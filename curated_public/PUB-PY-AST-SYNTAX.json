@@ -1,0 +1,17 @@
+{
+  "id": "PUB-PY-AST-SYNTAX",
+  "title": "Parse Python source without executing it",
+  "category": "python",
+  "problem": "A generated Python snippet may contain syntax errors that should be caught before execution.",
+  "guidance": "Use ast.parse on text for an initial syntax check. Parsing is not proof of runtime correctness, API existence, safety, or dependency compatibility.",
+  "source": {
+    "kind": "official_public_documentation",
+    "url": "https://docs.python.org/3/library/ast.html",
+    "citation": "Python documentation, ast.parse"
+  },
+  "environments": ["Python 3, offline AST parser"],
+  "probe": {
+    "kind": "python_ast_parse",
+    "snippet": "import ast\nnode = ast.parse('x = 1')\n"
+  }
+}
