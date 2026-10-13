@@ -1,4 +1,4 @@
-"""Entrypoint restricted to the standalone D:\UCIE checkout on Windows.
+"""Entrypoint restricted to the standalone D:/UCIE checkout on Windows.
 
 No project access, no GitHub credentials, no global scheduler installation.
 """
