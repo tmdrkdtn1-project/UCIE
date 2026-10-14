@@ -6,11 +6,11 @@ $ErrorActionPreference = 'Stop'
 $fixtures = @(
     @{ id='p-fuzzy'; expected=$true; code='Get-Command Get-Foo -UseFuzzyMatching' },
     @{ id='p-relative'; expected=$true; code="Resolve-Path '.directory\*.txt' -Relative" },
-    # Known alias false negative: the AST scanner intentionally does not resolve aliases.
+    # Calibration: fixed built-in gcm alias now recognized without lookup.
     @{ id='p-alias-known-fn'; expected=$true; code='gcm Get-Foo -UseFuzzyMatching' },
     @{ id='n-exact'; expected=$false; code='Get-Command Get-Foo' },
     @{ id='n-absolute'; expected=$false; code='Resolve-Path .directory\file.txt' },
-    # Known false positive: the static AST sees this unreachable command.
+    # Calibration: literal if ($false) branch is excluded from candidates.
     @{ id='n-unreachable-known-fp'; expected=$false; code='if ($false) { Get-Command Get-Foo -UseFuzzyMatching }' }
 )
 $tp=0; $tn=0; $fp=0; $fn=0
@@ -29,7 +29,7 @@ foreach ($fixture in $fixtures) {
         source_sha256=$result.source_sha256
     })
 }
-if ($tp -ne 2 -or $fn -ne 1 -or $fp -ne 1 -or $tn -ne 2) {
+if ($tp -ne 3 -or $fn -ne 0 -or $fp -ne 0 -or $tn -ne 3) {
     throw 'Unexpected synthetic calibration confusion matrix'
 }
 $output = [pscustomobject]@{
