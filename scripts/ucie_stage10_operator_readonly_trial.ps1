@@ -14,10 +14,30 @@ if (-not (Test-Path -LiteralPath $root -PathType Container)) {
 if (-not (Test-Path -LiteralPath $py -PathType Leaf)) {
     throw 'Dedicated UCIE Python interpreter unavailable.'
 }
-$allowed = @($miner, $knowledge, $stage)
+# SQLite WAL/journal files can change while the main .sqlite3 is unchanged.
+# Track exact UCIE-only sidecars as well as the database files.
+$tracked = @()
+foreach ($db in @($miner, $knowledge, $stage)) {
+    $tracked += @($db, "$db-wal", "$db-shm", "$db-journal")
+}
+$trustedComponents = @(
+    $root, (Join-Path $root 'runtime'),
+    (Join-Path $root '.venv'), (Join-Path $root '.venv\Scripts'),
+    (Join-Path $root 'src'), $py
+) + $tracked
+function Assert-UCIERealPaths {
+    foreach ($itemPath in $trustedComponents) {
+        $item = Get-Item -LiteralPath $itemPath -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item -and
+            (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+            throw "Untrusted reparse point in dedicated UCIE path: $itemPath"
+        }
+    }
+}
 function Get-UCIEReadOnlyHashes {
+    Assert-UCIERealPaths
     $result = @{}
-    foreach ($path in $allowed) {
+    foreach ($path in $tracked) {
         $name = [IO.Path]::GetFileName($path)
         if (Test-Path -LiteralPath $path -PathType Leaf) {
             $result[$name] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
@@ -28,8 +48,11 @@ function Get-UCIEReadOnlyHashes {
     return $result
 }
 $prior = Get-UCIEReadOnlyHashes
+$previousPythonPath = [Environment]::GetEnvironmentVariable('PYTHONPATH', 'Process')
 Push-Location -LiteralPath $root
 try {
+    # Load only UCIE's checked-out code, and restore the caller's setting.
+    $env:PYTHONPATH = Join-Path $root 'src'
     $environment = & $py -B -m ucie_miner preflight-public-batch-host
     if ($LASTEXITCODE -ne 0) { throw 'UCIE host preflight failed' }
     $inventory = & $py -B -m ucie_miner inspect-public-candidate-ledger
@@ -53,6 +76,11 @@ try {
         }
     }
 } finally {
+    if ($null -eq $previousPythonPath) {
+        [Environment]::SetEnvironmentVariable('PYTHONPATH', $null, 'Process')
+    } else {
+        $env:PYTHONPATH = $previousPythonPath
+    }
     Pop-Location
 }
 $after = Get-UCIEReadOnlyHashes
