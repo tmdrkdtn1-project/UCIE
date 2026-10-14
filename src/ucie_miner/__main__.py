@@ -9,6 +9,7 @@ import sqlite3
 
 from .core import MiningError, PUBLIC_SOURCES, mine_once, report
 from .review import ReviewError, analyze, review_and_store
+from .integration import preview_knowledge_rules
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,6 +25,7 @@ def main(argv=None):
     review.add_argument("--preview", action="store_true", help="Read-only: do not write review DB or receipt")
     review.add_argument("--verify-live", action="store_true",
                         help="Explicit anonymous reads of allowlisted public PRs and pinned release tag files")
+    sub.add_parser("preview-chain", help="Read-only Stage 4-7 preview; no import, verification or deployment")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
@@ -32,6 +34,8 @@ def main(argv=None):
         elif args.action == "report":
             path = report(ROOT)
             result = {"status": "LOCAL_REPORT_WRITTEN", "path": str(path)}
+        elif args.action == "preview-chain":
+            result = preview_knowledge_rules(ROOT)
         elif args.preview:
             result = analyze(ROOT, verify_live=args.verify_live)
         else:
