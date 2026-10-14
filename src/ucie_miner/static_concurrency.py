@@ -40,17 +40,17 @@ def _scope_nodes(scope):
         pending.extend(reversed(list(ast.iter_child_nodes(node))))
 
 
-def _scandir_function(expr, aliases):
+def _scandir_function(expr, aliases, modules):
     return (
         (isinstance(expr, ast.Attribute)
          and isinstance(expr.value, ast.Name)
-         and expr.value.id == "os" and expr.attr == "scandir")
+         and expr.value.id in modules and expr.attr == "scandir")
         or (isinstance(expr, ast.Name) and expr.id in aliases)
     )
 
 
-def _raw_scandir(expr, aliases):
-    return isinstance(expr, ast.Call) and _scandir_function(expr.func, aliases)
+def _raw_scandir(expr, aliases, modules):
+    return isinstance(expr, ast.Call) and _scandir_function(expr.func, aliases, modules)
 
 
 def _assigned_names(node):
@@ -145,11 +145,18 @@ def inspect_python_scandir_source(source: str) -> dict:
                            int(isinstance(n, ast.Call))),
         )
         state = dict(inherited.pop(id(scope), {}))
+        if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            params = scope.args.posonlyargs + scope.args.args + scope.args.kwonlyargs
+            params += ([scope.args.vararg] if scope.args.vararg else [])
+            params += ([scope.args.kwarg] if scope.args.kwarg else [])
+            for param in params:
+                state[param.arg] = "other"
         closure_cache = {}
         for node in ordered:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 inherited[id(node)] = {name: kind for name, kind in
-                                       state.items() if kind == "scandir_fn"}
+                                       state.items()
+                                       if kind in ("scandir_fn", "os_module")}
                 continue
             if isinstance(node, ast.ImportFrom):
                 if node.level == 0 and node.module == "os":
@@ -163,23 +170,30 @@ def inspect_python_scandir_source(source: str) -> dict:
                 continue
             if isinstance(node, ast.Import):
                 for imported in node.names:
-                    state[imported.asname or imported.name.split(".")[0]] = "other"
+                    state[imported.asname or imported.name.split(".")[0]] = (
+                        "os_module" if imported.name == "os" else "other")
                 continue
             assigned = {}
+            modules = {name for name, kind in state.items()
+                       if kind == "os_module"}
+            if "os" not in state:
+                modules.add("os")
+            aliases = {name for name, kind in state.items()
+                       if kind == "scandir_fn"}
             if isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
                 if isinstance(node, ast.Assign):
                     names = set().union(*(_assigned_names(x) for x in node.targets))
                 else:
                     names = _assigned_names(node.target)
                 value = node.value
-                if _scandir_function(value, {k for k, v in state.items()
-                                              if v == "scandir_fn"}):
+                if _scandir_function(value, aliases, modules):
                     kind = "scandir_fn"
-                elif _raw_scandir(value, {k for k, v in state.items()
-                                           if v == "scandir_fn"}):
+                elif _raw_scandir(value, aliases, modules):
                     kind = "raw"
                 elif isinstance(value, ast.Name) and state.get(value.id) == "raw":
                     kind = "raw"  # single-scope iterator variable alias
+                elif isinstance(value, ast.Name) and state.get(value.id) == "os_module":
+                    kind = "os_module"
                 else:
                     kind = "other"
                 assigned = {name: kind for name in names}
@@ -187,9 +201,7 @@ def inspect_python_scandir_source(source: str) -> dict:
                 assigned = {name: "other" for name in _assigned_names(node.target)}
             elif isinstance(node, (ast.With, ast.AsyncWith)):
                 for context in node.items:
-                    raw = _raw_scandir(context.context_expr,
-                                       {k for k,v in state.items()
-                                        if v == "scandir_fn"})
+                    raw = _raw_scandir(context.context_expr, aliases, modules)
                     for name in _assigned_names(context.optional_vars):
                         assigned[name] = "raw" if raw else "other"
             elif isinstance(node, ast.Delete):
