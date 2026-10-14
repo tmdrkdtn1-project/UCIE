@@ -15,7 +15,7 @@ from .patterns import PatternError
 
 HEX40 = re.compile(r"[0-9a-f]{40}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
-VERSION = re.compile(r"[0-9]{1,2}\\.[0-9]{1,2}(?:\\.[0-9]{1,3})?")
+VERSION = re.compile(r"[0-9]{1,2}[.][0-9]{1,2}(?:[.][0-9]{1,3})?")
 CLAIM_FIELDS = frozenset({
     "schema", "case_id", "source", "rule_code", "evidence_fingerprint",
     "merge_commit_sha", "runtime_product", "runtime_version", "platform",
