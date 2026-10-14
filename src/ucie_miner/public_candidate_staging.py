@@ -331,7 +331,8 @@ def inspect_staged_candidates(root):
             raise DiscoveryError("invalid public-only staged skill identity")
         skill_counts[skill_id] += entries
     if sum(skill_counts.values()) != count:
-        raise DiscoveryError("inconsistent public skill inventory")
+        raise DiscoveryError("inconsistent public PR skill inventory")
+    skill_counts["git-workflow-prevention"] += git_count
     return {
         "status": "UNVERIFIED_CANDIDATE_STAGING_INSPECTED_NO_GO",
         "candidate_revisions": count,
