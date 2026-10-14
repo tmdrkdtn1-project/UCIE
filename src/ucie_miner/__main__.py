@@ -17,6 +17,7 @@ from .merge_snapshot import compare_merge_snapshot
 import os
 import sys
 from .integration import preview_knowledge_rules
+from .static_concurrency import MAX_SOURCE_BYTES, inspect_python_scandir_source
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -44,11 +45,17 @@ def main(argv=None):
     pin = sub.add_parser("audit-merge-snapshot", help="Compare pinned public PR merge SHA, without DB writes")
     pin.add_argument("--verify-live", action="store_true",
                      help="Explicit anonymous public PR metadata GETs and pinned SHA checks")
+    sub.add_parser("scan-python-stdin", help="Parse only explicitly supplied approved public/synthetic Python text from stdin; no code execution or file scans")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
             result = mine_once(ROOT, sources=(args.source,) if args.source else PUBLIC_SOURCES,
                                max_new_per_source=args.limit)
+        elif args.action == "scan-python-stdin":
+            data = sys.stdin.buffer.read(MAX_SOURCE_BYTES + 1)
+            if len(data) > MAX_SOURCE_BYTES:
+                raise ValueError("input is oversized")
+            result = inspect_python_scandir_source(data.decode("utf-8", errors="strict"))
         elif args.action == "report":
             path = report(ROOT)
             result = {"status": "LOCAL_REPORT_WRITTEN", "path": str(path)}
