@@ -52,8 +52,8 @@ def build_public_batch(*, metadata_fetch=public_feed_get,
                        already_reviewed_prs=(),
                        review_feedback=None, max_enrich=2,
                        include_docs=True, include_advisories=True,
-                       now=None):
-    """On-demand public research; at most 5 + 4*3 external GETs.
+                       now=None, backfill_pages=1):
+    """On-demand public research; at most 15 + 4*3 external GETs.
 
     Metadata and evidence fetch callbacks are explicitly injected for CI.
     No persistent state is modified, even on partial upstream API failure.
@@ -67,6 +67,8 @@ def build_public_batch(*, metadata_fetch=public_feed_get,
             or len(set(opted_out_sources)) != len(opted_out_sources)
             or any(source not in SOURCES for source in opted_out_sources)
             or type(max_enrich) is not int or not 1 <= max_enrich <= MAX_ENRICH
+            or type(backfill_pages) is not int
+            or not 1 <= backfill_pages <= 3
             or type(include_docs) is not bool
             or type(include_advisories) is not bool):
         raise DiscoveryError("unsupported one-shot batch configuration")
@@ -80,12 +82,13 @@ def build_public_batch(*, metadata_fetch=public_feed_get,
     seen = prior | reviewed
     # Opted-out upstreams MUST NOT be requested, including docs or advisories.
     feeds = discover_all_feeds(fetch=metadata_fetch,
-                               sources=requested, now=now)
+                               sources=requested, now=now,
+                               backfill_pages=backfill_pages)
     intelligence = public_intelligence_preview(
         feeds, seen_public_prs=tuple(sorted(seen)),
         opted_out_sources=tuple(sorted(opts)),
         opted_out_prs=tuple(sorted(denied)),
-        review_feedback=review_feedback, limit=max_enrich,
+        review_feedback=review_feedback, limit=12,
     )
     # Never trust a ranking alone: bind every selected source/pr identity to
     # a declared public merged commit SHA from the actual feed receipt.
@@ -98,6 +101,8 @@ def build_public_batch(*, metadata_fetch=public_feed_get,
             leads[key] = lead
     selected, skipped, evidence_calls_budget = [], [], 0
     for choice in intelligence["priority"]["novel_review_queue"]:
+        if len(selected) >= max_enrich:
+            break
         key = (choice["source"], choice["pr_number"])
         raw = leads.get(key)
         if raw is None or key in seen or key in denied or key[0] in opts:
@@ -134,6 +139,11 @@ def build_public_batch(*, metadata_fetch=public_feed_get,
             "evidence_status": receipt["status"],
             "missing_evidence_types": receipt["missing_evidence_types"],
             "evidence_sha256": receipt["candidate_evidence_sha256"],
+            "error_pattern_tags": list(receipt["skill_knowledge_candidate"]["error_pattern_tags"]),
+            "safe_call_guidance": receipt["skill_knowledge_candidate"]["safe_call_guidance"],
+            "pinned_merge_commit_sha": sha,
+            "test_file_count": (receipt["patch_features"] or {}).get("test_file_count"),
+            "patch_signal_status": (receipt["patch_features"] or {}).get("behavioral_transition", "NOT_COLLECTED"),
             "knowledge_review_status": manual["status"],
             "review_plan": receipt["skill_knowledge_candidate"]["regression_plan"],
             "regression_independently_verified": False,
@@ -141,7 +151,7 @@ def build_public_batch(*, metadata_fetch=public_feed_get,
             "human_approval_received": False,
         })
         evidence_calls_budget += receipt["public_reads_max"]
-    scheduled_reads_limit = len(requested) + max_enrich * (2
+    scheduled_reads_limit = len(requested) * backfill_pages + max_enrich * (2
         + int(include_docs) + int(include_advisories))
     # Receipt hashes are dedupe hints; not signatures or proof of upstream fix.
     return {
@@ -159,7 +169,9 @@ def build_public_batch(*, metadata_fetch=public_feed_get,
         "unproven_merge_skips": skipped,
         "candidate_skill_queue": selected,
         "candidate_queue_sha256": _fingerprint(selected),
-        "metadata_gets_budget": len(requested),
+        "metadata_gets_budget": feeds["public_reads_max"],
+        "metadata_gets_upper_bound": len(requested) * backfill_pages,
+        "backfill_pages_limit": backfill_pages,
         "enrichment_gets_budget": evidence_calls_budget,
         "overall_gets_upper_bound": scheduled_reads_limit,
         "source_data_and_patch_code_retained": False,
