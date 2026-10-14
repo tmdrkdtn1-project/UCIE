@@ -29,6 +29,15 @@ TAGS = {
     "VERSION_COMPAT": re.compile(r"\b(?:version|deprecat|compatible|python 3\.15|upgrade)\b", re.I),
     "TEST_REGRESSION": re.compile(r"\b(?:test|assert|pytest|unittest|pester)\b", re.I),
 }
+# Fixed category features only: untrusted code text is never emitted or
+# rephrased as a runnable correction command.
+TRANSITION_SIGNALS = {
+    "GENERIC_EXCEPTION": re.compile(r"\\b(?:ValueError|RuntimeError|Exception)\\b"),
+    "PROTOCOL_ERROR_CODE": re.compile(r"\\b(?:INVALID_PARAMS|MCPError)\\b"),
+    "RECURSION_LIMIT_CLEANUP": re.compile(r"\\b(?:addCleanup|setrecursionlimit)\\b"),
+    "THREAD_SERIALIZATION": re.compile(r"\\b(?:Lock|RLock|mutex|lock\\.)\\b"),
+    "RUNNER_BINARY_CONFLICT": re.compile(r"\\b(?:fusermount3|podman|setuid)\\b", re.I),
+}
 EXTENSIONS = (".py", ".pyi", ".ps1", ".psm1", ".psd1", ".c", ".h", ".sh",
               ".yml", ".yaml", ".json", ".md", ".toml", ".go", ".rs")
 
@@ -136,6 +145,7 @@ def inspect_pr_changes(source, number, entries, *, merge_sha=None):
         raise PublicEvidenceError("oversized or invalid PR files")
     count, patch_files, tests, added, removed = 0, 0, 0, 0, 0
     cues = set()
+    before_signals, after_signals = set(), set()
     file_records = []
     for item in entries:
         if not isinstance(item, dict):
@@ -174,6 +184,9 @@ def inspect_pr_changes(source, number, entries, *, merge_sha=None):
                     removed += 1
                 body = line[1:500]
                 cues.update(key for key, expr in TAGS.items() if expr.search(body))
+                target = after_signals if line[0] == "+" else before_signals
+                target.update(k for k, pattern in TRANSITION_SIGNALS.items()
+                              if pattern.search(body))
         file_records.append({
             "path_sha256": path_hash, "extension": file_kind,
             "change_type": change, "patch_sha256": patch_sha,
@@ -188,6 +201,9 @@ def inspect_pr_changes(source, number, entries, *, merge_sha=None):
         "patch_file_count": patch_files, "test_file_count": tests,
         "added_line_count": added, "removed_line_count": removed,
         "tags": sorted(cues),
+        "removed_behavior_signals": sorted(before_signals),
+        "added_behavior_signals": sorted(after_signals),
+        "behavioral_transition": "HINT_ONLY_NOT_VERIFIED",
         "file_features": file_records,
         "coverage": "TRUNCATED_PAGINATION_POSSIBLE" if len(entries) == MAX_FILES
                     else "BOUNDED_FIRST_PAGE_ONLY",
