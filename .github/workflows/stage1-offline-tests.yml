@@ -68,3 +68,65 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./tests/test_ucie_powershell_flow_shadowing.ps1
+
+      - name: Stage 10 explicit one-shot public API acceptance on ephemeral Windows 3.15
+        if: github.event_name == 'pull_request' && github.head_ref == 'stage10-windows-live-public-acceptance-20261014' && runner.os == 'Windows' && matrix.python-version == '3.15'
+        shell: pwsh
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          @'
+          import json
+          from pathlib import Path
+          from ucie_miner.public_batch import build_public_batch, review_batch_preview
+          from ucie_miner.public_candidate_staging import stage_public_candidates
+          from ucie_miner.public_skill_digest import compare_public_skill_batches
+          from ucie_miner.public_discovery import SOURCES
+
+          # One-shot ACTUAL anonymous public GitHub API reads on disposable
+          # GitHub Windows runner. No local UCIE owner PC or external code execution.
+          paths = [Path("runtime/public_miner.sqlite3"),
+                   Path("runtime/knowledge.sqlite3"),
+                   Path("runtime/stage10_unverified_public_candidates.sqlite3")]
+          before = {str(p): (p.read_bytes() if p.is_file() else None) for p in paths}
+          result = build_public_batch(
+              sources=("modelcontextprotocol/python-sdk", "git/git"),
+              include_git_commits=True, include_docs=False,
+              include_advisories=False, backfill_pages=1, max_enrich=1,
+          )
+          review = review_batch_preview(result)
+          staged = stage_public_candidates(result)  # SQLite :memory: ONLY
+          digest = compare_public_skill_batches(result)
+          after = {str(p): (p.read_bytes() if p.is_file() else None) for p in paths}
+          assert before == after, "read-only acceptance unexpectedly mutated UCIE runtime"
+          assert result["metadata_gets_budget"] == 2
+          assert result["git_commit_gets_budget"] == 1
+          assert result["overall_gets_upper_bound"] == 5
+          assert result["operating_database_writes"] == 0
+          assert result["new_scheduler_registered"] is False
+          assert result["production_approved"] is False
+          assert staged["mode"] == "EPHEMERAL_MEMORY_ONLY"
+          assert staged["production_approved"] is False
+          assert review["production_approved"] is False
+          assert digest["production_approved"] is False
+          assert set(result["sources_fetched"]).issubset(set(SOURCES))
+          print("UCIE_REAL_PUBLIC_WINDOWS_RUNNER_ACCEPTANCE=" + json.dumps({
+              "status": "EPHEMERAL_WINDOWS_PUBLIC_API_READS_VERIFIED",
+              "platform": "GITHUB_ACTIONS_WINDOWS_RUNNER_NOT_OWNER_HOST",
+              "metadata_requests": result["metadata_gets_budget"],
+              "git_commit_requests": result["git_commit_gets_budget"],
+              "public_pr_candidates": result["public_metadata_candidate_count"],
+              "public_pr_enriched": result["enriched_count"],
+              "git_direct_commit_skill_leads": result["git_commit_lead_count"],
+              "separate_unverified_pr_rows_in_memory": staged["total_staged_revisions"],
+              "separate_unverified_git_rows_in_memory": staged["git_commit_total_revisions"],
+              "candidate_skill_digest_count": digest["candidate_count"],
+              "operating_databases_unchanged": True,
+              "external_code_executed": False,
+              "source_content_persisted": False,
+              "owner_windows_host_attested": False,
+              "independent_upstream_fix_verified": False,
+              "production_approved": False,
+          }, sort_keys=True))
+          '@ | python -B -
