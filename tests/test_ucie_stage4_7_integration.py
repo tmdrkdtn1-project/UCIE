@@ -19,6 +19,7 @@ from ucie_miner.provenance_review import inspect_public_prs
 from ucie_miner.preapproval import preapproval_readiness
 from ucie_miner.acceptance_bundle import build_readonly_acceptance_preview
 from ucie_miner.evidence_binding import bind_candidate_receipts
+from ucie_miner.merge_snapshot import compare_merge_snapshot
 from ucie_miner.license_review import inspect_pinned_licenses
 from ucie_miner.regression_plans import create_regression_matrix
 from ucie_miner.review import load_manifest
@@ -33,6 +34,10 @@ class Stage4To7IntegrationTests(unittest.TestCase):
         curated = self.root / "curated_public"
         runtime.mkdir()
         curated.mkdir()
+        evid = self.root / "docs" / "evidence"
+        evid.mkdir(parents=True)
+        pinned = ROOT / "docs" / "evidence" / "public_pr_merge_snapshot_v1.json"
+        (evid / pinned.name).write_bytes(pinned.read_bytes())
         manifest_text = (ROOT / "curated_public" /
                          "pr_review_evidence_v1.json").read_text("utf-8")
         (curated / "pr_review_evidence_v1.json").write_text(
@@ -103,6 +108,43 @@ class Stage4To7IntegrationTests(unittest.TestCase):
         self.assertEqual(result["pattern_preview"]["family_count"], 8)
         self.assertFalse(result["production_approved"])
 
+    def test_pinned_merge_snapshot_nine_prs_is_not_a_version_pass(self):
+        rows = _read_candidates(self.root)
+        receipt = inspect_public_prs(rows)
+        snap = compare_merge_snapshot(self.root, rows, receipt)
+        self.assertEqual(snap["local_pinned_pr_count"], 9)
+        self.assertEqual(snap["extra_unmapped_local_pr_count"], 0)
+        self.assertEqual(len(snap["snapshot_sha256"]), 64)
+        self.assertFalse(snap["version_inclusion_verified"])
+        self.assertTrue(all(x["fixed_release_version"] == "UNDETERMINED"
+                            for x in snap["observations"]))
+
+    def test_pinned_merge_snapshot_rejects_changed_remote_sha(self):
+        rows = _read_candidates(self.root)
+        receipt = inspect_public_prs(rows)
+        case = receipt["items"][0]
+        case["source_check"] = "SYNTHETIC_METADATA_MATCHED"
+        case["observed_merge_commit_sha"] = "0" * 40
+        with self.assertRaises(PatternError):
+            compare_merge_snapshot(self.root, rows, receipt)
+
+    def test_pinned_merge_snapshot_rejects_changed_original_file(self):
+        path = self.root / "docs" / "evidence" / "public_pr_merge_snapshot_v1.json"
+        file = json.loads(path.read_text("utf-8"))
+        file["entries"][0]["merged_at"] = "2025-01-01T00:00:00Z"
+        path.write_text(json.dumps(file), encoding="utf-8")
+        with self.assertRaises(PatternError):
+            compare_merge_snapshot(self.root, _read_candidates(self.root),
+                                   inspect_public_prs(_read_candidates(self.root)))
+
+    def test_pinned_merge_snapshot_unmapped_rows_remain_unverified(self):
+        with closing(sqlite3.connect(self.miner)) as db, db:
+            self._insert(db, "python/cpython", 999998, "2026-10-01T00:00:00Z")
+        rows = _read_candidates(self.root)
+        out = compare_merge_snapshot(self.root, rows, inspect_public_prs(rows))
+        self.assertEqual(out["local_pinned_pr_count"], 9)
+        self.assertEqual(out["extra_unmapped_local_pr_count"], 1)
+
     def binding_inputs(self):
         chain = preview_knowledge_rules(self.root)
         rows = _read_candidates(self.root)
@@ -165,6 +207,9 @@ class Stage4To7IntegrationTests(unittest.TestCase):
                          "STRUCTURALLY_CONSISTENT_CANDIDATES")
         self.assertEqual(len(result["candidate_binding_sha256"]), 64)
         self.assertFalse(result["candidate_binding_is_signature"])
+        self.assertEqual(len(result["pinned_merge_snapshot_sha256"]), 64)
+        self.assertEqual(result["pinned_merge_pr_count"], 9)
+        self.assertFalse(result["release_version_inclusion_verified"])
         self.assertEqual(result["miner_candidate_count"], 9)
         self.assertEqual(result["pattern_families"], 8)
         self.assertEqual(result["synthetic_regression_plans"], 8)
