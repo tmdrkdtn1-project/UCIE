@@ -55,6 +55,34 @@ class WorkerScheduleTests(unittest.TestCase):
                            write_report=self.write_report, enforce_schedule=True)
         self.assertEqual(second["status"], "SKIPPED_NOT_DUE")
 
+    def test_recovery_after_elapsed_retry_window(self):
+        runtime = self.root / "runtime"
+        runtime.mkdir()
+        previous = {
+            "schema": "UCIE_MINER_CYCLE_V1",
+            "finished_utc": (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat(),
+            "consecutive_failures": 3,
+            "status": "COLLECTION_FAILED",
+        }
+        (runtime / "last_run.json").write_text(json.dumps(previous), encoding="utf-8")
+        result = run_cycle(self.root, collect=self.collect,
+                           write_report=self.write_report, enforce_schedule=True)
+        self.assertEqual(result["status"], "COLLECTED_UNVERIFIED")
+        self.assertEqual(result["consecutive_failures"], 0)
+
+    def test_invalid_failure_counter_fails_closed(self):
+        runtime = self.root / "runtime"
+        runtime.mkdir()
+        previous = {
+            "schema": "UCIE_MINER_CYCLE_V1",
+            "finished_utc": (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat(),
+            "consecutive_failures": True,
+        }
+        (runtime / "last_run.json").write_text(json.dumps(previous), encoding="utf-8")
+        with self.assertRaises(ValueError):
+            run_cycle(self.root, collect=self.collect,
+                      write_report=self.write_report, enforce_schedule=True)
+
     def test_legacy_unscheduled_mode_remains_available(self):
         a = run_cycle(self.root, collect=self.collect, write_report=self.write_report)
         b = run_cycle(self.root, collect=self.collect, write_report=self.write_report)
