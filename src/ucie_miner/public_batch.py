@@ -18,6 +18,7 @@ from .public_intelligence import (public_intelligence_preview,
                                   read_prior_miner_ids)
 from .public_knowledge_pipeline import (collect_public_knowledge_candidate,
                                         preview_public_knowledge_receipt)
+from .public_git_commit_skills import discover_git_commit_skills
 
 SHA40 = re.compile(r"[0-9a-f]{40}")
 MAX_ENRICH = 3
@@ -52,7 +53,10 @@ def build_public_batch(*, metadata_fetch=public_feed_get,
                        already_reviewed_prs=(),
                        review_feedback=None, max_enrich=2,
                        include_docs=True, include_advisories=True,
-                       now=None, backfill_pages=1):
+                       now=None, backfill_pages=1,
+                       include_git_commits=False,
+                       git_commit_fetch=fetch_public_evidence,
+                       opted_out_git_commits=()):
     """On-demand public research; at most 15 + 4*3 external GETs.
 
     Metadata and evidence fetch callbacks are explicitly injected for CI.
@@ -69,9 +73,15 @@ def build_public_batch(*, metadata_fetch=public_feed_get,
             or type(max_enrich) is not int or not 1 <= max_enrich <= MAX_ENRICH
             or type(backfill_pages) is not int
             or not 1 <= backfill_pages <= 3
+            or type(include_git_commits) is not bool
             or type(include_docs) is not bool
             or type(include_advisories) is not bool):
         raise DiscoveryError("unsupported one-shot batch configuration")
+    if (not isinstance(opted_out_git_commits, (list, tuple, set, frozenset))
+            or len(opted_out_git_commits) > 1000
+            or any(not isinstance(sha, str) or not SHA40.fullmatch(sha)
+                   for sha in opted_out_git_commits)):
+        raise DiscoveryError("invalid public Git commit opt-outs")
     opts = set(opted_out_sources)
     denied = _key_list(opted_out_prs, kind="opt-outs")
     reviewed = _key_list(already_reviewed_prs, kind="review history")
@@ -151,8 +161,36 @@ def build_public_batch(*, metadata_fetch=public_feed_get,
             "human_approval_received": False,
         })
         evidence_calls_budget += receipt["public_reads_max"]
+    git_queue = []
+    git_reads = 0
+    if include_git_commits and "git/git" in requested:
+        # No PR number is manufactured for a direct Git commit. These
+        # independently typed leads remain unverified and non-executable.
+        report = discover_git_commit_skills(fetch=git_commit_fetch, now=now)
+        git_reads = 1
+        denied_commits = set(opted_out_git_commits)
+        for lead in report["git_skill_tasks"]:
+            if lead["git_commit_sha"] in denied_commits:
+                continue
+            git_queue.append({
+                "source": "git/git",
+                "git_commit_sha": lead["git_commit_sha"],
+                "public_url": lead["public_url"],
+                "message_sha256": lead["message_sha256"],
+                "skill_id": lead["skill_id"],
+                "error_category_tags": lead["error_category_tags"],
+                "safe_call_guidance": lead["safe_call_guidance"],
+                "review_plan": lead["regression_review_plan"],
+                "knowledge_review_status": "MANUAL_REVIEW_ONLY_NO_GO",
+                "source_commit_verified_behavior": False,
+                "released_version_inclusion_verified": False,
+                "human_approval_received": False,
+            })
+            if len(git_queue) >= max_enrich:
+                break
     scheduled_reads_limit = len(requested) * backfill_pages + max_enrich * (2
-        + int(include_docs) + int(include_advisories))
+        + int(include_docs) + int(include_advisories)) + int(
+            include_git_commits and "git/git" in requested)
     # Receipt hashes are dedupe hints; not signatures or proof of upstream fix.
     return {
         "schema": "UCIE_PUBLIC_RESEARCH_BATCH_PREVIEW_V1",
@@ -169,6 +207,10 @@ def build_public_batch(*, metadata_fetch=public_feed_get,
         "unproven_merge_skips": skipped,
         "candidate_skill_queue": selected,
         "candidate_queue_sha256": _fingerprint(selected),
+        "git_commit_skill_queue": git_queue,
+        "git_commit_queue_sha256": _fingerprint(git_queue),
+        "git_commit_lead_count": len(git_queue),
+        "git_commit_gets_budget": git_reads,
         "metadata_gets_budget": feeds["public_reads_max"],
         "metadata_gets_upper_bound": len(requested) * backfill_pages,
         "backfill_pages_limit": backfill_pages,
@@ -204,7 +246,14 @@ def review_batch_preview(receipt):
             or len(receipt["candidate_skill_queue"]) > MAX_ENRICH
             or receipt.get("enriched_count") != len(receipt["candidate_skill_queue"])
             or receipt.get("candidate_queue_sha256") !=
-               _fingerprint(receipt["candidate_skill_queue"])):
+               _fingerprint(receipt["candidate_skill_queue"])
+            or not isinstance(receipt.get("git_commit_skill_queue", []), list)
+            or len(receipt.get("git_commit_skill_queue", [])) > MAX_ENRICH
+            or receipt.get("git_commit_queue_sha256",
+                           _fingerprint([])) !=
+               _fingerprint(receipt.get("git_commit_skill_queue", []))
+            or receipt.get("git_commit_lead_count", 0) !=
+               len(receipt.get("git_commit_skill_queue", []))):
         raise DiscoveryError("untrusted or forged research batch receipt")
     findings = []
     for item in receipt["candidate_skill_queue"]:
@@ -228,10 +277,32 @@ def review_batch_preview(receipt):
             "required_review": "INDEPENDENT_SOURCE_VERSION_LICENSE_AND_TESTS",
             "rule_status": "NO_GO",
         })
+    git_findings = []
+    for item in receipt.get("git_commit_skill_queue", []):
+        sha = item.get("git_commit_sha") if isinstance(item, dict) else None
+        if (not isinstance(item, dict)
+                or item.get("source") != "git/git"
+                or not isinstance(sha, str) or not SHA40.fullmatch(sha)
+                or item.get("public_url") !=
+                    f"https://github.com/git/git/commit/{sha}"
+                or item.get("skill_id") != "git-workflow-prevention"
+                or item.get("knowledge_review_status") != "MANUAL_REVIEW_ONLY_NO_GO"
+                or item.get("human_approval_received") is not False
+                or item.get("source_commit_verified_behavior") is not False
+                or item.get("released_version_inclusion_verified") is not False):
+            raise DiscoveryError("forged Git commit candidate")
+        git_findings.append({
+            "public_commit": item["public_url"],
+            "skill_id": "git-workflow-prevention",
+            "required_review": "EXACT_COMMIT_TEST_LICENSE_AND_RELEASE",
+            "rule_status": "NO_GO",
+        })
     return {
         "schema": "UCIE_PUBLIC_RESEARCH_BATCH_REVIEW_V1",
         "status": "MANUAL_CANDIDATE_REVIEW_PENDING",
         "candidate_count": len(findings),
+        "git_commit_candidate_count": len(git_findings),
+        "git_commit_review_tasks": git_findings,
         "review_tasks": findings,
         "no_silent_knowledge_import": True,
         "operational_go": False,
