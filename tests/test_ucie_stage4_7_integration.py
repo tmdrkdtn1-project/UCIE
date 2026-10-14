@@ -17,6 +17,7 @@ from ucie_miner.patterns import PatternError
 from ucie_miner.review import _read_candidates
 from ucie_miner.provenance_review import inspect_public_prs
 from ucie_miner.preapproval import preapproval_readiness
+from ucie_miner.acceptance_bundle import build_readonly_acceptance_preview
 
 
 class Stage4To7IntegrationTests(unittest.TestCase):
@@ -96,6 +97,23 @@ class Stage4To7IntegrationTests(unittest.TestCase):
         result = preview_knowledge_rules(self.root)
         self.assertEqual(result["quarantined_or_retracted_count"], 1)
         self.assertEqual(result["pattern_preview"]["family_count"], 8)
+        self.assertFalse(result["production_approved"])
+
+    def test_stage8_bundle_includes_unverified_license_and_regression(self):
+        result = build_readonly_acceptance_preview(
+            self.root, is_windows=True, python_version=(3, 15))
+        self.assertEqual(result["status"], "NO_GO")
+        self.assertEqual(result["miner_candidate_count"], 9)
+        self.assertEqual(result["pattern_families"], 8)
+        self.assertEqual(result["synthetic_regression_plans"], 8)
+        self.assertGreaterEqual(result["license_document_count"], 2)
+        self.assertEqual(result["regression_execution_state"], "NOT_EXECUTED")
+        self.assertEqual(result["public_pr_metadata_state"], "NOT_CHECKED")
+        self.assertFalse(result["operational_host_attested"])
+        self.assertFalse(result["independent_license_approval"])
+        self.assertFalse(result["rulepack_signed"])
+        self.assertFalse(result["scheduler_registered"])
+        self.assertEqual(result["persistent_writes"], 0)
         self.assertFalse(result["production_approved"])
 
     def test_full_candidate_chain_never_authorizes_operation(self):
