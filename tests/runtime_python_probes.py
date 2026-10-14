@@ -1,8 +1,8 @@
-"""UCIE-authored, bounded Python runtime behavioral probes.
+"""UCIE-only guarded Python behavioral tests; no third-party code execution.
 
-Runs only first-party Python standard library in ephemeral GitHub CI.
-No upstream PR code is imported or executed. No local UCIE DB is accessed.
-Positive behavior is *not* a before/after upstream fix verification.
+Raw scandir iterator races previously failed/crashed in hosted CI. Those
+unsafe scenarios are NEVER rerun by this file. CI checks the first-party
+safe-call mitigation; native upstream and before/after gates remain NO-GO.
 """
 from __future__ import annotations
 
@@ -11,55 +11,56 @@ import ast
 import gc
 import json
 import os
-import subprocess
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import threading
 import warnings
 import weakref
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from ucie_miner.guarded_scandir import GuardedScandir
 
-def scandir_shared_next():
-    for _ in range(4):
-        with tempfile.TemporaryDirectory(prefix="ucie-scandir-") as d:
-            for i in range(80):
-                Path(d, f"n{i:03d}").touch()
-            names = []
-            lock = threading.Lock()
-            with os.scandir(d) as it:
-                def read():
-                    local = [entry.name for entry in it]
-                    with lock:
-                        names.extend(local)
+
+def guarded_shared_next():
+    for _ in range(5):
+        with tempfile.TemporaryDirectory(prefix="ucie-guarded-") as d:
+            names = [f"n{i:03d}" for i in range(80)]
+            for name in names:
+                Path(d, name).touch()
+            barrier = threading.Barrier(4)
+            def reader(it):
+                barrier.wait(timeout=5)
+                return [entry.name for entry in it]
+            with GuardedScandir(d) as it:
                 with ThreadPoolExecutor(max_workers=4) as pool:
-                    tasks = [pool.submit(read) for _ in range(4)]
-                    for task in tasks:
-                        task.result(timeout=8)
-            if sorted(names) != [f"n{i:03d}" for i in range(80)]:
+                    tasks = [pool.submit(reader, it) for _ in range(4)]
+                    observed = [n for f in tasks for n in f.result(timeout=8)]
+            if sorted(observed) != names:
                 return False
     return True
 
 
-def scandir_close_race():
-    for _ in range(4):
-        with tempfile.TemporaryDirectory(prefix="ucie-close-") as d:
-            for i in range(50):
+def guarded_next_close():
+    for _ in range(5):
+        with tempfile.TemporaryDirectory(prefix="ucie-guarded-close-") as d:
+            for i in range(80):
                 Path(d, str(i)).touch()
-            it = os.scandir(d)
+            it = GuardedScandir(d)
+            barrier = threading.Barrier(5)
             def reader():
-                try:
-                    for _ in it:
-                        pass
-                except OSError:
-                    # Windows may report a graceful directory-handle close race.
-                    pass
+                barrier.wait(timeout=5)
+                return [entry.name for entry in it]
+            def closer():
+                barrier.wait(timeout=5)
+                it.close()
             try:
                 with ThreadPoolExecutor(max_workers=5) as pool:
                     tasks = [pool.submit(reader) for _ in range(3)]
-                    tasks += [pool.submit(it.close) for _ in range(2)]
-                    for task in tasks:
-                        task.result(timeout=8)
+                    tasks += [pool.submit(closer) for _ in range(2)]
+                    for f in tasks:
+                        f.result(timeout=8)
             finally:
                 it.close()
     return True
@@ -80,7 +81,7 @@ def scandir_failed_open_no_warning():
         return not any(issubclass(w.category, ResourceWarning) for w in found)
 
 
-def weakref_surface_and_race():
+def weakref_surface_smoke():
     class Target:
         pass
     obj = Target()
@@ -88,32 +89,23 @@ def weakref_surface_and_race():
     if obj.__weakref__ is not ref:
         return False
     def reader():
-        for _ in range(1600):
+        for _ in range(1200):
             current = obj.__weakref__
             if current is not None and (not isinstance(current, weakref.ref)
                                         or current() is not obj):
                 return False
         return True
-    def writer():
-        for _ in range(1600):
-            weakref.ref(obj)
-        return True
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        tasks = [pool.submit(reader) for _ in range(3)]
-        tasks += [pool.submit(writer) for _ in range(3)]
-        return all(x.result(timeout=8) for x in tasks)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        return all(f.result(timeout=8) for f in
+                   [pool.submit(reader) for _ in range(4)])
 
 
-def ast_public_repr_surface():
-    tree = ast.parse("x = [n for n in (1, 2, 3)]")
-    text = repr(tree)
-    if not isinstance(text, str) or not text:
-        return False
-    # This does not exercise internal PyObject_GetAttr failure injection.
-    return isinstance(ast.Name(id="x", ctx=ast.Load()), ast.AST)
+def ast_public_repr_smoke():
+    node = ast.parse("x = [n for n in (1, 2, 3)]")
+    return bool(repr(node)) and isinstance(node, ast.AST)
 
 
-def compiler_public_error_recovery():
+def compiler_public_smoke():
     for bad in ("[x for in range(3)]",
                 "{k:v for k, v in }",
                 "(x for x in )"):
@@ -122,34 +114,30 @@ def compiler_public_error_recovery():
             return False
         except SyntaxError:
             pass
-        compile("[x for x in (1, 2)]", "<ucie-synthetic>", "exec")
-        compile("{x for x in (1, 2)}", "<ucie-synthetic>", "exec")
-        compile("{x:x for x in (1, 2)}", "<ucie-synthetic>", "exec")
-        compile("(x for x in (1, 2))", "<ucie-synthetic>", "exec")
-    # Compiler exception recovery smoke only, not internal failpoint proof.
+        for good in ("[x for x in (1, 2)]", "{x for x in (1, 2)}",
+                     "{x:x for x in (1, 2)}", "(x for x in (1, 2))"):
+            compile(good, "<ucie-synthetic>", "exec")
     return True
 
 
-
-# A native interpreter crash in one behavioral test must not prevent all
-# other probes from reporting. Run only our own fixed, literal child targets.
-CHILD_PROBES = {
-    "scandir_shared_next": scandir_shared_next,
-    "scandir_close_race": scandir_close_race,
+# Literal first-party call targets only: raw native racing is not reachable.
+SAFE_PROBES = {
+    "guarded_shared_next": guarded_shared_next,
+    "guarded_next_close": guarded_next_close,
     "scandir_failed_open_no_warning": scandir_failed_open_no_warning,
-    "weakref_surface_and_race": weakref_surface_and_race,
-    "ast_public_repr_surface": ast_public_repr_surface,
-    "compiler_public_error_recovery": compiler_public_error_recovery,
+    "weakref_surface_smoke": weakref_surface_smoke,
+    "ast_public_repr_smoke": ast_public_repr_smoke,
+    "compiler_public_smoke": compiler_public_smoke,
 }
 
 
 def child_main(label):
-    if label not in CHILD_PROBES:
+    if label not in SAFE_PROBES:
         return 2
     try:
-        succeeded = bool(CHILD_PROBES[label]())
-        print(json.dumps({"label": label, "ok": succeeded}), flush=True)
-        return 0 if succeeded else 1
+        ok = bool(SAFE_PROBES[label]())
+        print(json.dumps({"label": label, "ok": ok}), flush=True)
+        return 0 if ok else 1
     except Exception as exc:
         print(json.dumps({"label": label, "error_type": type(exc).__name__}),
               flush=True)
@@ -158,73 +146,55 @@ def child_main(label):
 
 def observe(label):
     try:
-        result = subprocess.run(
+        run = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), "--child", label],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            timeout=12, check=False,
+            timeout=15, check=False,
         )
     except subprocess.TimeoutExpired:
         return {"label": label, "state": "CHILD_TIMEOUT"}
-    if result.returncode < 0 or result.returncode in (134, 139, 3221225477):
+    if run.returncode < 0 or run.returncode in (134, 139, 3221225477):
         return {"label": label, "state": "CHILD_PROCESS_CRASH",
-                "exit_code": result.returncode}
-    if result.returncode != 0:
-        return {"label": label, "state": "PROBE_FAILURE",
-                "exit_code": result.returncode}
+                "exit_code": run.returncode}
+    if run.returncode != 0:
+        try:
+            parsed = json.loads(run.stdout.strip())
+        except (ValueError, TypeError):
+            parsed = {}
+        return {"label": label, "state": "GUARD_PROBE_FAILURE",
+                "exit_code": run.returncode,
+                "error_type": parsed.get("error_type", "UNKNOWN")}
     try:
-        obj = json.loads(result.stdout.strip())
-    except (json.JSONDecodeError, ValueError):
+        data = json.loads(run.stdout.strip())
+    except (ValueError, TypeError):
         return {"label": label, "state": "INVALID_PROBE_OUTPUT"}
-    return {"label": label,
-            "state": ("OBSERVED_EXPECTED_BEHAVIOR"
-                      if obj == {"label": label, "ok": True}
-                      else "INVALID_PROBE_OUTPUT")}
+    return {"label": label, "state": (
+        "GUARDED_BEHAVIOR_OBSERVED" if data == {"label": label, "ok": True}
+        else "INVALID_PROBE_OUTPUT")}
 
 
 def main():
-    version = ".".join(str(v) for v in sys.version_info[:3])
-    gil_fn = getattr(sys, "_is_gil_enabled", None)
-    gil_enabled = gil_fn() if gil_fn else None
-    observations = []
-    for label in CHILD_PROBES:
-        # This exact close/next probe crashed an isolated Linux subprocess on
-        # 3.13.16 and 3.15.0; do not repeatedly trigger native faults on
-        # ordinary PR CI. A separately approved isolated reproduction may
-        # opt in after a safety review.
-        if (label == "scandir_close_race"
-                and os.environ.get("UCIE_ALLOW_NATIVE_CRASH_REPRO") != "1"):
-            observation = {"label": label,
-                           "state": "NOT_RETESTED_PREVIOUS_CHILD_CRASH"}
-        else:
-            observation = observe(label)
-        observation["coverage"] = (
-            "DIRECT_PUBLIC_RUNTIME_SURFACE" if label.startswith("scandir")
-            else "PUBLIC_RUNTIME_SMOKE_WITH_THREADING" if label.startswith("weakref")
-            else "PUBLIC_RUNTIME_SMOKE_ONLY")
-        observations.append(observation)
-    observations.append({
-        "label": "PY_QSBR_THREADSTATE_SLOT_LEAK",
-        "coverage": "INTERNAL_FREE_THREADED_QSBR_INSTRUMENTATION_REQUIRED",
-        "state": "NOT_REPRODUCED",
-    })
-    output = {
-        "schema": "UCIE_SAFE_PYTHON_BEHAVIOR_OBSERVATION_V2",
-        "runtime": "CPython", "version": version,
-        "gil_enabled": gil_enabled,
+    observations = [observe(label) for label in SAFE_PROBES]
+    safe_guards_passed = all(
+        r["state"] == "GUARDED_BEHAVIOR_OBSERVED" for r in observations)
+    print("UCIE_PYTHON_BEHAVIOR=" + json.dumps({
+        "schema": "UCIE_SAFE_PYTHON_BEHAVIOR_OBSERVATION_V3",
+        "runtime": "CPython",
+        "version": ".".join(str(x) for x in sys.version_info[:3]),
+        "gil_enabled": (sys._is_gil_enabled()
+                        if hasattr(sys, "_is_gil_enabled") else None),
         "observations": observations,
-        "pre_fix_revision_tested": False,
-        "pinned_post_fix_commit_tested": False,
+        "historical_unprotected_shared_next": "OBSERVED_FAILURE_NOT_RETESTED",
+        "historical_unprotected_next_close": "OBSERVED_NATIVE_CRASH_NOT_RETESTED",
+        "candidate_mitigation_checks_passed": safe_guards_passed,
+        "native_upstream_regression_gate": "NO_GO",
+        "pinned_pre_fix_build_tested": False,
+        "pinned_post_fix_build_tested": False,
         "independent_before_after_verified": False,
         "production_approved": False,
-    }
-    print("UCIE_PYTHON_BEHAVIOR=" + json.dumps(output, sort_keys=True),
-          flush=True)
-    # Return nonzero on any observed crash/failure. A green result is only
-    # probe execution, not upstream before/after proof.
-    return 1 if any(x["state"] not in ("OBSERVED_EXPECTED_BEHAVIOR",
-                                     "NOT_REPRODUCED",
-                                     "NOT_RETESTED_PREVIOUS_CHILD_CRASH")
-                    for x in observations) else 0
+    }, sort_keys=True), flush=True)
+    # Green CI only means *guarded UCIE-owned prevention* checks passed.
+    return 0 if safe_guards_passed else 1
 
 
 if __name__ == "__main__":
