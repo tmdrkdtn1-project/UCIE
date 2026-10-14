@@ -199,6 +199,76 @@ class ScandirStaticDetectionTests(unittest.TestCase):
         """)
         self.assertEqual(result["finding_count"], 0)
 
+    def test_scandir_function_alias_is_detected(self):
+        result = scan("""
+            import os
+            def run(path, pool, worker):
+                alias = os.scandir
+                it = alias(path)
+                pool.submit(worker, it)
+        """)
+        self.assertEqual(result["finding_count"], 1)
+
+    def test_import_from_scandir_alias_inside_function(self):
+        result = scan("""
+            def run(path, pool, worker):
+                from os import scandir as scanned
+                it = scanned(path)
+                pool.submit(worker, it)
+        """)
+        self.assertEqual(result["finding_count"], 1)
+
+    def test_alias_reassigned_to_other_function_is_ignored(self):
+        result = scan("""
+            import os
+            def run(path, pool, worker):
+                alias = os.scandir
+                alias = list
+                it = alias(path)
+                pool.submit(worker, it)
+        """)
+        self.assertEqual(result["finding_count"], 0)
+
+    def test_dead_constant_false_branch_not_scanned(self):
+        result = scan("""
+            import os
+            def run(path, pool, worker):
+                if False:
+                    it = os.scandir(path)
+                    pool.submit(worker, it)
+        """)
+        self.assertEqual(result["finding_count"], 0)
+
+    def test_dead_constant_zero_nested_function_not_scanned(self):
+        result = scan("""
+            import os
+            if 0:
+                def unreachable(path, pool, worker):
+                    it = os.scandir(path)
+                    pool.submit(worker, it)
+        """)
+        self.assertEqual(result["finding_count"], 0)
+
+    def test_unknown_condition_remains_review_candidate(self):
+        result = scan("""
+            import os
+            def run(path, pool, worker, condition):
+                if condition:
+                    it = os.scandir(path)
+                    pool.submit(worker, it)
+        """)
+        self.assertEqual(result["finding_count"], 1)
+
+    def test_constant_true_branch_scanned(self):
+        result = scan("""
+            import os
+            def run(path, pool, worker):
+                if True:
+                    it = os.scandir(path)
+                    pool.submit(worker, it)
+        """)
+        self.assertEqual(result["finding_count"], 1)
+
     def test_deterministic_findings(self):
         s = """
             import os
