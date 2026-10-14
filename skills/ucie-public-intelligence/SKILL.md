@@ -53,3 +53,28 @@ trigger an empty alert.
 Never inspect unrelated local/remote user projects, conversation data,
 secrets, tokens or private repositories. No merge, signing, package
 distribution, scheduler registration, runtime migration or deployment.
+
+## Code, script, official docs, release and advisory enrichment
+
+When a high-priority *approved public* PR needs detailed code evidence, use
+the Stage 9 code/doc/release/advisory adapter to **inspect only first-page
+PR file features, official documentation fingerprints and public
+release/advisory metadata**. In a separately authorized development
+environment this is an explicit one-shot request; never silently run it
+inside the older scheduled miner.
+
+Use `python -m ucie_miner collect-public-evidence --live --source
+modelcontextprotocol/python-sdk --pr 3696 --merge-sha
+754254c08fe1c3eda18b69da3d336106fe8d72d6` only when that
+public PR is in scope and not opted out. A source or PR opt-out wins
+over priority ranking. Do not execute any code/snippet, retain diff
+contents, follow redirected URLs or access arbitrary paths.
+
+Next prepare a manual-only candidate via
+`python -m ucie_miner preview-public-evidence-stdin` on a bounded
+synthetic/public JSON receipt. An unknown release inclusion, missing
+advisory endpoint, absent patch, unreviewed license or missing
+independent regression result is **not** a successful verification.
+
+Relevant source modules: `ucie_miner.public_evidence_routes` and
+`ucie_miner.public_knowledge_pipeline`.
