@@ -36,10 +36,10 @@ class CandidateScanCLITests(unittest.TestCase):
         self.assertNotIn(source, result.stdout)
 
     def test_stdin_preview_links_pinned_nonexecuting_candidate(self):
-        text = ("import os\\n"
-                "def f(directory, executor, worker):\\n"
-                "    raw = os.scandir(directory)\\n"
-                "    executor.submit(worker, raw)\\n")
+        text = ("import os\n"
+                "def f(directory, executor, worker):\n"
+                "    raw = os.scandir(directory)\n"
+                "    executor.submit(worker, raw)\n")
         env = dict(os.environ)
         env["PYTHONPATH"] = str(ROOT / "src")
         result = subprocess.run(
