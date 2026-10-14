@@ -47,7 +47,7 @@ def run(path):
         return next(it)
     threading.Thread(target=worker).start()
 """},
-    # Known heuristic blind spot: aliases of os.scandir are not resolved.
+    # Calibration: local os.scandir function alias is now resolved.
     {"case_id": "p-alias-known-fn", "expected_flag": True, "source": """
 import os
 def run(path, pool, worker):
@@ -94,7 +94,7 @@ def run(path, pool, worker):
     it = list(os.scandir(path))
     pool.submit(worker, it)
 """},
-    # Known control-flow blind spot: unreachable branch remains in AST.
+    # Calibration: only literal unreachable branches are skipped.
     {"case_id": "n-unreachable-known-fp", "expected_flag": False, "source": """
 import os
 def run(path, pool, worker):
@@ -111,12 +111,12 @@ class SyntheticAccuracyTests(unittest.TestCase):
         self.assertEqual(outcome["fixture_count"], 14)
         self.assertEqual(outcome["positive_controls"], 7)
         self.assertEqual(outcome["negative_controls"], 7)
-        self.assertEqual(outcome["true_positive"], 6)
-        self.assertEqual(outcome["false_negative"], 1)
-        self.assertEqual(outcome["false_positive"], 1)
-        self.assertEqual(outcome["true_negative"], 6)
-        self.assertEqual(outcome["precision_ppm"], 857142)
-        self.assertEqual(outcome["recall_ppm"], 857142)
+        self.assertEqual(outcome["true_positive"], 7)
+        self.assertEqual(outcome["false_negative"], 0)
+        self.assertEqual(outcome["false_positive"], 0)
+        self.assertEqual(outcome["true_negative"], 7)
+        self.assertEqual(outcome["precision_ppm"], 1000000)
+        self.assertEqual(outcome["recall_ppm"], 1000000)
         self.assertFalse(outcome["real_world_accuracy_verified"])
         self.assertFalse(outcome["independently_validated_labels"])
         self.assertFalse(outcome["production_approved"])
