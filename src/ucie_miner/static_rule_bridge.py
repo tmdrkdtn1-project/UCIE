@@ -16,8 +16,8 @@ from .regression_plans import TEST_FAMILIES, create_regression_matrix
 from .review import load_manifest
 from .rule_candidates import GUIDANCE, REQUIRED_GATES
 
-SHA256 = re.compile(r"[0-9a-f]{64}\\Z")
-SHA40 = re.compile(r"[0-9a-f]{40}\\Z")
+SHA256 = re.compile(r"[0-9a-f]{64}")
+SHA40 = re.compile(r"[0-9a-f]{40}")
 SOURCE_BINDINGS = {
     "PY_SCANDIR_SHARED_ITERATOR_RACE": ("python/cpython", 153462),
     "PS_FUZZY_GET_COMMAND_DUPLICATES": ("PowerShell/PowerShell", 28042),
