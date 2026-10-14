@@ -28,8 +28,9 @@ from an exact pinned GitHub API route and compares PR number, merged flag,
 public URL, merged timestamp and 40-character merge commit SHA. Its default
 fetch uses anonymous GET only. This is an independently fetched **PR metadata
 consistency check**, not a source license verification, a patch-test pass, or
-complete author/date/commit provenance. It is not yet wired into the regular
-collector. The existing collector still reports unverified candidates.
+complete author/date/commit provenance. It is now opt-in for the collector through `crosscheck_origin=True` and enabled
+by the official Stage 3 worker entrypoint. The existing collector still reports
+unverified candidates and does not grant license or fix verification.
 
 The official `scripts/public_miner_cycle.py` now opts into an hourly schedule
 gate. Corrupt prior receipts fail closed; receipts persist failure counters
