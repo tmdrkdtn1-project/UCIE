@@ -19,6 +19,7 @@ import sys
 from .integration import preview_knowledge_rules
 from .static_concurrency import MAX_SOURCE_BYTES, inspect_python_scandir_source
 from .static_rule_bridge import preview_static_rule_candidates
+from .review_docket import prepare_independent_review_docket
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -50,6 +51,7 @@ def main(argv=None):
     pyscan.add_argument("--preview-candidates", action="store_true",
                         help="Link heuristic findings to unverified Stage 6 proposals; no DB writes")
     sub.add_parser("preview-static-json-stdin", help="Link explicitly supplied untrusted static-scan JSON to nonexecuting rule/plan candidates")
+    sub.add_parser("preview-review-docket-stdin", help="Offline structural review agenda for two supplied candidate receipts, never approval")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
@@ -76,6 +78,24 @@ def main(argv=None):
             scan = json.loads(data.decode("utf-8", errors="strict"),
                               object_pairs_hook=unique_fields)
             result = preview_static_rule_candidates(ROOT, scan)
+        elif args.action == "preview-review-docket-stdin":
+            data = sys.stdin.buffer.read(MAX_SOURCE_BYTES + 1)
+            if len(data) > MAX_SOURCE_BYTES:
+                raise ValueError("input is oversized")
+            def unique_docket_fields(pairs):
+                unique = {}
+                for key, value in pairs:
+                    if key in unique:
+                        raise ValueError("duplicate receipt property")
+                    unique[key] = value
+                return unique
+            inputs = json.loads(data.decode("utf-8", errors="strict"),
+                                object_pairs_hook=unique_docket_fields)
+            if not isinstance(inputs, dict) or set(inputs) != {
+                    "static_preview", "external_review"}:
+                raise ValueError("two bounded untrusted receipts required")
+            result = prepare_independent_review_docket(
+                inputs["static_preview"], inputs["external_review"])
         elif args.action == "report":
             path = report(ROOT)
             result = {"status": "LOCAL_REPORT_WRITTEN", "path": str(path)}
