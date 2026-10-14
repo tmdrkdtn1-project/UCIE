@@ -6,6 +6,8 @@ $items = [System.Collections.Generic.List[object]]::new()
 $version = $PSVersionTable.PSVersion.ToString()
 $root = Join-Path ([System.IO.Path]::GetTempPath()) ('ucie-runtime-' + [guid]::NewGuid().ToString('N'))
 $original = $env:PSModulePath
+$guardedFailures = 0
+. (Join-Path $PSScriptRoot '..\scripts\ucie_safe_powershell_results.ps1')
 [System.IO.Directory]::CreateDirectory($root) | Out-Null
 try {
     $roots = @()
@@ -21,15 +23,21 @@ try {
         $found = @(Get-Command 'Get-FuzzyDuplicat' -UseFuzzyMatching -FuzzyMinimumDistance 1 -ErrorAction Stop)
         $matches = @($found | Where-Object { $_.Name -eq 'Get-FuzzyDuplicate' })
         $ok = ($found.Count -eq 1 -and $matches.Count -eq 1)
+        $safe = @(Get-UCIEUniqueCommandResults -Commands $found)
+        $guardedOk = ($safe.Count -eq 1 -and $safe[0].Name -eq 'Get-FuzzyDuplicate')
+        if (-not $guardedOk) { $guardedFailures++ }
         $items.Add(@{
             pattern = 'PS_FUZZY_GET_COMMAND_DUPLICATES'
             coverage = 'PUBLIC_RUNTIME_BEHAVIOR'
             state = $(if ($ok) { 'OBSERVED_EXPECTED_BEHAVIOR' } else { 'OBSERVED_MISMATCH' })
             observed_command_count = $found.Count
+            guarded_result_count = $safe.Count
+            guarded_state = $(if ($guardedOk) { 'GUARDED_BEHAVIOR_OBSERVED' } else { 'GUARDED_MISMATCH' })
         })
     }
     catch {
-        $items.Add(@{ pattern='PS_FUZZY_GET_COMMAND_DUPLICATES'; coverage='PUBLIC_RUNTIME_BEHAVIOR'; state='PROBE_ERROR' })
+        $guardedFailures++
+        $items.Add(@{ pattern='PS_FUZZY_GET_COMMAND_DUPLICATES'; coverage='PUBLIC_RUNTIME_BEHAVIOR'; state='PROBE_ERROR'; guarded_state='GUARD_PROBE_ERROR' })
     }
     finally {
         $env:PSModulePath = $original
@@ -45,28 +53,38 @@ try {
             [System.IO.File]::WriteAllText((Join-Path $folder 'file2.txt'), 'y')
         }
         $match = $true
+        $guardedMatch = $true
         Push-Location -LiteralPath $relativeRoot
         try {
             foreach ($name in @('.directory', '..directory', 'directory')) {
                 $found = @(Resolve-Path -Path (Join-Path $name '*.txt') -Relative -ErrorAction Stop)
+                $safeFound = @(Resolve-UCIESafeRelativePath -BaseDirectory $relativeRoot -SearchPattern (Join-Path $name '*.txt'))
                 $expected = @((Join-Path (Join-Path '.' $name) 'file1.txt'), (Join-Path (Join-Path '.' $name) 'file2.txt'))
-                if ($found.Count -ne 2) { $match = $false; continue }
+                if ($found.Count -ne 2) { $match = $false }
+                if ($safeFound.Count -ne 2) { $guardedMatch = $false; continue }
                 $observed = @($found | Sort-Object)
                 $expectedSorted = @($expected | Sort-Object)
-                if (($observed[0] -cne $expectedSorted[0]) -or ($observed[1] -cne $expectedSorted[1])) {
+                if ($found.Count -eq 2 -and (($observed[0] -cne $expectedSorted[0]) -or ($observed[1] -cne $expectedSorted[1]))) {
                     $match = $false
+                }
+                $safeSorted = @($safeFound | Sort-Object)
+                if (($safeSorted[0] -cne $expectedSorted[0]) -or ($safeSorted[1] -cne $expectedSorted[1])) {
+                    $guardedMatch = $false
                 }
             }
         }
         finally { Pop-Location }
+        if (-not $guardedMatch) { $guardedFailures++ }
         $items.Add(@{
+            guarded_state = $(if ($guardedMatch) { 'GUARDED_BEHAVIOR_OBSERVED' } else { 'GUARDED_MISMATCH' })
             pattern = 'PS_RESOLVE_PATH_DOT_PREFIX'
             coverage = 'PUBLIC_RUNTIME_BEHAVIOR'
             state = $(if ($match) { 'OBSERVED_EXPECTED_BEHAVIOR' } else { 'OBSERVED_MISMATCH' })
         })
     }
     catch {
-        $items.Add(@{ pattern='PS_RESOLVE_PATH_DOT_PREFIX'; coverage='PUBLIC_RUNTIME_BEHAVIOR'; state='PROBE_ERROR' })
+        $guardedFailures++
+        $items.Add(@{ pattern='PS_RESOLVE_PATH_DOT_PREFIX'; coverage='PUBLIC_RUNTIME_BEHAVIOR'; state='PROBE_ERROR'; guarded_state='GUARD_PROBE_ERROR' })
     }
 
     $items.Add(@{
@@ -83,7 +101,9 @@ finally {
     }
 }
 $out = [ordered]@{
-    schema = 'UCIE_SAFE_POWERSHELL_BEHAVIOR_OBSERVATION_V1'
+    schema = 'UCIE_SAFE_POWERSHELL_BEHAVIOR_OBSERVATION_V2'
+    guarded_checks_passed = ($guardedFailures -eq 0)
+    native_runtime_regression_gate = 'NO_GO'
     runtime = 'PowerShell'
     version = $version
     observations = @($items.ToArray())
@@ -96,4 +116,4 @@ $out = [ordered]@{
 Write-Output ('UCIE_POWERSHELL_BEHAVIOR=' + ($out | ConvertTo-Json -Compress -Depth 6))
 # This probe is observational, not an upstream fix/production conformance gate.
 # Mismatches are reported verbatim and never converted into 'PASS' or approval.
-exit 0
+exit $(if ($guardedFailures -eq 0) { 0 } else { 1 })

@@ -26,14 +26,14 @@ GUIDANCE = {
         "Check SSH path behavior without assuming an active Runspace",
         "Null-Runspace and SSH path fixtures across supported PowerShell versions"),
     "PS_FUZZY_GET_COMMAND_DUPLICATES": (
-        "Review stable result identity when reporting fuzzy command matches",
+        "Deduplicate fuzzy CommandInfo results by Name, CommandType and Source before use; never invoke discovered commands",
         "Synthetic duplicate and near-match command fixtures"),
     "PS_RESOLVE_PATH_DOT_PREFIX": (
-        "Preserve documented semantics for dot-prefixed relative paths",
+        "Derive anchored relative paths with Path.GetRelativePath; reject escapes and preserve dot-prefixed filenames",
         "Dot-prefix, parent-directory and platform-specific path fixtures"),
     "PY_SCANDIR_SHARED_ITERATOR_RACE": (
-        "Review shared scandir iterator ownership and concurrency boundaries",
-        "Concurrent iterator access and end-of-stream synthetic fixtures"),
+        "Never concurrently share a raw scandir iterator; serialize every next() and close() with a single owned lock",
+        "Guarded concurrent next()/close() and end-of-stream fixtures; raw native crash remains NO-GO"),
     "PY_QSBR_THREADSTATE_SLOT_LEAK": (
         "Review balanced thread-state slot acquisition and release paths",
         "Repeated thread-state lifecycle and interrupted cleanup fixtures"),
