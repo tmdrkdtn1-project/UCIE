@@ -21,6 +21,31 @@ GUIDANCE = {
                            "Pinned and unsupported version fixtures"),
     "RESOURCE_CLEANUP": ("Close resources deterministically",
                          "Repeated open-close and failure cleanup fixtures"),
+    # Pinned Stage 4 review families: guidance and test *plans*, not patches.
+    "PS_SSH_PATH_WITHOUT_RUNSPACE": (
+        "Check SSH path behavior without assuming an active Runspace",
+        "Null-Runspace and SSH path fixtures across supported PowerShell versions"),
+    "PS_FUZZY_GET_COMMAND_DUPLICATES": (
+        "Review stable result identity when reporting fuzzy command matches",
+        "Synthetic duplicate and near-match command fixtures"),
+    "PS_RESOLVE_PATH_DOT_PREFIX": (
+        "Preserve documented semantics for dot-prefixed relative paths",
+        "Dot-prefix, parent-directory and platform-specific path fixtures"),
+    "PY_SCANDIR_SHARED_ITERATOR_RACE": (
+        "Review shared scandir iterator ownership and concurrency boundaries",
+        "Concurrent iterator access and end-of-stream synthetic fixtures"),
+    "PY_QSBR_THREADSTATE_SLOT_LEAK": (
+        "Review balanced thread-state slot acquisition and release paths",
+        "Repeated thread-state lifecycle and interrupted cleanup fixtures"),
+    "PY_COMPREHENSION_COMPILER_ERROR_CLEANUP": (
+        "Preserve compiler failure state while releasing temporary resources",
+        "Malformed comprehension and compiler exceptional-path fixtures"),
+    "PY_AST_REPR_FIELDS_LOOKUP": (
+        "Review AST repr field lookup and missing-field behavior",
+        "Missing, unusual and invalid AST field fixtures"),
+    "PY_WEAKREF_FREE_THREADED_RACE": (
+        "Review lifetime and synchronization of free-threaded weak references",
+        "Concurrent weakref access, finalization and cleanup fixtures"),
 }
 REQUIRED_GATES = ("source_authenticated", "license_verified",
                   "security_review_passed", "independent_regression_passed",
