@@ -1,5 +1,6 @@
 """Synthetic-only five-source discovery, adaptive selection and UCIE skills."""
 from datetime import datetime, timezone
+from contextlib import closing
 from pathlib import Path
 import json
 import sqlite3
@@ -161,7 +162,7 @@ class Stage9PublicDiscoveryTests(unittest.TestCase):
             runtime = root / "runtime"
             runtime.mkdir()
             database = runtime / "public_miner.sqlite3"
-            with sqlite3.connect(database) as db:
+            with closing(sqlite3.connect(database)) as db, db:
                 db.execute("CREATE TABLE candidates(source TEXT, pr_number INTEGER, status TEXT)")
                 db.execute("INSERT INTO candidates VALUES(?,?,?)",
                            ("python/cpython", 159311, "UNVERIFIED_CANDIDATE_ONLY"))
