@@ -18,6 +18,10 @@ from ucie_miner.review import _read_candidates
 from ucie_miner.provenance_review import inspect_public_prs
 from ucie_miner.preapproval import preapproval_readiness
 from ucie_miner.acceptance_bundle import build_readonly_acceptance_preview
+from ucie_miner.evidence_binding import bind_candidate_receipts
+from ucie_miner.license_review import inspect_pinned_licenses
+from ucie_miner.regression_plans import create_regression_matrix
+from ucie_miner.review import load_manifest
 
 
 class Stage4To7IntegrationTests(unittest.TestCase):
@@ -99,10 +103,68 @@ class Stage4To7IntegrationTests(unittest.TestCase):
         self.assertEqual(result["pattern_preview"]["family_count"], 8)
         self.assertFalse(result["production_approved"])
 
+    def binding_inputs(self):
+        chain = preview_knowledge_rules(self.root)
+        rows = _read_candidates(self.root)
+        manifest = load_manifest(self.root)
+        provenance = inspect_public_prs(rows)
+        licenses = inspect_pinned_licenses(self.root)
+        regression = create_regression_matrix(chain["rulepack_preview"])
+        return rows, manifest, chain, provenance, licenses, regression
+
+    def test_binding_cross_checks_nine_sources_eight_families(self):
+        receipt = bind_candidate_receipts(*self.binding_inputs())
+        self.assertEqual(receipt["source_count"], 9)
+        self.assertEqual(receipt["mapped_pr_count"], 9)
+        self.assertEqual(receipt["family_count"], 8)
+        self.assertEqual(len(receipt["receipt_sha256"]), 64)
+        self.assertFalse(receipt["receipt_cryptographically_signed"])
+        self.assertFalse(receipt["deploy_allowed"])
+
+    def test_binding_tampered_miner_hash_denied(self):
+        args = self.binding_inputs()
+        args[0][0]["evidence_sha256"] = "f" * 64
+        with self.assertRaises(PatternError):
+            bind_candidate_receipts(*args)
+
+    def test_binding_tampered_provenance_hash_denied(self):
+        args = self.binding_inputs()
+        args[3]["items"][0]["comparison_sha256"] = "0" * 64
+        with self.assertRaises(PatternError):
+            bind_candidate_receipts(*args)
+
+    def test_binding_missing_license_marker_denied(self):
+        args = self.binding_inputs()
+        args[4]["items"].pop()
+        with self.assertRaises(PatternError):
+            bind_candidate_receipts(*args)
+
+    def test_binding_forged_license_approval_denied(self):
+        args = self.binding_inputs()
+        args[4]["items"][0]["legal_approval"] = True
+        with self.assertRaises(PatternError):
+            bind_candidate_receipts(*args)
+
+    def test_binding_reordered_regression_plan_denied(self):
+        args = self.binding_inputs()
+        args[5]["cases"][0]["actual_test_result"] = "PASS"
+        with self.assertRaises(PatternError):
+            bind_candidate_receipts(*args)
+
+    def test_binding_stale_family_fingerprint_denied(self):
+        args = self.binding_inputs()
+        args[2]["pattern_preview"]["families"][0]["fingerprint_sha256"] = "0" * 64
+        with self.assertRaises(PatternError):
+            bind_candidate_receipts(*args)
+
     def test_stage8_bundle_includes_unverified_license_and_regression(self):
         result = build_readonly_acceptance_preview(
             self.root, is_windows=True, python_version=(3, 15))
         self.assertEqual(result["status"], "NO_GO")
+        self.assertEqual(result["candidate_binding_status"],
+                         "STRUCTURALLY_CONSISTENT_CANDIDATES")
+        self.assertEqual(len(result["candidate_binding_sha256"]), 64)
+        self.assertFalse(result["candidate_binding_is_signature"])
         self.assertEqual(result["miner_candidate_count"], 9)
         self.assertEqual(result["pattern_families"], 8)
         self.assertEqual(result["synthetic_regression_plans"], 8)
