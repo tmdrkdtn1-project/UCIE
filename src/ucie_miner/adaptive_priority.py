@@ -11,7 +11,7 @@ import json
 
 from .public_discovery import SOURCES, SOURCE_SKILL, DiscoveryError
 
-MAX_LEADS = 100
+MAX_LEADS = 300  # five allowlisted sources x 3 pages x 20 PRs
 TAG_PRIORITY = {"SECURITY": 60, "CRASH": 45, "REGRESSION": 30,
                 "COMPATIBILITY": 18, "TESTING": 5}
 
