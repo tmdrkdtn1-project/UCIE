@@ -29,17 +29,28 @@ def _scope_nodes(scope):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
                              ast.ClassDef, ast.Lambda)):
             continue
+        # Only literal constants are simplified. Never eval() conditions,
+        # resolve symbols, import modules or execute the supplied source.
+        if (isinstance(node, ast.If) and isinstance(node.test, ast.Constant)
+                and type(node.test.value) in (bool, int)
+                and node.test.value in (0, 1)):
+            chosen = node.body if node.test.value else node.orelse
+            pending.extend(reversed(chosen))
+            continue
         pending.extend(reversed(list(ast.iter_child_nodes(node))))
 
 
-def _raw_scandir(expr):
+def _scandir_function(expr, aliases):
     return (
-        isinstance(expr, ast.Call)
-        and isinstance(expr.func, ast.Attribute)
-        and isinstance(expr.func.value, ast.Name)
-        and expr.func.value.id == "os"
-        and expr.func.attr == "scandir"
+        (isinstance(expr, ast.Attribute)
+         and isinstance(expr.value, ast.Name)
+         and expr.value.id == "os" and expr.attr == "scandir")
+        or (isinstance(expr, ast.Name) and expr.id in aliases)
     )
+
+
+def _raw_scandir(expr, aliases):
+    return isinstance(expr, ast.Call) and _scandir_function(expr.func, aliases)
 
 
 def _assigned_names(node):
@@ -65,7 +76,8 @@ def _closures(scope_nodes, name):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             # A nested function accessing the iterator can be submitted with
             # no explicit iterator argument. This remains a *candidate* only.
-            if any(_name_used(statement, name) for statement in node.body):
+            if any(_name_used(statement, name)
+                   for statement in _scope_nodes(node)):
                 result.add((node.name, node.lineno))
     return result
 
@@ -111,41 +123,61 @@ def inspect_python_scandir_source(source: str) -> dict:
         raise CandidateScanError("invalid or excessively nested Python source") from exc
     if len(all_nodes) > MAX_AST_NODES:
         raise CandidateScanError("AST complexity limit exceeded")
-    scopes = [parsed] + [n for n in all_nodes
-                         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    # Collect only scopes reachable under strictly literal if-branches.
+    # A function declared solely inside `if False` must not be scanned.
+    scopes = [parsed]
     findings = []
     seen = set()
     for scope in scopes:
         statements = list(_scope_nodes(scope))
         if len(statements) > MAX_AST_NODES:
             raise CandidateScanError("scope complexity exceeded")
+        scopes.extend(n for n in statements
+                      if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)))
         # Keep the latest lexical assignment: after `it = list(...)` a
         # previous `it = os.scandir(...)` is no longer evidence of a raw
         # iterator. This is bounded lexical analysis, not full data flow.
         bindings = {}
+        aliases = set()
         for node in statements:
+            if isinstance(node, ast.ImportFrom):
+                if node.level == 0 and node.module == "os":
+                    for imported in node.names:
+                        if imported.name == "scandir":
+                            aliases.add(imported.asname or imported.name)
+                        elif imported.asname:
+                            aliases.discard(imported.asname)
+                continue
             names = set()
             is_raw = False
+            func_alias = False
             if isinstance(node, ast.Assign):
                 for target in node.targets:
                     names.update(_assigned_names(target))
-                is_raw = _raw_scandir(node.value)
+                is_raw = _raw_scandir(node.value, aliases)
+                func_alias = _scandir_function(node.value, aliases)
             elif isinstance(node, ast.AnnAssign):
                 if node.value is not None:
                     names = _assigned_names(node.target)
-                    is_raw = _raw_scandir(node.value)
+                    is_raw = _raw_scandir(node.value, aliases)
+                    func_alias = _scandir_function(node.value, aliases)
             elif isinstance(node, ast.NamedExpr):
                 names = _assigned_names(node.target)
-                is_raw = _raw_scandir(node.value)
+                is_raw = _raw_scandir(node.value, aliases)
+                func_alias = _scandir_function(node.value, aliases)
             elif isinstance(node, (ast.For, ast.AsyncFor)):
                 names = _assigned_names(node.target)
             elif isinstance(node, (ast.With, ast.AsyncWith)):
                 for context in node.items:
                     for name in _assigned_names(context.optional_vars):
                         bindings.setdefault(name, []).append(
-                            (node.lineno, _raw_scandir(context.context_expr)))
+                            (node.lineno, _raw_scandir(context.context_expr, aliases)))
             for name in names:
                 bindings.setdefault(name, []).append((node.lineno, is_raw))
+                if func_alias:
+                    aliases.add(name)
+                else:
+                    aliases.discard(name)
         if not bindings:
             continue
         for node in statements:
