@@ -32,11 +32,11 @@ TAGS = {
 # Fixed category features only: untrusted code text is never emitted or
 # rephrased as a runnable correction command.
 TRANSITION_SIGNALS = {
-    "GENERIC_EXCEPTION": re.compile(r"\\b(?:ValueError|RuntimeError|Exception)\\b"),
-    "PROTOCOL_ERROR_CODE": re.compile(r"\\b(?:INVALID_PARAMS|MCPError)\\b"),
-    "RECURSION_LIMIT_CLEANUP": re.compile(r"\\b(?:addCleanup|setrecursionlimit)\\b"),
-    "THREAD_SERIALIZATION": re.compile(r"\\b(?:Lock|RLock|mutex|lock\\.)\\b"),
-    "RUNNER_BINARY_CONFLICT": re.compile(r"\\b(?:fusermount3|podman|setuid)\\b", re.I),
+    "GENERIC_EXCEPTION": re.compile(r"\b(?:ValueError|RuntimeError|Exception)\b"),
+    "PROTOCOL_ERROR_CODE": re.compile(r"\b(?:INVALID_PARAMS|MCPError)\b"),
+    "RECURSION_LIMIT_CLEANUP": re.compile(r"\b(?:addCleanup|setrecursionlimit)\b"),
+    "THREAD_SERIALIZATION": re.compile(r"\b(?:Lock|RLock|mutex|lock\.)\b"),
+    "RUNNER_BINARY_CONFLICT": re.compile(r"\b(?:fusermount3|podman|setuid)\b", re.I),
 }
 EXTENSIONS = (".py", ".pyi", ".ps1", ".psm1", ".psd1", ".c", ".h", ".sh",
               ".yml", ".yaml", ".json", ".md", ".toml", ".go", ".rs")
