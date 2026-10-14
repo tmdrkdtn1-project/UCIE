@@ -40,7 +40,7 @@ def _utc_stamp(value):
     return value.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
-def _dedicated_path(root):
+def _dedicated_path(root, *, allow_absent_runtime=False):
     if not isinstance(root, (str, Path)):
         raise DiscoveryError("invalid dedicated UCIE root")
     base = Path(root)
@@ -48,7 +48,9 @@ def _dedicated_path(root):
             or not base.is_dir()):
         raise DiscoveryError("dedicated UCIE project root required")
     runtime = base / "runtime"
-    if not runtime.is_dir() or runtime.is_symlink():
+    if runtime.is_symlink() or (runtime.exists() and not runtime.is_dir()):
+        raise DiscoveryError("unsafe UCIE runtime directory")
+    if not runtime.is_dir() and not allow_absent_runtime:
         raise DiscoveryError("existing non-symlink UCIE runtime dir required")
     file = runtime / DB_NAME
     if file.is_symlink() or (file.exists() and not file.is_file()):
@@ -194,7 +196,7 @@ def stage_public_candidates(batch, *, root=None, allow_disk_write=False,
 
 def inspect_staged_candidates(root):
     """Inspect only the separately named Stage 10 SQLite file with mode=ro."""
-    path = _dedicated_path(root)
+    path = _dedicated_path(root, allow_absent_runtime=True)
     if not path.exists():
         return {
             "status": "STAGING_FILE_ABSENT",
