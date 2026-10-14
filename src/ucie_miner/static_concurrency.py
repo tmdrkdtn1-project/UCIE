@@ -126,6 +126,7 @@ def inspect_python_scandir_source(source: str) -> dict:
     # Collect only scopes reachable under strictly literal if-branches.
     # A function declared solely inside `if False` must not be scanned.
     scopes = [parsed]
+    inherited = {}
     findings = []
     seen = set()
     for scope in scopes:
@@ -134,62 +135,76 @@ def inspect_python_scandir_source(source: str) -> dict:
             raise CandidateScanError("scope complexity exceeded")
         scopes.extend(n for n in statements
                       if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)))
-        # Keep the latest lexical assignment: after `it = list(...)` a
-        # previous `it = os.scandir(...)` is no longer evidence of a raw
-        # iterator. This is bounded lexical analysis, not full data flow.
-        bindings = {}
-        aliases = set()
-        for node in statements:
+        # Read lexical events in order rather than pre-scanning aliases across
+        # the entire scope. An alias created later must NOT retroactively
+        # turn an earlier call into a candidate.
+        ordered = sorted(
+            statements,
+            key=lambda n: (getattr(n, "lineno", 0),
+                           getattr(n, "col_offset", 0),
+                           int(isinstance(n, ast.Call))),
+        )
+        state = dict(inherited.pop(id(scope), {}))
+        closure_cache = {}
+        for node in ordered:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                inherited[id(node)] = {name: kind for name, kind in
+                                       state.items() if kind == "scandir_fn"}
+                continue
             if isinstance(node, ast.ImportFrom):
                 if node.level == 0 and node.module == "os":
                     for imported in node.names:
-                        if imported.name == "scandir":
-                            aliases.add(imported.asname or imported.name)
-                        elif imported.asname:
-                            aliases.discard(imported.asname)
+                        name = imported.asname or imported.name
+                        state[name] = ("scandir_fn" if imported.name == "scandir"
+                                       else "other")
+                else:
+                    for imported in node.names:
+                        state[imported.asname or imported.name] = "other"
                 continue
-            names = set()
-            is_raw = False
-            func_alias = False
-            if isinstance(node, ast.Assign):
-                for target in node.targets:
-                    names.update(_assigned_names(target))
-                is_raw = _raw_scandir(node.value, aliases)
-                func_alias = _scandir_function(node.value, aliases)
-            elif isinstance(node, ast.AnnAssign):
-                if node.value is not None:
+            if isinstance(node, ast.Import):
+                for imported in node.names:
+                    state[imported.asname or imported.name.split(".")[0]] = "other"
+                continue
+            assigned = {}
+            if isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
+                if isinstance(node, ast.Assign):
+                    names = set().union(*(_assigned_names(x) for x in node.targets))
+                else:
                     names = _assigned_names(node.target)
-                    is_raw = _raw_scandir(node.value, aliases)
-                    func_alias = _scandir_function(node.value, aliases)
-            elif isinstance(node, ast.NamedExpr):
-                names = _assigned_names(node.target)
-                is_raw = _raw_scandir(node.value, aliases)
-                func_alias = _scandir_function(node.value, aliases)
+                value = node.value
+                if _scandir_function(value, {k for k, v in state.items()
+                                              if v == "scandir_fn"}):
+                    kind = "scandir_fn"
+                elif _raw_scandir(value, {k for k, v in state.items()
+                                           if v == "scandir_fn"}):
+                    kind = "raw"
+                elif isinstance(value, ast.Name) and state.get(value.id) == "raw":
+                    kind = "raw"  # single-scope iterator variable alias
+                else:
+                    kind = "other"
+                assigned = {name: kind for name in names}
             elif isinstance(node, (ast.For, ast.AsyncFor)):
-                names = _assigned_names(node.target)
+                assigned = {name: "other" for name in _assigned_names(node.target)}
             elif isinstance(node, (ast.With, ast.AsyncWith)):
                 for context in node.items:
+                    raw = _raw_scandir(context.context_expr,
+                                       {k for k,v in state.items()
+                                        if v == "scandir_fn"})
                     for name in _assigned_names(context.optional_vars):
-                        bindings.setdefault(name, []).append(
-                            (node.lineno, _raw_scandir(context.context_expr, aliases)))
-            for name in names:
-                bindings.setdefault(name, []).append((node.lineno, is_raw))
-                if func_alias:
-                    aliases.add(name)
-                else:
-                    aliases.discard(name)
-        if not bindings:
-            continue
-        for node in statements:
+                        assigned[name] = "raw" if raw else "other"
+            elif isinstance(node, ast.Delete):
+                for target in node.targets:
+                    assigned.update({name: "other"
+                                     for name in _assigned_names(target)})
+            state.update(assigned)
             if not isinstance(node, ast.Call):
                 continue
-            for name, assignments in bindings.items():
-                preceding = [is_raw for at, is_raw in assignments
-                             if at <= node.lineno]
-                if not preceding or not preceding[-1]:
+            for name, kind in list(state.items()):
+                if kind != "raw":
                     continue
-                boundary = _thread_boundary(node, name,
-                                            _closures(statements, name))
+                closures = closure_cache.setdefault(
+                    name, _closures(statements, name))
+                boundary = _thread_boundary(node, name, closures)
                 if boundary is None:
                     continue
                 key = (getattr(scope, "lineno", 0), node.lineno, name,
