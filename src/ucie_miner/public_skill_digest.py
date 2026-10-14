@@ -11,6 +11,7 @@ from __future__ import annotations
 from .public_batch import review_batch_preview, _fingerprint
 from .public_discovery import SOURCES, SOURCE_SKILL, DiscoveryError
 from .skill_profiles import PROFILE
+from .public_evidence_routes import TAGS
 
 MAX_BATCH_ITEMS = 3
 
@@ -37,10 +38,19 @@ def _map_candidate_batch(receipt):
                 or any(c not in "0123456789abcdef"
                        for c in item["evidence_sha256"])
                 or not isinstance(item.get("error_pattern_tags"), list)
-                or len(item["error_pattern_tags"]) > 12
-                or any(not isinstance(t, str) or not t.isascii()
-                       or not t.replace("_", "").isupper()
+                or len(item["error_pattern_tags"]) > len(TAGS)
+                or any(type(t) is not str or t not in TAGS
                        for t in item["error_pattern_tags"])
+                or len(set(item["error_pattern_tags"])) != len(item["error_pattern_tags"])
+                or not isinstance(item.get("missing_evidence_types"), list)
+                or any(t not in ("patch", "release", "document", "advisory")
+                       for t in item["missing_evidence_types"])
+                or len(set(item["missing_evidence_types"])) != len(item["missing_evidence_types"])
+                or item.get("patch_signal_status") not in (
+                    "HINT_ONLY_NOT_VERIFIED", "NOT_COLLECTED")
+                or (item.get("test_file_count") is not None and
+                    (type(item["test_file_count"]) is not int
+                     or not 0 <= item["test_file_count"] <= 30))
                 or item.get("safe_call_guidance") != PROFILE[skill]["safe_call"]
                 or item.get("review_plan") != PROFILE[skill]["recommended_action"]
                 or item.get("human_approval_received") is not False
