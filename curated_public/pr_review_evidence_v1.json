@@ -1,0 +1,114 @@
+{
+  "schema": "UCIE_PR_REVIEW_EVIDENCE_V1",
+  "basis": "MANUAL_PUBLIC_PR_AND_TAG_SOURCE_REVIEW_ONLY",
+  "entries": [
+    {
+      "source": "PowerShell/PowerShell",
+      "pr_number": 25780,
+      "merged_at": "2025-08-04T23:37:45Z",
+      "pattern_id": "PS_SSH_PATH_WITHOUT_RUNSPACE",
+      "canonical_pr_number": 25780,
+      "release_tag": "v7.5.12",
+      "release_file": "src/System.Management.Automation/engine/remoting/common/RunspaceConnectionInfo.cs",
+      "release_marker": "A Runspace may not be present in the TLS",
+      "license": "MIT",
+      "risk_category": "PATH_BEHAVIOR"
+    },
+    {
+      "source": "PowerShell/PowerShell",
+      "pr_number": 28042,
+      "merged_at": "2026-10-09T16:35:49Z",
+      "pattern_id": "PS_FUZZY_GET_COMMAND_DUPLICATES",
+      "canonical_pr_number": 28042,
+      "release_tag": "v7.6.7",
+      "release_file": "src/System.Management.Automation/engine/GetCommandCommand.cs",
+      "release_marker": "_commandScores.Add(new CommandScore(current, commandScore.Score))",
+      "license": "MIT",
+      "risk_category": "API_USAGE"
+    },
+    {
+      "source": "PowerShell/PowerShell",
+      "pr_number": 28087,
+      "merged_at": "2026-10-09T17:21:35Z",
+      "pattern_id": "PS_RESOLVE_PATH_DOT_PREFIX",
+      "canonical_pr_number": 28087,
+      "release_tag": "v7.6.7",
+      "release_file": "src/Microsoft.PowerShell.Commands.Management/commands/management/ResolvePathCommand.cs",
+      "release_marker": "StartsWithRelativePathToken",
+      "license": "MIT",
+      "risk_category": "PATH_BEHAVIOR"
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 153462,
+      "merged_at": "2026-08-21T17:02:24Z",
+      "pattern_id": "PY_SCANDIR_SHARED_ITERATOR_RACE",
+      "canonical_pr_number": 153462,
+      "release_tag": "v3.15.0",
+      "release_file": "Modules/posixmodule.c",
+      "release_marker": "PyMutex read_mutex",
+      "license": "PSF-2.0",
+      "risk_category": "THREAD_SAFETY"
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 155365,
+      "merged_at": "2026-08-11T16:48:20Z",
+      "pattern_id": "PY_QSBR_THREADSTATE_SLOT_LEAK",
+      "canonical_pr_number": 155365,
+      "release_tag": "v3.15.0",
+      "release_file": "Python/pystate.c",
+      "release_marker": "_Py_UnreserveTLBCIndex(interp, tlbc_idx)",
+      "license": "PSF-2.0",
+      "risk_category": "RESOURCE_CLEANUP"
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 156962,
+      "merged_at": "2026-10-13T09:51:34Z",
+      "pattern_id": "PY_COMPREHENSION_COMPILER_ERROR_CLEANUP",
+      "canonical_pr_number": 156962,
+      "release_tag": "v3.15.0",
+      "release_file": "Python/codegen.c",
+      "release_marker": "codegen_comprehension_init_container",
+      "license": "PSF-2.0",
+      "risk_category": "COMPILER_INTERNAL"
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 159232,
+      "merged_at": "2026-10-13T10:12:06Z",
+      "pattern_id": "PY_AST_REPR_FIELDS_LOOKUP",
+      "canonical_pr_number": 159232,
+      "release_tag": "v3.14.8",
+      "release_file": "Python/Python-ast.c",
+      "release_marker": "PyObject_GetAttr((PyObject *)Py_TYPE(self), state->_fields)",
+      "license": "PSF-2.0",
+      "risk_category": "COMPILER_INTERNAL"
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 159364,
+      "merged_at": "2026-10-13T23:03:21Z",
+      "pattern_id": "PY_WEAKREF_FREE_THREADED_RACE",
+      "canonical_pr_number": 159364,
+      "release_tag": "v3.15.0",
+      "release_file": "Objects/typeobject.c",
+      "release_marker": "LOCK_WEAKREFS(obj);",
+      "license": "PSF-2.0",
+      "risk_category": "THREAD_SAFETY"
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 159365,
+      "merged_at": "2026-10-13T23:05:35Z",
+      "pattern_id": "PY_SCANDIR_SHARED_ITERATOR_RACE",
+      "canonical_pr_number": 153462,
+      "release_tag": "v3.15.0",
+      "release_file": "Modules/posixmodule.c",
+      "release_marker": "PyMutex read_mutex",
+      "license": "PSF-2.0",
+      "risk_category": "THREAD_SAFETY"
+    }
+  ]
+}
