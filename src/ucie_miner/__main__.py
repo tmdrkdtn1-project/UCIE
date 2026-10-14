@@ -8,7 +8,8 @@ from pathlib import Path
 import sqlite3
 
 from .core import MiningError, PUBLIC_SOURCES, mine_once, report
-from .review import ReviewError, analyze, review_and_store
+from .review import ReviewError, _read_candidates, analyze, review_and_store
+from .provenance_review import inspect_public_prs
 from .integration import preview_knowledge_rules
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,6 +27,9 @@ def main(argv=None):
     review.add_argument("--verify-live", action="store_true",
                         help="Explicit anonymous reads of allowlisted public PRs and pinned release tag files")
     sub.add_parser("preview-chain", help="Read-only Stage 4-7 preview; no import, verification or deployment")
+    provenance = sub.add_parser("audit-provenance", help="Bounded, metadata-only, read-only provenance review")
+    provenance.add_argument("--verify-live", action="store_true",
+                            help="Explicit anonymous GitHub API GETs; no patch or license approval")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
@@ -34,6 +38,8 @@ def main(argv=None):
         elif args.action == "report":
             path = report(ROOT)
             result = {"status": "LOCAL_REPORT_WRITTEN", "path": str(path)}
+        elif args.action == "audit-provenance":
+            result = inspect_public_prs(_read_candidates(ROOT), verify_live=args.verify_live)
         elif args.action == "preview-chain":
             result = preview_knowledge_rules(ROOT)
         elif args.preview:

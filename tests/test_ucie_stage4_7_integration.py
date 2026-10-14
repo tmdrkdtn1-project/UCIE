@@ -14,6 +14,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from ucie_miner.integration import preview_knowledge_rules
 from ucie_miner.knowledge import import_miner_candidates
 from ucie_miner.patterns import PatternError
+from ucie_miner.review import _read_candidates
+from ucie_miner.provenance_review import inspect_public_prs
+from ucie_miner.preapproval import preapproval_readiness
 
 
 class Stage4To7IntegrationTests(unittest.TestCase):
@@ -94,6 +97,20 @@ class Stage4To7IntegrationTests(unittest.TestCase):
         self.assertEqual(result["quarantined_or_retracted_count"], 1)
         self.assertEqual(result["pattern_preview"]["family_count"], 8)
         self.assertFalse(result["production_approved"])
+
+    def test_full_candidate_chain_never_authorizes_operation(self):
+        chain = preview_knowledge_rules(self.root)
+        source_rows = _read_candidates(self.root)
+        receipt = inspect_public_prs(source_rows)
+        verdict = preapproval_readiness(chain, receipt)
+        self.assertEqual(receipt["count"], 9)
+        self.assertEqual(chain["pattern_preview"]["family_count"], 8)
+        self.assertEqual(verdict["status"], "NO_GO")
+        self.assertEqual(verdict["candidate_count"], 9)
+        self.assertIn("PUBLIC_METADATA_RECHECK_REQUIRED", verdict["pending"])
+        self.assertFalse(verdict["rulepack_signed"])
+        self.assertFalse(verdict["scheduler_registered"])
+        self.assertFalse(verdict["package_deployed"])
 
     def test_missing_canonical_fails_closed(self):
         with closing(sqlite3.connect(self.knowledge)) as db, db:
