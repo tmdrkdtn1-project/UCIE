@@ -1,0 +1,3 @@
+interface:
+  display_name: "UCIE Public Intelligence"
+  short_description: "Public evidence discovery, adaptive triage and coding-safety review"
