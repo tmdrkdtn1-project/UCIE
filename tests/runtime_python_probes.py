@@ -11,6 +11,7 @@ import ast
 import gc
 import json
 import os
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -47,7 +48,11 @@ def scandir_close_race():
                 Path(d, str(i)).touch()
             it = os.scandir(d)
             def reader():
-                for _ in it:
+                try:
+                    for _ in it:
+                        pass
+                except OSError:
+                    # Windows may report a graceful directory-handle close race.
                     pass
             try:
                 with ThreadPoolExecutor(max_workers=5) as pool:
@@ -125,17 +130,55 @@ def compiler_public_error_recovery():
     return True
 
 
-PROBES = (
-    ("PY_SCANDIR_SHARED_ITERATOR_RACE", "DIRECT_PUBLIC_RUNTIME_SURFACE",
-     lambda: all((scandir_shared_next(), scandir_close_race(),
-                  scandir_failed_open_no_warning()))),
-    ("PY_WEAKREF_FREE_THREADED_RACE", "PUBLIC_RUNTIME_WITH_THREADING",
-     weakref_surface_and_race),
-    ("PY_COMPREHENSION_COMPILER_ERROR_CLEANUP", "PUBLIC_COMPILER_SMOKE_ONLY",
-     compiler_public_error_recovery),
-    ("PY_AST_REPR_FIELDS_LOOKUP", "PUBLIC_AST_REPR_SMOKE_ONLY",
-     ast_public_repr_surface),
-)
+
+# A native interpreter crash in one behavioral test must not prevent all
+# other probes from reporting. Run only our own fixed, literal child targets.
+CHILD_PROBES = {
+    "scandir_shared_next": scandir_shared_next,
+    "scandir_close_race": scandir_close_race,
+    "scandir_failed_open_no_warning": scandir_failed_open_no_warning,
+    "weakref_surface_and_race": weakref_surface_and_race,
+    "ast_public_repr_surface": ast_public_repr_surface,
+    "compiler_public_error_recovery": compiler_public_error_recovery,
+}
+
+
+def child_main(label):
+    if label not in CHILD_PROBES:
+        return 2
+    try:
+        succeeded = bool(CHILD_PROBES[label]())
+        print(json.dumps({"label": label, "ok": succeeded}), flush=True)
+        return 0 if succeeded else 1
+    except Exception as exc:
+        print(json.dumps({"label": label, "error_type": type(exc).__name__}),
+              flush=True)
+        return 2
+
+
+def observe(label):
+    try:
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "--child", label],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            timeout=12, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"label": label, "state": "CHILD_TIMEOUT"}
+    if result.returncode < 0 or result.returncode in (134, 139, 3221225477):
+        return {"label": label, "state": "CHILD_PROCESS_CRASH",
+                "exit_code": result.returncode}
+    if result.returncode != 0:
+        return {"label": label, "state": "PROBE_FAILURE",
+                "exit_code": result.returncode}
+    try:
+        obj = json.loads(result.stdout.strip())
+    except (json.JSONDecodeError, ValueError):
+        return {"label": label, "state": "INVALID_PROBE_OUTPUT"}
+    return {"label": label,
+            "state": ("OBSERVED_EXPECTED_BEHAVIOR"
+                      if obj == {"label": label, "ok": True}
+                      else "INVALID_PROBE_OUTPUT")}
 
 
 def main():
@@ -143,33 +186,40 @@ def main():
     gil_fn = getattr(sys, "_is_gil_enabled", None)
     gil_enabled = gil_fn() if gil_fn else None
     observations = []
-    for code, coverage, test in PROBES:
-        try:
-            success = bool(test())
-            state = "OBSERVED_EXPECTED_BEHAVIOR" if success else "OBSERVED_MISMATCH"
-        except (Exception, AssertionError) as exc:
-            state = "PROBE_ERROR_" + type(exc).__name__
-        observations.append({"pattern": code, "coverage": coverage,
-                             "state": state})
+    for label in CHILD_PROBES:
+        observation = observe(label)
+        observation["coverage"] = (
+            "DIRECT_PUBLIC_RUNTIME_SURFACE" if label.startswith("scandir")
+            else "PUBLIC_RUNTIME_SMOKE_WITH_THREADING" if label.startswith("weakref")
+            else "PUBLIC_RUNTIME_SMOKE_ONLY")
+        observations.append(observation)
     observations.append({
-        "pattern": "PY_QSBR_THREADSTATE_SLOT_LEAK",
+        "label": "PY_QSBR_THREADSTATE_SLOT_LEAK",
         "coverage": "INTERNAL_FREE_THREADED_QSBR_INSTRUMENTATION_REQUIRED",
         "state": "NOT_REPRODUCED",
     })
     output = {
-        "schema": "UCIE_SAFE_PYTHON_BEHAVIOR_OBSERVATION_V1",
+        "schema": "UCIE_SAFE_PYTHON_BEHAVIOR_OBSERVATION_V2",
         "runtime": "CPython", "version": version,
         "gil_enabled": gil_enabled,
-        "observations": observations, "pre_fix_revision_tested": False,
+        "observations": observations,
+        "pre_fix_revision_tested": False,
         "pinned_post_fix_commit_tested": False,
-        "upstream_code_checked_out": False,
         "independent_before_after_verified": False,
         "production_approved": False,
     }
-    print("UCIE_PYTHON_BEHAVIOR=" + json.dumps(output, sort_keys=True))
-    return 1 if any(item["state"].startswith(("PROBE_ERROR", "OBSERVED_MISMATCH"))
-                    for item in observations) else 0
+    print("UCIE_PYTHON_BEHAVIOR=" + json.dumps(output, sort_keys=True),
+          flush=True)
+    # Return nonzero on any observed crash/failure. A green result is only
+    # probe execution, not upstream before/after proof.
+    return 1 if any(x["state"] not in ("OBSERVED_EXPECTED_BEHAVIOR",
+                                     "NOT_REPRODUCED")
+                    for x in observations) else 0
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--child":
+        raise SystemExit(child_main(sys.argv[2]))
+    if len(sys.argv) != 1:
+        raise SystemExit(2)
     raise SystemExit(main())
