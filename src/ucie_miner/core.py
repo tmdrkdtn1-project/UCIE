@@ -148,7 +148,10 @@ def mine_once(
     fetch: Callable[[str], object] = fetch_public_json,
     sources: tuple[str, ...] = PUBLIC_SOURCES,
     max_new_per_source: int = 2,
+    crosscheck_origin: bool = False,
 ) -> dict:
+    if type(crosscheck_origin) is not bool:
+        raise MiningError("invalid provenance crosscheck flag")
     if any(source not in PUBLIC_SOURCES for source in sources) or not sources:
         raise MiningError("unapproved source")
     if type(max_new_per_source) is not int or not 1 <= max_new_per_source <= 5:
@@ -157,6 +160,7 @@ def mine_once(
     observed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     added = 0
     incomplete_provenance = 0
+    public_pr_crosschecked = 0
     try:
         with conn:
             for source in sources:
@@ -184,6 +188,10 @@ def mine_once(
                     evidence = inspect_collected_pr(source, item, files)
                     if evidence["status"] == "INCOMPLETE_PROVENANCE":
                         incomplete_provenance += 1
+                    if crosscheck_origin:
+                        from .public_provenance import crosscheck_pr_metadata
+                        crosscheck_pr_metadata(source, item, fetch=fetch)
+                        public_pr_crosschecked += 1
                     digest, tags = _classify_changes(files)
                     conn.execute(
                         "INSERT INTO candidates VALUES (?,?,?,?,?,?,?,?)",
@@ -200,6 +208,7 @@ def mine_once(
         conn.close()
     return {"status": "COLLECTED_UNVERIFIED", "sources_checked": len(sources),
             "new_candidates": added, "incomplete_provenance": incomplete_provenance,
+            "public_pr_crosschecked": public_pr_crosschecked,
             "verification_pass": 0, "production_approved": False}
 
 
