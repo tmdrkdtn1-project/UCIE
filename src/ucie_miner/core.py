@@ -152,6 +152,7 @@ def mine_once(
     conn = _db(repo_root)
     observed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     added = 0
+    incomplete_provenance = 0
     try:
         with conn:
             for source in sources:
@@ -174,6 +175,11 @@ def mine_once(
                                     (source, number)).fetchone():
                         continue
                     files = fetch(_api_url(source, "pulls/" + str(number) + "/files?per_page=30"))
+                    # Local-only metadata gate. Never treats missing upstream facts as PASS.
+                    from .adapter import inspect_collected_pr
+                    evidence = inspect_collected_pr(source, item, files)
+                    if evidence["status"] == "INCOMPLETE_PROVENANCE":
+                        incomplete_provenance += 1
                     digest, tags = _classify_changes(files)
                     conn.execute(
                         "INSERT INTO candidates VALUES (?,?,?,?,?,?,?,?)",
@@ -189,7 +195,8 @@ def mine_once(
     finally:
         conn.close()
     return {"status": "COLLECTED_UNVERIFIED", "sources_checked": len(sources),
-            "new_candidates": added, "verification_pass": 0, "production_approved": False}
+            "new_candidates": added, "incomplete_provenance": incomplete_provenance,
+            "verification_pass": 0, "production_approved": False}
 
 
 def report(repo_root: Path) -> Path:
