@@ -9,6 +9,7 @@ from .host_preflight import inspect_ucie_host
 from .evidence_binding import bind_candidate_receipts
 from .merge_snapshot import compare_merge_snapshot, load_merge_snapshot
 from .regression_receipts import inspect_regression_claims
+from .review_docket import prepare_independent_review_docket
 from .integration import preview_knowledge_rules
 from .license_review import inspect_pinned_licenses
 from .patterns import PatternError
@@ -19,13 +20,16 @@ from .review import _read_candidates, load_manifest
 
 
 def build_readonly_acceptance_preview(root, *, is_windows, python_version,
-                                      external_regression_claims=None):
+                                      external_regression_claims=None,
+                                      static_preview=None):
     chain = preview_knowledge_rules(root)
     provenance = inspect_public_prs(_read_candidates(root))
     license_markers = inspect_pinned_licenses(root)
     regressions = create_regression_matrix(chain["rulepack_preview"])
     external_review = inspect_regression_claims(
         regressions, load_merge_snapshot(root), external_regression_claims)
+    docket = (prepare_independent_review_docket(static_preview, external_review)
+              if static_preview is not None else None)
     host = inspect_ucie_host(root, is_windows=is_windows,
                              python_version=python_version)
     readiness = preapproval_readiness(chain, provenance)
@@ -60,6 +64,11 @@ def build_readonly_acceptance_preview(root, *, is_windows, python_version,
         "external_regression_claims_missing": external_review["missing_claims"],
         "external_regression_claim_set_sha256": external_review["claim_set_sha256"],
         "external_regression_claims_are_attested": False,
+        "static_review_docket_sha256": (
+            docket["docket_sha256"] if docket is not None else None),
+        "static_review_candidate_count": (
+            docket["candidate_findings"] if docket is not None else 0),
+        "static_review_approved": False,
         "regression_execution_state": "NOT_EXECUTED",
         "public_pr_metadata_state": "NOT_CHECKED",
         "license_document_state": "NOT_CHECKED",
