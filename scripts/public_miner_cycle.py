@@ -18,11 +18,12 @@ if os.name == "nt":
 
 sys.path.insert(0, str(ROOT / "src"))
 from ucie_miner.worker import run_cycle
+from ucie_miner.core import mine_once
 
 
 def main() -> int:
     try:
-        result = run_cycle(ROOT, enforce_schedule=True)
+        result = run_cycle(ROOT, collect=lambda root: mine_once(root, crosscheck_origin=True), enforce_schedule=True)
     except Exception as exc:
         result = {"status": "FAIL_CLOSED", "error_type": type(exc).__name__}
     print(json.dumps(result, sort_keys=True, ensure_ascii=True))
