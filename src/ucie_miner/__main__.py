@@ -22,6 +22,7 @@ from .static_rule_bridge import preview_static_rule_candidates
 from .review_docket import prepare_independent_review_docket
 from .public_discovery import SOURCES as DISCOVERY_SOURCES, public_feed_get
 from .public_intelligence import discover_and_prioritize_live, public_intelligence_preview
+from .public_knowledge_pipeline import collect_public_knowledge_candidate, preview_public_knowledge_receipt
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -61,6 +62,14 @@ def main(argv=None):
     discover.add_argument("--skip-source", action="append", choices=DISCOVERY_SOURCES, default=[])
     discover.add_argument("--limit", type=int, default=12)
     sub.add_parser("preview-intelligence-stdin", help="Offline JSON public metadata leads to 5-skill agenda; no network or code execution")
+    collect = sub.add_parser("collect-public-evidence", help="Opt-in four-route public diff/doc/release/advisory evidence for one approved PR; no writes")
+    collect.add_argument("--live", action="store_true", help="Explicitly allow bounded anonymous public GET requests")
+    collect.add_argument("--source", required=True, choices=DISCOVERY_SOURCES)
+    collect.add_argument("--pr", type=int, required=True)
+    collect.add_argument("--merge-sha", required=True)
+    collect.add_argument("--skip-doc", action="store_true")
+    collect.add_argument("--skip-advisory", action="store_true")
+    sub.add_parser("preview-public-evidence-stdin", help="Bounded offline untrusted public evidence receipt review; no network or writes")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
@@ -114,6 +123,28 @@ def main(argv=None):
                 opted_out_sources=tuple(args.skip_source),
                 limit=args.limit,
             )
+        elif args.action == "collect-public-evidence":
+            if not args.live:
+                raise ValueError("public code/document/release API reads require --live")
+            result = collect_public_knowledge_candidate(
+                args.source, args.pr, merge_sha=args.merge_sha,
+                include_doc=not args.skip_doc,
+                include_advisory=not args.skip_advisory,
+            )
+        elif args.action == "preview-public-evidence-stdin":
+            data = sys.stdin.buffer.read(262145)
+            if len(data) > 262144:
+                raise ValueError("oversized public evidence receipt")
+            def unique_evidence_fields(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError("duplicate untrusted evidence field")
+                    result[key] = value
+                return result
+            payload = json.loads(data.decode("utf-8", "strict"),
+                                 object_pairs_hook=unique_evidence_fields)
+            result = preview_public_knowledge_receipt(payload)
         elif args.action == "preview-intelligence-stdin":
             data = sys.stdin.buffer.read(262145)
             if len(data) > 262144:
