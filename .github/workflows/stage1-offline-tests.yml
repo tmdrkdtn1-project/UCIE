@@ -56,3 +56,7 @@ jobs:
         if: ${{ always() && runner.os == 'Windows' }}
         shell: pwsh
         run: ./tests/runtime_powershell_probes.ps1
+      - name: UCIE-authored inert PowerShell AST candidate tests (no user code)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/test_ucie_powershell_static_candidates.ps1
