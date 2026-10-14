@@ -15,11 +15,12 @@ import re
 import sqlite3
 
 from .public_skill_digest import _map_candidate_batch
+from .public_discovery import CATEGORIES
 from .public_discovery import SOURCES, SOURCE_SKILL, DiscoveryError
 
 DB_NAME = "stage10_unverified_public_candidates.sqlite3"
 APPLICATION_ID = 0x55434945
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MAX_ROWS = 10_000
 SHA40 = re.compile(r"[a-f0-9]{40}")
 SHA64 = re.compile(r"[a-f0-9]{64}")
@@ -28,6 +29,43 @@ COLUMNS = (
     "skill_id", "tags_json", "missing_json", "first_seen_utc",
     "review_state",
 )
+
+
+GIT_COLUMNS = (
+    "git_commit_sha", "message_sha256", "tags_json",
+    "first_seen_utc", "review_state",
+)
+
+
+def _validated_git_items(batch):
+    items = batch.get("git_commit_skill_queue", [])
+    if not isinstance(items, list) or len(items) > 3:
+        raise DiscoveryError("invalid Git commit queue")
+    output = {}
+    for item in items:
+        if not isinstance(item, dict):
+            raise DiscoveryError("malformed Git commit lead")
+        sha, digest, tags = (item.get("git_commit_sha"),
+                             item.get("message_sha256"),
+                             item.get("error_category_tags"))
+        if (not isinstance(sha, str) or not SHA40.fullmatch(sha)
+                or not isinstance(digest, str) or not SHA64.fullmatch(digest)
+                or sha in output
+                or item.get("source") != "git/git"
+                or item.get("public_url") !=
+                    f"https://github.com/git/git/commit/{sha}"
+                or item.get("skill_id") != "git-workflow-prevention"
+                or item.get("knowledge_review_status") != "MANUAL_REVIEW_ONLY_NO_GO"
+                or item.get("human_approval_received") is not False
+                or item.get("source_commit_verified_behavior") is not False
+                or item.get("released_version_inclusion_verified") is not False
+                or not isinstance(tags, list) or not tags
+                or len(tags) > len(CATEGORIES)
+                or len(set(tags)) != len(tags)
+                or any(t not in CATEGORIES for t in tags)):
+            raise DiscoveryError("untrusted Git commit stage identity")
+        output[sha] = item
+    return output
 
 
 def _utc_stamp(value):
@@ -74,12 +112,17 @@ def _initialize(conn, *, new):
     if not new:
         # Reject arbitrary externally created triggers or unrelated tables;
         # a forged staging file must not redirect inserts into other objects.
-        if set(objects) != {("table", "public_candidate_stage")}:
+        if set(objects) != {("table", "public_candidate_stage"),
+                            ("table", "public_git_commit_stage")}:
             raise DiscoveryError("unexpected existing staging schema objects")
         columns = tuple(x[1] for x in conn.execute(
             "PRAGMA table_info(public_candidate_stage)").fetchall())
         if columns != COLUMNS:
             raise DiscoveryError("unexpected staging table columns")
+        git_columns = tuple(x[1] for x in conn.execute(
+            "PRAGMA table_info(public_git_commit_stage)").fetchall())
+        if git_columns != GIT_COLUMNS:
+            raise DiscoveryError("unexpected Git commit staging columns")
     else:
         conn.execute("""
             CREATE TABLE public_candidate_stage (
@@ -94,6 +137,17 @@ def _initialize(conn, *, new):
               review_state TEXT NOT NULL
                   CHECK(review_state = 'UNVERIFIED_CANDIDATE_ONLY'),
               PRIMARY KEY (source, pr_number, merge_sha, evidence_sha)
+            ) WITHOUT ROWID
+        """)
+        conn.execute("""
+            CREATE TABLE public_git_commit_stage (
+              git_commit_sha TEXT NOT NULL,
+              message_sha256 TEXT NOT NULL,
+              tags_json TEXT NOT NULL,
+              first_seen_utc TEXT NOT NULL,
+              review_state TEXT NOT NULL
+                  CHECK(review_state = 'UNVERIFIED_CANDIDATE_ONLY'),
+              PRIMARY KEY (git_commit_sha, message_sha256)
             ) WITHOUT ROWID
         """)
         conn.execute(f"PRAGMA application_id={APPLICATION_ID}")
