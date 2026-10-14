@@ -96,6 +96,20 @@ class PublicRoutesTests(unittest.TestCase):
         self.assertNotIn("manager.py", encoded)
         self.assertEqual(result["persistent_writes"], 0)
 
+    def test_before_after_behavioral_signals_are_bounded_nonexecuting(self):
+        change = inspect_pr_changes(SOURCE, NUMBER, [{
+            "filename": "src/mcp/server/server.py", "status": "modified",
+            "patch": "@@ -1 +1 @@\\n-raise ValueError('unknown')\\n+raise MCPError(code=INVALID_PARAMS, message='unknown')\\n",
+        }], merge_sha=MERGED_SHA)
+        self.assertIn("GENERIC_EXCEPTION",
+                      change["removed_behavior_signals"])
+        self.assertIn("PROTOCOL_ERROR_CODE",
+                      change["added_behavior_signals"])
+        self.assertEqual(change["behavioral_transition"],
+                         "HINT_ONLY_NOT_VERIFIED")
+        self.assertFalse(change["fix_verified"])
+        self.assertNotIn("MCPError(", json.dumps(change))
+
     def test_patch_missing_binary_or_truncated_page_is_reported(self):
         files = [{"filename": f"tests/n{i}.py", "status": "modified",
                   "patch": None} for i in range(30)]
