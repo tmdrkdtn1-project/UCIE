@@ -6,13 +6,14 @@ plan and read-only host observations. It has *no approval operation*.
 from __future__ import annotations
 
 from .host_preflight import inspect_ucie_host
+from .evidence_binding import bind_candidate_receipts
 from .integration import preview_knowledge_rules
 from .license_review import inspect_pinned_licenses
 from .patterns import PatternError
 from .preapproval import preapproval_readiness
 from .provenance_review import inspect_public_prs
 from .regression_plans import create_regression_matrix
-from .review import _read_candidates
+from .review import _read_candidates, load_manifest
 
 
 def build_readonly_acceptance_preview(root, *, is_windows, python_version):
@@ -23,6 +24,9 @@ def build_readonly_acceptance_preview(root, *, is_windows, python_version):
     host = inspect_ucie_host(root, is_windows=is_windows,
                              python_version=python_version)
     readiness = preapproval_readiness(chain, provenance)
+    binding = bind_candidate_receipts(
+        _read_candidates(root), load_manifest(root), chain,
+        provenance, license_markers, regressions)
     if (regressions["candidate_count"] !=
             chain["pattern_preview"]["family_count"]):
         raise PatternError("incomplete regression candidate coverage")
@@ -34,6 +38,9 @@ def build_readonly_acceptance_preview(root, *, is_windows, python_version):
         raise PatternError("untrusted approval or mismatched evidence")
     return {
         "schema": "UCIE_STAGE8_READONLY_ACCEPTANCE_BUNDLE_V1",
+        "candidate_binding_status": binding["status"],
+        "candidate_binding_sha256": binding["receipt_sha256"],
+        "candidate_binding_is_signature": False,
         "status": "NO_GO",
         "miner_candidate_count": chain["miner_count"],
         "knowledge_evidence_count": chain["knowledge_count"],
