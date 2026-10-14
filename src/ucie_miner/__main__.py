@@ -13,6 +13,7 @@ from .provenance_review import inspect_public_prs
 from .license_review import inspect_pinned_licenses
 from .regression_plans import create_regression_matrix
 from .acceptance_bundle import build_readonly_acceptance_preview
+from .merge_snapshot import compare_merge_snapshot
 import os
 import sys
 from .integration import preview_knowledge_rules
@@ -40,6 +41,9 @@ def main(argv=None):
                      help="Explicit anonymous GET of pinned official upstream license documents")
     sub.add_parser("preview-regressions", help="Generate nonexecuting regression test plans")
     sub.add_parser("preview-acceptance", help="Read-only NO-GO host and evidence observation")
+    pin = sub.add_parser("audit-merge-snapshot", help="Compare pinned public PR merge SHA, without DB writes")
+    pin.add_argument("--verify-live", action="store_true",
+                     help="Explicit anonymous public PR metadata GETs and pinned SHA checks")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
@@ -48,6 +52,10 @@ def main(argv=None):
         elif args.action == "report":
             path = report(ROOT)
             result = {"status": "LOCAL_REPORT_WRITTEN", "path": str(path)}
+        elif args.action == "audit-merge-snapshot":
+            local_rows = _read_candidates(ROOT)
+            remote = inspect_public_prs(local_rows, verify_live=args.verify_live)
+            result = compare_merge_snapshot(ROOT, local_rows, remote)
         elif args.action == "audit-license":
             result = inspect_pinned_licenses(ROOT, verify_live=args.verify_live)
         elif args.action == "preview-regressions":
