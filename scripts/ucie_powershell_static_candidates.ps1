@@ -2,6 +2,30 @@
 # No Invoke-Expression, scriptblock creation from input, file traversal,
 # system configuration changes, external code execution or persistence.
 
+# Conservative constant-folding only. Never evaluate conditions, call
+# Get-Alias, perform variable expansion or interpret the supplied script.
+function Test-UCIEConstantUnreachableCommand {
+    param([System.Management.Automation.Language.CommandAst]$Command)
+    $cursor = $Command.Parent
+    while ($null -ne $cursor) {
+        if ($cursor -is [System.Management.Automation.Language.IfStatementAst]) {
+            foreach ($clause in $cursor.Clauses) {
+                $block = $clause.Item2
+                $inside = ($Command.Extent.StartOffset -ge $block.Extent.StartOffset -and
+                           $Command.Extent.EndOffset -le $block.Extent.EndOffset)
+                if ($inside) {
+                    $literal = ($clause.Item1.Extent.Text -replace '[()\s]', '').ToLowerInvariant()
+                    if ($literal -in @('$false', '0')) {
+                        return $true
+                    }
+                }
+            }
+        }
+        $cursor = $cursor.Parent
+    }
+    return $false
+}
+
 function Find-UCIEPowerShellCandidate {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$SourceText)
@@ -26,6 +50,9 @@ function Find-UCIEPowerShellCandidate {
         if ($cmd -isnot [System.Management.Automation.Language.CommandAst]) {
             continue
         }
+        if (Test-UCIEConstantUnreachableCommand -Command $cmd) {
+            continue
+        }
         $name = $cmd.GetCommandName()
         if ([string]::IsNullOrEmpty($name)) {
             continue
@@ -38,8 +65,7 @@ function Find-UCIEPowerShellCandidate {
         $pattern = $null
         $publicPr = $null
         $guidance = $null
-        if ([string]::Equals($name, 'Get-Command',
-                             [System.StringComparison]::OrdinalIgnoreCase) -and
+        if (($name -in @('Get-Command', 'gcm')) -and
                 $parameters -contains 'UseFuzzyMatching') {
             $pattern = 'PS_FUZZY_GET_COMMAND_DUPLICATES'
             $publicPr = 'https://github.com/PowerShell/PowerShell/pull/28042'

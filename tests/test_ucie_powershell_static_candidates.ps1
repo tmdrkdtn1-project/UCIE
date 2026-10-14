@@ -28,6 +28,19 @@ Resolve-Path 'directory\file.txt'
 '@
 Assert-UCIE ($negative.finding_count -eq 0) 'False positive for commands without candidate switches'
 
+$aliasFinding = Find-UCIEPowerShellCandidate -SourceText 'gcm Get-FuzzyDuplicat -UseFuzzyMatching'
+Assert-UCIE ($aliasFinding.finding_count -eq 1) 'gcm alias candidate was missed'
+Assert-UCIE ($aliasFinding.findings[0].pattern_code -eq 'PS_FUZZY_GET_COMMAND_DUPLICATES') 'Alias matched wrong pattern'
+
+$dead = Find-UCIEPowerShellCandidate -SourceText 'if ($false) { Get-Command Get-Foo -UseFuzzyMatching }'
+Assert-UCIE ($dead.finding_count -eq 0) 'Unreachable literal false branch was flagged'
+
+$possible = Find-UCIEPowerShellCandidate -SourceText 'if ($condition) { Get-Command Get-Foo -UseFuzzyMatching }'
+Assert-UCIE ($possible.finding_count -eq 1) 'Unknown condition must remain a review candidate'
+
+$trueBranch = Find-UCIEPowerShellCandidate -SourceText 'if ($true) { gcm Get-Foo -UseFuzzyMatching }'
+Assert-UCIE ($trueBranch.finding_count -eq 1) 'Literal true branch must be analyzed'
+
 $inert = Find-UCIEPowerShellCandidate -SourceText @'
 throw 'SHOULD_NEVER_EXECUTE'
 Get-Command Get-FuzzyDuplicat -UseFuzzyMatching
