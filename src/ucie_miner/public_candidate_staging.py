@@ -199,6 +199,8 @@ def inspect_staged_candidates(root):
         return {
             "status": "STAGING_FILE_ABSENT",
             "candidate_revisions": 0,
+            "review_queue_by_skill": {SOURCE_SKILL[source]: 0
+                                      for source in SOURCES},
             "approved_rules": 0,
             "persistent_writes": 0,
             "production_approved": False,
@@ -214,13 +216,27 @@ def inspect_staged_candidates(root):
                 SELECT count(*) FROM public_candidate_stage
                 WHERE review_state <> 'UNVERIFIED_CANDIDATE_ONLY'
             """).fetchone()[0]
+            by_source = conn.execute("""
+                SELECT source, skill_id, COUNT(*)
+                FROM public_candidate_stage
+                GROUP BY source, skill_id
+            """).fetchall()
     except sqlite3.DatabaseError as exc:
         raise DiscoveryError("read-only candidate staging inspect failed") from exc
-    if invalid:
-        raise DiscoveryError("unexpected approved state in unverified staging")
+    if invalid or count > MAX_ROWS:
+        raise DiscoveryError("invalid unverified candidate ledger state")
+    skill_counts = {SOURCE_SKILL[source]: 0 for source in SOURCES}
+    for source, skill_id, entries in by_source:
+        if (source not in SOURCES or skill_id != SOURCE_SKILL[source]
+                or type(entries) is not int or entries < 0):
+            raise DiscoveryError("invalid public-only staged skill identity")
+        skill_counts[skill_id] += entries
+    if sum(skill_counts.values()) != count:
+        raise DiscoveryError("inconsistent public skill inventory")
     return {
         "status": "UNVERIFIED_CANDIDATE_STAGING_INSPECTED_NO_GO",
         "candidate_revisions": count,
+        "review_queue_by_skill": skill_counts,
         "approved_rules": 0,
         "persistent_writes": 0,
         "production_approved": False,
