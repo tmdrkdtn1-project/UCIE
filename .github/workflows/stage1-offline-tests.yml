@@ -53,6 +53,6 @@ jobs:
       - name: UCIE-owned CPython bounded behavioral regression probes (no upstream checkout)
         run: python tests/runtime_python_probes.py
       - name: UCIE-owned PowerShell bounded behavioral observations (ephemeral runner only)
-        if: runner.os == 'Windows'
+        if: ${{ always() && runner.os == 'Windows' }}
         shell: pwsh
         run: ./tests/runtime_powershell_probes.ps1
