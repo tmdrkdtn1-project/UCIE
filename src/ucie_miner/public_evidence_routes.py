@@ -85,6 +85,10 @@ def github_evidence_url(source, kind, number=None):
 def _safe_url(url):
     if not isinstance(url, str):
         return False
+    # Git's approved upstream is commit-centric; exactly one extra
+    # public JSON endpoint, without open-ended path/ref or pagination.
+    if url == "https://api.github.com/repos/git/git/commits?per_page=20":
+        return True
     for source in SOURCES:
         if url in (github_evidence_url(source, "releases"),
                    github_evidence_url(source, "advisories")):
