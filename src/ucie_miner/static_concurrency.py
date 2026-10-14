@@ -119,27 +119,42 @@ def inspect_python_scandir_source(source: str) -> dict:
         statements = list(_scope_nodes(scope))
         if len(statements) > MAX_AST_NODES:
             raise CandidateScanError("scope complexity exceeded")
-        iterator_names = {}
+        # Keep the latest lexical assignment: after `it = list(...)` a
+        # previous `it = os.scandir(...)` is no longer evidence of a raw
+        # iterator. This is bounded lexical analysis, not full data flow.
+        bindings = {}
         for node in statements:
-            if isinstance(node, ast.Assign) and _raw_scandir(node.value):
+            names = set()
+            is_raw = False
+            if isinstance(node, ast.Assign):
                 for target in node.targets:
-                    for name in _assigned_names(target):
-                        iterator_names.setdefault(name, []).append(node.lineno)
-            elif isinstance(node, ast.AnnAssign) and _raw_scandir(node.value):
-                for name in _assigned_names(node.target):
-                    iterator_names.setdefault(name, []).append(node.lineno)
+                    names.update(_assigned_names(target))
+                is_raw = _raw_scandir(node.value)
+            elif isinstance(node, ast.AnnAssign):
+                if node.value is not None:
+                    names = _assigned_names(node.target)
+                    is_raw = _raw_scandir(node.value)
+            elif isinstance(node, ast.NamedExpr):
+                names = _assigned_names(node.target)
+                is_raw = _raw_scandir(node.value)
+            elif isinstance(node, (ast.For, ast.AsyncFor)):
+                names = _assigned_names(node.target)
             elif isinstance(node, (ast.With, ast.AsyncWith)):
                 for context in node.items:
-                    if _raw_scandir(context.context_expr):
-                        for name in _assigned_names(context.optional_vars):
-                            iterator_names.setdefault(name, []).append(node.lineno)
-        if not iterator_names:
+                    for name in _assigned_names(context.optional_vars):
+                        bindings.setdefault(name, []).append(
+                            (node.lineno, _raw_scandir(context.context_expr)))
+            for name in names:
+                bindings.setdefault(name, []).append((node.lineno, is_raw))
+        if not bindings:
             continue
         for node in statements:
             if not isinstance(node, ast.Call):
                 continue
-            for name, declarations in iterator_names.items():
-                if not any(declared_at <= node.lineno for declared_at in declarations):
+            for name, assignments in bindings.items():
+                preceding = [is_raw for at, is_raw in assignments
+                             if at <= node.lineno]
+                if not preceding or not preceding[-1]:
                     continue
                 boundary = _thread_boundary(node, name,
                                             _closures(statements, name))

@@ -158,6 +158,47 @@ class ScandirStaticDetectionTests(unittest.TestCase):
         with self.assertRaises(CandidateScanError):
             inspect_python_scandir_source("x = 1\n" * 30000)
 
+    def test_rebound_iterator_does_not_trigger_stale_candidate(self):
+        result = scan("""
+            import os
+            def examine(path, pool, worker):
+                it = os.scandir(path)
+                it = list(it)
+                pool.submit(worker, it)
+        """)
+        self.assertEqual(result["finding_count"], 0)
+
+    def test_reassignment_back_to_raw_scandir_is_detected(self):
+        result = scan("""
+            import os
+            def examine(path, pool, worker):
+                it = object()
+                it = os.scandir(path)
+                pool.submit(worker, it)
+        """)
+        self.assertEqual(result["finding_count"], 1)
+
+    def test_only_submit_before_rebinding_is_flagged(self):
+        result = scan("""
+            import os
+            def examine(path, pool, worker):
+                it = os.scandir(path)
+                pool.submit(worker, it)
+                it = list(it)
+                pool.submit(worker, it)
+        """)
+        self.assertEqual(result["finding_count"], 1)
+
+    def test_loop_target_rebind_clears_raw_iterator(self):
+        result = scan("""
+            import os
+            def f(path, pool, worker):
+                it = os.scandir(path)
+                for it in [1, 2]:
+                    pool.submit(worker, it)
+        """)
+        self.assertEqual(result["finding_count"], 0)
+
     def test_deterministic_findings(self):
         s = """
             import os
