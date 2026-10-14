@@ -1,0 +1,19 @@
+{
+  "schema": "UCIE_STAGE10_PUBLIC_GIT_COMMIT_SPOTCHECK_V1",
+  "observation_date_utc": "2026-10-14",
+  "source": "git/git",
+  "public_url": "https://github.com/git/git/commit/20c35e3b71985621e160639fbf36b6c0c2c3c27a",
+  "commit_sha": "20c35e3b71985621e160639fbf36b6c0c2c3c27a",
+  "date_utc": "2026-09-27T04:33:34Z",
+  "review_topic": "Repeated Git fetch perf-test runs; update-ref --no-deref avoids symref/target update collision",
+  "public_file_class": "t/perf/ Git-owned performance regression script",
+  "source_scope": "EXACT_APPROVED_PUBLIC_GIT_REPO",
+  "classify_as": "UNVERIFIED_PUBLIC_GIT_COMMIT_LEAD",
+  "not_a_pr": true,
+  "full_source_retained": false,
+  "upstream_code_executed": false,
+  "affected_released_versions_verified": false,
+  "human_review_received": false,
+  "rule_approved": false,
+  "operating_ledger_inserted": false
+}
