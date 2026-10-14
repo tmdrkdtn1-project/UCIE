@@ -1,0 +1,84 @@
+{
+  "schema": "UCIE_STAGE9_APPROVED_SOURCE_SPOTCHECK_V1",
+  "observation_date_utc": "2026-10-14",
+  "basis": "PUBLIC_GITHUB_PR_METADATA_READ_FROM_EXACT_FIVE_APPROVED_PUBLIC_REPOSITORIES",
+  "metadata_only": true,
+  "not_live_operating_miner": true,
+  "not_exhaustive": true,
+  "entries": [
+    {
+      "source": "python/cpython",
+      "pr_number": 159311,
+      "public_url": "https://github.com/python/cpython/pull/159311",
+      "merged_at": "2026-10-14T02:38:51Z",
+      "merge_commit_sha": "aeff4cb4c4b38744037f7ea88d2241c66c17a7eb",
+      "classification": "RECENT_PUBLIC_RACE_FIX_LEAD",
+      "original_title_retained": false,
+      "independent_fix_reproduced": false,
+      "license_reviewed": false,
+      "approval": false
+    },
+    {
+      "source": "PowerShell/PowerShell",
+      "pr_number": 28178,
+      "public_url": "https://github.com/PowerShell/PowerShell/pull/28178",
+      "merged_at": "2026-10-12T17:57:42Z",
+      "merge_commit_sha": "ddf8a9b3b9b6b8a7485480e18aa2fcba2501e624",
+      "classification": "CHANGELOG_METADATA_NOT_INDEPENDENT_FIX",
+      "original_title_retained": false,
+      "independent_fix_reproduced": false,
+      "license_reviewed": false,
+      "approval": false
+    },
+    {
+      "source": "git/git",
+      "pr_number": 1025,
+      "public_url": "https://github.com/git/git/pull/1025",
+      "merged_at": "2021-06-06T12:17:39Z",
+      "merge_commit_sha": "de65c76e557bd8d86625731914b8394a71f1b4f4",
+      "classification": "STALE_OLDER_THAN_90_DAYS",
+      "original_title_retained": false,
+      "independent_fix_reproduced": false,
+      "license_reviewed": false,
+      "approval": false
+    },
+    {
+      "source": "modelcontextprotocol/python-sdk",
+      "pr_number": 3696,
+      "public_url": "https://github.com/modelcontextprotocol/python-sdk/pull/3696",
+      "merged_at": "2026-10-13T09:20:59Z",
+      "merge_commit_sha": "754254c08fe1c3eda18b69da3d336106fe8d72d6",
+      "classification": "RECENT_PUBLIC_ARGUMENT_SCHEMA_LEAD",
+      "original_title_retained": false,
+      "independent_fix_reproduced": false,
+      "license_reviewed": false,
+      "approval": false
+    },
+    {
+      "source": "modelcontextprotocol/python-sdk",
+      "pr_number": 3688,
+      "public_url": "https://github.com/modelcontextprotocol/python-sdk/pull/3688",
+      "merged_at": "2026-10-12T11:48:16Z",
+      "merge_commit_sha": "3ecd2af67b09cdc9309d3b3e50606f83b2deda35",
+      "classification": "RECENT_PUBLIC_PYTHON_315_COMPATIBILITY_LEAD",
+      "original_title_retained": false,
+      "independent_fix_reproduced": false,
+      "license_reviewed": false,
+      "approval": false
+    },
+    {
+      "source": "actions/runner-images",
+      "pr_number": 14517,
+      "public_url": "https://github.com/actions/runner-images/pull/14517",
+      "merged_at": "2026-08-10T07:55:56Z",
+      "merge_commit_sha": "adbbdb213ddc66b575dff7f5b7eec70e6cee585f",
+      "classification": "PUBLIC_RUNNER_COMPATIBILITY_LEAD",
+      "original_title_retained": false,
+      "independent_fix_reproduced": false,
+      "license_reviewed": false,
+      "approval": false
+    }
+  ],
+  "external_code_executed": false,
+  "production_approved": false
+}
