@@ -20,3 +20,24 @@ Before wiring the current collector to this extension, independently fetch PR de
 The existing CI offline matrix uses Python 3.13 and 3.15 on Windows and Ubuntu. It runs `python -m unittest discover -s tests -v`, which includes `tests/test_ucie_evidence.py`.
 
 This PR is **candidate-only**, not a production deployment, training result, or local Windows execution pass.
+
+## October 14 follow-up: provenance cross-check and Stage 3 gate
+
+The read-only `public_provenance.crosscheck_pr_metadata` helper retrieves PR detail
+from an exact pinned GitHub API route and compares PR number, merged flag,
+public URL, merged timestamp and 40-character merge commit SHA. Its default
+fetch uses anonymous GET only. This is an independently fetched **PR metadata
+consistency check**, not a source license verification, a patch-test pass, or
+complete author/date/commit provenance. It is not yet wired into the regular
+collector. The existing collector still reports unverified candidates.
+
+The official `scripts/public_miner_cycle.py` now opts into an hourly schedule
+gate. Corrupt prior receipts fail closed; receipts persist failure counters
+and allow bounded retry. The source collector's outbound API routes are
+now exact allowlisted paths. The CI tests use synthetic fixtures.
+
+**Operational release gate remains HOLD:** complete pinned-commit license
+lookup and opt-out handling, independently review data retention and quotas,
+verify Windows scheduled task execution/recovery, and obtain approval for
+any broader corpus. A successful CI matrix is not a live Windows operation
+receipt. Do not deploy a scheduler or promote learning data on this evidence.
