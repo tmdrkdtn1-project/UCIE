@@ -26,6 +26,7 @@ from .public_knowledge_pipeline import collect_public_knowledge_candidate, previ
 from .public_batch import build_public_batch, review_batch_preview
 from .public_batch_host import inspect_public_batch_host
 from .public_skill_digest import compare_public_skill_batches
+from .public_candidate_staging import stage_public_candidates, inspect_staged_candidates
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -93,6 +94,13 @@ def main(argv=None):
     sub.add_parser("preview-public-skill-digest-stdin",
                    help="Compare two bounded public-only batches and report new/changed skill leads; no writes")
     sub.add_parser("preflight-public-batch-host", help="UCIE-local Windows 3.15/SQLite read-only acceptance preview; always NO-GO")
+    stage = sub.add_parser(
+        "stage-public-candidates-stdin",
+        help="Validate and stage up to 3 UNVERIFIED public candidates, ephemeral unless disk explicitly permitted")
+    stage.add_argument("--write-separate-ledger", action="store_true",
+                       help="Explicit write to dedicated UCIE Stage 10 candidate-only DB, never to miner/Knowledge")
+    sub.add_parser("inspect-public-candidate-ledger",
+                   help="Read-only inspection of separate Stage 10 candidate staging; no file creation")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
@@ -189,6 +197,26 @@ def main(argv=None):
                 include_docs=not args.skip_doc,
                 include_advisories=not args.skip_advisory,
             )
+        elif args.action == "stage-public-candidates-stdin":
+            data = sys.stdin.buffer.read(262145)
+            if len(data) > 262144:
+                raise ValueError("oversized untrusted public batch for staging")
+            def unique_stage_keys(pairs):
+                output = {}
+                for key, value in pairs:
+                    if key in output:
+                        raise ValueError("duplicate staging receipt property")
+                    output[key] = value
+                return output
+            receipt = json.loads(data.decode("utf-8", "strict"),
+                                 object_pairs_hook=unique_stage_keys)
+            result = stage_public_candidates(
+                receipt,
+                root=ROOT if args.write_separate_ledger else None,
+                allow_disk_write=args.write_separate_ledger,
+            )
+        elif args.action == "inspect-public-candidate-ledger":
+            result = inspect_staged_candidates(ROOT)
         elif args.action == "preflight-public-batch-host":
             result = inspect_public_batch_host(
                 ROOT, is_windows=os.name == "nt",
