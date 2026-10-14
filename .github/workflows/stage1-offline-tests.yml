@@ -70,7 +70,7 @@ jobs:
         run: ./tests/test_ucie_powershell_flow_shadowing.ps1
 
       - name: Stage 10 explicit one-shot public API acceptance on ephemeral Windows 3.15
-        if: github.event_name == 'pull_request' && github.head_ref == 'stage10-windows-live-public-acceptance-20261014' && runner.os == 'Windows' && matrix.python-version == '3.15'
+        if: github.event_name == 'pull_request' && github.base_ref == 'main' && github.head_ref == 'stage10-windows-live-public-acceptance-20261014' && runner.os == 'Windows' && matrix.python-version == '3.15'
         shell: pwsh
         env:
           PYTHONPATH: src
