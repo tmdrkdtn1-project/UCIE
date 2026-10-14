@@ -42,9 +42,9 @@ def _api_url(source: str, endpoint: str) -> str:
 
 def fetch_public_json(url: str) -> object:
     if not isinstance(url, str) or not any(re.fullmatch(
-            r"https://api\\.github\\.com/repos/" + re.escape(source) +
-            r"/(?:pulls\\?state=closed&sort=updated&direction=desc&per_page=20|"
-            r"pulls/[1-9][0-9]*/files\\?per_page=30|pulls/[1-9][0-9]*)", url)
+            r"https://api\.github\.com/repos/" + re.escape(source) +
+            r"/(?:pulls\?state=closed&sort=updated&direction=desc&per_page=20|"
+            r"pulls/[1-9][0-9]*/files\?per_page=30|pulls/[1-9][0-9]*)", url)
             for source in PUBLIC_SOURCES):
         raise MiningError("request outside approved exact public API routes")
     request = urllib.request.Request(
