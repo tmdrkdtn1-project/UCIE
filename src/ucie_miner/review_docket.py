@@ -164,6 +164,10 @@ def prepare_independent_review_docket(static_preview, external_review):
             "ready_to_deploy": False,
         })
     queue.sort(key=lambda x: (x["case_id"], x["candidate_id_sha256"]))
+    linked_cases = {x["case_id"] for x in queue}
+    unlinked = sorted(set(comparisons) - linked_cases)
+    # Do not silently imply external claims outside the static scan scope
+    # were independently reviewed or attached to an applicable finding.
     docket_fp = hashlib.sha256(json.dumps(
         {"items": queue, "external_review_sha": external_review["claim_set_sha256"]},
         sort_keys=True, separators=(",", ":")
@@ -175,6 +179,9 @@ def prepare_independent_review_docket(static_preview, external_review):
         "claimed_reviewed_cases": sum(
             x["claimed_external_regression_sha256"] is not None for x in queue),
         "review_queue": queue,
+        "unlinked_external_claim_count": len(unlinked),
+        "unlinked_external_case_ids": unlinked,
+        "unlinked_external_claims_are_verified": False,
         "docket_sha256": docket_fp,
         "docket_sha256_is_signature": False,
         "independent_approvals_verified": 0,
