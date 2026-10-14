@@ -13,7 +13,7 @@ import re
 from .merge_snapshot import load_merge_snapshot
 from .patterns import PatternError
 from .regression_plans import TEST_FAMILIES, create_regression_matrix
-from .review import load_manifest
+from .review import ReviewError, load_manifest
 from .rule_candidates import GUIDANCE, REQUIRED_GATES
 
 SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -125,7 +125,10 @@ def preview_static_rule_candidates(root, scan, *, existing_rulepack=None):
     true runtime behavior and authorization remain UNVERIFIED.
     """
     _check_receipt(scan)
-    manifest = load_manifest(root)
+    try:
+        manifest = load_manifest(root)
+    except ReviewError as exc:
+        raise PatternError("required public manifest unavailable") from exc
     snapshot = load_merge_snapshot(root, manifest)
     refs = {(x["source"], x["pr_number"]): x
             for x in manifest["entries"]}
