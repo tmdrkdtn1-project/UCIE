@@ -171,6 +171,7 @@ def stage_public_candidates(batch, *, root=None, allow_disk_write=False,
     if root is not None and not allow_disk_write:
         raise DiscoveryError("disk staging requires separate explicit permit")
     entries = _map_candidate_batch(batch)  # strict structural NO-GO receipt
+    git_entries = _validated_git_items(batch)
     stamp = _utc_stamp(observed_utc)
     disk_path = _dedicated_path(root) if root is not None else None
     if disk_path is not None:
@@ -186,7 +187,9 @@ def stage_public_candidates(batch, *, root=None, allow_disk_write=False,
             _initialize(conn, new=not exists)
             existing = conn.execute(
                 "SELECT count(*) FROM public_candidate_stage").fetchone()[0]
-            if existing > MAX_ROWS:
+            existing_git = conn.execute(
+                "SELECT count(*) FROM public_git_commit_stage").fetchone()[0]
+            if existing + existing_git > MAX_ROWS:
                 raise DiscoveryError("staging DB exceeds candidate limit")
             newly_added, unchanged, changed = 0, 0, 0
             for (source, pr), item in sorted(entries.items()):
@@ -203,7 +206,7 @@ def stage_public_candidates(batch, *, root=None, allow_disk_write=False,
                 if (sha, proof) in prior:
                     unchanged += 1
                     continue
-                if existing + newly_added >= MAX_ROWS:
+                if existing + existing_git + newly_added + changed >= MAX_ROWS:
                     raise DiscoveryError("candidate staging capacity reached")
                 if prior:
                     changed += 1
@@ -224,6 +227,35 @@ def stage_public_candidates(batch, *, root=None, allow_disk_write=False,
                 "SELECT count(*) FROM public_candidate_stage").fetchone()[0]
             if final != existing + newly_added + changed:
                 raise DiscoveryError("staging count mismatch")
+            git_new, git_unchanged, git_changed = 0, 0, 0
+            for sha, item in sorted(git_entries.items()):
+                digest = item["message_sha256"]
+                prior_commits = conn.execute("""
+                    SELECT message_sha256 FROM public_git_commit_stage
+                    WHERE git_commit_sha=?
+                """, (sha,)).fetchall()
+                if (digest,) in prior_commits:
+                    git_unchanged += 1
+                    continue
+                if final + existing_git + git_new + git_changed >= MAX_ROWS:
+                    raise DiscoveryError("Git commit staging capacity reached")
+                if prior_commits:
+                    git_changed += 1
+                else:
+                    git_new += 1
+                conn.execute("""
+                    INSERT INTO public_git_commit_stage
+                    (git_commit_sha, message_sha256, tags_json,
+                     first_seen_utc, review_state)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (sha, digest,
+                      json.dumps(item["error_category_tags"],
+                                 separators=(",", ":")),
+                      stamp, "UNVERIFIED_CANDIDATE_ONLY"))
+            git_final = conn.execute(
+                "SELECT count(*) FROM public_git_commit_stage").fetchone()[0]
+            if git_final != existing_git + git_new + git_changed:
+                raise DiscoveryError("Git commit staging count mismatch")
             conn.commit()
     except sqlite3.DatabaseError as exc:
         raise DiscoveryError("candidate-only SQLite staging failed") from exc
@@ -236,6 +268,10 @@ def stage_public_candidates(batch, *, root=None, allow_disk_write=False,
         "evidence_revisions": changed,
         "unchanged_candidates": unchanged,
         "total_staged_revisions": final,
+        "git_commit_new_identities": git_new,
+        "git_commit_evidence_revisions": git_changed,
+        "git_commit_unchanged": git_unchanged,
+        "git_commit_total_revisions": git_final,
         "reviewable_skill_ids": sorted({item["skill_id"] for item in entries.values()}),
         "approved_rules_added": 0,
         "reviewer_signatures_attested": 0,
@@ -255,6 +291,7 @@ def inspect_staged_candidates(root):
         return {
             "status": "STAGING_FILE_ABSENT",
             "candidate_revisions": 0,
+            "git_commit_revisions": 0,
             "review_queue_by_skill": {SOURCE_SKILL[source]: 0
                                       for source in SOURCES},
             "approved_rules": 0,
@@ -268,6 +305,12 @@ def inspect_staged_candidates(root):
             _initialize(conn, new=False)
             count = conn.execute(
                 "SELECT count(*) FROM public_candidate_stage").fetchone()[0]
+            git_count = conn.execute(
+                "SELECT count(*) FROM public_git_commit_stage").fetchone()[0]
+            git_invalid = conn.execute("""
+                SELECT count(*) FROM public_git_commit_stage
+                WHERE review_state <> 'UNVERIFIED_CANDIDATE_ONLY'
+            """).fetchone()[0]
             invalid = conn.execute("""
                 SELECT count(*) FROM public_candidate_stage
                 WHERE review_state <> 'UNVERIFIED_CANDIDATE_ONLY'
@@ -279,7 +322,7 @@ def inspect_staged_candidates(root):
             """).fetchall()
     except sqlite3.DatabaseError as exc:
         raise DiscoveryError("read-only candidate staging inspect failed") from exc
-    if invalid or count > MAX_ROWS:
+    if invalid or git_invalid or count + git_count > MAX_ROWS:
         raise DiscoveryError("invalid unverified candidate ledger state")
     skill_counts = {SOURCE_SKILL[source]: 0 for source in SOURCES}
     for source, skill_id, entries in by_source:
@@ -292,6 +335,7 @@ def inspect_staged_candidates(root):
     return {
         "status": "UNVERIFIED_CANDIDATE_STAGING_INSPECTED_NO_GO",
         "candidate_revisions": count,
+        "git_commit_revisions": git_count,
         "review_queue_by_skill": skill_counts,
         "approved_rules": 0,
         "persistent_writes": 0,
