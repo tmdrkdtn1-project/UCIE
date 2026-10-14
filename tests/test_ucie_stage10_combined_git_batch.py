@@ -11,6 +11,7 @@ from ucie_miner.public_candidate_staging import (
     DB_NAME, stage_public_candidates, inspect_staged_candidates,
 )
 from ucie_miner.public_discovery import DiscoveryError
+from ucie_miner.public_skill_digest import compare_public_skill_batches
 from ucie_miner.public_git_commit_skills import GIT_COMMITS_URL
 from test_ucie_stage9_batch import NOW, metadata, evidence
 from test_ucie_stage10_git_commit_skills import git_commit
@@ -49,6 +50,20 @@ class CombinedPublicCandidateTests(unittest.TestCase):
         self.assertEqual(review["git_commit_candidate_count"], 1)
         self.assertEqual(review["candidate_count"], result["enriched_count"])
         self.assertFalse(review["production_approved"])
+
+    def test_direct_git_commits_appear_in_five_skill_change_digest(self):
+        batch = combined()
+        first = compare_public_skill_batches(batch)
+        self.assertEqual(first["candidate_count"],
+                         batch["enriched_count"] + 1)
+        commits = [x for x in first["candidate_tasks"]
+                   if x.get("evidence_kind") == "GIT_DIRECT_COMMIT"]
+        self.assertEqual(len(commits), 1)
+        self.assertEqual(commits[0]["change_classification"],
+                         "NEW_IN_BATCH_SCOPE")
+        again = compare_public_skill_batches(batch, deepcopy(batch))
+        self.assertFalse(again["notify_if_manually_scheduled"])
+        self.assertFalse(again["production_approved"])
 
     def test_source_optout_prevents_git_api_fetch(self):
         git_calls = []
