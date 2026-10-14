@@ -61,6 +61,7 @@ def _check_receipt(scan):
                 "source_files_read", "persistent_writes",
                 "production_approved"}
     if (not isinstance(scan, dict) or set(scan) != required
+            or not isinstance(scan["schema"], str)
             or scan["schema"] not in SCAN_SCHEMAS
             or not isinstance(scan["source_sha256"], str)
             or not SHA256.fullmatch(scan["source_sha256"])
@@ -70,8 +71,11 @@ def _check_receipt(scan):
             or scan["finding_count"] != len(scan["findings"])
             or scan["parser_executed_supplied_code"] is not False
             or scan["confidence"] != "HUMAN_REVIEW_REQUIRED"
+            or type(scan["approved_rules"]) is not int
             or scan["approved_rules"] != 0
+            or type(scan["source_files_read"]) is not int
             or scan["source_files_read"] != 0
+            or type(scan["persistent_writes"]) is not int
             or scan["persistent_writes"] != 0
             or scan["production_approved"] is not False):
         raise PatternError("unsafe or malformed static-scan metadata")
@@ -83,7 +87,8 @@ def _check_receipt(scan):
                                   else PS_FIELDS)):
             raise PatternError("invalid static-finding fields")
         code = item["pattern_code"]
-        if (code not in SOURCE_BINDINGS
+        if (not isinstance(code, str)
+                or code not in SOURCE_BINDINGS
                 or (language == "python") != code.startswith("PY_")
                 or type(item["line"]) is not int
                 or type(item["column"]) is not int
@@ -101,7 +106,8 @@ def _check_receipt(scan):
             detail = item["iterator_binding"]
             if (not isinstance(detail, str) or not detail.isidentifier()
                     or len(detail) > 128
-                    or item["thread_boundary"] not in PY_BOUNDARIES):
+                    or not isinstance(item["thread_boundary"], str)
+                or item["thread_boundary"] not in PY_BOUNDARIES):
                 raise PatternError("invalid Python thread-boundary metadata")
         key = (code, item["line"], item["column"],
                detail, item.get("thread_boundary"))
