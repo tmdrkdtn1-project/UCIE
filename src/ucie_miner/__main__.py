@@ -10,6 +10,11 @@ import sqlite3
 from .core import MiningError, PUBLIC_SOURCES, mine_once, report
 from .review import ReviewError, _read_candidates, analyze, review_and_store
 from .provenance_review import inspect_public_prs
+from .license_review import inspect_pinned_licenses
+from .regression_plans import create_regression_matrix
+from .acceptance_bundle import build_readonly_acceptance_preview
+import os
+import sys
 from .integration import preview_knowledge_rules
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,6 +35,11 @@ def main(argv=None):
     provenance = sub.add_parser("audit-provenance", help="Bounded, metadata-only, read-only provenance review")
     provenance.add_argument("--verify-live", action="store_true",
                             help="Explicit anonymous GitHub API GETs; no patch or license approval")
+    lic = sub.add_parser("audit-license", help="Pinned public license markers only; no approvals")
+    lic.add_argument("--verify-live", action="store_true",
+                     help="Explicit anonymous GET of pinned official upstream license documents")
+    sub.add_parser("preview-regressions", help="Generate nonexecuting regression test plans")
+    sub.add_parser("preview-acceptance", help="Read-only NO-GO host and evidence observation")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
@@ -38,6 +48,14 @@ def main(argv=None):
         elif args.action == "report":
             path = report(ROOT)
             result = {"status": "LOCAL_REPORT_WRITTEN", "path": str(path)}
+        elif args.action == "audit-license":
+            result = inspect_pinned_licenses(ROOT, verify_live=args.verify_live)
+        elif args.action == "preview-regressions":
+            result = create_regression_matrix(preview_knowledge_rules(ROOT)["rulepack_preview"])
+        elif args.action == "preview-acceptance":
+            result = build_readonly_acceptance_preview(
+                ROOT, is_windows=os.name == "nt",
+                python_version=tuple(sys.version_info[:2]))
         elif args.action == "audit-provenance":
             result = inspect_public_prs(_read_candidates(ROOT), verify_live=args.verify_live)
         elif args.action == "preview-chain":
