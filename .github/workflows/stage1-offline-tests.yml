@@ -64,3 +64,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./tests/test_ucie_powershell_static_accuracy.ps1
+      - name: UCIE PowerShell alias and shadowing synthetics (never execute supplied code)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/test_ucie_powershell_flow_shadowing.ps1
