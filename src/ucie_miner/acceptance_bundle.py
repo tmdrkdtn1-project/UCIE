@@ -69,6 +69,8 @@ def build_readonly_acceptance_preview(root, *, is_windows, python_version,
         "static_review_candidate_count": (
             docket["candidate_findings"] if docket is not None else 0),
         "static_review_approved": False,
+        "static_review_unlinked_claim_count": (
+            docket["unlinked_external_claim_count"] if docket is not None else 0),
         "regression_execution_state": "NOT_EXECUTED",
         "public_pr_metadata_state": "NOT_CHECKED",
         "license_document_state": "NOT_CHECKED",
