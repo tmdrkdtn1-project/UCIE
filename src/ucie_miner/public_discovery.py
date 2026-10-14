@@ -47,16 +47,22 @@ class DiscoveryError(ValueError):
     pass
 
 
-def public_feed_url(source: str) -> str:
-    if source not in SOURCES:
-        raise DiscoveryError("unapproved public source")
-    return ("https://api.github.com/repos/" + source +
-            "/pulls?state=closed&sort=updated&direction=desc&per_page=20")
+MAX_BACKFILL_PAGES = 3
+
+def public_feed_url(source: str, page: int = 1) -> str:
+    if source not in SOURCES or type(page) is not int or not 1 <= page <= MAX_BACKFILL_PAGES:
+        raise DiscoveryError("unapproved public source or page")
+    url = ("https://api.github.com/repos/" + source +
+           "/pulls?state=closed&sort=updated&direction=desc&per_page=20")
+    return url if page == 1 else url + f"&page={page}"
 
 
 def public_feed_get(url: str) -> object:
     """Anonymous exact-URL GET; never follow redirects or remote instructions."""
-    if not isinstance(url, str) or url not in {public_feed_url(s) for s in SOURCES}:
+    if (not isinstance(url, str) or url not in {
+            public_feed_url(source, page)
+            for source in SOURCES
+            for page in range(1, MAX_BACKFILL_PAGES + 1)}):
         raise DiscoveryError("URL outside approved public metadata routes")
     request = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json",
@@ -172,22 +178,54 @@ def discover_public_leads(source_rows: object, *, source: str,
 
 def discover_all_feeds(*, fetch=public_feed_get,
                        sources: tuple[str, ...] = SOURCES,
-                       now: datetime | None = None) -> dict:
-    """Explicit opt-in caller network orchestration; never saves to disk."""
+                       now: datetime | None = None,
+                       backfill_pages: int = 1) -> dict:
+    """Bounded public-page discovery. A short page stops further requests.
+
+    Approved public API data stays inert and source hashes only. Backfill
+    allows up to 60 closed PRs/source when the first 20 lack useful fixes.
+    """
     if (not isinstance(sources, tuple) or not sources
             or len(sources) > len(SOURCES) or len(set(sources)) != len(sources)
-            or any(s not in SOURCES for s in sources)):
-        raise DiscoveryError("unapproved or duplicate public source")
-    feeds = []
+            or any(s not in SOURCES for s in sources)
+            or type(backfill_pages) is not int
+            or not 1 <= backfill_pages <= MAX_BACKFILL_PAGES):
+        raise DiscoveryError("unapproved or excessive public discovery")
+    feeds, actual_requests = [], 0
     for source in sources:
-        observed = discover_public_leads(fetch(public_feed_url(source)),
-                                         source=source, now=now)
-        feeds.append(observed)
+        collected, observed_count, identities = [], 0, set()
+        for page in range(1, backfill_pages + 1):
+            rows = fetch(public_feed_url(source, page))
+            actual_requests += 1
+            receipt = discover_public_leads(rows, source=source, now=now)
+            observed_count += receipt["records_examined"]
+            for lead in receipt["leads"]:
+                identity = lead["pr_number"]
+                if identity in identities:
+                    raise DiscoveryError("duplicate public PR across feed pages")
+                identities.add(identity)
+                collected.append(lead)
+            if receipt["records_examined"] < PR_CAP:
+                break
+        feeds.append({
+            "schema": "UCIE_APPROVED_PUBLIC_DISCOVERY_V1",
+            "source": source,
+            "leads": collected,
+            "lead_count": len(collected),
+            "records_examined": observed_count,
+            "raw_text_retained": False,
+            "network_fetch_performed": False,
+            "proposals_promoted": 0,
+            "production_approved": False,
+            "persistent_writes": 0,
+        })
     return {
         "schema": "UCIE_MULTI_SOURCE_PUBLIC_DISCOVERY_V1",
         "feeds": feeds,
         "sources_attempted": list(sources),
-        "public_reads_max": len(sources),
+        "public_reads_max": actual_requests,
+        "public_reads_upper_bound": len(sources) * backfill_pages,
+        "backfill_pages_limit": backfill_pages,
         "candidate_leads_total": sum(f["lead_count"] for f in feeds),
         "automatic_rule_training": False,
         "production_approved": False,
