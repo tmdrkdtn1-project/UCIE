@@ -217,6 +217,9 @@ class PublicKnowledgePipelineTests(unittest.TestCase):
             include_advisory=False)
         self.assertEqual(len(calls), 3)
         self.assertNotIn("advisory", result["evidence_types_attempted"])
+        self.assertIn("advisory", result["explicitly_skipped_evidence_types"])
+        self.assertIn("advisory", result["missing_evidence_types"])
+        self.assertEqual(result["status"], "INCOMPLETE_PUBLIC_EVIDENCE")
         self.assertFalse(result["production_approved"])
 
     def test_missing_patch_never_promotes_candidate(self):
@@ -252,6 +255,13 @@ class PublicKnowledgePipelineTests(unittest.TestCase):
         modified["skill_knowledge_candidate"]["approved_for_deployment"] = True
         with self.assertRaises(PublicEvidenceError):
             preview_public_knowledge_receipt(modified)
+
+    def test_forged_candidate_hash_cannot_be_rendered_as_review(self):
+        outcome = collect_public_knowledge_candidate(
+            SOURCE, NUMBER, merge_sha=MERGED_SHA, fetch=synthetic_get)
+        outcome["candidate_evidence_sha256"] = "not-a-digest"
+        with self.assertRaises(PublicEvidenceError):
+            preview_public_knowledge_receipt(outcome)
 
     def test_same_approved_public_evidence_is_deterministic(self):
         first = collect_public_knowledge_candidate(
