@@ -5,7 +5,7 @@
 # Conservative constant-folding only. Never evaluate conditions, call
 # Get-Alias, perform variable expansion or interpret the supplied script.
 function Test-UCIEConstantUnreachableCommand {
-    param([System.Management.Automation.Language.CommandAst]$Command)
+    param([System.Management.Automation.Language.Ast]$Command)
     $cursor = $Command.Parent
     while ($null -ne $cursor) {
         if ($cursor -is [System.Management.Automation.Language.IfStatementAst]) {
@@ -46,6 +46,10 @@ function Find-UCIEPowerShellCandidate {
         throw 'PowerShell syntax tree complexity exceeded'
     }
     $found = [System.Collections.Generic.List[object]]::new()
+    $definitions = @($nodes | Where-Object {
+        $_ -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        -not (Test-UCIEConstantUnreachableCommand -Command $_)
+    })
     foreach ($cmd in $nodes) {
         if ($cmd -isnot [System.Management.Automation.Language.CommandAst]) {
             continue
@@ -57,6 +61,13 @@ function Find-UCIEPowerShellCandidate {
         if ([string]::IsNullOrEmpty($name)) {
             continue
         }
+        # Explicit source-defined functions can shadow built-in commands or
+        # aliases; do not falsely classify these as real Get-Command calls.
+        $shadowed = @($definitions | Where-Object {
+            $_.Name -ieq $name -and
+            $_.Extent.StartOffset -lt $cmd.Extent.StartOffset
+        })
+        if ($shadowed.Count -gt 0) { continue }
         $parameters = @(
             $cmd.CommandElements |
                 Where-Object { $_ -is [System.Management.Automation.Language.CommandParameterAst] } |
@@ -71,8 +82,7 @@ function Find-UCIEPowerShellCandidate {
             $publicPr = 'https://github.com/PowerShell/PowerShell/pull/28042'
             $guidance = 'Inspect fuzzy matches for duplicate Name/CommandType/Source identities before using results'
         }
-        elseif ([string]::Equals($name, 'Resolve-Path',
-                                 [System.StringComparison]::OrdinalIgnoreCase) -and
+        elseif (($name -in @('Resolve-Path', 'rvpa')) -and
                 $parameters -contains 'Relative') {
             $pattern = 'PS_RESOLVE_PATH_DOT_PREFIX'
             $publicPr = 'https://github.com/PowerShell/PowerShell/pull/28087'
