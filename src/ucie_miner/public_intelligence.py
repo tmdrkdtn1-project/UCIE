@@ -91,7 +91,14 @@ def discover_and_prioritize_live(*, fetch, root: Path | None = None,
         seen = ()
     else:
         seen = read_prior_miner_ids(root)
-    result = discover_all_feeds(fetch=fetch, sources=tuple(sources))
+    allowed = tuple(sources)
+    opted = tuple(opted_out_sources)
+    if any(s not in SOURCES for s in opted):
+        raise DiscoveryError("invalid explicit source opt-out")
+    remaining = tuple(s for s in allowed if s not in opted)
+    if not remaining:
+        raise DiscoveryError("all sources opted out")
+    result = discover_all_feeds(fetch=fetch, sources=remaining)
     # External metadata is untrusted even when returned by a real GitHub API.
     preview = public_intelligence_preview(
         result, seen_public_prs=seen, opted_out_sources=opted_out_sources,
