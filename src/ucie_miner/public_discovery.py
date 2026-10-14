@@ -33,8 +33,8 @@ SOURCE_SKILL = {
 CATEGORIES = {
     "SECURITY": re.compile(r"\b(?:cve|security|vulnerability|exploit|injection)\b", re.I),
     "CRASH": re.compile(r"\b(?:crash|segfault|deadlock|race|hang|panic)\b", re.I),
-    "REGRESSION": re.compile(r"\b(?:regression|bugfix|bug|fix|fixed|repair)\b", re.I),
-    "COMPATIBILITY": re.compile(r"\b(?:compatibility|breaking|deprecat(?:e|ion|ed)|migration|version|sdk)\b", re.I),
+    "REGRESSION": re.compile(r"\b(?:regression|bugfix|bug|fix|fixed|repair|invalid|missing|incorrect)\b", re.I),
+    "COMPATIBILITY": re.compile(r"\b(?:compatibility|breaking|breaks|deprecat(?:e|ion|ed)|migration|version|sdk|support)\b", re.I),
     "TESTING": re.compile(r"\b(?:test|flaky|ci|runner)\b", re.I),
 }
 PR_CAP = 20
