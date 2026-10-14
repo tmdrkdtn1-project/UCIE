@@ -25,6 +25,7 @@ from .public_intelligence import discover_and_prioritize_live, public_intelligen
 from .public_knowledge_pipeline import collect_public_knowledge_candidate, preview_public_knowledge_receipt
 from .public_batch import build_public_batch, review_batch_preview
 from .public_batch_host import inspect_public_batch_host
+from .public_skill_digest import compare_public_skill_batches
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -83,10 +84,14 @@ def main(argv=None):
     batch.add_argument("--skip-pr", action="append", default=[],
                        help="Approved public owner/repo#PR explicit opt-out")
     batch.add_argument("--limit", type=int, default=2)
+    batch.add_argument("--backfill-pages", type=int, choices=(1, 2, 3), default=1,
+                       help="Bounded public PR backfill pages per source; max 3")
     batch.add_argument("--skip-doc", action="store_true")
     batch.add_argument("--skip-advisory", action="store_true")
     sub.add_parser("preview-public-batch-stdin",
                    help="Review bounded offline public-only batch receipt, never sign or auto-promote")
+    sub.add_parser("preview-public-skill-digest-stdin",
+                   help="Compare two bounded public-only batches and report new/changed skill leads; no writes")
     sub.add_parser("preflight-public-batch-host", help="UCIE-local Windows 3.15/SQLite read-only acceptance preview; always NO-GO")
     args = parser.parse_args(argv)
     try:
@@ -180,6 +185,7 @@ def main(argv=None):
                 opted_out_sources=tuple(args.skip_source),
                 opted_out_prs=opted_prs,
                 max_enrich=args.limit,
+                backfill_pages=args.backfill_pages,
                 include_docs=not args.skip_doc,
                 include_advisories=not args.skip_advisory,
             )
@@ -187,6 +193,24 @@ def main(argv=None):
             result = inspect_public_batch_host(
                 ROOT, is_windows=os.name == "nt",
                 python_version=tuple(sys.version_info[:2]))
+        elif args.action == "preview-public-skill-digest-stdin":
+            data = sys.stdin.buffer.read(262145)
+            if len(data) > 262144:
+                raise ValueError("oversized public skill digest input")
+            def no_duplicates(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError("duplicate untrusted public digest property")
+                    result[key] = value
+                return result
+            envelope = json.loads(data.decode("utf-8", errors="strict"),
+                                  object_pairs_hook=no_duplicates)
+            if (not isinstance(envelope, dict)
+                    or set(envelope) != {"current", "previous"}):
+                raise ValueError("public current/previous receipts required")
+            result = compare_public_skill_batches(
+                envelope["current"], envelope["previous"])
         elif args.action == "preview-public-batch-stdin":
             data = sys.stdin.buffer.read(262145)
             if len(data) > 262144:
