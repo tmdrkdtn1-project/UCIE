@@ -18,6 +18,7 @@ import os
 import sys
 from .integration import preview_knowledge_rules
 from .static_concurrency import MAX_SOURCE_BYTES, inspect_python_scandir_source
+from .static_rule_bridge import preview_static_rule_candidates
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -45,7 +46,10 @@ def main(argv=None):
     pin = sub.add_parser("audit-merge-snapshot", help="Compare pinned public PR merge SHA, without DB writes")
     pin.add_argument("--verify-live", action="store_true",
                      help="Explicit anonymous public PR metadata GETs and pinned SHA checks")
-    sub.add_parser("scan-python-stdin", help="Parse only explicitly supplied approved public/synthetic Python text from stdin; no code execution or file scans")
+    pyscan = sub.add_parser("scan-python-stdin", help="Parse only explicitly supplied approved public/synthetic Python text from stdin; no code execution or file scans")
+    pyscan.add_argument("--preview-candidates", action="store_true",
+                        help="Link heuristic findings to unverified Stage 6 proposals; no DB writes")
+    sub.add_parser("preview-static-json-stdin", help="Link explicitly supplied untrusted static-scan JSON to nonexecuting rule/plan candidates")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
@@ -55,7 +59,23 @@ def main(argv=None):
             data = sys.stdin.buffer.read(MAX_SOURCE_BYTES + 1)
             if len(data) > MAX_SOURCE_BYTES:
                 raise ValueError("input is oversized")
-            result = inspect_python_scandir_source(data.decode("utf-8", errors="strict"))
+            scan = inspect_python_scandir_source(data.decode("utf-8", errors="strict"))
+            result = (preview_static_rule_candidates(ROOT, scan)
+                      if args.preview_candidates else scan)
+        elif args.action == "preview-static-json-stdin":
+            data = sys.stdin.buffer.read(MAX_SOURCE_BYTES + 1)
+            if len(data) > MAX_SOURCE_BYTES:
+                raise ValueError("input is oversized")
+            def unique_fields(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError("duplicate untrusted JSON property")
+                    result[key] = value
+                return result
+            scan = json.loads(data.decode("utf-8", errors="strict"),
+                              object_pairs_hook=unique_fields)
+            result = preview_static_rule_candidates(ROOT, scan)
         elif args.action == "report":
             path = report(ROOT)
             result = {"status": "LOCAL_REPORT_WRITTEN", "path": str(path)}
