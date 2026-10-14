@@ -19,7 +19,7 @@ from ucie_miner.provenance_review import inspect_public_prs
 from ucie_miner.preapproval import preapproval_readiness
 from ucie_miner.acceptance_bundle import build_readonly_acceptance_preview
 from ucie_miner.evidence_binding import bind_candidate_receipts
-from ucie_miner.merge_snapshot import compare_merge_snapshot
+from ucie_miner.merge_snapshot import compare_merge_snapshot, load_merge_snapshot
 from ucie_miner.license_review import inspect_pinned_licenses
 from ucie_miner.regression_plans import create_regression_matrix
 from ucie_miner.review import load_manifest
@@ -199,6 +199,54 @@ class Stage4To7IntegrationTests(unittest.TestCase):
         with self.assertRaises(PatternError):
             bind_candidate_receipts(*args)
 
+    def external_claim(self):
+        chain = preview_knowledge_rules(self.root)
+        plan = create_regression_matrix(chain["rulepack_preview"])
+        case = plan["cases"][0]
+        pinned = load_merge_snapshot(self.root)
+        source = case["source"]
+        number = int(case["case_id"].split("#", 1)[1].split(":", 1)[0])
+        commit = next(row["merge_commit_sha"] for row in pinned["entries"]
+                      if row["source"] == source and row["pr_number"] == number)
+        return {
+            "schema": "UCIE_EXTERNAL_REGRESSION_CLAIM_V1",
+            "case_id": case["case_id"], "source": source,
+            "rule_code": case["rule_code"],
+            "evidence_fingerprint": case["evidence_fingerprint"],
+            "merge_commit_sha": commit,
+            "runtime_product": "CPython" if source == "python/cpython" else "PowerShell",
+            "runtime_version": "3.15.0" if source == "python/cpython" else "7.6.0",
+            "platform": "Windows",
+            "fixture_sha256": hashlib.sha256(b"synthetic").hexdigest(),
+            "pre_fix": {"revision_sha": "b" * 40,
+                        "result": "FAILURE_OBSERVED_CLAIM",
+                        "observation_sha256": hashlib.sha256(b"before").hexdigest()},
+            "post_fix": {"revision_sha": commit,
+                         "result": "SUCCESS_OBSERVED_CLAIM",
+                         "observation_sha256": hashlib.sha256(b"after").hexdigest()},
+            "recorded_utc": "2026-10-14T00:00:00Z",
+            "independent_attestation": None,
+        }
+
+    def test_external_regression_claim_is_never_an_approval(self):
+        result = build_readonly_acceptance_preview(
+            self.root, is_windows=True, python_version=(3, 15),
+            external_regression_claims=[self.external_claim()])
+        self.assertEqual(result["external_regression_claims"], 1)
+        self.assertEqual(result["external_regression_claims_missing"], 7)
+        self.assertFalse(result["external_regression_claims_are_attested"])
+        self.assertEqual(result["status"], "NO_GO")
+        self.assertFalse(result["independent_regression_signoff"])
+        self.assertFalse(result["production_approved"])
+
+    def test_invalid_external_revision_fails_closed(self):
+        claim = self.external_claim()
+        claim["post_fix"]["revision_sha"] = "c" * 40
+        with self.assertRaises(PatternError):
+            build_readonly_acceptance_preview(
+                self.root, is_windows=True, python_version=(3, 15),
+                external_regression_claims=[claim])
+
     def test_stage8_bundle_includes_unverified_license_and_regression(self):
         result = build_readonly_acceptance_preview(
             self.root, is_windows=True, python_version=(3, 15))
@@ -213,6 +261,9 @@ class Stage4To7IntegrationTests(unittest.TestCase):
         self.assertEqual(result["miner_candidate_count"], 9)
         self.assertEqual(result["pattern_families"], 8)
         self.assertEqual(result["synthetic_regression_plans"], 8)
+        self.assertEqual(result["external_regression_claims"], 0)
+        self.assertEqual(result["external_regression_claims_missing"], 8)
+        self.assertFalse(result["external_regression_claims_are_attested"])
         self.assertGreaterEqual(result["license_document_count"], 2)
         self.assertEqual(result["regression_execution_state"], "NOT_EXECUTED")
         self.assertEqual(result["public_pr_metadata_state"], "NOT_CHECKED")
