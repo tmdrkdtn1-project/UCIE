@@ -27,6 +27,7 @@ from .public_batch import build_public_batch, review_batch_preview
 from .public_batch_host import inspect_public_batch_host
 from .public_skill_digest import compare_public_skill_batches
 from .public_candidate_staging import stage_public_candidates, inspect_staged_candidates
+from .public_git_commit_skills import discover_git_commit_skills, analyze_git_commits
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -101,6 +102,13 @@ def main(argv=None):
                        help="Explicit write to dedicated UCIE Stage 10 candidate-only DB, never to miner/Knowledge")
     sub.add_parser("inspect-public-candidate-ledger",
                    help="Read-only inspection of separate Stage 10 candidate staging; no file creation")
+    gitcommits = sub.add_parser(
+        "discover-git-commits",
+        help="One-shot public git/git commit fixes for Git skill; default no network or writes")
+    gitcommits.add_argument("--live", action="store_true",
+                            help="Explicit anonymous public git/git commit metadata GET")
+    sub.add_parser("preview-git-commits-stdin",
+                   help="Inert bounded offline git/git commit metadata -> unsigned skill tasks")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
@@ -197,6 +205,24 @@ def main(argv=None):
                 include_docs=not args.skip_doc,
                 include_advisories=not args.skip_advisory,
             )
+        elif args.action == "discover-git-commits":
+            if not args.live:
+                raise ValueError("Git public commit API read requires --live")
+            result = discover_git_commit_skills()
+        elif args.action == "preview-git-commits-stdin":
+            data = sys.stdin.buffer.read(262145)
+            if len(data) > 262144:
+                raise ValueError("oversized Git commit receipt")
+            def no_duplicate_git_fields(pairs):
+                obj = {}
+                for key, val in pairs:
+                    if key in obj:
+                        raise ValueError("duplicate untrusted Git commit property")
+                    obj[key] = val
+                return obj
+            rows = json.loads(data.decode("utf-8", "strict"),
+                              object_pairs_hook=no_duplicate_git_fields)
+            result = analyze_git_commits(rows)
         elif args.action == "stage-public-candidates-stdin":
             data = sys.stdin.buffer.read(262145)
             if len(data) > 262144:
