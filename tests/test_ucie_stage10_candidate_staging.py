@@ -92,7 +92,7 @@ class CandidateStagingTests(unittest.TestCase):
                 self.assertEqual(states, [("UNVERIFIED_CANDIDATE_ONLY",)])
                 names = set(x[0] for x in conn.execute(
                     "SELECT name FROM sqlite_master WHERE type='table'"))
-                self.assertEqual(names, {"public_candidate_stage"})
+                self.assertEqual(names, {"public_candidate_stage", "public_git_commit_stage"})
 
     def test_no_root_disk_write_is_rejected(self):
         with self.assertRaises(DiscoveryError):
