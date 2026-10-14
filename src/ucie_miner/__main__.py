@@ -24,6 +24,7 @@ from .public_discovery import SOURCES as DISCOVERY_SOURCES, public_feed_get
 from .public_intelligence import discover_and_prioritize_live, public_intelligence_preview
 from .public_knowledge_pipeline import collect_public_knowledge_candidate, preview_public_knowledge_receipt
 from .public_batch import build_public_batch, review_batch_preview
+from .public_batch_host import inspect_public_batch_host
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -86,6 +87,7 @@ def main(argv=None):
     batch.add_argument("--skip-advisory", action="store_true")
     sub.add_parser("preview-public-batch-stdin",
                    help="Review bounded offline public-only batch receipt, never sign or auto-promote")
+    sub.add_parser("preflight-public-batch-host", help="UCIE-local Windows 3.15/SQLite read-only acceptance preview; always NO-GO")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
@@ -181,6 +183,10 @@ def main(argv=None):
                 include_docs=not args.skip_doc,
                 include_advisories=not args.skip_advisory,
             )
+        elif args.action == "preflight-public-batch-host":
+            result = inspect_public_batch_host(
+                ROOT, is_windows=os.name == "nt",
+                python_version=tuple(sys.version_info[:2]))
         elif args.action == "preview-public-batch-stdin":
             data = sys.stdin.buffer.read(262145)
             if len(data) > 262144:
