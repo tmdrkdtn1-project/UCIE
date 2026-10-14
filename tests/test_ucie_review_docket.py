@@ -100,6 +100,34 @@ class IndependentReviewDocketTests(unittest.TestCase):
         self.assertEqual(docket["rulepacks_signed"], 0)
         self.assertFalse(docket["production_approved"])
 
+    def test_unlinked_external_claim_is_not_silently_counted_as_reviewed(self):
+        static, plan, pins = fixture()
+        review = inspect_regression_claims(plan, pins)
+        # A structurally shaped *untrusted* claim about another family
+        # must remain visible but cannot attach to this static finding.
+        comparison = {
+            "case_id": "PowerShell/PowerShell#28042:PS_FUZZY_GET_COMMAND_DUPLICATES",
+            "external_claim_sha256": "a" * 64,
+            "claim_consistency": "STRUCTURAL_ONLY",
+            "reproduction_verified": False,
+            "independent_attestation_verified": False,
+            "version_applicability": "UNDETERMINED",
+        }
+        review["comparisons"] = [comparison]
+        review["claimed_cases"] = 1
+        review["missing_claims"] = 0
+        review["status"] = "UNTRUSTED_CLAIMS_PRESENT"
+        review["claim_set_sha256"] = hashlib.sha256(json.dumps(
+            review["comparisons"], sort_keys=True,
+            separators=(",", ":")).encode("utf-8")).hexdigest()
+        docket = prepare_independent_review_docket(static, review)
+        self.assertEqual(docket["claimed_reviewed_cases"], 0)
+        self.assertEqual(docket["unlinked_external_claim_count"], 1)
+        self.assertEqual(docket["unlinked_external_case_ids"],
+                         [comparison["case_id"]])
+        self.assertFalse(docket["unlinked_external_claims_are_verified"])
+        self.assertFalse(docket["production_approved"])
+
     def test_forged_static_signature_denied(self):
         static, plan, pins = fixture()
         static["rulepack_signed"] = True
