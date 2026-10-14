@@ -122,6 +122,10 @@ def load_curated(repo_root: Path, selected: Path | None = None) -> list[dict]:
     items = []
     seen = set()
     for f in files:
+        if f.name == "pr_review_evidence_v1.json":
+            # Independently validated by ucie_miner.review.load_manifest.
+            # This is a review manifest, not a Stage 1 Rulepack entry.
+            continue
         try:
             obj = json.loads(f.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
