@@ -113,6 +113,44 @@ def compare_public_skill_batches(current, previous=None):
             "source_license_independently_approved": False,
             "human_signoff_received": False,
         })
+    # Direct Git commit leads share the same Git skill lane without ever
+    # inventing PR numbers or mixing PR and commit evidence identities.
+    current_git = {x["git_commit_sha"]: x for x in
+                   current.get("git_commit_skill_queue", [])}
+    previous_git = ({x["git_commit_sha"]: x for x in
+                    previous.get("git_commit_skill_queue", [])}
+                    if previous is not None else {})
+    for sha in sorted(current_git):
+        item, old = current_git[sha], previous_git.get(sha)
+        category = ("NEW_IN_BATCH_SCOPE" if old is None else
+                    "PUBLIC_EVIDENCE_FINGERPRINT_CHANGED"
+                    if item["message_sha256"] != old["message_sha256"]
+                    else "UNCHANGED_WITHIN_BATCH_SCOPE")
+        group = groups["git-workflow-prevention"]
+        group["current_candidate_count"] += 1
+        group["needs_manual_review"] += 1
+        if category == "NEW_IN_BATCH_SCOPE":
+            group["new_candidates"] += 1
+            important += 1
+        elif category == "UNCHANGED_WITHIN_BATCH_SCOPE":
+            group["unchanged_candidates"] += 1
+        else:
+            group["changed_evidence"] += 1
+            important += 1
+        items.append({
+            "public_url": item["public_url"],
+            "evidence_kind": "GIT_DIRECT_COMMIT",
+            "skill_id": "git-workflow-prevention",
+            "change_classification": category,
+            "public_error_pattern_tags": item["error_category_tags"],
+            "safe_call_guidance": PROFILE["git-workflow-prevention"]["safe_call"],
+            "manual_regression_plan": PROFILE["git-workflow-prevention"]["recommended_action"],
+            "evidence_status": "UNVERIFIED_PUBLIC_GIT_COMMIT_LEAD",
+            "missing_evidence_types": ["independent_regression", "release_inclusion"],
+            "actual_upstream_fix_verified": False,
+            "source_license_independently_approved": False,
+            "human_signoff_received": False,
+        })
     not_seen_keys = sorted(
         set(previous_entries) - set(latest),
         key=lambda k: (SOURCES.index(k[0]), k[1]))
@@ -120,6 +158,11 @@ def compare_public_skill_batches(current, previous=None):
         "public_url": f"https://github.com/{source}/pull/{number}",
         "status": "NOT_IN_THIS_BOUNDED_SELECTION_NOT_DELETED",
     } for source, number in not_seen_keys]
+    for sha in sorted(set(previous_git) - set(current_git)):
+        not_seen.append({
+            "public_url": f"https://github.com/git/git/commit/{sha}",
+            "status": "NOT_IN_THIS_BOUNDED_SELECTION_NOT_DELETED",
+        })
     return {
         "schema": "UCIE_PUBLIC_SKILL_KNOWLEDGE_DIGEST_V1",
         "status": "PUBLIC_RESEARCH_REVIEW_ONLY_NO_GO",
