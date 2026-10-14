@@ -22,12 +22,12 @@ from ucie_miner.worker import run_cycle
 
 def main() -> int:
     try:
-        result = run_cycle(ROOT)
+        result = run_cycle(ROOT, enforce_schedule=True)
     except Exception as exc:
         result = {"status": "FAIL_CLOSED", "error_type": type(exc).__name__}
     print(json.dumps(result, sort_keys=True, ensure_ascii=True))
     return 0 if result["status"] == "COLLECTED_UNVERIFIED" else (
-        3 if result["status"] == "SKIPPED_ALREADY_RUNNING" else 2
+        3 if result["status"] == "SKIPPED_ALREADY_RUNNING" else (0 if result["status"] == "SKIPPED_NOT_DUE" else 2)
     )
 
 
