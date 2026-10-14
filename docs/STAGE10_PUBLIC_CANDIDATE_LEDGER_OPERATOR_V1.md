@@ -83,3 +83,42 @@ Rulepack signing and automatic promotion = DISABLED.
 Owner-PC host acceptance = NOT EXECUTED.
 Operating database writes or scheduler change = NONE.
 Main-branch merge, distribution and production GO = NONE / NO_GO.
+
+## Approved git/git direct-commit skill discovery
+
+The existing Stage 9 pipeline was PR-centric, which can leave the
+Git skill with no new leads even when upstream Git fixes are merged
+as direct commits.
+
+Stage 10 adds exactly one separate, allowlisted anonymous GitHub GET:
+
+    https://api.github.com/repos/git/git/commits?per_page=20
+
+Its first-party parser accepts at most 20 public git/git commit records,
+checks canonical Git commit URL and 40-digit SHA, current UTC timestamp,
+skips merge commits and old changes, and hashes untrusted commit messages.
+Only known coarse error tags, exact commit SHA, first-party safety guidance,
+and a Git regression-review task leave the parser. No message content,
+patch, author identity or executable script is retained. The commit SHA
+remains a commit SHA; it is never invented as a PR number.
+
+Explicit one-shot commands:
+
+    python -m ucie_miner discover-git-commits --live
+    python -m ucie_miner preview-git-commits-stdin
+
+Without --live the network command fails closed. The offline command
+accepts a bounded public/synthetic commit JSON list on stdin. Both are
+separate from the existing hourly UCIE miner and the PR-only Stage 10
+candidate staging schema. This commit source is a research skill input,
+not an authorized database import.
+
+Actual approved public Git commit 20c35e3b71985621e160639fbf36b6c0c2c3c27a
+was independently looked up on 2026-10-14 and its identity, timestamp,
+summary and changed file class were recorded in
+docs/evidence/stage10_git_direct_commit_spotcheck_20261014.json.
+This is real public metadata, not an upstream behavior regression,
+release inclusion proof, or a Windows owner-host collection run.
+
+No external source was executed, no unapproved public repo added,
+and no permanent learning/rule promotion occurred.
