@@ -90,6 +90,10 @@ def main(argv=None):
                        help="Bounded public PR backfill pages per source; max 3")
     batch.add_argument("--skip-doc", action="store_true")
     batch.add_argument("--skip-advisory", action="store_true")
+    batch.add_argument("--include-git-commits", action="store_true",
+                       help="Opt in to an approved git/git direct-commit GET and typed skill leads")
+    batch.add_argument("--skip-git-commit", action="append", default=[],
+                       help="Exclude an exact 40-digit approved public Git commit SHA")
     sub.add_parser("preview-public-batch-stdin",
                    help="Review bounded offline public-only batch receipt, never sign or auto-promote")
     sub.add_parser("preview-public-skill-digest-stdin",
@@ -204,6 +208,8 @@ def main(argv=None):
                 backfill_pages=args.backfill_pages,
                 include_docs=not args.skip_doc,
                 include_advisories=not args.skip_advisory,
+                include_git_commits=args.include_git_commits,
+                opted_out_git_commits=tuple(args.skip_git_commit),
             )
         elif args.action == "discover-git-commits":
             if not args.live:
