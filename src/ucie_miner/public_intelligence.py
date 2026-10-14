@@ -56,6 +56,22 @@ def read_prior_miner_ids(root: Path) -> tuple[tuple[str, int], ...]:
 def public_intelligence_preview(discovery, *, seen_public_prs=(),
                                 opted_out_sources=(), opted_out_prs=(),
                                 review_feedback=None, limit=12):
+    if (not isinstance(discovery, dict)
+            or discovery.get("schema") != "UCIE_MULTI_SOURCE_PUBLIC_DISCOVERY_V1"
+            or not isinstance(discovery.get("sources_attempted"), list)
+            or not isinstance(discovery.get("feeds"), list)
+            or discovery["sources_attempted"] != [
+                f.get("source") if isinstance(f, dict) else None
+                for f in discovery["feeds"]]
+            or type(discovery.get("candidate_leads_total")) is not int
+            or discovery["candidate_leads_total"] != sum(
+                len(f.get("leads", [])) if isinstance(f, dict)
+                and isinstance(f.get("leads"), list) else -999
+                for f in discovery["feeds"])
+            or discovery.get("production_approved") is not False
+            or discovery.get("automatic_rule_training") is not False
+            or discovery.get("persistent_writes") != 0):
+        raise DiscoveryError("untrusted or conflicting discovery receipts")
     priority = prioritize_public_leads(
         discovery, seen_public_prs=seen_public_prs,
         opted_out_sources=opted_out_sources,
