@@ -41,8 +41,12 @@ def _api_url(source: str, endpoint: str) -> str:
 
 
 def fetch_public_json(url: str) -> object:
-    if not any(url.startswith("https://api.github.com/repos/" + source + "/") for source in PUBLIC_SOURCES):
-        raise MiningError("request outside approved third-party API roots")
+    if not isinstance(url, str) or not any(re.fullmatch(
+            r"https://api\.github\.com/repos/" + re.escape(source) +
+            r"/(?:pulls\?state=closed&sort=updated&direction=desc&per_page=20|"
+            r"pulls/[1-9][0-9]*/files\?per_page=30|pulls/[1-9][0-9]*)", url)
+            for source in PUBLIC_SOURCES):
+        raise MiningError("request outside approved exact public API routes")
     request = urllib.request.Request(
         url,
         headers={"Accept": "application/vnd.github+json",
@@ -144,7 +148,10 @@ def mine_once(
     fetch: Callable[[str], object] = fetch_public_json,
     sources: tuple[str, ...] = PUBLIC_SOURCES,
     max_new_per_source: int = 2,
+    crosscheck_origin: bool = False,
 ) -> dict:
+    if type(crosscheck_origin) is not bool:
+        raise MiningError("invalid provenance crosscheck flag")
     if any(source not in PUBLIC_SOURCES for source in sources) or not sources:
         raise MiningError("unapproved source")
     if type(max_new_per_source) is not int or not 1 <= max_new_per_source <= 5:
@@ -152,6 +159,8 @@ def mine_once(
     conn = _db(repo_root)
     observed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     added = 0
+    incomplete_provenance = 0
+    public_pr_crosschecked = 0
     try:
         with conn:
             for source in sources:
@@ -174,6 +183,15 @@ def mine_once(
                                     (source, number)).fetchone():
                         continue
                     files = fetch(_api_url(source, "pulls/" + str(number) + "/files?per_page=30"))
+                    # Local-only metadata gate. Never treats missing upstream facts as PASS.
+                    from .adapter import inspect_collected_pr
+                    evidence = inspect_collected_pr(source, item, files)
+                    if evidence["status"] == "INCOMPLETE_PROVENANCE":
+                        incomplete_provenance += 1
+                    if crosscheck_origin:
+                        from .public_provenance import crosscheck_pr_metadata
+                        crosscheck_pr_metadata(source, item, fetch=fetch)
+                        public_pr_crosschecked += 1
                     digest, tags = _classify_changes(files)
                     conn.execute(
                         "INSERT INTO candidates VALUES (?,?,?,?,?,?,?,?)",
@@ -189,7 +207,9 @@ def mine_once(
     finally:
         conn.close()
     return {"status": "COLLECTED_UNVERIFIED", "sources_checked": len(sources),
-            "new_candidates": added, "verification_pass": 0, "production_approved": False}
+            "new_candidates": added, "incomplete_provenance": incomplete_provenance,
+            "public_pr_crosschecked": public_pr_crosschecked,
+            "verification_pass": 0, "production_approved": False}
 
 
 def report(repo_root: Path) -> Path:

@@ -7,7 +7,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from ucie_miner.core import PUBLIC_SOURCES, MiningError, _api_url, _classify_changes, mine_once, report
+from ucie_miner.core import PUBLIC_SOURCES, MiningError, _api_url, _classify_changes, mine_once, report, fetch_public_json
 
 
 class PublicMinerTests(unittest.TestCase):
@@ -29,6 +29,16 @@ class PublicMinerTests(unittest.TestCase):
         self.assertEqual(_api_url(PUBLIC_SOURCES[0], "pulls/42/files?per_page=30"),
                          "https://api.github.com/repos/python/cpython/pulls/42/files?per_page=30")
 
+    def test_fetch_denies_unapproved_endpoint_before_network(self):
+        for url in (
+            "https://api.github.com/repos/python/cpython/contents/private",
+            "https://api.github.com/repos/python/cpython/pulls/42/files?per_page=999",
+            "https://api.github.com/repos/python/cpython/pulls/42/commits",
+            "https://api.github.com/repos/not-approved/test/pulls/4",
+        ):
+            with self.subTest(url=url), self.assertRaises(MiningError):
+                fetch_public_json(url)
+
     def test_other_project_source_is_denied(self):
         with self.assertRaises(MiningError):
             _api_url("somebody/unknown-project", "pulls?state=closed&sort=updated&direction=desc&per_page=20")
@@ -36,6 +46,35 @@ class PublicMinerTests(unittest.TestCase):
     def test_unsafe_endpoint_denied(self):
         with self.assertRaises(MiningError):
             _api_url(PUBLIC_SOURCES[0], "contents/secrets")
+
+    @staticmethod
+    def fake_get_with_origin(url):
+        if url.endswith("/pulls/42"):
+            return {"number": 42, "html_url": "https://github.com/python/cpython/pull/42",
+                    "state": "closed", "merged": True,
+                    "merged_at": "2026-10-01T10:00:00Z",
+                    "updated_at": "2026-10-02T10:00:00Z",
+                    "merge_commit_sha": "a" * 40}
+        return PublicMinerTests.fake_get(url)
+
+    def test_crosscheck_origin_in_collector(self):
+        result = mine_once(self.root, fetch=self.fake_get_with_origin,
+                           sources=(PUBLIC_SOURCES[0],), crosscheck_origin=True)
+        self.assertEqual(result["public_pr_crosschecked"], 1)
+        self.assertEqual(result["verification_pass"], 0)
+
+    def test_origin_mismatch_fails_closed(self):
+        def mismatch(url):
+            if url.endswith("/pulls/42"):
+                return {"number": 42, "html_url": "https://github.com/python/cpython/pull/42",
+                        "state": "closed", "merged": False,
+                        "merged_at": "2026-10-01T10:00:00Z",
+                        "updated_at": "2026-10-02T10:00:00Z",
+                        "merge_commit_sha": "a" * 40}
+            return self.fake_get(url)
+        with self.assertRaises(MiningError):
+            mine_once(self.root, fetch=mismatch,
+                      sources=(PUBLIC_SOURCES[0],), crosscheck_origin=True)
 
     def test_mine_once(self):
         r = mine_once(self.root, fetch=self.fake_get, sources=(PUBLIC_SOURCES[0],))

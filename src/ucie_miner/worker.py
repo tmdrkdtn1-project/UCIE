@@ -16,6 +16,7 @@ import tempfile
 from typing import Callable, Iterator
 
 from .core import mine_once, report
+from .schedule_policy import next_cycle
 
 
 def _utc() -> str:
@@ -96,6 +97,7 @@ def run_cycle(
     *,
     collect: Callable[..., dict] = mine_once,
     write_report: Callable[[Path], Path] = report,
+    enforce_schedule: bool = False,
 ) -> dict:
     """One bounded mining+report cycle. No background threads or external auth."""
     start = _utc()
@@ -109,6 +111,29 @@ def run_cycle(
                 "verification_pass": 0,
                 "production_approved": False,
             }
+        if enforce_schedule:
+            last = runtime / "last_run.json"
+            if last.is_symlink():
+                raise ValueError("unsafe last-run receipt path")
+            prior = None
+            failures = 0
+            if last.exists():
+                try:
+                    payload = json.loads(last.read_text(encoding="utf-8"))
+                    if not isinstance(payload, dict) or payload.get("schema") != "UCIE_MINER_CYCLE_V1":
+                        raise ValueError("untrusted prior receipt")
+                    stamp = payload.get("finished_utc")
+                    if not isinstance(stamp, str):
+                        raise ValueError("missing completion time")
+                    prior = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+                    failures = payload.get("consecutive_failures", 0)
+                except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                    raise ValueError("invalid prior receipt") from exc
+            decision = next_cycle(prior, now=datetime.now(timezone.utc), consecutive_failures=failures)
+            if decision["decision"] == "WAIT":
+                return {"schema": "UCIE_MINER_CYCLE_V1", "status": "SKIPPED_NOT_DUE",
+                        "retry_after_seconds": decision["retry_after_seconds"],
+                        "verification_pass": 0, "production_approved": False}
         receipt = {
             "schema": "UCIE_MINER_CYCLE_V1",
             "started_utc": start,
@@ -117,6 +142,7 @@ def run_cycle(
             "sources_checked": 0,
             "verification_pass": 0,
             "production_approved": False,
+            "consecutive_failures": 0,
         }
         try:
             result = collect(repo_root)
@@ -144,6 +170,8 @@ def run_cycle(
             # Exceptions can contain externally controlled text: store type ONLY.
             receipt["status"] = "COLLECTION_FAILED"
             receipt["error_type"] = type(exc).__name__
+            if enforce_schedule:
+                receipt["consecutive_failures"] = min(6, failures + 1)
         finally:
             receipt["finished_utc"] = _utc()
             _write_receipt(runtime, receipt)
