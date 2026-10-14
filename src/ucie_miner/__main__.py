@@ -23,6 +23,7 @@ from .review_docket import prepare_independent_review_docket
 from .public_discovery import SOURCES as DISCOVERY_SOURCES, public_feed_get
 from .public_intelligence import discover_and_prioritize_live, public_intelligence_preview
 from .public_knowledge_pipeline import collect_public_knowledge_candidate, preview_public_knowledge_receipt
+from .public_batch import build_public_batch, review_batch_preview
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -70,6 +71,21 @@ def main(argv=None):
     collect.add_argument("--skip-doc", action="store_true")
     collect.add_argument("--skip-advisory", action="store_true")
     sub.add_parser("preview-public-evidence-stdin", help="Bounded offline untrusted public evidence receipt review; no network or writes")
+    batch = sub.add_parser(
+        "batch-public-evidence",
+        help="Explicit one-shot five-source discovery, dedupe, 1-3 PR enrichments and skill tasks; never write")
+    batch.add_argument("--live", action="store_true",
+                       help="Required approval for bounded anonymous public metadata and evidence GETs")
+    batch.add_argument("--source", choices=DISCOVERY_SOURCES)
+    batch.add_argument("--skip-source", action="append",
+                       choices=DISCOVERY_SOURCES, default=[])
+    batch.add_argument("--skip-pr", action="append", default=[],
+                       help="Approved public owner/repo#PR explicit opt-out")
+    batch.add_argument("--limit", type=int, default=2)
+    batch.add_argument("--skip-doc", action="store_true")
+    batch.add_argument("--skip-advisory", action="store_true")
+    sub.add_parser("preview-public-batch-stdin",
+                   help="Review bounded offline public-only batch receipt, never sign or auto-promote")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
@@ -145,6 +161,40 @@ def main(argv=None):
             payload = json.loads(data.decode("utf-8", "strict"),
                                  object_pairs_hook=unique_evidence_fields)
             result = preview_public_knowledge_receipt(payload)
+        elif args.action == "batch-public-evidence":
+            if not args.live:
+                raise ValueError("public batch reads require explicit --live")
+            def public_optout(key):
+                if not isinstance(key, str) or key.count("#") != 1:
+                    raise ValueError("invalid public opt-out PR")
+                source, number = key.split("#")
+                if source not in DISCOVERY_SOURCES or not number.isascii() or not number.isdigit():
+                    raise ValueError("unapproved public PR opt-out")
+                return (source, int(number))
+            opted_prs = tuple(public_optout(key) for key in args.skip_pr)
+            result = build_public_batch(
+                sources=(args.source,) if args.source else DISCOVERY_SOURCES,
+                root=ROOT,
+                opted_out_sources=tuple(args.skip_source),
+                opted_out_prs=opted_prs,
+                max_enrich=args.limit,
+                include_docs=not args.skip_doc,
+                include_advisories=not args.skip_advisory,
+            )
+        elif args.action == "preview-public-batch-stdin":
+            data = sys.stdin.buffer.read(262145)
+            if len(data) > 262144:
+                raise ValueError("oversized untrusted public batch")
+            def unique_batch_fields(pairs):
+                obj = {}
+                for key, val in pairs:
+                    if key in obj:
+                        raise ValueError("duplicate public batch property")
+                    obj[key] = val
+                return obj
+            raw = json.loads(data.decode("utf-8", "strict"),
+                             object_pairs_hook=unique_batch_fields)
+            result = review_batch_preview(raw)
         elif args.action == "preview-intelligence-stdin":
             data = sys.stdin.buffer.read(262145)
             if len(data) > 262144:
