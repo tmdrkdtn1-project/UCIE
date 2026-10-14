@@ -13,8 +13,8 @@ import re
 
 from .evidence import SOURCES
 
-PATTERN = re.compile(r"[A-Z][A-Z0-9_]{2,63}\\Z")
-SHA256 = re.compile(r"[a-f0-9]{64}\\Z")
+PATTERN = re.compile(r"[A-Z][A-Z0-9_]{2,63}")
+SHA256 = re.compile(r"[a-f0-9]{64}")
 MAX_ROWS = 10000
 
 
