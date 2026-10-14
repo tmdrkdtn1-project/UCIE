@@ -18,6 +18,8 @@ from ucie_miner.review import _read_candidates
 from ucie_miner.provenance_review import inspect_public_prs
 from ucie_miner.preapproval import preapproval_readiness
 from ucie_miner.acceptance_bundle import build_readonly_acceptance_preview
+from ucie_miner.static_concurrency import inspect_python_scandir_source
+from ucie_miner.static_rule_bridge import preview_static_rule_candidates
 from ucie_miner.evidence_binding import bind_candidate_receipts
 from ucie_miner.merge_snapshot import compare_merge_snapshot, load_merge_snapshot
 from ucie_miner.license_review import inspect_pinned_licenses
@@ -246,6 +248,24 @@ class Stage4To7IntegrationTests(unittest.TestCase):
             build_readonly_acceptance_preview(
                 self.root, is_windows=True, python_version=(3, 15),
                 external_regression_claims=[claim])
+
+    def test_stage8_optional_static_docket_is_explicitly_no_go(self):
+        scan = inspect_python_scandir_source(
+            "import os\n"
+            "def run(path, executor, worker):\n"
+            "    raw = os.scandir(path)\n"
+            "    executor.submit(worker, raw)\n")
+        static_preview = preview_static_rule_candidates(self.root, scan)
+        bundle = build_readonly_acceptance_preview(
+            self.root, is_windows=True, python_version=(3, 15),
+            static_preview=static_preview)
+        self.assertEqual(bundle["status"], "NO_GO")
+        self.assertEqual(bundle["static_review_candidate_count"], 1)
+        self.assertEqual(len(bundle["static_review_docket_sha256"]), 64)
+        self.assertFalse(bundle["static_review_approved"])
+        self.assertFalse(bundle["rulepack_signed"])
+        self.assertFalse(bundle["production_approved"])
+        self.assertEqual(bundle["persistent_writes"], 0)
 
     def test_stage8_bundle_includes_unverified_license_and_regression(self):
         result = build_readonly_acceptance_preview(

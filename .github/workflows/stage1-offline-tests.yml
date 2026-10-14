@@ -60,3 +60,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./tests/test_ucie_powershell_static_candidates.ps1
+      - name: UCIE-authored PowerShell synthetic detector calibration (not production accuracy)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/test_ucie_powershell_static_accuracy.ps1
