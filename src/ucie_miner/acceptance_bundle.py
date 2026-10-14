@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from .host_preflight import inspect_ucie_host
 from .evidence_binding import bind_candidate_receipts
+from .merge_snapshot import compare_merge_snapshot
 from .integration import preview_knowledge_rules
 from .license_review import inspect_pinned_licenses
 from .patterns import PatternError
@@ -27,6 +28,8 @@ def build_readonly_acceptance_preview(root, *, is_windows, python_version):
     binding = bind_candidate_receipts(
         _read_candidates(root), load_manifest(root), chain,
         provenance, license_markers, regressions)
+    merge_snapshot = compare_merge_snapshot(
+        root, _read_candidates(root), provenance, load_manifest(root))
     if (regressions["candidate_count"] !=
             chain["pattern_preview"]["family_count"]):
         raise PatternError("incomplete regression candidate coverage")
@@ -41,6 +44,9 @@ def build_readonly_acceptance_preview(root, *, is_windows, python_version):
         "candidate_binding_status": binding["status"],
         "candidate_binding_sha256": binding["receipt_sha256"],
         "candidate_binding_is_signature": False,
+        "pinned_merge_snapshot_sha256": merge_snapshot["snapshot_sha256"],
+        "pinned_merge_pr_count": merge_snapshot["local_pinned_pr_count"],
+        "release_version_inclusion_verified": False,
         "status": "NO_GO",
         "miner_candidate_count": chain["miner_count"],
         "knowledge_evidence_count": chain["knowledge_count"],
