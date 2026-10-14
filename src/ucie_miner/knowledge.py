@@ -6,6 +6,7 @@ independent SQLite database in the same UCIE runtime directory.
 """
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
@@ -115,7 +116,7 @@ def propose_rule(root: Path, *, source: str, number: int,
     key = hashlib.sha256(
         f"{source}:{number}:{pattern_code}:{proposal_digest}".encode("utf-8")
     ).hexdigest()
-    with open_knowledge(root) as con:
+    with closing(open_knowledge(root)) as con, con:
         con.execute("""INSERT OR IGNORE INTO rule_candidates
             (rule_id,source,pr_number,pattern_code,proposal_sha256,created_utc)
             VALUES (?,?,?,?,?,?)""",
@@ -134,11 +135,11 @@ def backup_knowledge(root: Path, destination: Path) -> Path:
         raise ValueError("backup destination already exists")
     if destination.parent.resolve() != runtime.resolve():
         raise ValueError("backup must remain in UCIE runtime")
-    with sqlite3.connect(source.as_uri()+"?mode=ro",uri=True) as inp:
+    with closing(sqlite3.connect(source.as_uri()+"?mode=ro",uri=True)) as inp:
         if inp.execute("PRAGMA quick_check").fetchone()[0] != "ok":
             raise ValueError("knowledge database corrupt")
         try:
-            with sqlite3.connect(destination) as out:
+            with closing(sqlite3.connect(destination)) as out, out:
                 inp.backup(out)
         except Exception:
             destination.unlink(missing_ok=True)
