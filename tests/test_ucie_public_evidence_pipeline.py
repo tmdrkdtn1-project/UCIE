@@ -99,7 +99,7 @@ class PublicRoutesTests(unittest.TestCase):
     def test_before_after_behavioral_signals_are_bounded_nonexecuting(self):
         change = inspect_pr_changes(SOURCE, NUMBER, [{
             "filename": "src/mcp/server/server.py", "status": "modified",
-            "patch": "@@ -1 +1 @@\\n-raise ValueError('unknown')\\n+raise MCPError(code=INVALID_PARAMS, message='unknown')\\n",
+            "patch": "@@ -1 +1 @@\n-raise ValueError('unknown')\n+raise MCPError(code=INVALID_PARAMS, message='unknown')\n",
         }], merge_sha=MERGED_SHA)
         self.assertIn("GENERIC_EXCEPTION",
                       change["removed_behavior_signals"])
