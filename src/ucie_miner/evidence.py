@@ -39,7 +39,7 @@ SECRET = re.compile(
 RULES = (
     ("EXPLICIT_ENCODING", re.compile(r"(?i)encoding\s*=|\b(?:utf-8|cp1252|cp949)\b"), "Explicitly specify the documented file encoding"),
     ("EXCEPTION_HANDLING", re.compile(r"(?i)\b(?:except|catch|throw|raise|finally)\b"), "Check exception handling and failing-path behavior"),
-    ("API_CONTRACT", re.compile(r"(?i)\b(?:schema|header|validation|argument|parameter)\b"), "Validate the API contract and negative inputs"),
+    ("API_CONTRACT", re.compile(r"(?i)(?:schema|header|validat|argument|parameter)"), "Validate the API contract and negative inputs"),
     ("DEPENDENCY_VERSION", re.compile(r"(?i)\b(?:version|dependency|runner|image)\b"), "Pin and compare tool/runtime versions"),
 )
 
