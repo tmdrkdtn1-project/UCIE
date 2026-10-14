@@ -19,6 +19,8 @@ from .public_intelligence import (public_intelligence_preview,
 from .public_knowledge_pipeline import (collect_public_knowledge_candidate,
                                         preview_public_knowledge_receipt)
 from .public_git_commit_skills import discover_git_commit_skills
+from .public_discovery import CATEGORIES
+from .skill_profiles import PROFILE
 
 SHA40 = re.compile(r"[0-9a-f]{40}")
 MAX_ENRICH = 3
@@ -278,6 +280,7 @@ def review_batch_preview(receipt):
             "rule_status": "NO_GO",
         })
     git_findings = []
+    observed_commits = set()
     for item in receipt.get("git_commit_skill_queue", []):
         sha = item.get("git_commit_sha") if isinstance(item, dict) else None
         if (not isinstance(item, dict)
@@ -286,11 +289,25 @@ def review_batch_preview(receipt):
                 or item.get("public_url") !=
                     f"https://github.com/git/git/commit/{sha}"
                 or item.get("skill_id") != "git-workflow-prevention"
+                or "pr_number" in item
+                or sha in observed_commits
+                or not isinstance(item.get("message_sha256"), str)
+                or not re.fullmatch(r"[0-9a-f]{64}", item["message_sha256"])
+                or not isinstance(item.get("error_category_tags"), list)
+                or not item["error_category_tags"]
+                or len(set(item["error_category_tags"])) !=
+                    len(item["error_category_tags"])
+                or any(tag not in CATEGORIES for tag in item["error_category_tags"])
+                or item.get("safe_call_guidance") !=
+                    PROFILE["git-workflow-prevention"]["safe_call"]
+                or item.get("review_plan") !=
+                    PROFILE["git-workflow-prevention"]["recommended_action"]
                 or item.get("knowledge_review_status") != "MANUAL_REVIEW_ONLY_NO_GO"
                 or item.get("human_approval_received") is not False
                 or item.get("source_commit_verified_behavior") is not False
                 or item.get("released_version_inclusion_verified") is not False):
             raise DiscoveryError("forged Git commit candidate")
+        observed_commits.add(sha)
         git_findings.append({
             "public_commit": item["public_url"],
             "skill_id": "git-workflow-prevention",
