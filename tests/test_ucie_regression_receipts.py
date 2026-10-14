@@ -92,6 +92,17 @@ class ExternalRegressionReceiptTests(unittest.TestCase):
         with self.assertRaises(PatternError):
             inspect_regression_claims(plan, pins, [claim])
 
+    def test_runtime_version_dots_are_not_commands(self):
+        plan, pins, claim = fixtures()
+        self.assertEqual(inspect_regression_claims(
+            plan, pins, [claim])["claimed_cases"], 1)
+        for malformed in ("3/15/0", "3\\\\15\\\\0", "3.15;exit", "3.15\\nrun"):
+            with self.subTest(malformed=malformed):
+                attempt = deepcopy(claim)
+                attempt["runtime_version"] = malformed
+                with self.assertRaises(PatternError):
+                    inspect_regression_claims(plan, pins, [attempt])
+
     def test_wrong_merge_sha_fails_closed(self):
         plan, pins, claim = fixtures()
         claim["merge_commit_sha"] = "c" * 40
