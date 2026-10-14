@@ -251,10 +251,10 @@ class Stage4To7IntegrationTests(unittest.TestCase):
 
     def test_stage8_optional_static_docket_is_explicitly_no_go(self):
         scan = inspect_python_scandir_source(
-            "import os\\n"
-            "def run(path, executor, worker):\\n"
-            "    raw = os.scandir(path)\\n"
-            "    executor.submit(worker, raw)\\n")
+            "import os\n"
+            "def run(path, executor, worker):\n"
+            "    raw = os.scandir(path)\n"
+            "    executor.submit(worker, raw)\n")
         static_preview = preview_static_rule_candidates(self.root, scan)
         bundle = build_readonly_acceptance_preview(
             self.root, is_windows=True, python_version=(3, 15),
