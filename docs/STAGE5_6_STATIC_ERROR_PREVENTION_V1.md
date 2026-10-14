@@ -58,6 +58,31 @@ filesystem paths. It does not show the source text in output or save it.
 Do **not** pipe private code, user files or unapproved repos to this
 command; approved public and purpose-built synthetic examples only.
 
+## Inert PowerShell source candidates
+
+`Find-UCIEPowerShellCandidate -SourceText <explicitly approved text>`
+is a separate bounded **PowerShell AST-only** analyzer in
+`scripts/ucie_powershell_static_candidates.ps1`. It uses the built-in
+`Parser.ParseInput` and does not run any statement from `SourceText`.
+
+- `Get-Command ... -UseFuzzyMatching` produces a manual-review candidate
+  linked to approved public PowerShell PR #28042.
+- `Resolve-Path ... -Relative` produces a manual-review candidate linked
+  to approved public PowerShell PR #28087.
+
+These flags alone do **not** establish that a caller contains a bug.
+Commands that use fuzzy matching with their own deduplication or paths
+with already-correct normalization may still be valid. Missing findings
+are not PASS either. The parser checks 128 KiB input, syntax errors,
+a 10,000-node AST limit, and up to 100 findings. Results contain only
+line/column, candidate rule ID, approved public evidence URL and a
+non-executable safe-call suggestion. They never contain the supplied
+source text or independently verified reviewer approvals.
+
+The CI uses only `tests/test_ucie_powershell_static_candidates.ps1`
+with UCIE-authored synthetic strings. No operating Windows files,
+live UCIE DB, user content or unapproved source repository is read.
+
 ## Regression and review boundaries
 
 - Synthetic tests check explicit executor arguments, captured closures,
