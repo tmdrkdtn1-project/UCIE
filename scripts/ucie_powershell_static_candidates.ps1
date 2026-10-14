@@ -14,7 +14,7 @@ function Test-UCIEConstantUnreachableCommand {
                 $inside = ($Command.Extent.StartOffset -ge $block.Extent.StartOffset -and
                            $Command.Extent.EndOffset -le $block.Extent.EndOffset)
                 if ($inside) {
-                    $literal = ($clause.Item1.Extent.Text -replace '[()\\s]', '').ToLowerInvariant()
+                    $literal = ($clause.Item1.Extent.Text -replace '[()\s]', '').ToLowerInvariant()
                     if ($literal -in @('$false', '0')) {
                         return $true
                     }
