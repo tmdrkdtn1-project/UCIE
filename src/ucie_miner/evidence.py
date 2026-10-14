@@ -28,19 +28,19 @@ UTC_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 INJECTION = re.compile(
     r"(?i)(ignore (?:all |previous |prior )?instructions|"
     r"system prompt|developer message|reveal (?:the |your )?(?:secret|token|key)|"
-    r"exfiltrat|curl\\s+[^\\n]*\\|\\s*(?:sh|bash)|"
-    r"invoke-expression|remove-item\\s+-recurse)"
+    r"exfiltrat|curl\s+[^\n]*\|\s*(?:sh|bash)|"
+    r"invoke-expression|remove-item\s+-recurse)"
 )
 SECRET = re.compile(
     r"(?:ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
     r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"
-    r"Bearer\\s+[A-Za-z0-9_.-]{16,})", re.I
+    r"Bearer\s+[A-Za-z0-9_.-]{16,})", re.I
 )
 RULES = (
-    ("EXPLICIT_ENCODING", re.compile(r"(?i)encoding\\s*=|\\b(?:utf-8|cp1252|cp949)\\b"), "Explicitly specify the documented file encoding"),
-    ("EXCEPTION_HANDLING", re.compile(r"(?i)\\b(?:except|catch|throw|raise|finally)\\b"), "Check exception handling and failing-path behavior"),
-    ("API_CONTRACT", re.compile(r"(?i)\\b(?:schema|header|validation|argument|parameter)\\b"), "Validate the API contract and negative inputs"),
-    ("DEPENDENCY_VERSION", re.compile(r"(?i)\\b(?:version|dependency|runner|image)\\b"), "Pin and compare tool/runtime versions"),
+    ("EXPLICIT_ENCODING", re.compile(r"(?i)encoding\s*=|\b(?:utf-8|cp1252|cp949)\b"), "Explicitly specify the documented file encoding"),
+    ("EXCEPTION_HANDLING", re.compile(r"(?i)\b(?:except|catch|throw|raise|finally)\b"), "Check exception handling and failing-path behavior"),
+    ("API_CONTRACT", re.compile(r"(?i)\b(?:schema|header|validation|argument|parameter)\b"), "Validate the API contract and negative inputs"),
+    ("DEPENDENCY_VERSION", re.compile(r"(?i)\b(?:version|dependency|runner|image)\b"), "Pin and compare tool/runtime versions"),
 )
 
 
@@ -119,8 +119,8 @@ def evaluate(record: object, seen: set[str] | None = None) -> dict:
     test_changed = False
     for file in item["files"]:
         name, patch = file["filename"], file["patch"]
-        h.update(name.encode("utf-8") + b"\\0" + patch.encode("utf-8") + b"\\0")
-        if re.search(r"(^|/)(test|tests|testing)(/|_|\\.|$)", name, re.I):
+        h.update(name.encode("utf-8") + b"\0" + patch.encode("utf-8") + b"\0")
+        if re.search(r"(^|/)(test|tests|testing)(/|_|\.|$)", name, re.I):
             test_changed = True
         lines = [line[1:] for line in patch.splitlines()
                  if line.startswith(("+", "-")) and not line.startswith(("+++", "---"))]
