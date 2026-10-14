@@ -31,7 +31,7 @@ def _validate(rows: object) -> list[dict]:
         if not isinstance(row, dict) or set(row) != FIELDS:
             raise ReviewError("unexpected source metadata fields")
         source, number = row["source"], row["pr_number"]
-        if (source not in ALLOWED or type(number) is not int
+        if (not isinstance(source, str) or source not in ALLOWED or type(number) is not int
                 or not 0 < number < 1_000_000
                 or row["public_url"] != f"https://github.com/{source}/pull/{number}"
                 or not isinstance(row["evidence_sha256"], str)
