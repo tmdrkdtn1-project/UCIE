@@ -122,3 +122,32 @@ release inclusion proof, or a Windows owner-host collection run.
 
 No external source was executed, no unapproved public repo added,
 and no permanent learning/rule promotion occurred.
+
+## Unified Git direct commits inside the public skill batch
+
+This branch closes the practical gap between the standalone Git commit reader
+and the five-domain candidate pipeline. An explicitly requested batch now
+includes up to three **separately typed Git commit** skill leads, alongside
+up to three public PR evidence enrichments, with one extra exact allowlisted
+GitHub commit metadata GET. Git commits are never given invented PR numbers.
+
+    python -m ucie_miner batch-public-evidence --live --include-git-commits --limit 2
+
+The public-only batch has no automatic disk writes. Source opt-out
+--skip-source git/git prevents the direct-commit request too; the separate
+--skip-git-commit <40-character SHA> excludes an individual Git commit.
+The opt-in collection does not issue a request when Git is not selected.
+The public metadata budget increases by at most **one GET** when enabled.
+
+A bounded batch result includes PR and Git commit queues with different
+identity fields and hashes. The existing Stage 10 staging command continues
+to default to ephemeral SQLite. If a separate explicit disk write is
+later authorized, two typed unverified tables are used in the same dedicated
+UCIE staging database: public_candidate_stage (PR) and public_git_commit_stage
+(Git commit). Both preserve append-only changes and reject any approved
+review state. The new schema version 2 intentionally rejects incompatible
+unreviewed version-1 staging files rather than silently migrating them.
+No Stage 10 database has been created on the owner's Windows host by this PR.
+
+A real upstream fix, fixed release, legal approval or automatic learning
+remains **NOT VERIFIED**; only first-party synthetic CI is reported as CI.
