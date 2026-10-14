@@ -86,6 +86,8 @@ class CombinedPublicCandidateTests(unittest.TestCase):
             self.assertEqual(again["git_commit_total_revisions"], 1)
             observed = inspect_staged_candidates(root)
             self.assertEqual(observed["git_commit_revisions"], 1)
+            self.assertGreaterEqual(
+                observed["review_queue_by_skill"]["git-workflow-prevention"], 1)
             self.assertEqual(observed["candidate_revisions"],
                              batch["enriched_count"])
             self.assertEqual(original.read_bytes(), snapshot)
@@ -123,15 +125,8 @@ class CombinedPublicCandidateTests(unittest.TestCase):
             forged["git_commit_skill_queue"][0][change] = value
             forged["git_commit_queue_sha256"] = _fingerprint(
                 forged["git_commit_skill_queue"])
-            with self.subTest(change=change):
-                if change == "human_approval_received":
-                    with self.assertRaises(DiscoveryError):
-                        stage_public_candidates(forged)
-                else:
-                    # First-party-only safe-call text must be fixed by contract.
-                    self.assertNotEqual(
-                        forged["git_commit_skill_queue"][0][change],
-                        combined()["git_commit_skill_queue"][0][change])
+            with self.subTest(change=change), self.assertRaises(DiscoveryError):
+                stage_public_candidates(forged)
 
 
 if __name__ == "__main__":
