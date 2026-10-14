@@ -76,7 +76,7 @@ jobs:
           PYTHONPATH: src
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
-          @'
+          $script = @'
           import json
           from pathlib import Path
           from ucie_miner.public_batch import build_public_batch, review_batch_preview
@@ -129,4 +129,5 @@ jobs:
               "independent_upstream_fix_verified": False,
               "production_approved": False,
           }, sort_keys=True))
-          '@ | python -B -
+          '@
+          $script | python -B -
