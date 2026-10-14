@@ -1,6 +1,10 @@
 """Synthetic-only Stage 7 review agenda: no signatures or approvals."""
 from copy import deepcopy
 import hashlib
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 import unittest
 
@@ -138,6 +142,38 @@ class IndependentReviewDocketTests(unittest.TestCase):
         review["claimed_cases"] = 1
         with self.assertRaises(PatternError):
             prepare_independent_review_docket(static, review)
+
+    def test_bounded_cli_docket_remains_review_pending(self):
+        static, plan, pins = fixture()
+        review = inspect_regression_claims(plan, pins)
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(ROOT / "src")
+        command = [sys.executable, "-m", "ucie_miner",
+                   "preview-review-docket-stdin"]
+        done = subprocess.run(
+            command, input=json.dumps({
+                "static_preview": static, "external_review": review,
+            }), capture_output=True, text=True,
+            cwd=ROOT, env=env, timeout=12,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        output = json.loads(done.stdout)
+        self.assertEqual(output["status"], "REVIEW_PENDING_NO_GO")
+        self.assertEqual(output["candidate_findings"], 1)
+        self.assertEqual(output["independent_approvals_verified"], 0)
+        self.assertFalse(output["deploy_allowed"])
+
+    def test_cli_rejects_duplicate_json_keys(self):
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(ROOT / "src")
+        done = subprocess.run(
+            [sys.executable, "-m", "ucie_miner",
+             "preview-review-docket-stdin"],
+            input='{"static_preview":{},"static_preview":{},"external_review":{}}',
+            capture_output=True, text=True, cwd=ROOT, env=env, timeout=12,
+        )
+        self.assertEqual(done.returncode, 2)
+        self.assertEqual(json.loads(done.stdout)["status"], "FAIL_CLOSED")
 
     def test_deterministic_hash_not_signature(self):
         static, plan, pins = fixture()
