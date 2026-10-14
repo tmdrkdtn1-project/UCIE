@@ -1,0 +1,80 @@
+{
+  "schema": "UCIE_PUBLIC_PR_MERGE_SNAPSHOT_V1",
+  "observed_utc_date": "2026-10-14",
+  "source_basis": "PUBLIC_UPSTREAM_PR_METADATA_OBSERVED_VIA_GITHUB_CONNECTOR",
+  "note": "Public merge metadata only; no binary version, independent regression, license, security or signing approval.",
+  "entries": [
+    {
+      "source": "PowerShell/PowerShell",
+      "pr_number": 25780,
+      "public_url": "https://github.com/PowerShell/PowerShell/pull/25780",
+      "merged_at": "2025-08-04T23:37:45Z",
+      "base_branch": "master",
+      "merge_commit_sha": "8dd0d2acf87501511857125bf7029eea70e8e302"
+    },
+    {
+      "source": "PowerShell/PowerShell",
+      "pr_number": 28042,
+      "public_url": "https://github.com/PowerShell/PowerShell/pull/28042",
+      "merged_at": "2026-10-09T16:35:49Z",
+      "base_branch": "master",
+      "merge_commit_sha": "bd8cb01a7d5b86129c45eaa14ab5830a63b1283f"
+    },
+    {
+      "source": "PowerShell/PowerShell",
+      "pr_number": 28087,
+      "public_url": "https://github.com/PowerShell/PowerShell/pull/28087",
+      "merged_at": "2026-10-09T17:21:35Z",
+      "base_branch": "master",
+      "merge_commit_sha": "373f6a7b7972a0a4b73bfd9737a0d768d28b347e"
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 153462,
+      "public_url": "https://github.com/python/cpython/pull/153462",
+      "merged_at": "2026-08-21T17:02:24Z",
+      "base_branch": "main",
+      "merge_commit_sha": "999a046b24cff4ba0e72b574196721f66bd08237"
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 155365,
+      "public_url": "https://github.com/python/cpython/pull/155365",
+      "merged_at": "2026-08-11T16:48:20Z",
+      "base_branch": "main",
+      "merge_commit_sha": "44e92d4a5922dd8fa61f75834784c2772fdd34ab"
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 156962,
+      "public_url": "https://github.com/python/cpython/pull/156962",
+      "merged_at": "2026-10-13T09:51:34Z",
+      "base_branch": "3.15",
+      "merge_commit_sha": "8870e267187e2ea14609b24400d7e6180c8188f7"
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 159232,
+      "public_url": "https://github.com/python/cpython/pull/159232",
+      "merged_at": "2026-10-13T10:12:06Z",
+      "base_branch": "3.14",
+      "merge_commit_sha": "4489dc3e16abb09aa2e50a4909ed33f2327ae77d"
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 159364,
+      "public_url": "https://github.com/python/cpython/pull/159364",
+      "merged_at": "2026-10-13T23:03:21Z",
+      "base_branch": "3.15",
+      "merge_commit_sha": "82bef22edecce3444ca27d5320af16a660796360"
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 159365,
+      "public_url": "https://github.com/python/cpython/pull/159365",
+      "merged_at": "2026-10-13T23:05:35Z",
+      "base_branch": "3.15",
+      "merge_commit_sha": "b3fae57cc5e04e2808aaa34b5297e96281673244"
+    }
+  ]
+}
