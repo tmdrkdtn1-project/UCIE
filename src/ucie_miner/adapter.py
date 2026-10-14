@@ -26,6 +26,8 @@ def inspect_collected_pr(source: str, pr: object, files: object) -> dict:
         raise MiningError("invalid collected PR number")
     if not isinstance(files, list) or not 1 <= len(files) <= 30:
         raise MiningError("invalid collected file list")
+    if any(not isinstance(file, dict) or not isinstance(file.get("filename"), str) or not isinstance(file.get("patch", ""), str) for file in files):
+        raise MiningError("malformed collected file metadata")
     # Never persist or return patches. The underlying collector separately
     # stores only a patch digest and non-sensitive tags.
     required = ("merged_at", "updated_at", "merge_commit_sha", "license", "license_url")
