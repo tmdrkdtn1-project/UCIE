@@ -20,6 +20,8 @@ from .integration import preview_knowledge_rules
 from .static_concurrency import MAX_SOURCE_BYTES, inspect_python_scandir_source
 from .static_rule_bridge import preview_static_rule_candidates
 from .review_docket import prepare_independent_review_docket
+from .public_discovery import SOURCES as DISCOVERY_SOURCES, public_feed_get
+from .public_intelligence import discover_and_prioritize_live, public_intelligence_preview
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -52,6 +54,13 @@ def main(argv=None):
                         help="Link heuristic findings to unverified Stage 6 proposals; no DB writes")
     sub.add_parser("preview-static-json-stdin", help="Link explicitly supplied untrusted static-scan JSON to nonexecuting rule/plan candidates")
     sub.add_parser("preview-review-docket-stdin", help="Offline structural review agenda for two supplied candidate receipts, never approval")
+    discover = sub.add_parser("discover-public", help="Explicit one-shot public 5-repo metadata discovery and adaptive review; no writes")
+    discover.add_argument("--live", action="store_true",
+                          help="Required opt-in anonymous metadata GET against the approved public 5 repositories")
+    discover.add_argument("--source", choices=DISCOVERY_SOURCES)
+    discover.add_argument("--skip-source", action="append", choices=DISCOVERY_SOURCES, default=[])
+    discover.add_argument("--limit", type=int, default=12)
+    sub.add_parser("preview-intelligence-stdin", help="Offline JSON public metadata leads to 5-skill agenda; no network or code execution")
     args = parser.parse_args(argv)
     try:
         if args.action == "mine-once":
@@ -96,6 +105,29 @@ def main(argv=None):
                 raise ValueError("two bounded untrusted receipts required")
             result = prepare_independent_review_docket(
                 inputs["static_preview"], inputs["external_review"])
+        elif args.action == "discover-public":
+            if not args.live:
+                raise ValueError("public live reads require explicit opt-in")
+            result = discover_and_prioritize_live(
+                fetch=public_feed_get, root=ROOT,
+                sources=(args.source,) if args.source else DISCOVERY_SOURCES,
+                opted_out_sources=tuple(args.skip_source),
+                limit=args.limit,
+            )
+        elif args.action == "preview-intelligence-stdin":
+            data = sys.stdin.buffer.read(262145)
+            if len(data) > 262144:
+                raise ValueError("public candidate JSON input too large")
+            def unique_public_properties(pairs):
+                o = {}
+                for key, value in pairs:
+                    if key in o:
+                        raise ValueError("duplicate public receipt key")
+                    o[key] = value
+                return o
+            raw = json.loads(data.decode("utf-8", "strict"),
+                             object_pairs_hook=unique_public_properties)
+            result = public_intelligence_preview(raw)
         elif args.action == "report":
             path = report(ROOT)
             result = {"status": "LOCAL_REPORT_WRITTEN", "path": str(path)}
