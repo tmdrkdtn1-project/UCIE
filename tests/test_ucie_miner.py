@@ -7,7 +7,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from ucie_miner.core import PUBLIC_SOURCES, MiningError, _api_url, _classify_changes, mine_once, report
+from ucie_miner.core import PUBLIC_SOURCES, MiningError, _api_url, _classify_changes, mine_once, report, fetch_public_json
 
 
 class PublicMinerTests(unittest.TestCase):
@@ -28,6 +28,16 @@ class PublicMinerTests(unittest.TestCase):
     def test_allowlisted_routes(self):
         self.assertEqual(_api_url(PUBLIC_SOURCES[0], "pulls/42/files?per_page=30"),
                          "https://api.github.com/repos/python/cpython/pulls/42/files?per_page=30")
+
+    def test_fetch_denies_unapproved_endpoint_before_network(self):
+        for url in (
+            "https://api.github.com/repos/python/cpython/contents/private",
+            "https://api.github.com/repos/python/cpython/pulls/42/files?per_page=999",
+            "https://api.github.com/repos/python/cpython/pulls/42/commits",
+            "https://api.github.com/repos/not-approved/test/pulls/4",
+        ):
+            with self.subTest(url=url), self.assertRaises(MiningError):
+                fetch_public_json(url)
 
     def test_other_project_source_is_denied(self):
         with self.assertRaises(MiningError):
