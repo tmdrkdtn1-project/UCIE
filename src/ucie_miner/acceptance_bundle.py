@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from .host_preflight import inspect_ucie_host
 from .evidence_binding import bind_candidate_receipts
-from .merge_snapshot import compare_merge_snapshot
+from .merge_snapshot import compare_merge_snapshot, load_merge_snapshot
+from .regression_receipts import inspect_regression_claims
 from .integration import preview_knowledge_rules
 from .license_review import inspect_pinned_licenses
 from .patterns import PatternError
@@ -17,11 +18,14 @@ from .regression_plans import create_regression_matrix
 from .review import _read_candidates, load_manifest
 
 
-def build_readonly_acceptance_preview(root, *, is_windows, python_version):
+def build_readonly_acceptance_preview(root, *, is_windows, python_version,
+                                      external_regression_claims=None):
     chain = preview_knowledge_rules(root)
     provenance = inspect_public_prs(_read_candidates(root))
     license_markers = inspect_pinned_licenses(root)
     regressions = create_regression_matrix(chain["rulepack_preview"])
+    external_review = inspect_regression_claims(
+        regressions, load_merge_snapshot(root), external_regression_claims)
     host = inspect_ucie_host(root, is_windows=is_windows,
                              python_version=python_version)
     readiness = preapproval_readiness(chain, provenance)
@@ -52,6 +56,10 @@ def build_readonly_acceptance_preview(root, *, is_windows, python_version):
         "knowledge_evidence_count": chain["knowledge_count"],
         "pattern_families": chain["pattern_preview"]["family_count"],
         "synthetic_regression_plans": regressions["candidate_count"],
+        "external_regression_claims": external_review["claimed_cases"],
+        "external_regression_claims_missing": external_review["missing_claims"],
+        "external_regression_claim_set_sha256": external_review["claim_set_sha256"],
+        "external_regression_claims_are_attested": False,
         "regression_execution_state": "NOT_EXECUTED",
         "public_pr_metadata_state": "NOT_CHECKED",
         "license_document_state": "NOT_CHECKED",
