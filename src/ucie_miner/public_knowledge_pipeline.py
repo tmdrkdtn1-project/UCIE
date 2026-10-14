@@ -56,6 +56,8 @@ def collect_public_knowledge_candidate(source: str, number: int,
         routes["document"] = DOC_ENDPOINTS[source][0]
     if include_advisory:
         routes["advisory"] = github_evidence_url(source, "advisories")
+    skipped = ([ "document" ] if not include_doc else []) + (
+        [ "advisory" ] if not include_advisory else [])
     receipts, missing = {}, []
     for kind, url in routes.items():
         try:
@@ -75,7 +77,7 @@ def collect_public_knowledge_candidate(source: str, number: int,
             missing.append(kind)
     # Fail closed for any missing code or release source. An advisory 404
     # or redirecting documentation is not silently treated as evidence.
-    status = ("INCOMPLETE_PUBLIC_EVIDENCE" if missing
+    status = ("INCOMPLETE_PUBLIC_EVIDENCE" if missing or skipped
               else "UNVERIFIED_PUBLIC_KNOWLEDGE_CANDIDATE")
     patch = receipts.get("patch")
     tags = [] if patch is None else patch["tags"]
@@ -113,7 +115,8 @@ def collect_public_knowledge_candidate(source: str, number: int,
         "public_reads_max": len(routes),
         "evidence_types_attempted": list(routes),
         "evidence_types_collected": sorted(receipts),
-        "missing_evidence_types": sorted(missing),
+        "missing_evidence_types": sorted(missing + skipped),
+        "explicitly_skipped_evidence_types": sorted(skipped),
         "patch_features": receipts.get("patch"),
         "official_doc_fingerprint": receipts.get("document"),
         "release_fingerprints": receipts.get("release"),
@@ -154,7 +157,9 @@ def preview_public_knowledge_receipt(receipt: object) -> dict:
             or receipt.get("scheduler_registered") is not False
             or receipt.get("version_inclusion_verified") is not False
             or receipt.get("evidence_sha256_is_signature") is not False
-            or receipt.get("persistence") != "NONE"):
+            or receipt.get("persistence") != "NONE"
+            or not isinstance(receipt.get("candidate_evidence_sha256"), str)
+            or not re.fullmatch(r"[a-f0-9]{64}", receipt["candidate_evidence_sha256"])):
         raise PublicEvidenceError("invalid untrusted candidate receipt")
     candidate = receipt.get("skill_knowledge_candidate")
     if (not isinstance(candidate, dict)
