@@ -76,9 +76,23 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
             "STAGE12_REVIEW_DISABLED",
             "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO"):
         raise ValueError("invalid candidate-only learning result")
+    from .public_external_history import optional_external_history_backfill
+    history = optional_external_history_backfill(root)
+    if history.get("status") not in (
+            "STAGE13_EXTERNAL_HISTORY_DISABLED",
+            "EXTERNAL_HISTORY_BACKFILL_OK_NO_GO",
+            "EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO",
+            "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO"):
+        raise ValueError("unexpected external history collection result")
+    if history["status"] == "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO":
+        raise ValueError("optional historical public upstream unavailable")
     return {
         "status": STATUS_STAGED,
         "operator_opted_in": True,
+        "stage13_history_status": history["status"],
+        "stage13_history_new_revisions": history.get(
+            "new_unverified_evidence_revisions", 0),
+        "stage13_history_gets": history.get("external_gets", 0),
         "stage12_review_status": learning["status"],
         "stage12_review_proposals_added": learning.get("new_review_proposals", 0),
         "metadata_source_count": len(SOURCES),

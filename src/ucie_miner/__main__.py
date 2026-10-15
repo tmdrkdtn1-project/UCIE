@@ -28,6 +28,7 @@ from .public_batch_host import inspect_public_batch_host
 from .public_skill_digest import compare_public_skill_batches
 from .public_candidate_staging import stage_public_candidates, inspect_staged_candidates
 from .public_candidate_learning import inspect_review_learning, update_unverified_review_queue, optional_hourly_review_learning
+from .public_external_history import inspect_external_history, optional_external_history_backfill
 from .public_git_commit_skills import discover_git_commit_skills, analyze_git_commits
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -113,6 +114,12 @@ def main(argv=None):
                    help="Read Stage 10 candidate metadata and derive safe review plans, never write")
     sub.add_parser("run-stage12-review-once",
                    help="Operator opt-in required; no network, write only separate unverified review queue")
+    sub.add_parser("inspect-external-history",
+                   help="Read-only cursor and digest-only historical five-source index summary")
+    backfill = sub.add_parser("backfill-external-history-once",
+                   help="Operator marker and --live required; max five approved anonymous GETs")
+    backfill.add_argument("--live", action="store_true",
+                   help="Allow bounded public historical PR API reads and isolated index writes")
     gitcommits = sub.add_parser(
         "discover-git-commits",
         help="One-shot public git/git commit fixes for Git skill; default no network or writes")
@@ -262,6 +269,12 @@ def main(argv=None):
             result = update_unverified_review_queue(ROOT, allow_write=False)
         elif args.action == "run-stage12-review-once":
             result = optional_hourly_review_learning(ROOT)
+        elif args.action == "inspect-external-history":
+            result = inspect_external_history(ROOT)
+        elif args.action == "backfill-external-history-once":
+            if not args.live:
+                raise ValueError("explicit --live required to backfill external public history")
+            result = optional_external_history_backfill(ROOT)
         elif args.action == "preflight-public-batch-host":
             result = inspect_public_batch_host(
                 ROOT, is_windows=os.name == "nt",
