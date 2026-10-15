@@ -75,7 +75,8 @@ class Stage12CandidateLearningTests(unittest.TestCase):
             """).fetchone()
         self.assertIn(vals[0], (
             "SECURITY", "CRASH", "REGRESSION", "COMPATIBILITY", "TESTING",
-            "UNCLASSIFIED"))
+            "EXCEPTION_HANDLING", "CONCURRENCY", "API_CONTRACT",
+            "VERSION_COMPAT", "TEST_REGRESSION", "UNCLASSIFIED"))
         self.assertTrue(vals[1])
         self.assertTrue(vals[2])
         self.assertEqual(vals[3], REVIEW_STATUS)
