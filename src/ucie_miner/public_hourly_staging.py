@@ -84,6 +84,8 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
             "EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO",
             "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO"):
         raise ValueError("unexpected external history collection result")
+    if history["status"] == "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO":
+        raise ValueError("optional historical public upstream unavailable")
     return {
         "status": STATUS_STAGED,
         "operator_opted_in": True,
