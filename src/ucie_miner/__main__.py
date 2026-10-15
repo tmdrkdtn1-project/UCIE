@@ -30,6 +30,7 @@ from .public_candidate_staging import stage_public_candidates, inspect_staged_ca
 from .public_candidate_learning import inspect_review_learning, update_unverified_review_queue, optional_hourly_review_learning
 from .public_external_history import inspect_external_history, optional_external_history_backfill
 from .public_official_evidence import inspect_official_sources, optional_official_evidence_cycle
+from .public_fix_evidence import inspect_fix_evidence, optional_fix_evidence_enrichment
 from .public_git_commit_skills import discover_git_commit_skills, analyze_git_commits
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -127,6 +128,12 @@ def main(argv=None):
                    help="Explicit operator marker and --live, max 3 public reads for one approved source")
     official.add_argument("--live", action="store_true",
                    help="Allow bounded official public documentation, releases and advisory GETs")
+    sub.add_parser("inspect-fix-evidence",
+                   help="Read-only Stage15 structured unverified error/regression evidence inventory")
+    fix = sub.add_parser("enrich-public-fix-evidence-once",
+                   help="Separate operator marker + --live; max 2 PR patch/release pairs")
+    fix.add_argument("--live", action="store_true",
+                   help="Allow a maximum of four approved public PR/release API requests")
     gitcommits = sub.add_parser(
         "discover-git-commits",
         help="One-shot public git/git commit fixes for Git skill; default no network or writes")
@@ -288,6 +295,12 @@ def main(argv=None):
             if not args.live:
                 raise ValueError("explicit --live required for official public evidence")
             result = optional_official_evidence_cycle(ROOT)
+        elif args.action == "inspect-fix-evidence":
+            result = inspect_fix_evidence(ROOT)
+        elif args.action == "enrich-public-fix-evidence-once":
+            if not args.live:
+                raise ValueError("explicit --live required for public PR evidence enrichment")
+            result = optional_fix_evidence_enrichment(ROOT)
         elif args.action == "preflight-public-batch-host":
             result = inspect_public_batch_host(
                 ROOT, is_windows=os.name == "nt",
