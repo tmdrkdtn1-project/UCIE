@@ -27,6 +27,7 @@ from .public_batch import build_public_batch, review_batch_preview
 from .public_batch_host import inspect_public_batch_host
 from .public_skill_digest import compare_public_skill_batches
 from .public_candidate_staging import stage_public_candidates, inspect_staged_candidates
+from .public_candidate_learning import inspect_review_learning, update_unverified_review_queue
 from .public_git_commit_skills import discover_git_commit_skills, analyze_git_commits
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -106,6 +107,10 @@ def main(argv=None):
                        help="Explicit write to dedicated UCIE Stage 10 candidate-only DB, never to miner/Knowledge")
     sub.add_parser("inspect-public-candidate-ledger",
                    help="Read-only inspection of separate Stage 10 candidate staging; no file creation")
+    sub.add_parser("inspect-stage12-review",
+                   help="Read-only separate Stage 12 unverified review queue, never approve")
+    sub.add_parser("preview-stage12-review",
+                   help="Read Stage 10 candidate metadata and derive safe review plans, never write")
     gitcommits = sub.add_parser(
         "discover-git-commits",
         help="One-shot public git/git commit fixes for Git skill; default no network or writes")
@@ -249,6 +254,10 @@ def main(argv=None):
             )
         elif args.action == "inspect-public-candidate-ledger":
             result = inspect_staged_candidates(ROOT)
+        elif args.action == "inspect-stage12-review":
+            result = inspect_review_learning(ROOT)
+        elif args.action == "preview-stage12-review":
+            result = update_unverified_review_queue(ROOT, allow_write=False)
         elif args.action == "preflight-public-batch-host":
             result = inspect_public_batch_host(
                 ROOT, is_windows=os.name == "nt",
