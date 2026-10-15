@@ -19,6 +19,7 @@ from .public_candidate_staging import (
     SHA40, SHA64, MAX_ROWS,
 )
 from .public_discovery import CATEGORIES, SOURCES, SOURCE_SKILL, DiscoveryError
+from .public_evidence_routes import TAGS as PR_TAGS
 from .skill_profiles import PROFILE
 
 REVIEW_FILE = "stage12_unverified_review.sqlite3"
@@ -34,16 +35,16 @@ COLUMNS = (
 REVIEW_STATUS = "UNVERIFIED_REVIEW_CANDIDATE_ONLY"
 
 
-def _valid_tags(text):
+def _valid_tags(text, *, allowed):
     if not isinstance(text, str) or len(text) > 240:
         raise DiscoveryError("invalid staged public pattern tag length")
     try:
         value = json.loads(text)
     except ValueError as exc:
         raise DiscoveryError("invalid staged public pattern tags") from exc
-    if (not isinstance(value, list) or len(value) > len(CATEGORIES)
+    if (not isinstance(value, list) or len(value) > len(allowed)
             or len(set(map(str, value))) != len(value)
-            or any(type(x) is not str or x not in CATEGORIES for x in value)):
+            or any(type(x) is not str or x not in allowed for x in value)):
         raise DiscoveryError("untrusted staged public pattern tag")
     return value
 
@@ -69,7 +70,7 @@ def _rows_from_stage10(root):
         raise DiscoveryError("Stage 10 public candidate ledger too large")
     rows = []
     for source, number, sha, evidence, skill, tags_json, missing_json, state in prs:
-        tags = _valid_tags(tags_json)
+        tags = _valid_tags(tags_json, allowed=PR_TAGS)
         if type(missing_json) is not str or len(missing_json) > 240:
             raise DiscoveryError("invalid public evidence omissions")
         try:
@@ -88,7 +89,7 @@ def _rows_from_stage10(root):
             raise DiscoveryError("unsafe staged public PR identity")
         rows.append((source, f"pr:{number}:{sha}", skill, evidence, tags))
     for sha, digest, tags_json, state in commits:
-        tags = _valid_tags(tags_json)
+        tags = _valid_tags(tags_json, allowed=CATEGORIES)
         if (not isinstance(sha, str) or not SHA40.fullmatch(sha)
                 or not isinstance(digest, str) or not SHA64.fullmatch(digest)
                 or state != "UNVERIFIED_CANDIDATE_ONLY"):
@@ -142,7 +143,9 @@ def _review_records(rows):
     proposals = []
     for source, ref, skill, evidence, tags in rows:
         pattern = next((tag for tag in (
-            "SECURITY", "CRASH", "REGRESSION", "COMPATIBILITY", "TESTING")
+            "SECURITY", "CRASH", "EXCEPTION_HANDLING", "CONCURRENCY",
+            "API_CONTRACT", "REGRESSION", "VERSION_COMPAT",
+            "COMPATIBILITY", "TEST_REGRESSION", "TESTING")
                         if tag in tags), "UNCLASSIFIED")
         safe = PROFILE[skill]["safe_call"]
         regression = PROFILE[skill]["recommended_action"]
