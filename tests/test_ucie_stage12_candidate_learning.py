@@ -71,7 +71,7 @@ class Stage12CandidateLearningTests(unittest.TestCase):
         self.assertFalse(output["model_weights_updated"])
         inventory = inspect_review_learning(self.root)
         self.assertEqual(inventory["review_proposals"], self.baseline)
-        self.assertEqual(sum(inventory["by_skill"].values()), 1)
+        self.assertEqual(sum(inventory["by_skill"].values()), self.baseline)
         with closing(sqlite3.connect(self.runtime / REVIEW_FILE)) as db:
             vals = db.execute("""
                 SELECT pattern_code, safe_guidance, regression_plan, review_state
