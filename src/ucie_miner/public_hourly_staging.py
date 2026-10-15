@@ -86,9 +86,19 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
         raise ValueError("unexpected external history collection result")
     if history["status"] == "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO":
         raise ValueError("optional historical public upstream unavailable")
+    from .public_official_evidence import optional_official_evidence_cycle
+    official = optional_official_evidence_cycle(root)
+    if official.get("status") not in (
+            "STAGE14_OFFICIAL_DISABLED", "STAGE14_OFFICIAL_OBSERVED_NO_GO",
+            "STAGE14_OFFICIAL_RATE_PAUSED_NO_GO",
+            "STAGE14_OFFICIAL_PARTIAL_NO_GO"):
+        raise ValueError("invalid official public metadata status")
     return {
         "status": STATUS_STAGED,
         "operator_opted_in": True,
+        "stage14_official_status": official["status"],
+        "stage14_official_new_revisions": official.get("new_metadata_revisions", 0),
+        "stage14_official_gets": official.get("official_gets", 0),
         "stage13_history_status": history["status"],
         "stage13_history_new_revisions": history.get(
             "new_unverified_evidence_revisions", 0),
