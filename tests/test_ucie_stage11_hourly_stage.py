@@ -1,5 +1,6 @@
 """Stage 11: connect to existing hourly worker without modifying the task."""
 from pathlib import Path
+import sqlite3
 import tempfile
 import unittest
 
@@ -60,7 +61,11 @@ class Stage11ExistingTaskTests(unittest.TestCase):
         self.marker = self.runtime / OPT_IN_FILENAME
         self.operating = self.runtime / "public_miner.sqlite3"
         self.knowledge = self.runtime / "knowledge.sqlite3"
-        self.operating.write_bytes(b"DO_NOT_REWRITE_OPERATING_DB")
+        with sqlite3.connect(self.operating) as conn:
+            conn.execute("""CREATE TABLE candidates(
+                source TEXT, pr_number INTEGER, status TEXT
+            )""")
+            conn.commit()
         self.knowledge.write_bytes(b"DO_NOT_REWRITE_KNOWLEDGE_DB")
 
     def optin(self):
