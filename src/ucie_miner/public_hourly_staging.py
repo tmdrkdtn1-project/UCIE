@@ -70,9 +70,17 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
             or staged.get("approved_rules_added") != 0
             or staged.get("production_approved") is not False):
         raise ValueError("invalid Stage 10 unverified-only staging result")
+    from .public_candidate_learning import optional_hourly_review_learning
+    learning = optional_hourly_review_learning(root)
+    if learning.get("status") not in (
+            "STAGE12_REVIEW_DISABLED",
+            "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO"):
+        raise ValueError("invalid candidate-only learning result")
     return {
         "status": STATUS_STAGED,
         "operator_opted_in": True,
+        "stage12_review_status": learning["status"],
+        "stage12_review_proposals_added": learning.get("new_review_proposals", 0),
         "metadata_source_count": len(SOURCES),
         "candidate_pr_rows_added": staged["new_identities"],
         "candidate_pr_revisions_added": staged["evidence_revisions"],
