@@ -93,9 +93,20 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
             "STAGE14_OFFICIAL_RATE_PAUSED_NO_GO",
             "STAGE14_OFFICIAL_PARTIAL_NO_GO"):
         raise ValueError("invalid official public metadata status")
+    from .public_fix_evidence import optional_fix_evidence_enrichment
+    fix_review = optional_fix_evidence_enrichment(root)
+    if fix_review.get("status") not in (
+            "STAGE15_FIX_EVIDENCE_DISABLED",
+            "STAGE15_STRUCTURED_FIX_EVIDENCE_STAGED_NO_GO"):
+        raise ValueError("invalid external structured fix evidence status")
     return {
         "status": STATUS_STAGED,
         "operator_opted_in": True,
+        "stage15_fix_evidence_status": fix_review["status"],
+        "stage15_fix_evidence_new_records": fix_review.get(
+            "new_unverified_evidence_records", 0),
+        "stage15_fix_evidence_gets_upper_bound": fix_review.get(
+            "external_gets_upper_bound", 0),
         "stage14_official_status": official["status"],
         "stage14_official_new_revisions": official.get("new_metadata_revisions", 0),
         "stage14_official_gets": official.get("official_gets", 0),
