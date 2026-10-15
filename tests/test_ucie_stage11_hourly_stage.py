@@ -1,4 +1,5 @@
 """Stage 11: connect to existing hourly worker without modifying the task."""
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -61,7 +62,7 @@ class Stage11ExistingTaskTests(unittest.TestCase):
         self.marker = self.runtime / OPT_IN_FILENAME
         self.operating = self.runtime / "public_miner.sqlite3"
         self.knowledge = self.runtime / "knowledge.sqlite3"
-        with sqlite3.connect(self.operating) as conn:
+        with closing(sqlite3.connect(self.operating)) as conn:
             conn.execute("""CREATE TABLE candidates(
                 source TEXT, pr_number INTEGER, status TEXT
             )""")
