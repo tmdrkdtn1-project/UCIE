@@ -1,0 +1,47 @@
+{
+  "schema": "UCIE_STAGE9_PUBLIC_CODE_PATCH_SPOTCHECK_V1",
+  "utc_date": "2026-10-14",
+  "method": "GitHub public PR file patch connector read, evidence summarized without retaining source/patch contents",
+  "only_approved_public_sources": true,
+  "not_runner_execution": true,
+  "real_public_patch_rows": [
+    {
+      "source": "modelcontextprotocol/python-sdk",
+      "pr_number": 3696,
+      "public_url": "https://github.com/modelcontextprotocol/python-sdk/pull/3696",
+      "merge_commit_sha": "754254c08fe1c3eda18b69da3d336106fe8d72d6",
+      "implementation_path": "src/mcp/server/mcpserver/server.py",
+      "regression_test_path": "tests/server/mcpserver/test_server.py",
+      "observed_error_family": "MCP_ERROR_CODE_INVALID_PARAMS_ON_UNKNOWN_PROMPT",
+      "evidence_summary": "Source change uses protocol INVALID_PARAMS error when prompt lookup fails; public test change checks returned code and missing arguments.",
+      "upstream_test_executed": false
+    },
+    {
+      "source": "python/cpython",
+      "pr_number": 159311,
+      "public_url": "https://github.com/python/cpython/pull/159311",
+      "merge_commit_sha": "aeff4cb4c4b38744037f7ea88d2241c66c17a7eb",
+      "implementation_path": "Lib/test/test_free_threading/test_races.py",
+      "regression_test_path": "Lib/test/test_free_threading/test_races.py",
+      "observed_error_family": "TEST_RECURSION_LIMIT_CLEANUP",
+      "evidence_summary": "Regression test change adds cleanup restoring recursion limit when a race test changes it.",
+      "upstream_test_executed": false
+    },
+    {
+      "source": "actions/runner-images",
+      "pr_number": 14517,
+      "public_url": "https://github.com/actions/runner-images/pull/14517",
+      "merge_commit_sha": "adbbdb213ddc66b575dff7f5b7eec70e6cee585f",
+      "implementation_path": "images/ubuntu/scripts/build/install-container-tools.sh",
+      "regression_test_path": "images/ubuntu/scripts/tests/Tools.Tests.ps1",
+      "observed_error_family": "UNPRIVILEGED_FUSE_PATH_CONFLICT",
+      "evidence_summary": "Public Ubuntu runner build script change addresses conflicting fusermount3 executable placement in bundled Podman toolchain.",
+      "upstream_test_executed": false
+    }
+  ],
+  "original_patch_retained": false,
+  "full_source_copied": false,
+  "version_inclusion_verified": false,
+  "license_approved": false,
+  "production_approved": false
+}

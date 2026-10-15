@@ -1,0 +1,62 @@
+{
+  "schema": "UCIE_STAGE9_PUBLIC_RECENT_DELTA_SPOTCHECK_V1",
+  "observed_date_utc": "2026-10-14",
+  "source_policy": "ONLY_EXPLICITLY_APPROVED_PUBLIC_UPSTREAMS",
+  "method": "PUBLIC_GITHUB_PR_METADATA_AND_CHANGED_FILENAMES_CHECK",
+  "entries": [
+    {
+      "source": "python/cpython",
+      "pr_number": 159397,
+      "public_url": "https://github.com/python/cpython/pull/159397",
+      "merged_at": "2026-10-14T09:18:53Z",
+      "merge_commit_sha": "2ec47444ae147ad4b62bfce57c9ada2eec01f54f",
+      "base_branch": "main",
+      "changed_public_paths": [
+        "Modules/posixmodule.c"
+      ],
+      "skill_lane": "python-runtime-safety",
+      "review_topic": "FreeBSD readlink/runtime compile compatibility",
+      "classification": "NEW_PUBLIC_MERGED_PR_METADATA_REVIEW"
+    },
+    {
+      "source": "modelcontextprotocol/python-sdk",
+      "pr_number": 3679,
+      "public_url": "https://github.com/modelcontextprotocol/python-sdk/pull/3679",
+      "merged_at": "2026-10-13T08:59:42Z",
+      "merge_commit_sha": "9db497ed31e7b8a87febe0f3bb8c2ba35e4f21dc",
+      "base_branch": "main",
+      "changed_public_paths": [
+        ".github/workflows/shared.yml",
+        "docs/advanced/apps.md",
+        "docs_src/apps/tutorial001.py",
+        "examples/stories/apps/server.py"
+      ],
+      "skill_lane": "mcp-api-compatibility",
+      "review_topic": "MCP Apps result-from-notification contract changes",
+      "classification": "NEW_PUBLIC_MERGED_PR_METADATA_REVIEW"
+    },
+    {
+      "source": "actions/runner-images",
+      "pr_number": 14911,
+      "public_url": "https://github.com/actions/runner-images/pull/14911",
+      "merged_at": "2026-10-14T07:40:33Z",
+      "merge_commit_sha": "021614ee6cb894846fc0bd9b766fa2f678625b94",
+      "base_branch": "main",
+      "changed_public_paths": [
+        "images/ubuntu/toolsets/toolset-2204.json",
+        "images/ubuntu/toolsets/toolset-2404.json",
+        "images/ubuntu/toolsets/toolset-2604.json"
+      ],
+      "skill_lane": "runner-environment-drift",
+      "review_topic": "Runner Ubuntu toolsets register Python 3.15 versions",
+      "classification": "NEW_PUBLIC_MERGED_PR_METADATA_REVIEW"
+    }
+  ],
+  "upstream_patch_executed": false,
+  "independent_fix_behavior_verified": false,
+  "affected_release_version_verified": false,
+  "full_source_copied": false,
+  "license_audited": false,
+  "local_owner_host_batch_executed": false,
+  "production_approved": false
+}
