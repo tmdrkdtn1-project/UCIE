@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from test_ucie_stage11_hourly_stage import fixture_batch
-from ucie_miner.public_candidate_staging import stage_public_candidates
+from ucie_miner.public_candidate_staging import stage_public_candidates, inspect_staged_candidates
 from ucie_miner.public_candidate_learning import (
     OPT_IN_FILENAME, OPT_IN_TOKEN, REVIEW_FILE, REVIEW_STATUS,
     inspect_review_learning, optional_hourly_review_learning,
@@ -38,6 +38,10 @@ class Stage12CandidateLearningTests(unittest.TestCase):
             max_enrich=1, include_git_commits=True, include_docs=False,
             include_advisories=False, backfill_pages=1)
         stage_public_candidates(batch, root=self.root, allow_disk_write=True)
+        inventory = inspect_staged_candidates(self.root)
+        self.baseline = inventory['candidate_revisions'] + inventory['git_commit_revisions']
+        self.assertEqual(inventory['candidate_revisions'], 1)
+        self.assertEqual(inventory['git_commit_revisions'], 1)
 
     def enable(self):
         self.marker.write_text(OPT_IN_TOKEN, encoding="ascii")
@@ -46,7 +50,7 @@ class Stage12CandidateLearningTests(unittest.TestCase):
         initial = self.miner.read_bytes(), self.knowledge.read_bytes(), self.stage10.read_bytes()
         preview = update_unverified_review_queue(self.root)
         self.assertEqual(preview["status"], "STAGE12_REVIEW_PREVIEW_ONLY")
-        self.assertEqual(preview["candidate_proposals"], 1)
+        self.assertEqual(preview["candidate_proposals"], self.baseline)
         self.assertEqual(preview["persistent_writes"], 0)
         self.assertEqual(optional_hourly_review_learning(self.root)["status"],
                          "STAGE12_REVIEW_DISABLED")
@@ -60,13 +64,13 @@ class Stage12CandidateLearningTests(unittest.TestCase):
         before = self.miner.read_bytes(), self.knowledge.read_bytes(), self.stage10.read_bytes()
         output = optional_hourly_review_learning(self.root)
         self.assertEqual(output["status"], "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO")
-        self.assertEqual(output["source_revisions"], 1)
-        self.assertEqual(output["new_review_proposals"], 1)
-        self.assertEqual(output["total_review_proposals"], 1)
+        self.assertEqual(output["source_revisions"], self.baseline)
+        self.assertEqual(output["new_review_proposals"], self.baseline)
+        self.assertEqual(output["total_review_proposals"], self.baseline)
         self.assertEqual(output["approved_rules"], 0)
         self.assertFalse(output["model_weights_updated"])
         inventory = inspect_review_learning(self.root)
-        self.assertEqual(inventory["review_proposals"], 1)
+        self.assertEqual(inventory["review_proposals"], self.baseline)
         self.assertEqual(sum(inventory["by_skill"].values()), 1)
         with closing(sqlite3.connect(self.runtime / REVIEW_FILE)) as db:
             vals = db.execute("""
@@ -88,13 +92,13 @@ class Stage12CandidateLearningTests(unittest.TestCase):
         self.enable()
         first = optional_hourly_review_learning(self.root)
         second = optional_hourly_review_learning(self.root)
-        self.assertEqual(first["new_review_proposals"], 1)
+        self.assertEqual(first["new_review_proposals"], self.baseline)
         self.assertEqual(second["new_review_proposals"], 0)
-        self.assertEqual(second["unchanged_review_proposals"], 1)
+        self.assertEqual(second["unchanged_review_proposals"], self.baseline)
         self.marker.unlink()
         self.assertEqual(optional_hourly_review_learning(self.root)["status"],
                          "STAGE12_REVIEW_DISABLED")
-        self.assertEqual(inspect_review_learning(self.root)["review_proposals"], 1)
+        self.assertEqual(inspect_review_learning(self.root)["review_proposals"], self.baseline)
 
     def test_new_revision_appends_new_review_candidate_only(self):
         self.enable()
@@ -112,7 +116,7 @@ class Stage12CandidateLearningTests(unittest.TestCase):
             conn.commit()
         update = optional_hourly_review_learning(self.root)
         self.assertEqual(update["new_review_proposals"], 1)
-        self.assertEqual(update["total_review_proposals"], 2)
+        self.assertEqual(update["total_review_proposals"], self.baseline + 1)
         self.assertEqual(update["approved_rules"], 0)
 
     def test_git_sha_keeps_distinct_commit_identity(self):
@@ -125,9 +129,9 @@ class Stage12CandidateLearningTests(unittest.TestCase):
                  "2026-10-15T08:00:00+00:00", "UNVERIFIED_CANDIDATE_ONLY"))
             conn.commit()
         data = optional_hourly_review_learning(self.root)
-        self.assertEqual(data["total_review_proposals"], 2)
+        self.assertEqual(data["total_review_proposals"], self.baseline + 1)
         info = inspect_review_learning(self.root)
-        self.assertEqual(info["by_skill"]["git-workflow-prevention"], 1)
+        self.assertEqual(info["by_skill"]["git-workflow-prevention"], 2)
 
     def test_stage10_tampered_tags_are_denied_without_learning(self):
         self.enable()
