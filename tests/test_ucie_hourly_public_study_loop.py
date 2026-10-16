@@ -44,7 +44,9 @@ class PublicAutomaticStudyTests(unittest.TestCase):
         self.runtime.mkdir(parents=True)
         self.miner = self.runtime / "public_miner.sqlite3"
         self.knowledge = self.runtime / "knowledge.sqlite3"
-        self.miner.write_bytes(b"OPERATING_MINER_UNCHANGED")
+        with closing(sqlite3.connect(self.miner)) as db:
+            db.execute("CREATE TABLE candidates(source TEXT, pr_number INTEGER, status TEXT)")
+            db.commit()
         self.knowledge.write_bytes(b"OPERATING_KNOWLEDGE_UNCHANGED")
         self.stage10 = self.runtime / "stage10_unverified_public_candidates.sqlite3"
         self.history = self.runtime / HISTORY_DB
