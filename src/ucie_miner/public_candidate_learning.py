@@ -99,6 +99,44 @@ def _rows_from_stage10(root):
     return sorted(rows)
 
 
+
+def _rows_from_stage15(root):
+    """Use existing Stage 15 unverified fix hints ONLY with its own opt-in.
+
+    Stage 13/15 source databases are read-only; Stage 16's pinned revision
+    checks must pass before any derived review task can be appended.
+    Never store external PR titles, filenames, diffs, release text or code.
+    """
+    from .public_fix_evidence import _marker_enabled, _path as fix_path
+    if not _marker_enabled(root):
+        return []
+    if not fix_path(root).exists():
+        return []
+    from .public_evidence_chain_audit import (
+        _history, _fix, _valid_fix, audit_external_evidence_chain,
+    )
+    chain = audit_external_evidence_chain(root)
+    if chain["status"] != "STAGE16_LOCALLY_LINKED_BUT_UNVERIFIED_NO_GO":
+        raise DiscoveryError("Stage 13/15 public evidence chain is not consistent")
+    historical = _history(root)
+    records = _fix(root)
+    if historical is None or records is None:
+        raise DiscoveryError("missing opted-in public fix evidence ledger")
+    rows = []
+    for record in records:
+        if not _valid_fix(record):
+            raise DiscoveryError("invalid public fix evidence review record")
+        source, number, merge, history_sha, evidence_sha, skill, tags_text = record[:7]
+        if historical.get((source, number, history_sha)) != (
+                merge, SOURCE_SKILL[source]):
+            raise DiscoveryError("unlinked public fix evidence revision")
+        tags = _valid_tags(tags_text, allowed=PR_TAGS)
+        # Distinct evidence *revisions* are review tasks, not claims of
+        # distinct bug families, fixes, released versions or verified rules.
+        ref = f"fix-pr:{number}:{merge}:{history_sha}"
+        rows.append((source, ref, skill, evidence_sha, tags))
+    return sorted(rows)
+
 def _review_path(root):
     _dedicated_path(root)
     path = Path(root) / "runtime" / REVIEW_FILE
@@ -161,7 +199,9 @@ def update_unverified_review_queue(root: Path, *, allow_write=False):
     """Classify in read-only mode unless a separate owner opt-in permits writes."""
     if type(allow_write) is not bool:
         raise DiscoveryError("invalid candidate review permit")
-    rows = _rows_from_stage10(root)
+    stage10_rows = _rows_from_stage10(root)
+    fix_rows = _rows_from_stage15(root)
+    rows = stage10_rows + fix_rows
     entries = _review_records(rows)
     path = _review_path(root)
     if not allow_write:
@@ -169,6 +209,8 @@ def update_unverified_review_queue(root: Path, *, allow_write=False):
             "status": "STAGE12_REVIEW_PREVIEW_ONLY",
             "source_revisions": len(rows),
             "candidate_proposals": len(entries),
+            "stage10_input_revisions": len(stage10_rows),
+            "stage15_unverified_fix_input_revisions": len(fix_rows),
             "persistent_writes": 0,
             "approved_rules": 0,
             "model_weights_updated": False,
@@ -196,6 +238,8 @@ def update_unverified_review_queue(root: Path, *, allow_write=False):
     return {
         "status": "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO",
         "source_revisions": len(rows),
+        "stage10_input_revisions": len(stage10_rows),
+        "stage15_unverified_fix_input_revisions": len(fix_rows),
         "new_review_proposals": added,
         "unchanged_review_proposals": len(rows) - added,
         "total_review_proposals": count,
@@ -239,6 +283,15 @@ def inspect_review_learning(root: Path):
             SELECT count(*) FROM review_queue
             WHERE review_state <> 'UNVERIFIED_REVIEW_CANDIDATE_ONLY'
         """).fetchone()[0]
+        by_origin = dict(conn.execute("""
+            SELECT CASE
+                WHEN reference LIKE 'fix-pr:%' THEN 'stage15_fix_evidence'
+                WHEN reference LIKE 'pr:%' THEN 'stage10_pr_metadata'
+                WHEN reference LIKE 'commit:%' THEN 'stage10_git_metadata'
+                ELSE 'unrecognized'
+                END AS origin, COUNT(*)
+            FROM review_queue GROUP BY origin
+        """).fetchall())
     if invalid or count > MAX_ROWS or any(
             skill not in PROFILE or type(n) is not int or n < 0
             for skill, n in rows):
@@ -247,6 +300,7 @@ def inspect_review_learning(root: Path):
         "status": "STAGE12_UNVERIFIED_REVIEW_INSPECTED_NO_GO",
         "review_proposals": count,
         "by_skill": dict(rows),
+        "by_evidence_origin": by_origin,
         "approved_rules": 0,
         "model_weights_updated": False,
         "production_approved": False,
