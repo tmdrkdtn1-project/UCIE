@@ -24,7 +24,7 @@ class ChainAuditTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name) / "UCIE"
         self.runtime = self.root / "runtime"
-        self.runtime.mkdir()
+        self.runtime.mkdir(parents=True)
         self.operational = self.runtime / "public_miner.sqlite3"
         self.operational.write_bytes(b"OPERATIONAL_NO_TOUCH")
 
