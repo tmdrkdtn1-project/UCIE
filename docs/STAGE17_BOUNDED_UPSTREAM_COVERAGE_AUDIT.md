@@ -62,6 +62,32 @@ file listing match:
 - Invalid remote data, foreign SQLite schemas and unapproved paths fail
   closed without leaking upstream content.
 
+## Targeted first-party build-system classification correction
+
+The actual approved `python/cpython` merged PRs #159443 (3.15) and #159444
+(3.14) modify root-level `configure.ac` (Autoconf input), root-level
+`configure` (generated build script), and a `Misc/NEWS.d/next/Build/*.rst`
+release-note entry. Their change is about Git work-tree selection in
+out-of-tree Python builds. The earlier `observed_supported_file_count=0`
+was **not** evidence of a no-code PR: the legacy Stage15 extension list
+does not classify these two build-system filenames.
+
+Stage17 now reports separate counters
+`autoconf_source_files_observed`,
+`generated_configure_files_observed`, and
+`build_release_note_files_observed` plus `other_files_observed`.
+Classification inspects exact file paths from the already fetched GitHub
+file-listing response only, with no extra GET or persistence. It never
+reinterprets previously stored Stage15 snapshots or adds a production
+code feature family. `build_file_classification_state` is always
+`FILENAME_ONLY_UNVERIFIED`. Counts do not establish test success.
+
+PR #159443 and PR #159444 are **version backports of the same reported
+issue**. They are not independent proofs of two different bug families.
+No automated semantic deduplication is claimed; the digest-only
+Stage13/15 ledgers cannot prove the cross-PR link by themselves.
+Do not add a speculative model/training pipeline to infer such a link.
+
 ## Critical limits
 
 A complete **file listing** is *not* a complete patch/hunk retrieval: GitHub
