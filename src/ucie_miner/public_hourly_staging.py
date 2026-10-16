@@ -70,12 +70,6 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
             or staged.get("approved_rules_added") != 0
             or staged.get("production_approved") is not False):
         raise ValueError("invalid Stage 10 unverified-only staging result")
-    from .public_candidate_learning import optional_hourly_review_learning
-    learning = optional_hourly_review_learning(root)
-    if learning.get("status") not in (
-            "STAGE12_REVIEW_DISABLED",
-            "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO"):
-        raise ValueError("invalid candidate-only learning result")
     from .public_external_history import optional_external_history_backfill
     history = optional_external_history_backfill(root)
     if history.get("status") not in (
@@ -99,6 +93,16 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
             "STAGE15_FIX_EVIDENCE_DISABLED",
             "STAGE15_STRUCTURED_FIX_EVIDENCE_STAGED_NO_GO"):
         raise ValueError("invalid external structured fix evidence status")
+    # Final stage of the *existing* hourly cycle: Stage12 now reviews both
+    # Stage10 metadata and already-committed Stage15 fix hints, if and only
+    # if their independent owner markers exist. Reuse the same unverified
+    # append-only review ledger; never schedule a separate learner.
+    from .public_candidate_learning import optional_hourly_review_learning
+    learning = optional_hourly_review_learning(root)
+    if learning.get("status") not in (
+            "STAGE12_REVIEW_DISABLED",
+            "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO"):
+        raise ValueError("invalid candidate-only learning result")
     return {
         "status": STATUS_STAGED,
         "operator_opted_in": True,
@@ -116,6 +120,8 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
         "stage13_history_gets": history.get("external_gets", 0),
         "stage12_review_status": learning["status"],
         "stage12_review_proposals_added": learning.get("new_review_proposals", 0),
+        "stage12_fix_evidence_input_revisions": learning.get(
+            "stage15_unverified_fix_input_revisions", 0),
         "metadata_source_count": len(SOURCES),
         "candidate_pr_rows_added": staged["new_identities"],
         "candidate_pr_revisions_added": staged["evidence_revisions"],
