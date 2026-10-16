@@ -32,6 +32,7 @@ from .public_external_history import inspect_external_history, optional_external
 from .public_official_evidence import inspect_official_sources, optional_official_evidence_cycle
 from .public_fix_evidence import inspect_fix_evidence, optional_fix_evidence_enrichment
 from .public_evidence_chain_audit import audit_external_evidence_chain
+from .public_pr_coverage_audit import audit_public_pr_evidence_once
 from .public_git_commit_skills import discover_git_commit_skills, analyze_git_commits
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -129,6 +130,12 @@ def main(argv=None):
                    help="Explicit operator marker and --live, max 3 public reads for one approved source")
     official.add_argument("--live", action="store_true",
                    help="Allow bounded official public documentation, releases and advisory GETs")
+    pr_audit = sub.add_parser("audit-public-pr-coverage",
+                   help="Explicit bounded live PR merge identity/changed-file coverage recheck, no writes")
+    pr_audit.add_argument("--live", action="store_true",
+                   help="One-shot up to four approved anonymous public GETs")
+    pr_audit.add_argument("--source", choices=DISCOVERY_SOURCES, required=True)
+    pr_audit.add_argument("--pr", type=int, required=True)
     sub.add_parser("audit-external-evidence-chain",
                    help="Offline Stage13-to-15 SHA and provenance audit; no network or writes")
     sub.add_parser("inspect-fix-evidence",
@@ -302,6 +309,10 @@ def main(argv=None):
             result = inspect_fix_evidence(ROOT)
         elif args.action == "audit-external-evidence-chain":
             result = audit_external_evidence_chain(ROOT)
+        elif args.action == "audit-public-pr-coverage":
+            if not args.live:
+                raise ValueError("Stage 17 public PR reads require --live")
+            result = audit_public_pr_evidence_once(ROOT, args.source, args.pr)
         elif args.action == "enrich-public-fix-evidence-once":
             if not args.live:
                 raise ValueError("explicit --live required for public PR evidence enrichment")
