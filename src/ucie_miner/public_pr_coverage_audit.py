@@ -154,6 +154,25 @@ def _official_source_inventory(root, source):
     return {"present": True, "counts": counts}
 
 
+def _build_file_role(source, filename):
+    """Small, strict metadata-only supplement to legacy Stage15 file features.
+
+    Stage15 snapshots must remain comparable without schema migration.
+    Root-level Autoconf source and generated configure scripts are not
+    ordinary Python files, but can carry genuine build-system bug fixes.
+    Classification is filename-only; never parse/execute upstream bytes.
+    """
+    if filename == "configure.ac":
+        return "autoconf_source"
+    if filename == "configure":
+        return "generated_configure"
+    if (source == "python/cpython"
+            and filename.startswith("Misc/NEWS.d/next/Build/")
+            and filename.endswith(".rst")):
+        return "build_release_note"
+    return "other"
+
+
 def _snapshot_matches(first, row):
     return (first["patch_file_count"] == row[10]
             and first["test_file_count"] == row[9]
@@ -202,6 +221,11 @@ def audit_public_pr_evidence_once(root, source, number, *, fetch=None):
         "pr_files_inspected": 0, "pr_file_pages_inspected": 0,
         "pr_file_listing_complete_at_observation": False,
         "stage15_first_page_snapshot_matches": False,
+        "autoconf_source_files_observed": 0,
+        "generated_configure_files_observed": 0,
+        "build_release_note_files_observed": 0,
+        "other_files_observed": 0,
+        "build_file_classification_state": "FILENAME_ONLY_UNVERIFIED",
         "external_gets": requests, "max_external_gets": 1 + MAX_FILE_PAGES,
         "persistent_writes": 0, "external_code_executed": False,
         "raw_patch_retained": False, "upstream_merge_independently_attested": False,
@@ -242,10 +266,20 @@ def audit_public_pr_evidence_once(root, source, number, *, fetch=None):
             features = inspect_pr_changes(source, number, entries, merge_sha=pinned)
         except PublicEvidenceError as exc:
             raise DiscoveryError("invalid Stage 17 untrusted patch data") from exc
+        # Filename-based build-system signal only. Do not change the Stage15
+        # legacy feature digest or treat a changelog as executable source.
+        counters = {
+            "autoconf_source": "autoconf_source_files_observed",
+            "generated_configure": "generated_configure_files_observed",
+            "build_release_note": "build_release_note_files_observed",
+            "other": "other_files_observed",
+        }
         for entry in entries:
             if entry["filename"] in seen_names:
                 raise DiscoveryError("duplicate Stage 17 PR file across pages")
             seen_names.add(entry["filename"])
+            role = _build_file_role(source, entry["filename"])
+            result[counters[role]] += 1
         all_features.append(features)
         inspected += len(entries)
         result["pr_files_inspected"] = inspected
