@@ -56,6 +56,7 @@ class PublicCoverageTests(unittest.TestCase):
         self.operating.write_bytes(b"ORIGINAL_OPERATING_LEDGER")
         self.requests = []
         self.total_files = 1
+        self.custom_files = None
         self.merge = MERGE
         self.remaining = 50
         self.duplicate_page_two = False
@@ -107,12 +108,71 @@ class PublicCoverageTests(unittest.TestCase):
             return metadata_fixture(self.total_files, self.merge), self.remaining
         page = int(url.rsplit("=", 1)[1])
         offset = (page - 1) * 30
-        entries = files_fixture(self.total_files)[offset:offset + 30]
+        files = self.custom_files if self.custom_files is not None else files_fixture(self.total_files)
+        entries = [dict(e) for e in files[offset:offset + 30]]
         if page == 2 and self.duplicate_page_two:
             entries[0]["filename"] = "tests/test_behavior_0.py"
         if page == 2 and self.short_page_two:
             entries.pop()
         return entries, self.remaining
+
+    def test_build_config_backports_expose_real_filenames_without_touching_stage15(self):
+        # Shape of the two observed approved CPython 3.14/3.15 backports.
+        self.custom_files = [
+            {"filename": "Misc/NEWS.d/next/Build/fix-build-tag.rst",
+             "status": "added", "patch": "+ news-only"},
+            {"filename": "configure", "status": "modified",
+             "patch": "- git --git-dir=foo\n+ git --git-dir=foo --work-tree=bar"},
+            {"filename": "configure.ac", "status": "modified",
+             "patch": "- git --git-dir=foo\n+ git --git-dir=foo --work-tree=bar"},
+        ]
+        self.total_files = len(self.custom_files)
+        # Historical Stage15 ignored these formats. Preserve its pinned
+        # snapshot exactly; never reclassify old data as failed provenance.
+        self.assertEqual(
+            inspect_pr_changes(SOURCE, PR, self.custom_files, merge_sha=MERGE)[
+                "changed_supported_file_count"], 0)
+        with closing(sqlite3.connect(self.runtime / FIX_DB)) as db:
+            features = inspect_pr_changes(SOURCE, PR, self.custom_files, merge_sha=MERGE)
+            db.execute("""UPDATE fix_evidence SET pattern_tags_json=?,
+                removed_signals_json=?,added_signals_json=?,
+                patch_file_count=?,test_file_count=?,patch_coverage=?""", (
+                json.dumps(features["tags"], separators=(",", ":")),
+                json.dumps(features["removed_behavior_signals"], separators=(",", ":")),
+                json.dumps(features["added_behavior_signals"], separators=(",", ":")),
+                features["patch_file_count"], features["test_file_count"],
+                features["coverage"]))
+            db.commit()
+        before = {p.name: p.read_bytes() for p in self.runtime.iterdir()}
+        result = audit_public_pr_evidence_once(self.root, SOURCE, PR, fetch=self.fetch)
+        self.assertEqual(result["status"], "STAGE17_UPSTREAM_LISTING_RECHECKED_UNVERIFIED_NO_GO")
+        self.assertTrue(result["stage15_first_page_snapshot_matches"])
+        self.assertEqual(result["observed_supported_file_count"], 0)
+        self.assertEqual(result["autoconf_source_files_observed"], 1)
+        self.assertEqual(result["generated_configure_files_observed"], 1)
+        self.assertEqual(result["build_release_note_files_observed"], 1)
+        self.assertEqual(result["other_files_observed"], 0)
+        self.assertEqual(result["build_file_classification_state"],
+                         "FILENAME_ONLY_UNVERIFIED")
+        self.assertFalse(result["independent_regression_verified"])
+        self.assertFalse(result["production_approved"])
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.runtime.iterdir()})
+
+    def test_non_root_configure_does_not_become_false_build_source(self):
+        self.custom_files = [{
+            "filename": "docs/configure.ac", "status": "modified",
+            "patch": "+ inert"},
+        ]
+        result = audit_public_pr_evidence_once(self.root, SOURCE, PR, fetch=self.fetch)
+        self.assertEqual(result["autoconf_source_files_observed"], 0)
+        self.assertEqual(result["other_files_observed"], 1)
+
+    def test_unrelated_python_code_is_not_mislabeled_build_source(self):
+        result = audit_public_pr_evidence_once(self.root, SOURCE, PR, fetch=self.fetch)
+        self.assertEqual(result["autoconf_source_files_observed"], 0)
+        self.assertEqual(result["generated_configure_files_observed"], 0)
+        self.assertEqual(result["build_release_note_files_observed"], 0)
+        self.assertEqual(result["other_files_observed"], 1)
 
     def test_single_file_matches_upstream_identity_and_snapshot_not_verified_fix(self):
         before = {p.name: p.read_bytes() for p in self.runtime.iterdir()}
