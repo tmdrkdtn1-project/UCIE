@@ -31,6 +31,9 @@ GUIDANCE = {
     "PS_RESOLVE_PATH_DOT_PREFIX": (
         "Derive anchored relative paths with Path.GetRelativePath; reject escapes and preserve dot-prefixed filenames",
         "Dot-prefix, parent-directory and platform-specific path fixtures"),
+    "PS_PYTHON_REMOTE_DEBUG_XOPTION_TYPO": (
+        "Replace only the literal Python -X disable_remote_debug with -X disable-remote-debug; verify target interpreter behavior before relying on the control",
+        "Separate isolated Python process checks: baseline enabled, misspelled option still enabled, corrected option disabled where supported"),
     "PY_SCANDIR_SHARED_ITERATOR_RACE": (
         "Never concurrently share a raw scandir iterator; serialize every next() and close() with a single owned lock",
         "Guarded concurrent next()/close() and end-of-stream fixtures; raw native crash remains NO-GO"),
