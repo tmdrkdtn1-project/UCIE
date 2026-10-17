@@ -169,9 +169,42 @@ def run_cycle(
                 if type(optional_stage) is not dict or optional_stage.get("status") not in (
                         "STAGE10_HOURLY_DISABLED",
                         "STAGE10_UNVERIFIED_STAGED_NO_GO",
+                        "STAGE10_HOURLY_PARTIAL_NO_GO",
                         "STAGE10_HOURLY_FAILED_NO_GO"):
                     raise ValueError("invalid optional public stage result")
                 receipt["stage10_status"] = optional_stage["status"]
+                history_status = optional_stage.get("stage13_history_status")
+                if history_status is not None:
+                    if history_status not in (
+                            "STAGE13_EXTERNAL_HISTORY_DISABLED",
+                            "EXTERNAL_HISTORY_BACKFILL_OK_NO_GO",
+                            "EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO",
+                            "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO"):
+                        raise ValueError("unrecognized public history status")
+                    receipt["stage13_history_status"] = history_status
+                if optional_stage["status"] == "STAGE10_HOURLY_PARTIAL_NO_GO":
+                    if history_status != "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO":
+                        raise ValueError("partial status must identify Stage 13 failure")
+                    from .public_discovery import SOURCES
+                    failure_source = optional_stage.get("stage13_failure_source")
+                    failure_category = optional_stage.get("stage13_failure_category")
+                    if (failure_source not in SOURCES or failure_category not in (
+                            "FETCH_OR_RESPONSE_REJECTED",
+                            "PUBLIC_METADATA_REJECTED")):
+                        raise ValueError("invalid Stage 13 failure identity")
+                    receipt["stage13_failure_source"] = failure_source
+                    receipt["stage13_failure_category"] = failure_category
+                review_status = optional_stage.get("stage12_review_status")
+                if review_status is not None:
+                    if review_status not in (
+                            "STAGE12_REVIEW_DISABLED",
+                            "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO"):
+                        raise ValueError("invalid Stage 12 review receipt")
+                    receipt["stage12_review_status"] = review_status
+                    proposals = optional_stage.get("stage12_review_proposals_added", 0)
+                    if type(proposals) is not int or not 0 <= proposals <= 10000:
+                        raise ValueError("unbounded Stage 12 review counter")
+                    receipt["stage12_review_proposals_added"] = proposals
                 if optional_stage["status"] == "STAGE10_HOURLY_FAILED_NO_GO":
                     # Preserve error CLASS only, never exception text or data
                     # from public sources. No extra file or new observer.
