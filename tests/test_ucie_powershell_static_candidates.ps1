@@ -22,6 +22,29 @@ Assert-UCIE ($result.persistent_writes -eq 0) 'Scanner unexpectedly persisted da
 Assert-UCIE ($result.production_approved -eq $false) 'Scanner unexpectedly approved production'
 Assert-UCIE ($result.approved_rules -eq 0) 'Scanner promoted a rule'
 
+# One real observed CPython security-control misconfiguration:
+# the wrong underscore spelling is silently ignored on supported Python.
+# Only analyze fixed PowerShell command syntax; never launch 'python'.
+$wrongOption = Find-UCIEPowerShellCandidate -SourceText @'
+python -I -X disable_remote_debug -c 'raise Exception("DO_NOT_EXECUTE")'
+'@
+Assert-UCIE ($wrongOption.finding_count -eq 1) 'Missing actual Python xoption typo finding'
+Assert-UCIE ($wrongOption.findings[0].pattern_code -eq 'PS_PYTHON_REMOTE_DEBUG_XOPTION_TYPO') 'Wrong flag pattern'
+Assert-UCIE ($wrongOption.findings[0].public_evidence -ceq 'https://github.com/python/cpython/pull/159014') 'Untrusted Python PR identity'
+Assert-UCIE ($wrongOption.parser_executed_supplied_code -eq $false) 'Unsafe Python command execution implied'
+
+$correctOption = Find-UCIEPowerShellCandidate -SourceText "python -I -X disable-remote-debug -"
+Assert-UCIE ($correctOption.finding_count -eq 0) 'Correct Python flag must not be flagged'
+
+$otherCommand = Find-UCIEPowerShellCandidate -SourceText "Write-Output -X disable_remote_debug"
+Assert-UCIE ($otherCommand.finding_count -eq 0) 'Non-Python command was incorrectly flagged'
+
+$dynamicOption = Find-UCIEPowerShellCandidate -SourceText 'python -X $option -'
+Assert-UCIE ($dynamicOption.finding_count -eq 0) 'Dynamic PowerShell expression must remain unclassified'
+
+$unreachableOption = Find-UCIEPowerShellCandidate -SourceText 'if ($false) { python -X disable_remote_debug - }'
+Assert-UCIE ($unreachableOption.finding_count -eq 0) 'Provably dead branch should not be flagged'
+
 $negative = Find-UCIEPowerShellCandidate -SourceText @'
 Get-Command 'Get-FuzzyDuplicat'
 Resolve-Path 'directory\file.txt'
