@@ -12,6 +12,7 @@ OPT_IN_FILENAME = "stage10_hourly_opt_in.txt"
 OPT_IN_TOKEN = "UCIE_STAGE10_HOURLY_OPT_IN_V1"
 STATUS_DISABLED = "STAGE10_HOURLY_DISABLED"
 STATUS_STAGED = "STAGE10_UNVERIFIED_STAGED_NO_GO"
+STATUS_PARTIAL = "STAGE10_HOURLY_PARTIAL_NO_GO"
 
 
 def optional_public_skill_staging(root: Path, *, batch_builder=None,
@@ -78,8 +79,18 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
             "EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO",
             "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO"):
         raise ValueError("unexpected external history collection result")
-    if history["status"] == "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO":
-        raise ValueError("optional historical public upstream unavailable")
+    # Stage13 may reject one upstream page or encounter a temporary
+    # public API failure. It already preserves the rejected source cursor.
+    # Do not block independent Stage14/15 reads or Stage12 review learning;
+    # surface a PARTIAL receipt and nonzero task result instead.
+    history_failed = (
+        history["status"] == "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO"
+    )
+    if history_failed and (
+            history.get("failure_source") not in SOURCES
+            or history.get("failure_category") not in (
+                "FETCH_OR_RESPONSE_REJECTED", "PUBLIC_METADATA_REJECTED")):
+        raise ValueError("invalid Stage 13 failure provenance")
     from .public_official_evidence import optional_official_evidence_cycle
     official = optional_official_evidence_cycle(root)
     if official.get("status") not in (
@@ -104,7 +115,7 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
             "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO"):
         raise ValueError("invalid candidate-only learning result")
     return {
-        "status": STATUS_STAGED,
+        "status": STATUS_PARTIAL if history_failed else STATUS_STAGED,
         "operator_opted_in": True,
         "stage15_fix_evidence_status": fix_review["status"],
         "stage15_fix_evidence_new_records": fix_review.get(
@@ -115,6 +126,8 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
         "stage14_official_new_revisions": official.get("new_metadata_revisions", 0),
         "stage14_official_gets": official.get("official_gets", 0),
         "stage13_history_status": history["status"],
+        "stage13_failure_source": history.get("failure_source") if history_failed else None,
+        "stage13_failure_category": history.get("failure_category") if history_failed else None,
         "stage13_history_new_revisions": history.get(
             "new_unverified_evidence_revisions", 0),
         "stage13_history_gets": history.get("external_gets", 0),
