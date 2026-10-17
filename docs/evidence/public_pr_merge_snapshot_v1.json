@@ -75,14 +75,6 @@
       "merged_at": "2026-10-13T23:05:35Z",
       "base_branch": "3.15",
       "merge_commit_sha": "b3fae57cc5e04e2808aaa34b5297e96281673244"
-    },
-    {
-      "source": "python/cpython",
-      "pr_number": 159014,
-      "public_url": "https://github.com/python/cpython/pull/159014",
-      "merged_at": "2026-10-14T13:18:20Z",
-      "base_branch": "main",
-      "merge_commit_sha": "91248026c8a41910098032dd23f9a05ad2d9b513"
     }
   ]
 }
