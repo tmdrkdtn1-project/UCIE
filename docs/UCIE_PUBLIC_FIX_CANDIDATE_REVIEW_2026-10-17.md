@@ -40,13 +40,25 @@ regression, versioned release-inclusion test or license approval. Accordingly
   environment variable `PYTHON_DISABLE_REMOTE_DEBUG=1` is an
   alternate documented control. A `False` observation alone does not
   prove the flag worked if remote debug support is compiled out.
-- **Unperformed regression:** On disposable, feature-enabled Python
-  3.15.0, independently compare default vs misspelled vs correct
-  arguments in separate interpreter processes; assert default and
-  misspelled are enabled, correct is disabled. A 3.15 development-branch
-  documentation fix does **not** retrofit the released 3.15.0 docs.
-- **Gate:** `SOURCE_AND_RELEASE_TAG_STATIC_MATCH`; independent host
-  runtime observation and production approval `NO_GO`.
+- **Owner-reported runtime observation (2026-10-17):** On the owner-host
+  Windows Python 3.15 installation, a PowerShell STDIN probe invoked three
+  **separate** interpreter processes with `-I`: no extra `-X` option
+  printed `True`; `-X disable_remote_debug` printed `True`;
+  `-X disable-remote-debug` printed `False` for
+  `sys.is_remote_debug_enabled()`. This confirms the safe flag's effect
+  and the misleading underscore option on **that tested runtime**.
+  The operator supplied the printed outputs; no executable was acquired
+  or run by the reviewer, and that invocation did **not** print the
+  exact `sys.version`, binary digest, or subprocess exit codes.
+  Do not misrepresent the host output as an independent runner test.
+- **Remaining regression:** Independently repeat the three child-process
+  observations on a version-identified, disposable feature-enabled
+  Python runner. Confirm interpreter identity and observed exit codes.
+  A 3.15 development-branch documentation fix does **not** retrofit
+  the released 3.15.0 documentation.
+- **Gate:** `SOURCE_RELEASE_TAG_AND_OWNER_RUNTIME_BEHAVIOR_MATCH`;
+  independent runtime replication, distribution-specific rule acceptance,
+  and production approval remain `NO_GO`.
 
 ## Candidate B — concurrent `os.scandir` iterator use and close (priority 2)
 
@@ -125,7 +137,9 @@ bug families. These findings are a **manual static evidence review**,
 not a mutation of the Stage12 queue, a permanent trained memory,
 an approved Rulepack, or a deployed product rule.
 
-Next gate: safe target-runtime observation of the remote-debug flag
-without executing external code, followed by qualified independent
-regression and release-inclusion checks where feasible. Do not
-automatically approve candidates on receipt counts or green UCIE CI.
+Next gate: independently replicate Candidate A's owner-reported
+three-process flag observation on a pinned disposable interpreter,
+then carry out noncrashing provenance, regression and release-inclusion
+checks for Candidates B and C where feasible. Do not run native crash
+reproducers on the owner host or automatically approve candidates from
+receipt counts, screenshots or green UCIE CI.
