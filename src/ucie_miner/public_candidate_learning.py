@@ -158,6 +158,23 @@ def _rows_from_stage15(root):
         rows.append((source, ref, skill, evidence_sha, tags, pattern_hint))
     return sorted(rows)
 
+def _allowed_review_patterns():
+    from .public_evidence_routes import TRANSITION_SIGNALS
+    labels = tuple(TRANSITION_SIGNALS)
+    patterns = {
+        "SECURITY", "CRASH", "EXCEPTION_HANDLING", "CONCURRENCY",
+        "API_CONTRACT", "REGRESSION", "VERSION_COMPAT",
+        "COMPATIBILITY", "TEST_REGRESSION", "TESTING", "UNCLASSIFIED",
+    }
+    patterns.update("PATCH_OBSERVED_ADD_" + signal for signal in labels)
+    patterns.update("PATCH_OBSERVED_REMOVE_" + signal for signal in labels)
+    patterns.update(
+        "PATCH_OBSERVED_DELTA_" + gone + "_" + new
+        for gone in labels for new in labels if gone != new
+    )
+    return patterns
+
+
 def _review_path(root):
     _dedicated_path(root)
     path = Path(root) / "runtime" / REVIEW_FILE
@@ -319,9 +336,13 @@ def inspect_review_learning(root: Path):
             SELECT pattern_code, COUNT(*) FROM review_queue
             GROUP BY pattern_code
         """).fetchall())
-    if invalid or count > MAX_ROWS or any(
+    if (invalid or count > MAX_ROWS or any(
             skill not in PROFILE or type(n) is not int or n < 0
-            for skill, n in rows):
+            for skill, n in rows)
+            or any(pattern not in _allowed_review_patterns()
+                   or type(n) is not int or n < 0
+                   for pattern, n in by_pattern.items())
+            or sum(by_pattern.values()) != count):
         raise DiscoveryError("invalid unverified candidate review content")
     return {
         "status": "STAGE12_UNVERIFIED_REVIEW_INSPECTED_NO_GO",
