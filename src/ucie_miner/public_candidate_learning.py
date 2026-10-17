@@ -87,7 +87,7 @@ def _rows_from_stage10(root):
                 or len(set(missing)) != len(missing)
                 or state != "UNVERIFIED_CANDIDATE_ONLY"):
             raise DiscoveryError("unsafe staged public PR identity")
-        rows.append((source, f"pr:{number}:{sha}", skill, evidence, tags))
+        rows.append((source, f"pr:{number}:{sha}", skill, evidence, tags, None))
     for sha, digest, tags_json, state in commits:
         tags = _valid_tags(tags_json, allowed=CATEGORIES)
         if (not isinstance(sha, str) or not SHA40.fullmatch(sha)
@@ -95,9 +95,29 @@ def _rows_from_stage10(root):
                 or state != "UNVERIFIED_CANDIDATE_ONLY"):
             raise DiscoveryError("unsafe staged public Git commit")
         rows.append(("git/git", f"commit:{sha}", "git-workflow-prevention",
-                     digest, tags))
+                     digest, tags, None))
     return sorted(rows)
 
+
+
+def _observed_patch_signal_hint(removed_json, added_json):
+    """Bounded token evidence, never a claim about the fix's correctness.
+
+    Stage 15 only observes patterns on '+' and '-' lines, not their semantic
+    relationship. Emit a specific label only for a single unambiguous
+    difference; do not manufacture a code change or safe invocation.
+    """
+    from .public_evidence_routes import TRANSITION_SIGNALS
+    removed = set(_valid_tags(removed_json, allowed=TRANSITION_SIGNALS))
+    added = set(_valid_tags(added_json, allowed=TRANSITION_SIGNALS))
+    gone, new = removed - added, added - removed
+    if len(gone) == 1 and len(new) == 1:
+        return "PATCH_OBSERVED_DELTA_" + next(iter(gone)) + "_" + next(iter(new))
+    if len(gone) == 1 and not new:
+        return "PATCH_OBSERVED_REMOVE_" + next(iter(gone))
+    if len(new) == 1 and not gone:
+        return "PATCH_OBSERVED_ADD_" + next(iter(new))
+    return None
 
 
 def _rows_from_stage15(root):
@@ -131,11 +151,29 @@ def _rows_from_stage15(root):
                 merge, SOURCE_SKILL[source]):
             raise DiscoveryError("unlinked public fix evidence revision")
         tags = _valid_tags(tags_text, allowed=PR_TAGS)
+        pattern_hint = _observed_patch_signal_hint(record[7], record[8])
         # Distinct evidence *revisions* are review tasks, not claims of
         # distinct bug families, fixes, released versions or verified rules.
         ref = f"fix-pr:{number}:{merge}:{history_sha}"
-        rows.append((source, ref, skill, evidence_sha, tags))
+        rows.append((source, ref, skill, evidence_sha, tags, pattern_hint))
     return sorted(rows)
+
+def _allowed_review_patterns():
+    from .public_evidence_routes import TRANSITION_SIGNALS
+    labels = tuple(TRANSITION_SIGNALS)
+    patterns = {
+        "SECURITY", "CRASH", "EXCEPTION_HANDLING", "CONCURRENCY",
+        "API_CONTRACT", "REGRESSION", "VERSION_COMPAT",
+        "COMPATIBILITY", "TEST_REGRESSION", "TESTING", "UNCLASSIFIED",
+    }
+    patterns.update("PATCH_OBSERVED_ADD_" + signal for signal in labels)
+    patterns.update("PATCH_OBSERVED_REMOVE_" + signal for signal in labels)
+    patterns.update(
+        "PATCH_OBSERVED_DELTA_" + gone + "_" + new
+        for gone in labels for new in labels if gone != new
+    )
+    return patterns
+
 
 def _review_path(root):
     _dedicated_path(root)
@@ -179,8 +217,10 @@ def _check_review_schema(conn, *, new):
 def _review_records(rows):
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     proposals = []
-    for source, ref, skill, evidence, tags in rows:
-        pattern = next((tag for tag in (
+    for source, ref, skill, evidence, tags, pattern_hint in rows:
+        # The tagged patch-token observation is more specific than a
+        # domain-wide category but remains unverified and non-executable.
+        pattern = pattern_hint or next((tag for tag in (
             "SECURITY", "CRASH", "EXCEPTION_HANDLING", "CONCURRENCY",
             "API_CONTRACT", "REGRESSION", "VERSION_COMPAT",
             "COMPATIBILITY", "TEST_REGRESSION", "TESTING")
@@ -292,15 +332,24 @@ def inspect_review_learning(root: Path):
                 END AS origin, COUNT(*)
             FROM review_queue GROUP BY origin
         """).fetchall())
-    if invalid or count > MAX_ROWS or any(
+        by_pattern = dict(conn.execute("""
+            SELECT pattern_code, COUNT(*) FROM review_queue
+            GROUP BY pattern_code
+        """).fetchall())
+    if (invalid or count > MAX_ROWS or any(
             skill not in PROFILE or type(n) is not int or n < 0
-            for skill, n in rows):
+            for skill, n in rows)
+            or any(pattern not in _allowed_review_patterns()
+                   or type(n) is not int or n < 0
+                   for pattern, n in by_pattern.items())
+            or sum(by_pattern.values()) != count):
         raise DiscoveryError("invalid unverified candidate review content")
     return {
         "status": "STAGE12_UNVERIFIED_REVIEW_INSPECTED_NO_GO",
         "review_proposals": count,
         "by_skill": dict(rows),
         "by_evidence_origin": by_origin,
+        "by_pattern_code": by_pattern,
         "approved_rules": 0,
         "model_weights_updated": False,
         "production_approved": False,

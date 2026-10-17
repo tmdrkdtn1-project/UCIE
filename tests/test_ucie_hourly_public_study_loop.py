@@ -79,7 +79,8 @@ class PublicAutomaticStudyTests(unittest.TestCase):
             )
             db.commit()
 
-    def _fix_setup(self, *, metadata=META, digest=FIX):
+    def _fix_setup(self, *, metadata=META, digest=FIX,
+                   removed="[]", added="[]"):
         profile = PROFILE[SKILL]
         with closing(sqlite3.connect(self.fix)) as db:
             db.execute("BEGIN IMMEDIATE")
@@ -90,7 +91,7 @@ class PublicAutomaticStudyTests(unittest.TestCase):
             db.execute(
                 "INSERT INTO fix_evidence VALUES (" + ",".join("?" for _ in range(21)) + ")",
                 (SOURCE, 159443, MERGE, metadata, digest, SKILL,
-                 '["API_CONTRACT"]', "[]", "[]", 0, 2,
+                 '["API_CONTRACT"]', removed, added, 0, 2,
                  "BOUNDED_FIRST_PAGE_ONLY", 0, '["advisory","document"]',
                  profile["safe_call"], profile["recommended_action"],
                  "UNDETERMINED", "UNVERIFIED",
@@ -150,6 +151,55 @@ class PublicAutomaticStudyTests(unittest.TestCase):
         self.assertEqual(repeat["new_review_proposals"], 0)
         self.assertEqual(before, {p.name: p.read_bytes() for p in (
             self.miner, self.knowledge, self.stage10, self.history, self.fix)})
+
+    def test_existing_stage15_delta_becomes_specific_unverified_pattern(self):
+        self._history_setup()
+        self._fix_setup(
+            removed='["GENERIC_EXCEPTION"]',
+            added='["PROTOCOL_ERROR_CODE"]')
+        self._markers()
+        immutable = {p.name: p.read_bytes() for p in (
+            self.miner, self.knowledge, self.stage10, self.history, self.fix)}
+        first = optional_hourly_review_learning(self.root)
+        self.assertEqual(first["new_review_proposals"], 3)
+        observed = "PATCH_OBSERVED_DELTA_GENERIC_EXCEPTION_PROTOCOL_ERROR_CODE"
+        with closing(sqlite3.connect(self.review)) as db:
+            row = db.execute("""
+                SELECT pattern_code,safe_guidance,regression_plan,review_state
+                FROM review_queue WHERE reference LIKE 'fix-pr:%'
+            """).fetchone()
+        self.assertEqual(row, (
+            observed,
+            PROFILE[SKILL]["safe_call"],
+            PROFILE[SKILL]["recommended_action"],
+            "UNVERIFIED_REVIEW_CANDIDATE_ONLY",
+        ))
+        self.assertEqual(inspect_review_learning(self.root)["by_pattern_code"][observed], 1)
+        self.assertEqual(optional_hourly_review_learning(self.root)["new_review_proposals"], 0)
+        self.assertEqual(immutable, {p.name: p.read_bytes() for p in (
+            self.miner, self.knowledge, self.stage10, self.history, self.fix)})
+
+    def test_ambiguous_patch_signals_keep_existing_general_review(self):
+        self._history_setup()
+        self._fix_setup(
+            removed='["GENERIC_EXCEPTION"]',
+            added='["GENERIC_EXCEPTION"]')
+        self._markers()
+        optional_hourly_review_learning(self.root)
+        with closing(sqlite3.connect(self.review)) as db:
+            pattern = db.execute("""
+                SELECT pattern_code FROM review_queue
+                WHERE reference LIKE 'fix-pr:%'
+            """).fetchone()[0]
+        self.assertEqual(pattern, "API_CONTRACT")
+
+    def test_forged_patch_signal_is_rejected_before_review_write(self):
+        self._history_setup()
+        self._fix_setup(added='["AUTO_PROMOTE"]')
+        self._markers()
+        with self.assertRaises(DiscoveryError):
+            optional_hourly_review_learning(self.root)
+        self.assertFalse(self.review.exists())
 
     def test_marker_optout_does_not_delete_learned_review_history(self):
         self._history_setup()

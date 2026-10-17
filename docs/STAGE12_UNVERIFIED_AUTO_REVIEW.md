@@ -244,3 +244,24 @@ rejected without advancing the cursor. Do not weaken merged evidence
 verification, manually move owner-host cursors, or claim that previously
 rejected PRs are verified fixes. The actual owner Windows run after
 this patch is a separate operational verification.
+
+
+## Existing Stage15 -> Stage12 evidence detail (2026-10-17)
+
+Previously Stage15 saved fixed-label `removed_signals_json` and
+`added_signals_json` extracted from bounded published PR file metadata, but
+Stage12 ignored both and kept only generic domain tags. Stage12 now uses
+those **already-validated** fixed labels to generate a more specific
+`PATCH_OBSERVED_*` pattern when the before/after token sets have exactly
+one unambiguous difference. These patterns are **observations of patch
+tokens**, not proof of causality, correctness, release inclusion or a
+safe automatically executable fix. Ambiguous changes retain the original
+general pattern. The existing human-review queue, schema, fingerprint,
+append-only deduplication, source opt-ins, fixed guidance, and regression
+review actions remain unchanged. Previously stored proposals are kept
+as-is; only genuinely new evidence revisions receive detailed patterns.
+
+The existing read-only `inspect-stage12-review` output additionally lists
+`by_pattern_code` counts with an allowlist check. Nothing in this change
+requests external GETs, schedules work, runs external code or changes
+operating rule/model/approval state.
