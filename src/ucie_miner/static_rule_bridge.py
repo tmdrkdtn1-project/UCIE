@@ -22,6 +22,7 @@ SOURCE_BINDINGS = {
     "PY_SCANDIR_SHARED_ITERATOR_RACE": ("python/cpython", 153462),
     "PS_FUZZY_GET_COMMAND_DUPLICATES": ("PowerShell/PowerShell", 28042),
     "PS_RESOLVE_PATH_DOT_PREFIX": ("PowerShell/PowerShell", 28087),
+    "PS_PYTHON_REMOTE_DEBUG_XOPTION_TYPO": ("python/cpython", 159014),
 }
 SCAN_SCHEMAS = {
     "UCIE_PYTHON_SCANDIR_STATIC_CANDIDATES_V1": "python",
@@ -45,6 +46,9 @@ SCANNER_GUIDANCE = {
     "PS_RESOLVE_PATH_DOT_PREFIX": (
         "Review dot-prefixed relative paths and use an anchored "
         "base-directory conversion if needed"),
+    "PS_PYTHON_REMOTE_DEBUG_XOPTION_TYPO": (
+        "Use Python -X disable-remote-debug (hyphens), not disable_remote_debug; "
+        "confirm target interpreter setting"),
 }
 MAX_FINDINGS = 100
 
