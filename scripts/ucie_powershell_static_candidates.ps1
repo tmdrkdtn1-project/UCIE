@@ -88,6 +88,26 @@ function Find-UCIEPowerShellCandidate {
             $publicPr = 'https://github.com/PowerShell/PowerShell/pull/28087'
             $guidance = 'Review dot-prefixed relative paths and use an anchored base-directory conversion if needed'
         }
+        elseif ($name -in @('python', 'python.exe', 'python3', 'python3.exe',
+                             'python3.14', 'python3.15', 'py', 'py.exe')) {
+            # Approved CPython PR #159014 documents a silent-no-op typo.
+            # Analyze ONLY a literal -X option immediately followed by the
+            # misspelled literal. Never resolve shell expressions or aliases.
+            $elements = @($cmd.CommandElements)
+            for ($i = 1; $i -lt ($elements.Count - 1); $i++) {
+                $switch = $elements[$i]
+                $arg = $elements[$i + 1]
+                if ($switch -is [System.Management.Automation.Language.CommandParameterAst] -and
+                    $switch.ParameterName -ceq 'X' -and
+                    $arg -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+                    $arg.Value -ceq 'disable_remote_debug') {
+                    $pattern = 'PS_PYTHON_REMOTE_DEBUG_XOPTION_TYPO'
+                    $publicPr = 'https://github.com/python/cpython/pull/159014'
+                    $guidance = 'Use Python -X disable-remote-debug (hyphens), not disable_remote_debug; confirm target interpreter setting'
+                    break
+                }
+            }
+        }
         if ($null -eq $pattern) {
             continue
         }

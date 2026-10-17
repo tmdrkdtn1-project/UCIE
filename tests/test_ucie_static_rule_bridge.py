@@ -97,6 +97,59 @@ class StaticRuleBridgeTests(unittest.TestCase):
                             for p in result["proposals"]))
         self.assertFalse(result["auto_promoted"])
 
+    def test_actual_python_xoption_misuse_links_to_pinned_stage6_review(self):
+        # A PowerShell AST observation can point to an approved CPython PR.
+        # This verifies detector -> pinned public evidence -> nonexecuting
+        # prevention/repair instructions, not production auto-promotion.
+        guidance = (
+            "Use Python -X disable-remote-debug (hyphens), not disable_remote_debug; "
+            "confirm target interpreter setting"
+        )
+        receipt = {
+            "schema": "UCIE_POWERSHELL_STATIC_CANDIDATES_V1",
+            "source_sha256": hashlib.sha256(b"python -X disable_remote_debug").hexdigest(),
+            "finding_count": 1,
+            "findings": [{
+                "pattern_code": "PS_PYTHON_REMOTE_DEBUG_XOPTION_TYPO",
+                "line": 1, "column": 1,
+                "confidence": "STATIC_HEURISTIC_REVIEW_REQUIRED",
+                "public_evidence": "https://github.com/python/cpython/pull/159014",
+                "safe_fix_guidance": guidance,
+                "runtime_bug_reproduced": False,
+            }],
+            "parser_executed_supplied_code": False,
+            "confidence": "HUMAN_REVIEW_REQUIRED",
+            "approved_rules": 0,
+            "source_files_read": 0,
+            "persistent_writes": 0,
+            "production_approved": False,
+        }
+        preview = preview_static_rule_candidates(ROOT, receipt)
+        self.assertEqual(preview["finding_count"], 1)
+        item = preview["proposals"][0]
+        self.assertEqual(item["canonical_pr_number"], 159014)
+        self.assertEqual(item["source"], "python/cpython")
+        self.assertEqual(item["pinned_merge_commit_sha"],
+                         "91248026c8a41910098032dd23f9a05ad2d9b513")
+        self.assertIn("-X disable-remote-debug",
+                      item["stage6_rulepack_candidate"]["safe_fix_guidance"])
+        self.assertEqual(item["stage6_regression_case"]["actual_test_result"],
+                         "NOT_EXECUTED")
+        self.assertFalse(preview["deploy_allowed"])
+        self.assertFalse(preview["auto_promoted"])
+        linked = preview_static_rule_candidates(
+            ROOT, receipt,
+            existing_rulepack=known_pack(
+                "python/cpython", 159014,
+                "PS_PYTHON_REMOTE_DEBUG_XOPTION_TYPO"))
+        self.assertEqual(linked["status"], "STRUCTURALLY_LINKED_UNVERIFIED")
+        self.assertFalse(linked["independent_regression_passed"])
+        forged = deepcopy(receipt)
+        forged["findings"][0]["public_evidence"] = (
+            "https://github.com/PowerShell/PowerShell/pull/159014")
+        with self.assertRaises(PatternError):
+            preview_static_rule_candidates(ROOT, forged)
+
     def test_existing_unapproved_rulepack_can_be_structurally_linked(self):
         result = preview_static_rule_candidates(
             ROOT, python_receipt(),

@@ -23,6 +23,9 @@ TEST_FAMILIES = {
     "PS_RESOLVE_PATH_DOT_PREFIX": (
         "Dot-prefixed relative path with synthetic fixture tree",
         "Relative path semantics remain stable", "Windows"),
+    "PS_PYTHON_REMOTE_DEBUG_XOPTION_TYPO": (
+        "Inert explicit Python -X options and an isolated feature-enabled runtime",
+        "A supported interpreter reports remote debugging disabled with the hyphenated option, not with the misspelled underscored option", "Any"),
     "PY_SCANDIR_SHARED_ITERATOR_RACE": (
         "Synthetic parallel iterator ownership and close calls",
         "Iterator state is not corrupted by overlapping lifecycle events", "Any"),
@@ -72,7 +75,9 @@ def create_regression_matrix(candidate_pack: object) -> dict:
                 or not isinstance(source, str)
                 or source not in ("python/cpython", "PowerShell/PowerShell")
                 or (rule.startswith("PY_") and source != "python/cpython")
-                or (rule.startswith("PS_") and source != "PowerShell/PowerShell")
+                or (rule.startswith("PS_") and source != "PowerShell/PowerShell"
+                    and not (rule == "PS_PYTHON_REMOTE_DEBUG_XOPTION_TYPO"
+                             and source == "python/cpython"))
                 or type(number) is not int or number < 1
                 or (source, number) in seen
                 or not isinstance(item["evidence_fingerprint"], str)
