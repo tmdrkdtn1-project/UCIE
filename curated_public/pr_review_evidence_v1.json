@@ -109,18 +109,6 @@
       "release_marker": "PyMutex read_mutex",
       "license": "PSF-2.0",
       "risk_category": "THREAD_SAFETY"
-    },
-    {
-      "source": "python/cpython",
-      "pr_number": 159014,
-      "merged_at": "2026-10-14T13:18:20Z",
-      "pattern_id": "PS_PYTHON_REMOTE_DEBUG_XOPTION_TYPO",
-      "canonical_pr_number": 159014,
-      "release_tag": "v3.15.0",
-      "release_file": "Python/initconfig.c",
-      "release_marker": "config_get_xoption(config, L\"disable-remote-debug\")",
-      "license": "PSF-2.0",
-      "risk_category": "API_USAGE"
     }
   ]
 }
