@@ -113,6 +113,70 @@ class Stage13ExternalHistoryTests(unittest.TestCase):
                 "https://api.github.com/repos/python/cpython/private")
         self.assertEqual(self.urls, [])
 
+    def test_git_page22_long_unmerged_title_is_excluded_without_cursor_stall(self):
+        # The real approved git/git closed-PR page 22 contains unmerged
+        # PR #1774 with a 419-character title. A closed-but-unmerged PR is
+        # NOT a revision candidate and must not block the entire page.
+        self.enable()
+        initial = optional_external_history_backfill(
+            self.root, fetch=lambda url: ([], 40))
+        self.assertEqual(initial["status"], "EXTERNAL_HISTORY_BACKFILL_OK_NO_GO")
+        with closing(sqlite3.connect(self.runtime / DB_NAME)) as db:
+            db.execute("""UPDATE history_cursor SET next_page=22, scan_state='ACTIVE'
+                WHERE source='git/git'""")
+            db.commit()
+        rows = [upstream_pr("git/git", 1774, title="L" * 419)]
+        rows += [upstream_pr("git/git", 5000 + i) for i in range(19)]
+        for entry in rows:
+            entry["merged_at"] = None
+        requested = []
+        def page22_fetch(url):
+            requested.append(url)
+            self.assertEqual(url, public_history_url("git/git", 22))
+            return rows, 40
+        result = optional_external_history_backfill(
+            self.root, fetch=page22_fetch)
+        self.assertEqual(requested, [public_history_url("git/git", 22)])
+        self.assertEqual(result["status"], "EXTERNAL_HISTORY_BACKFILL_OK_NO_GO")
+        self.assertEqual(result["new_unverified_evidence_revisions"], 0)
+        self.assertEqual(result["public_pr_records_examined"], 20)
+        cursor = inspect_external_history(self.root)["source_cursors"]["git/git"]
+        self.assertEqual(cursor["next_page"], 23)
+        self.assertEqual(cursor["state"], "ACTIVE")
+        self.assertEqual(inspect_external_history(self.root)["indexed_evidence_revisions"], 0)
+
+    def test_unmerged_long_title_never_weakens_merged_validation(self):
+        self.enable()
+        def mixed_page(url):
+            source = next(s for s in SOURCES if f"/repos/{s}/" in url)
+            long_unmerged = upstream_pr(source, 1774, title="L" * 419)
+            long_unmerged["merged_at"] = None
+            valid = upstream_pr(source, 1775, title="Fix valid public regression")
+            return [long_unmerged, valid], 40
+        result = optional_external_history_backfill(self.root, fetch=mixed_page)
+        self.assertEqual(result["status"], "EXTERNAL_HISTORY_BACKFILL_OK_NO_GO")
+        self.assertEqual(result["new_unverified_evidence_revisions"], len(SOURCES))
+        self.assertEqual(result["public_pr_records_examined"], 2 * len(SOURCES))
+        with closing(sqlite3.connect(self.runtime / DB_NAME)) as db:
+            numbers = db.execute("SELECT DISTINCT pr_number FROM upstream_history").fetchall()
+        self.assertEqual(numbers, [(1775,)])
+        # A MERGED PR with an oversized title must still fail closed, and
+        # its cursor must remain on the rejected page.
+        def forged_merged_title(url):
+            source = next(s for s in SOURCES if f"/repos/{s}/" in url)
+            return [upstream_pr(source, 1776, title="L" * 419)], 40
+        with closing(sqlite3.connect(self.runtime / DB_NAME)) as db:
+            db.execute("""UPDATE history_cursor SET next_page=1,scan_state='ACTIVE'
+                WHERE source=?""", (SOURCES[0],))
+            db.commit()
+        second = optional_external_history_backfill(self.root, fetch=forged_merged_title)
+        self.assertEqual(second["status"], "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO")
+        self.assertEqual(second["failure_category"], "PUBLIC_METADATA_REJECTED")
+        self.assertEqual(second["failure_source"], SOURCES[0])
+        cursor = inspect_external_history(self.root)["source_cursors"][SOURCES[0]]
+        self.assertEqual(cursor["next_page"], 1)
+        self.assertEqual(inspect_external_history(self.root)["indexed_evidence_revisions"], len(SOURCES))
+
     def test_source_identity_mismatch_rolls_back_current_page(self):
         self.enable()
         def source_mismatch(url):
