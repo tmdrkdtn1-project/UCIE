@@ -52,6 +52,9 @@ jobs:
 
       - name: UCIE-owned CPython bounded behavioral regression probes (no upstream checkout)
         run: python tests/runtime_python_probes.py
+      - name: First rule real CPython 3.15 -X runtime regression (ephemeral runner only)
+        if: matrix.python-version == '3.15'
+        run: python tests/runtime_python_xoption_regression.py
       - name: UCIE-owned PowerShell bounded behavioral observations (ephemeral runner only)
         if: ${{ always() && runner.os == 'Windows' }}
         shell: pwsh

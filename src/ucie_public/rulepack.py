@@ -34,12 +34,14 @@ def digest(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
-def generate_keys(directory: Path) -> tuple[Path, Path]:
+def generate_keys(directory: Path, *, purpose: str = "demo") -> tuple[Path, Path]:
+    if purpose not in ("demo", "prevention"):
+        raise PolicyError("unsupported key purpose")
     if directory.is_symlink():
         raise PolicyError("key directory cannot be symlink")
     directory.mkdir(parents=True, exist_ok=True)
-    private_path = directory / "private_demo.pem"
-    public_path = directory / "public_demo.pem"
+    private_path = directory / f"private_{purpose}.pem"
+    public_path = directory / f"public_{purpose}.pem"
     if private_path.exists() or public_path.exists():
         raise PolicyError("refusing key overwrite")
     private = Ed25519PrivateKey.generate()
