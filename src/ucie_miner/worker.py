@@ -116,6 +116,7 @@ def run_cycle(
             if last.is_symlink():
                 raise ValueError("unsafe last-run receipt path")
             prior = None
+            prior_started = None
             failures = 0
             if last.exists():
                 try:
@@ -126,10 +127,18 @@ def run_cycle(
                     if not isinstance(stamp, str):
                         raise ValueError("missing completion time")
                     prior = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+                    start_stamp = payload.get("started_utc")
+                    if start_stamp is not None:
+                        if not isinstance(start_stamp, str):
+                            raise ValueError("invalid prior start time")
+                        prior_started = datetime.fromisoformat(
+                            start_stamp.replace("Z", "+00:00"))
                     failures = payload.get("consecutive_failures", 0)
                 except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
                     raise ValueError("invalid prior receipt") from exc
-            decision = next_cycle(prior, now=datetime.now(timezone.utc), consecutive_failures=failures)
+            decision = next_cycle(
+                prior, now=datetime.now(timezone.utc),
+                consecutive_failures=failures, last_started=prior_started)
             if decision["decision"] == "WAIT":
                 return {"schema": "UCIE_MINER_CYCLE_V1", "status": "SKIPPED_NOT_DUE",
                         "retry_after_seconds": decision["retry_after_seconds"],
@@ -155,6 +164,23 @@ def run_cycle(
                     or result.get("verification_pass") != 0
                     or result.get("production_approved") is not False):
                 raise ValueError("invalid source statistics")
+            optional_stage = result.get("stage10")
+            if optional_stage is not None:
+                if type(optional_stage) is not dict or optional_stage.get("status") not in (
+                        "STAGE10_HOURLY_DISABLED",
+                        "STAGE10_UNVERIFIED_STAGED_NO_GO",
+                        "STAGE10_HOURLY_FAILED_NO_GO"):
+                    raise ValueError("invalid optional public stage result")
+                receipt["stage10_status"] = optional_stage["status"]
+                if optional_stage["status"] == "STAGE10_HOURLY_FAILED_NO_GO":
+                    # Preserve error CLASS only, never exception text or data
+                    # from public sources. No extra file or new observer.
+                    error_name = optional_stage.get("error_type")
+                    if (type(error_name) is not str or not error_name.isascii()
+                            or not 1 <= len(error_name) <= 80
+                            or not error_name.isidentifier()):
+                        raise ValueError("invalid optional public stage error type")
+                    receipt["stage10_error_type"] = error_name
             path = write_report(repo_root)
             report_path = path.resolve(strict=True)
             report_root = (runtime / "reports").resolve(strict=True)
