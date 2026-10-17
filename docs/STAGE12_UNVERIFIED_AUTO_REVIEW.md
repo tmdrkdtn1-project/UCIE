@@ -153,3 +153,37 @@ of *review records*, not deduplicated real-world bug families.
 The existing Windows host's actual task state, active owner markers and
 hourly receipts must be checked separately; CI synthetic tests are not an
 attestation of local activation or a claim of model training.
+
+
+## Existing Windows hourly timing and persistent diagnostics
+
+The recurring Windows task is start-time based. A successful worker cycle
+normally finishes several seconds after the hourly trigger; the previous
+finish+60min guard could therefore skip the *next* regular trigger, turning
+intended hourly collection into effective two-hour collection.
+
+The worker now respects the **prior recorded start timestamp + 60min** for
+successful cycles, with the prior finish as a minimum boundary and the
+original operating-system single-instance lock still in place. Failed
+cycles retain the original completion-anchored retry backoff. Historic
+receipts lacking a start timestamp retain the old fallback. No task
+registration, trigger update or new scheduler is required.
+
+Existing \`runtime/last_run.json\` and \`run_history.jsonl\` now retain only
+the sanitized optional public stage \`stage10_status\` and, on failure,
+\`stage10_error_type\` (Python exception class name, no exception text).
+\`COLLECTED_UNVERIFIED\` still describes **legacy miner collection only**:
+check \`stage10_status\` before claiming that the additional opt-in
+external study pipeline succeeded. Exit code 2 with an otherwise successful
+legacy receipt may indicate \`STAGE10_HOURLY_FAILED_NO_GO\` in the new receipt.
+
+Owner-host command after an actual newly scheduled execution (read-only):
+
+~~~powershell
+& 'D:\UCIE\scripts\task_status.ps1'
+Get-Content 'D:\UCIE\runtime\run_history.jsonl' -Tail 3
+~~~
+
+Never rewrite existing receipts to pretend that historical optional-stage
+diagnostics were known. Offline CI verifies only behavior on disposable
+test hosts, not the owner's actual hourly task.
