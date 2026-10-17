@@ -88,3 +88,6 @@ finally {
     $env:PYTHONPATH = $oldPath
     Remove-Item -LiteralPath $scratch -Force -Recurse -ErrorAction Stop
 }
+# The fail-closed negative tests intentionally leave Python LASTEXITCODE=2.
+# Explicit success is reachable only after every assertion and cleanup pass.
+exit 0
