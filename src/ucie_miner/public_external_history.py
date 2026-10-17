@@ -117,14 +117,19 @@ def _metadata(source: str, rows: list, *, now: datetime) -> list[tuple]:
     for raw in rows:
         if not isinstance(raw, dict):
             raise DiscoveryError("invalid upstream PR metadata")
-        n, title = raw.get("number"), raw.get("title")
-        if (type(n) is not int or not 1 <= n <= 999999999
-                or n in seen or type(title) is not str
-                or not 1 <= len(title) <= MAX_TITLE):
+        n = raw.get("number")
+        if type(n) is not int or not 1 <= n <= 999999999 or n in seen:
             raise DiscoveryError("invalid or duplicate upstream PR")
         seen.add(n)
+        # The public closed-PR feed contains unmerged PRs. They are not
+        # candidates and their unbounded titles must not poison an otherwise
+        # valid historical page (git/git PR #1774 had 419 title characters).
+        # Keep the strict title limit for *merged* evidence admitted below.
         if raw.get("merged_at") is None:
             continue
+        title = raw.get("title")
+        if type(title) is not str or not 1 <= len(title) <= MAX_TITLE:
+            raise DiscoveryError("invalid merged upstream PR title")
         merged_at = raw["merged_at"]
         merged = _utc(merged_at)
         base = raw.get("base")
