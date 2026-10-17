@@ -258,6 +258,7 @@ def optional_external_history_backfill(root: Path, *, fetch=None) -> dict:
     now = datetime.now(timezone.utc)
     requests, added, examined, scanned = 0, 0, 0, []
     status = "EXTERNAL_HISTORY_BACKFILL_OK_NO_GO"
+    failure_source, failure_category = None, None
     try:
         with closing(sqlite3.connect(path.as_uri() + ("?mode=rwc" if new else "?mode=rw"),
                                      uri=True, timeout=3)) as conn:
@@ -278,9 +279,19 @@ def optional_external_history_backfill(root: Path, *, fetch=None) -> dict:
                                 (type(remote[1]) is not int or remote[1] < 0))):
                         raise DiscoveryError("invalid bounded public history transport receipt")
                     rows, remaining = remote
-                    candidates = _metadata(source, rows, now=now)
                 except (DiscoveryError, ValueError):
                     status = "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO"
+                    failure_source = source
+                    failure_category = "FETCH_OR_RESPONSE_REJECTED"
+                    break
+                try:
+                    candidates = _metadata(source, rows, now=now)
+                except (DiscoveryError, ValueError):
+                    # Never silently skip untrusted PR metadata or advance
+                    # that source cursor past a rejected page.
+                    status = "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO"
+                    failure_source = source
+                    failure_category = "PUBLIC_METADATA_REJECTED"
                     break
                 conn.execute("BEGIN IMMEDIATE")
                 try:
@@ -312,6 +323,8 @@ def optional_external_history_backfill(root: Path, *, fetch=None) -> dict:
     except sqlite3.DatabaseError as exc:
         raise DiscoveryError("isolated historical-public index DB failure") from exc
     return {"status": status, "external_gets": requests,
+            "failure_source": failure_source,
+            "failure_category": failure_category,
             "public_pr_records_examined": examined,
             "new_unverified_evidence_revisions": added,
             "sources_scanned": scanned,

@@ -123,11 +123,28 @@ class Stage13ExternalHistoryTests(unittest.TestCase):
         result = optional_external_history_backfill(
             self.root, fetch=source_mismatch)
         self.assertEqual(result["status"], "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO")
+        self.assertEqual(result["failure_source"], SOURCES[0])
+        self.assertEqual(result["failure_category"], "PUBLIC_METADATA_REJECTED")
         self.assertEqual(result["external_gets"], 0)
         state = inspect_external_history(self.root)
         self.assertEqual(state["indexed_evidence_revisions"], 0)
         self.assertTrue(all(v["next_page"] == 1
                             for v in state["source_cursors"].values()))
+
+    def test_transport_failure_is_bounded_and_identifies_approved_source(self):
+        self.enable()
+        def failing_public_transport(_):
+            raise DiscoveryError("untrusted upstream response never stored")
+        result = optional_external_history_backfill(
+            self.root, fetch=failing_public_transport)
+        self.assertEqual(result["status"], "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO")
+        self.assertEqual(result["failure_source"], SOURCES[0])
+        self.assertEqual(result["failure_category"], "FETCH_OR_RESPONSE_REJECTED")
+        self.assertEqual(result["external_gets"], 0)
+        self.assertNotIn("untrusted upstream", str(result))
+        inventory = inspect_external_history(self.root)
+        self.assertTrue(all(v["next_page"] == 1
+                            for v in inventory["source_cursors"].values()))
 
     def test_rate_budget_pauses_before_second_source(self):
         self.enable()

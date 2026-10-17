@@ -139,6 +139,48 @@ class WorkerScheduleTests(unittest.TestCase):
         receipt = (self.root / "runtime" / "last_run.json").read_text()
         self.assertNotIn("PRIVATE_VALUE", receipt)
 
+    def test_partial_stage13_failure_is_persisted_without_false_success(self):
+        def study_with_upstream_issue(root):
+            legacy = self.collect(root)
+            legacy["stage10"] = {
+                "status": "STAGE10_HOURLY_PARTIAL_NO_GO",
+                "stage13_history_status": "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO",
+                "stage13_failure_source": "python/cpython",
+                "stage13_failure_category": "FETCH_OR_RESPONSE_REJECTED",
+                "stage12_review_status": "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO",
+                "stage12_review_proposals_added": 2,
+            }
+            return legacy
+        result = run_cycle(self.root, collect=study_with_upstream_issue,
+                           write_report=self.write_report)
+        self.assertEqual(result["status"], "COLLECTED_UNVERIFIED")
+        self.assertEqual(result["stage10_status"], "STAGE10_HOURLY_PARTIAL_NO_GO")
+        self.assertEqual(result["stage13_failure_source"], "python/cpython")
+        self.assertEqual(result["stage13_failure_category"], "FETCH_OR_RESPONSE_REJECTED")
+        self.assertEqual(result["stage12_review_proposals_added"], 2)
+        self.assertEqual(result["stage12_review_status"],
+                         "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO")
+        self.assertNotIn("stage10_error_type", result)
+        last = json.loads((self.root / "runtime" / "last_run.json").read_text())
+        self.assertEqual(last["stage10_status"], "STAGE10_HOURLY_PARTIAL_NO_GO")
+        self.assertEqual(last["stage12_review_proposals_added"], 2)
+
+    def test_partial_stage13_invalid_details_rejected_without_hidden_approval(self):
+        def forged(root):
+            legacy = self.collect(root)
+            legacy["stage10"] = {
+                "status": "STAGE10_HOURLY_PARTIAL_NO_GO",
+                "stage13_history_status": "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO",
+                "stage13_failure_source": "foreign/private",
+                "stage13_failure_category": "AUTO_APPROVED",
+            }
+            return legacy
+        result = run_cycle(self.root, collect=forged,
+                           write_report=self.write_report)
+        self.assertEqual(result["status"], "COLLECTION_FAILED")
+        self.assertNotIn("stage13_failure_source", result)
+        self.assertNotIn("stage12_review_status", result)
+
     def test_legacy_unscheduled_mode_remains_available(self):
         a = run_cycle(self.root, collect=self.collect, write_report=self.write_report)
         b = run_cycle(self.root, collect=self.collect, write_report=self.write_report)

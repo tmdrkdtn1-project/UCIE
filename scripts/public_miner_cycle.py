@@ -48,7 +48,15 @@ def main() -> int:
         legacy["stage10"] = {
             "status": stage10["status"],
             **({"error_type": stage10["error_type"]}
-               if stage10.get("status") == "STAGE10_HOURLY_FAILED_NO_GO" else {}),
+               if stage10["status"] == "STAGE10_HOURLY_FAILED_NO_GO" else {}),
+            **({k: stage10[k] for k in (
+                "stage13_history_status", "stage13_failure_source",
+                "stage13_failure_category", "stage12_review_status",
+                "stage12_review_proposals_added",
+            ) if k in stage10}
+               if stage10["status"] in (
+                   "STAGE10_UNVERIFIED_STAGED_NO_GO",
+                   "STAGE10_HOURLY_PARTIAL_NO_GO") else {}),
         }
         return legacy
 
@@ -59,7 +67,8 @@ def main() -> int:
     except Exception as exc:
         result = {"status": "FAIL_CLOSED", "error_type": type(exc).__name__}
     print(json.dumps(result, sort_keys=True, ensure_ascii=True))
-    if result.get("stage10", {}).get("status") == "STAGE10_HOURLY_FAILED_NO_GO":
+    if result.get("stage10", {}).get("status") in (
+            "STAGE10_HOURLY_FAILED_NO_GO", "STAGE10_HOURLY_PARTIAL_NO_GO"):
         return 2
     return 0 if result["status"] == "COLLECTED_UNVERIFIED" else (
         3 if result["status"] == "SKIPPED_ALREADY_RUNNING" else (0 if result["status"] == "SKIPPED_NOT_DUE" else 2)
