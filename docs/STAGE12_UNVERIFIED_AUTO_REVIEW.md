@@ -224,3 +224,23 @@ public upstream evidence. Do **not** skip malformed PRs, move cursors past
 unknown data, disable allowlists, reinstall the scheduler, auto-promote
 rules or treat unverified reviews as confirmed fixes. Retain opt-out
 and independent human activation exactly as before.
+
+
+## 2026-10-17: approved git/git closed PR page 22 rejected for irrelevant unmerged title
+
+Owner-host Stage13 read-only inspection fixed its \`git/git\` cursor on
+page 22. A public read of that *allowlisted* GitHub closed-PR page found
+\`git/git#1774\` with \`merged_at=null\` and a 419-character title.
+Previously Stage13 checked the 400-character title bound for **every**
+closed PR before excluding unmerged PRs, so one out-of-scope entry
+rejected the whole historical page as \`PUBLIC_METADATA_REJECTED\`.
+
+Stage13 now validates bounded PR numbers and duplicate page identities,
+skips **unmerged** PRs without accepting/storing them, then applies the
+unchanged strict title length, URL, repository identity and SHA checks
+to **merged** PRs only. A synthetic 20-unmerged-row page-22 regression
+proves the cursor advances, while an oversized *merged* title is still
+rejected without advancing the cursor. Do not weaken merged evidence
+verification, manually move owner-host cursors, or claim that previously
+rejected PRs are verified fixes. The actual owner Windows run after
+this patch is a separate operational verification.
