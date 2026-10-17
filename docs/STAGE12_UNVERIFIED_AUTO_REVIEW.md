@@ -187,3 +187,40 @@ Get-Content 'D:\UCIE\runtime\run_history.jsonl' -Tail 3
 Never rewrite existing receipts to pretend that historical optional-stage
 diagnostics were known. Offline CI verifies only behavior on disposable
 test hosts, not the owner's actual hourly task.
+
+
+## Stage13 optional public backfill failure isolation (owner case: 2026-10-17)
+
+An actual owner-PC hourly run returned \`stage10_error_type=ValueError\`.
+A constrained local traceback located the deliberate Stage13 failure escalation
+in \`public_hourly_staging.py\` (the prior 82nd line), not a failure in the
+legacy two-source miner. Stage13 had reported
+\`EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO\`. The underlying cause
+was not distinguishable from previous receipts.
+
+Stage13 now reports bounded, non-text diagnostic fields on this failure:
+\`failure_source\` (exactly one of the five approved public repos) and
+\`failure_category\` (either \`FETCH_OR_RESPONSE_REJECTED\` or
+\`PUBLIC_METADATA_REJECTED\`). No HTTP body, URL parameter, exception
+message, upstream title or code is retained. The failed public source
+cursor stays on the rejected page: **no bypass of evidence validation**.
+
+This recoverable **optional upstream** failure no longer prevents already
+independent Stage14 observation, Stage15 fix-evidence collection and Stage12
+unverified review of properly linked, previously collected Stage13 revisions.
+The overall Stage10 receipt is \`STAGE10_HOURLY_PARTIAL_NO_GO\`, **not**
+\`STAGE10_UNVERIFIED_STAGED_NO_GO\`. The Windows task still exits with code
+**2** to signal degradation; it must not be reported as full success.
+\`runtime/last_run.json\` now records:
+\`stage10_status\`, \`stage13_history_status\`,
+\`stage13_failure_source\`, \`stage13_failure_category\`,
+\`stage12_review_status\` and \`stage12_review_proposals_added\`.
+Some may be absent when the corresponding optional stage is disabled or
+fails before the receipt exists.
+
+When diagnosing a recurring public metadata error, use the bounded receipt
+to identify the approved public source, then separately review its pinned
+public upstream evidence. Do **not** skip malformed PRs, move cursors past
+unknown data, disable allowlists, reinstall the scheduler, auto-promote
+rules or treat unverified reviews as confirmed fixes. Retain opt-out
+and independent human activation exactly as before.
