@@ -83,6 +83,62 @@ class WorkerScheduleTests(unittest.TestCase):
             run_cycle(self.root, collect=self.collect,
                       write_report=self.write_report, enforce_schedule=True)
 
+    def test_task_hourly_start_timestamp_avoids_alternate_hour_skip(self):
+        runtime = self.root / "runtime"
+        runtime.mkdir()
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(hours=1, seconds=5)
+        prior = {
+            "schema": "UCIE_MINER_CYCLE_V1",
+            "started_utc": start.isoformat(),
+            "finished_utc": (start + timedelta(seconds=8)).isoformat(),
+            "consecutive_failures": 0,
+            "status": "COLLECTED_UNVERIFIED",
+        }
+        (runtime / "last_run.json").write_text(json.dumps(prior), encoding="utf-8")
+        outcome = run_cycle(self.root, collect=self.collect,
+                            write_report=self.write_report, enforce_schedule=True)
+        self.assertEqual(outcome["status"], "COLLECTED_UNVERIFIED")
+
+    def test_optional_stage_failure_class_is_saved_without_message(self):
+        def with_stage(_):
+            legacy = self.collect(_)
+            legacy["stage10"] = {
+                "status": "STAGE10_HOURLY_FAILED_NO_GO",
+                "error_type": "DiscoveryError",
+            }
+            return legacy
+        outcome = run_cycle(self.root, collect=with_stage,
+                            write_report=self.write_report, enforce_schedule=False)
+        self.assertEqual(outcome["status"], "COLLECTED_UNVERIFIED")
+        self.assertEqual(outcome["stage10_status"], "STAGE10_HOURLY_FAILED_NO_GO")
+        self.assertEqual(outcome["stage10_error_type"], "DiscoveryError")
+        last = json.loads((self.root / "runtime" / "last_run.json").read_text())
+        self.assertEqual(last["stage10_error_type"], "DiscoveryError")
+        self.assertEqual(last["stage10_status"], "STAGE10_HOURLY_FAILED_NO_GO")
+        self.assertNotIn("stage10", last)
+
+    def test_optional_stage_sanitized_status_and_reject_injected_error(self):
+        def with_stage(_):
+            legacy = self.collect(_)
+            legacy["stage10"] = {"status": "STAGE10_UNVERIFIED_STAGED_NO_GO"}
+            return legacy
+        success = run_cycle(self.root, collect=with_stage,
+                            write_report=self.write_report)
+        self.assertEqual(success["stage10_status"], "STAGE10_UNVERIFIED_STAGED_NO_GO")
+        self.assertNotIn("stage10_error_type", success)
+        def forged(_):
+            legacy = self.collect(_)
+            legacy["stage10"] = {
+                "status": "STAGE10_HOURLY_FAILED_NO_GO",
+                "error_type": "DiscoveryError token=PRIVATE_VALUE",
+            }
+            return legacy
+        refused = run_cycle(self.root, collect=forged, write_report=self.write_report)
+        self.assertEqual(refused["status"], "COLLECTION_FAILED")
+        receipt = (self.root / "runtime" / "last_run.json").read_text()
+        self.assertNotIn("PRIVATE_VALUE", receipt)
+
     def test_legacy_unscheduled_mode_remains_available(self):
         a = run_cycle(self.root, collect=self.collect, write_report=self.write_report)
         b = run_cycle(self.root, collect=self.collect, write_report=self.write_report)

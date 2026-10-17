@@ -42,6 +42,14 @@ def main() -> int:
                 "approved_rules_added": 0,
                 "production_approved": False,
             }
+        # The worker must persist this opt-in stage's outcome alongside
+        # the legacy receipt; otherwise a task exit 2 has no stored cause.
+        # The worker stores only its pinned status and sanitized error TYPE.
+        legacy["stage10"] = {
+            "status": stage10["status"],
+            **({"error_type": stage10["error_type"]}
+               if stage10.get("status") == "STAGE10_HOURLY_FAILED_NO_GO" else {}),
+        }
         return legacy
 
     try:

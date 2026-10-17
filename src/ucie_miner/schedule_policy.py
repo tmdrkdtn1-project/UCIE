@@ -13,20 +13,39 @@ MAX_FAILURES = 6
 
 
 def next_cycle(last_finished: datetime | None, *, now: datetime,
-               consecutive_failures: int = 0) -> dict:
-    """Fail closed on invalid clocks; exponential retry capped at one hour."""
+               consecutive_failures: int = 0,
+               last_started: datetime | None = None) -> dict:
+    """Hourly *start-to-start* cadence; failures still back off from finish.
+
+    Windows Task Scheduler fires at the previous scheduled START + 1 hour.
+    Gating from FINISH + 1 hour skips alternate tasks after even an 8-second
+    successful run. Never permit overlapping runs: the OS worker lock still
+    applies, and the next successful run cannot be due before last finish.
+    Older receipts lacking a start timestamp preserve their old policy.
+    """
     if now.tzinfo is None or now.utcoffset() != timedelta(0):
         raise MiningError("UTC-aware clock required")
     if type(consecutive_failures) is not int or not 0 <= consecutive_failures <= MAX_FAILURES:
         raise MiningError("failure counter outside bounds")
     if last_finished is None:
+        if last_started is not None:
+            raise MiningError("start timestamp without prior completion")
         return {"decision": "DUE", "retry_after_seconds": 0}
     if last_finished.tzinfo is None or last_finished.utcoffset() != timedelta(0):
         raise MiningError("UTC-aware prior completion required")
     if last_finished > now:
         raise MiningError("future prior completion")
-    delay = INTERVAL if consecutive_failures == 0 else timedelta(
-        minutes=min(60, 2 ** consecutive_failures))
-    seconds = max(0, int((last_finished + delay - now).total_seconds()))
+    if last_started is not None:
+        if (last_started.tzinfo is None
+                or last_started.utcoffset() != timedelta(0)
+                or last_started > last_finished):
+            raise MiningError("invalid prior start/completion ordering")
+    if consecutive_failures == 0 and last_started is not None:
+        due_at = max(last_started + INTERVAL, last_finished)
+    else:
+        delay = INTERVAL if consecutive_failures == 0 else timedelta(
+            minutes=min(60, 2 ** consecutive_failures))
+        due_at = last_finished + delay
+    seconds = max(0, int((due_at - now).total_seconds()))
     return {"decision": "DUE" if seconds == 0 else "WAIT",
             "retry_after_seconds": seconds}
