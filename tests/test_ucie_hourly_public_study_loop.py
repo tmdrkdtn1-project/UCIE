@@ -17,6 +17,9 @@ from ucie_miner.public_candidate_learning import (
     inspect_review_learning,
 )
 from ucie_miner.public_discovery import DiscoveryError
+from ucie_miner.public_external_history import (
+    OPT_IN_FILE as HISTORY_MARKER, OPT_IN_TOKEN as HISTORY_TOKEN,
+)
 from ucie_miner.public_external_history import DB_NAME as HISTORY_DB, _schema as init_history
 from ucie_miner.public_fix_evidence import (
     DB_NAME as FIX_DB, OPT_IN_FILE as FIX_MARKER,
@@ -24,7 +27,7 @@ from ucie_miner.public_fix_evidence import (
 )
 from ucie_miner.public_hourly_staging import (
     OPT_IN_FILENAME as HOUR_MARKER, OPT_IN_TOKEN as HOUR_TOKEN,
-    optional_public_skill_staging,
+    optional_public_skill_staging, STATUS_PARTIAL,
 )
 from ucie_miner.skill_profiles import PROFILE
 
@@ -177,6 +180,72 @@ class PublicAutomaticStudyTests(unittest.TestCase):
         (self.runtime / FIX_MARKER).write_text("AUTO_APPROVE", encoding="ascii")
         with self.assertRaises(DiscoveryError):
             optional_hourly_review_learning(self.root)
+        self.assertFalse(self.review.exists())
+
+    def test_stage13_upstream_failure_keeps_other_study_stages_running(self):
+        self._history_setup()
+        self._fix_setup()
+        self._markers()
+        (self.runtime / HOUR_MARKER).write_text(HOUR_TOKEN, encoding="ascii")
+        (self.runtime / HISTORY_MARKER).write_text(HISTORY_TOKEN, encoding="ascii")
+        called = []
+
+        def official(_):
+            called.append("official")
+            return {"status": "STAGE14_OFFICIAL_OBSERVED_NO_GO",
+                    "official_gets": 0, "new_metadata_revisions": 0}
+
+        def fix(_):
+            called.append("fix")
+            return {"status": "STAGE15_STRUCTURED_FIX_EVIDENCE_STAGED_NO_GO",
+                    "external_gets_upper_bound": 0,
+                    "new_unverified_evidence_records": 0}
+
+        upstream = {
+            "status": "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO",
+            "failure_source": SOURCE,
+            "failure_category": "PUBLIC_METADATA_REJECTED",
+            "new_unverified_evidence_revisions": 0,
+            "external_gets": 0,
+        }
+        before = {p.name: p.read_bytes() for p in (
+            self.miner, self.knowledge, self.history, self.fix)}
+        with patch("ucie_miner.public_external_history.optional_external_history_backfill",
+                   return_value=upstream), patch(
+                       "ucie_miner.public_official_evidence.optional_official_evidence_cycle",
+                       side_effect=official), patch(
+                           "ucie_miner.public_fix_evidence.optional_fix_evidence_enrichment",
+                           side_effect=fix):
+            result = optional_public_skill_staging(
+                self.root, batch_builder=fixture_batch)
+        self.assertEqual(called, ["official", "fix"])
+        self.assertEqual(result["status"], STATUS_PARTIAL)
+        self.assertEqual(result["stage13_history_status"], upstream["status"])
+        self.assertEqual(result["stage13_failure_source"], SOURCE)
+        self.assertEqual(result["stage13_failure_category"], "PUBLIC_METADATA_REJECTED")
+        self.assertEqual(result["stage12_review_status"],
+                         "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO")
+        self.assertEqual(result["stage12_review_proposals_added"], 3)
+        self.assertEqual(inspect_review_learning(self.root)["review_proposals"], 3)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in (
+            self.miner, self.knowledge, self.history, self.fix)})
+        self.assertEqual(result["approved_rules_added"], 0)
+        self.assertFalse(result["production_approved"])
+
+    def test_stage13_forged_failure_details_do_not_run_followup_stages(self):
+        self._markers()
+        (self.runtime / HOUR_MARKER).write_text(HOUR_TOKEN, encoding="ascii")
+        fake = {
+            "status": "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO",
+            "failure_source": "unapproved/fake",
+            "failure_category": "PUBLIC_METADATA_REJECTED",
+        }
+        with patch("ucie_miner.public_external_history.optional_external_history_backfill",
+                   return_value=fake), patch(
+                       "ucie_miner.public_official_evidence.optional_official_evidence_cycle",
+                       side_effect=AssertionError("should not run")):
+            with self.assertRaises(ValueError):
+                optional_public_skill_staging(self.root, batch_builder=fixture_batch)
         self.assertFalse(self.review.exists())
 
     def test_existing_hourly_lock_orders_fix_ingest_before_study(self):
