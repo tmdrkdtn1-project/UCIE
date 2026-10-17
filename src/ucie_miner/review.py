@@ -27,7 +27,7 @@ ALLOWED = {
         "tags": frozenset({"v3.15.0", "v3.14.8"}),
         "files": frozenset({
             "Modules/posixmodule.c", "Python/pystate.c", "Python/codegen.c",
-            "Python/Python-ast.c", "Python/initconfig.c", "Objects/typeobject.c",
+            "Python/Python-ast.c", "Objects/typeobject.c",
         }),
     },
     "PowerShell/PowerShell": {
