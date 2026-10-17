@@ -148,11 +148,22 @@ def preview_static_rule_candidates(root, scan, *, existing_rulepack=None):
         code = item["pattern_code"]
         source, pr = SOURCE_BINDINGS[code]
         key = (source, pr)
-        if (key not in refs or key not in pins
-                or refs[key]["pattern_id"] != code
-                or refs[key]["canonical_pr_number"] != pr):
-            raise PatternError("approved public pattern identity not pinned")
-        pin = pins[key]
+        if code == "PS_PYTHON_REMOTE_DEBUG_XOPTION_TYPO":
+            # First independently observed prevention rule: exact public
+            # source + original merge SHA; do not enlarge the frozen
+            # nine-case Stage 4 curated manifest or silently accept new PRs.
+            if key != ("python/cpython", 159014):
+                raise PatternError("unapproved Python xoption source")
+            pin = {
+                "public_url": "https://github.com/python/cpython/pull/159014",
+                "merge_commit_sha": "91248026c8a41910098032dd23f9a05ad2d9b513",
+            }
+        else:
+            if (key not in refs or key not in pins
+                    or refs[key]["pattern_id"] != code
+                    or refs[key]["canonical_pr_number"] != pr):
+                raise PatternError("approved public pattern identity not pinned")
+            pin = pins[key]
         if (not isinstance(pin.get("merge_commit_sha"), str)
                 or not SHA40.fullmatch(pin["merge_commit_sha"])
                 or pin["public_url"] != item["public_evidence"]):
