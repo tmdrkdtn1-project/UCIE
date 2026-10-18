@@ -277,3 +277,59 @@ def verify_two_rule_owner_release(
         "owner_risk_accepted": True, "production_approved": True,
         "deploy_allowed": True, "auto_apply": False,
     }
+
+
+def scan_two_rule_owner_receipt(
+    pack: Path, owner_trust: Path, scan: object, *, min_serial: int = 1,
+) -> dict:
+    """Filter a bounded inert AST receipt against exactly two owner-signed rules.
+
+    Source text is never accepted/executed here. Receipts do NOT prove
+    provenance; actual manual scan caller must create one from explicit input.
+    """
+    signed = verify_two_rule_owner_release(
+        pack, owner_trust, min_serial=min_serial)
+    from ucie_miner.static_rule_bridge import _check_receipt, SCANNER_GUIDANCE
+    from ucie_miner.patterns import PatternError
+
+    try:
+        language = _check_receipt(scan)
+    except (PatternError, TypeError, ValueError) as exc:
+        raise PolicyError("untrusted or malformed scanner receipt") from exc
+    if language != "powershell":
+        raise PolicyError("manual two-rule receiver requires PowerShell AST")
+    allowed = {r["rule_id"]: r for r in RELEASE_RULES}
+    findings = []
+    for item in scan["findings"]:
+        rule = allowed.get(item["pattern_code"])
+        if rule is None:
+            continue
+        if (item["public_evidence"] != rule["upstream"]
+                or item["safe_fix_guidance"] != SCANNER_GUIDANCE[rule["rule_id"]]):
+            raise PolicyError("finding and owner-approved rule identity mismatch")
+        findings.append({
+            "rule_id": rule["rule_id"],
+            "line": item["line"], "column": item["column"],
+            "public_evidence": rule["upstream"],
+            "safe_guidance": rule["safe_guidance"],
+            "manual_review_required": True,
+            "runtime_bug_confirmed_for_this_input": False,
+        })
+    return {
+        "schema": "UCIE_TWO_RULE_OWNER_PUBLIC_MANUAL_SCAN_V1",
+        "status": ("PUBLIC_PREVENTION_CANDIDATES_FOR_MANUAL_REVIEW"
+                   if findings else "NO_SIGNED_RULE_MATCH_IN_SUPPLIED_INPUT"),
+        "rule_ids": list(RULE_IDS), "rule_count": 2,
+        "pack_serial": signed["serial"], "owner_signature": "VALID",
+        "source_sha256": scan["source_sha256"],
+        "source_authentication_verified": False,
+        "finding_count": len(findings), "findings": findings,
+        "scope": SCOPE, "approval_mode": MODE,
+        "independent_human_qa_approved": False,
+        "legal_license_signoff": False,
+        "release_version_coverage_proven": False,
+        "source_executed": False, "source_files_read": 0,
+        "auto_fix_applied": False, "auto_apply": False,
+        "production_approved": True, "deploy_allowed": True,
+        "persistent_writes": 0,
+    }
