@@ -33,6 +33,22 @@ class SchedulePolicyTests(unittest.TestCase):
         # Legacy finish-anchored behavior remains for old receipts.
         self.assertEqual(next_cycle(last_finished, now=self.now)["decision"], "WAIT")
 
+    def test_scheduler_seconds_skew_does_not_skip_alternate_hour(self):
+        # At 04:00:00, the prior 03:00 scheduled task may actually have
+        # started at 03:00:08. An exact 60-minute guard skips this trigger.
+        last_started = self.now - timedelta(hours=1) + timedelta(seconds=8)
+        last_finished = last_started + timedelta(seconds=7)
+        self.assertEqual(next_cycle(last_finished, now=self.now,
+                                    last_started=last_started)["decision"], "DUE")
+
+    def test_scheduler_jitter_boundary_never_allows_early_manual_repeats(self):
+        at_boundary = self.now - timedelta(hours=1) + timedelta(seconds=30)
+        past_boundary = at_boundary + timedelta(seconds=2)
+        self.assertEqual(next_cycle(at_boundary + timedelta(seconds=5),
+                                    now=self.now, last_started=at_boundary)["decision"], "DUE")
+        self.assertEqual(next_cycle(past_boundary + timedelta(seconds=5),
+                                    now=self.now, last_started=past_boundary)["decision"], "WAIT")
+
     def test_start_based_cadence_does_not_run_early(self):
         last_started = self.now - timedelta(minutes=59)
         last_finished = last_started + timedelta(seconds=9)

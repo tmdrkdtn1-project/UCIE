@@ -100,6 +100,23 @@ class WorkerScheduleTests(unittest.TestCase):
                             write_report=self.write_report, enforce_schedule=True)
         self.assertEqual(outcome["status"], "COLLECTED_UNVERIFIED")
 
+    def test_hourly_worker_accepts_small_scheduler_trigger_jitter(self):
+        runtime = self.root / "runtime"
+        runtime.mkdir()
+        now = datetime.now(timezone.utc)
+        prior_start = now - timedelta(hours=1) + timedelta(seconds=9)
+        prior = {
+            "schema": "UCIE_MINER_CYCLE_V1",
+            "started_utc": prior_start.isoformat(),
+            "finished_utc": (prior_start + timedelta(seconds=6)).isoformat(),
+            "consecutive_failures": 0,
+            "status": "COLLECTED_UNVERIFIED",
+        }
+        (runtime / "last_run.json").write_text(json.dumps(prior), encoding="utf-8")
+        outcome = run_cycle(self.root, collect=self.collect,
+                            write_report=self.write_report, enforce_schedule=True)
+        self.assertEqual(outcome["status"], "COLLECTED_UNVERIFIED")
+
     def test_optional_stage_failure_class_is_saved_without_message(self):
         def with_stage(_):
             legacy = self.collect(_)
