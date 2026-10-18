@@ -133,7 +133,7 @@ class SelectedOwnerReleaseTests(unittest.TestCase):
     def test_unapproved_candidate_or_duplicate_or_misordered_selection(self):
         for ids in (
             [], list(reversed(RULE_ORDER)), [RULE_ORDER[0]] * 2,
-            ["PS_FUZZY_GET_COMMAND_DUPLICATES"],
+            ["PS_SSH_PATH_WITHOUT_RUNSPACE"],
             [RULE_ORDER[0], "PY_SCANDIR_SHARED_ITERATOR_RACE"],
         ):
             with self.subTest(ids=ids), self.assertRaises(PolicyError):
