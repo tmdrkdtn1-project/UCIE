@@ -75,6 +75,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: ./tests/test_ucie_signed_review_consumer.ps1
+      - name: Stage4 QA plus owner signed production consumer (synthetic only)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./tests/test_ucie_stage4_production_consumer.ps1
       - name: UCIE PowerShell alias and shadowing synthetics (never execute supplied code)
         if: runner.os == 'Windows'
         shell: pwsh
