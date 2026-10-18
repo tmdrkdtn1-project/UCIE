@@ -36,6 +36,7 @@ from .public_pr_coverage_audit import audit_public_pr_evidence_once
 from .public_git_commit_skills import discover_git_commit_skills, analyze_git_commits
 from .automated_candidate_qa import verify_public_candidate_qa
 from .stage17_review_docket import inspect_stage17_review
+from .stage18_first_rule import inspect_first_rule
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -69,6 +70,12 @@ def main(argv=None):
     sub.add_parser(
         "inspect-stage17-review",
         help="Offline read-only candidate QA/security handoff with Stage16 receipt binding; always NO-GO")
+    first = sub.add_parser(
+        "inspect-stage18-first-rule",
+        help="Read-only exact first-rule review dossier, optional hardened 3.15 local reproduction; never approve")
+    first.add_argument(
+        "--local-probe", action="store_true",
+        help="Explicit one-shot isolated, UCIE-authored inert CPython -X subprocess checks")
     sub.add_parser("preview-acceptance", help="Read-only NO-GO host and evidence observation")
     pin = sub.add_parser("audit-merge-snapshot", help="Compare pinned public PR merge SHA, without DB writes")
     pin.add_argument("--verify-live", action="store_true",
@@ -303,6 +310,8 @@ def main(argv=None):
             result = verify_public_candidate_qa(ROOT, run_id=args.run_id)
         elif args.action == "inspect-stage17-review":
             result = inspect_stage17_review(ROOT)
+        elif args.action == "inspect-stage18-first-rule":
+            result = inspect_first_rule(ROOT, local_probe=args.local_probe)
         elif args.action == "inspect-public-candidate-ledger":
             result = inspect_staged_candidates(ROOT)
         elif args.action == "inspect-stage12-review":
