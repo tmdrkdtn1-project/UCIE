@@ -205,6 +205,34 @@ def run_cycle(
                     if type(proposals) is not int or not 0 <= proposals <= 10000:
                         raise ValueError("unbounded Stage 12 review counter")
                     receipt["stage12_review_proposals_added"] = proposals
+                # Stage16 is observational and unsigned. Only known safe
+                # state/counters may be persisted, never a rule approval.
+                stage16 = optional_stage.get("stage16_safe_qa_status")
+                if stage16 is not None:
+                    if stage16 not in {
+                            "STAGE16_SAFE_QA_DISABLED",
+                            "STAGE16_SAFE_QA_RATE_PAUSED_NO_GO",
+                            "STAGE16_SAFE_QA_ALREADY_ATTEMPTED_NO_GO",
+                            "STAGE16_SAFE_QA_24H_BUDGET_PAUSED_NO_GO",
+                            "STAGE16_SAFE_QA_OBSERVED_REVIEW_REQUIRED",
+                            "STAGE16_SAFE_QA_LEDGER_INCOMPLETE_NO_GO",
+                            "STAGE16_SAFE_QA_FAILED_NO_GO"}:
+                        raise ValueError("invalid Stage16 status")
+                    templates = optional_stage.get("stage16_safe_qa_templates", 0)
+                    gets = optional_stage.get("stage16_safe_qa_gets_upper_bound", 0)
+                    if (type(templates) is not int or not 0 <= templates <= 4
+                            or type(gets) is not int or gets not in (0, 9)
+                            or (gets == 0 and templates != 0)
+                            or (stage16 in (
+                                "STAGE16_SAFE_QA_DISABLED",
+                                "STAGE16_SAFE_QA_RATE_PAUSED_NO_GO",
+                                "STAGE16_SAFE_QA_ALREADY_ATTEMPTED_NO_GO",
+                                "STAGE16_SAFE_QA_24H_BUDGET_PAUSED_NO_GO")
+                                and gets != 0)):
+                        raise ValueError("invalid Stage16 read budget or templates")
+                    receipt["stage16_safe_qa_status"] = stage16
+                    receipt["stage16_safe_qa_templates"] = templates
+                    receipt["stage16_safe_qa_gets_upper_bound"] = gets
                 if optional_stage["status"] == "STAGE10_HOURLY_FAILED_NO_GO":
                     # Preserve error CLASS only, never exception text or data
                     # from public sources. No extra file or new observer.
