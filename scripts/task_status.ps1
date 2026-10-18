@@ -20,6 +20,7 @@ if ($Evidence) {
     $cadenceConfigured = $false
     $lastResultOk = $false
     $scheduleNextUtc = $null
+    $lastTaskUtc = $null
     if ($null -ne $task -and $null -ne $info) {
         $actions = @($task.Actions)
         if ($actions.Count -eq 1) {
@@ -45,6 +46,9 @@ if ($Evidence) {
             [string]::Equals([string]$task.Settings.MultipleInstances, 'IgnoreNew', [StringComparison]::OrdinalIgnoreCase)
         )
         $lastResultOk = ($info.LastTaskResult -eq 0)
+        if ($info.LastRunTime -gt [datetime]::MinValue) {
+            $lastTaskUtc = ([DateTimeOffset]$info.LastRunTime).ToUniversalTime()
+        }
         if ($info.NextRunTime -gt [datetime]::MinValue) {
             $scheduleNextUtc = $info.NextRunTime.ToUniversalTime().ToString('o')
         }
@@ -70,6 +74,8 @@ if ($Evidence) {
         }
     }
     $twoCyclesOk = $false
+    $taskReceiptBound = $false
+    $priorStage13 = 'UNOBSERVED'
     $lastFinishedUtc = $null
     $stage13 = 'UNOBSERVED'
     $stage12 = 'UNOBSERVED'
@@ -83,12 +89,22 @@ if ($Evidence) {
         try {
             if ($receipts.Count -eq 2) {
                 $previous = $receipts[0]
+                $priorStage13 = [string]$previous.stage13_history_status
                 $pStart = [DateTimeOffset]::Parse([string]$previous.started_utc)
                 $pEnd = [DateTimeOffset]::Parse([string]$previous.finished_utc)
                 $cStart = [DateTimeOffset]::Parse([string]$latest.started_utc)
                 $cEnd = [DateTimeOffset]::Parse([string]$latest.finished_utc)
                 $lastFinishedUtc = $cEnd.ToUniversalTime().ToString('o')
                 $gapMinutes = [Math]::Round(($cStart - $pStart).TotalMinutes, 2)
+                if ($null -ne $lastTaskUtc) {
+                    # A successful scheduler exit alone may be stale or belong
+                    # to a skipped run. Bind it to the newest persisted cycle.
+                    $taskReceiptBound = (
+                        [Math]::Abs(($cStart.ToUniversalTime() - $lastTaskUtc).TotalMinutes) -le 10 -and
+                        $lastTaskUtc -ge $now.AddMinutes(-90) -and
+                        $lastTaskUtc -le $now.AddMinutes(5)
+                    )
+                }
                 $twoCyclesOk = (
                     $previous.schema -ceq 'UCIE_MINER_CYCLE_V1' -and
                     $latest.schema -ceq 'UCIE_MINER_CYCLE_V1' -and
@@ -108,12 +124,18 @@ if ($Evidence) {
             }
         } catch {
             $twoCyclesOk = $false
+            $taskReceiptBound = $false
         }
     }
+    $pauseThenResumed = ($twoCyclesOk -and $taskReceiptBound -and
+        $priorStage13 -ceq 'EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO' -and
+        $stage13 -ceq 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO')
     $taskStatus = if ($null -eq $task) { 'NOT_REGISTERED_NO_GO' }
                   elseif (-not $actionOk -or -not $principalOk -or -not $cadenceConfigured) { 'TASK_IDENTITY_OR_CADENCE_NO_GO' }
                   elseif (-not $lastResultOk) { 'LAST_TASK_RESULT_NO_GO' }
                   elseif (-not $historyReadable -or -not $twoCyclesOk) { 'TWO_RECENT_HOURLY_CYCLES_NOT_PROVEN_NO_GO' }
+                  elseif (-not $taskReceiptBound) { 'LAST_SCHEDULED_RUN_RECEIPT_MISMATCH_NO_GO' }
+                  elseif ($pauseThenResumed) { 'TWO_CYCLE_BASE_COLLECTOR_OBSERVED_STAGE13_RESUMED' }
                   elseif ($stage13 -ceq 'EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO') { 'TWO_CYCLE_BASE_COLLECTOR_OBSERVED_STAGE13_RATE_PAUSED' }
                   else { 'TWO_CYCLE_BASE_COLLECTOR_OBSERVED' }
     [pscustomobject]@{
@@ -126,14 +148,18 @@ if ($Evidence) {
         owner_least_privilege_verified = $principalOk
         hourly_no_overlap_configured = $cadenceConfigured
         last_task_result_zero = $lastResultOk
+        last_scheduled_run_utc = if ($null -eq $lastTaskUtc) { $null } else { $lastTaskUtc.ToString('o') }
+        last_scheduled_run_matches_receipt = $taskReceiptBound
         next_scheduled_utc = $scheduleNextUtc
         last_cycle_finished_utc = $lastFinishedUtc
         last_cycle_status = $lastStatus
-        two_recent_hourly_successes = $twoCyclesOk
+        two_recent_hourly_successes = ($twoCyclesOk -and $taskReceiptBound)
         observed_start_gap_minutes = $gapMinutes
         stage12_review_status = $stage12
         stage13_history_status = $stage13
         stage13_rate_pause_protected = ($stage13 -ceq 'EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO')
+        stage13_pause_then_success_observed = $pauseThenResumed
+        # A successful next page alone does not prove the GitHub reset timestamp.
         stage13_resumed_after_quota_reset = $false
         scheduler_changed = $false
         database_modified = $false
