@@ -13,6 +13,10 @@ from pathlib import Path
 import subprocess
 import sys
 
+# Allow a direct D:\UCIE\.venv\Scripts\python.exe scripts\... invocation
+# without relying on package installation or inheriting arbitrary PYTHONPATH.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
 from ucie_public.owner_release import (
     REPO, WORKFLOW, _public_json, validate_live_automated_qa,
     verify_owner_risk_release,
