@@ -5,6 +5,9 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -18,8 +21,9 @@ from ucie_public.multi_owner_release import (
     CONFIRM, SECOND_RISK, RISK, SECOND_RUN, SECOND_SHA,
     SECOND_PR_BRANCH, POSTFIX_STEP, RULE_IDS, DECISIONS,
     publish_two_rule_owner_release, verify_two_rule_owner_release,
-    _postfix_ci,
+    _postfix_ci, scan_two_rule_owner_receipt,
 )
+from test_ucie_multi_review import scanner_receipt
 
 
 def fake_second():
@@ -188,6 +192,63 @@ class TwoRuleOwnerGateTests(unittest.TestCase):
             names = set(z.namelist())
         self.assertEqual(len(names), 5)
         self.assertIn("evidence/rule_decisions.json", names)
+
+
+    def test_both_rules_static_findings_consumed_under_synthetic_owner_signer(self):
+        self.publish()
+        receipt = scan_two_rule_owner_receipt(
+            self.pack, self.public, scanner_receipt(), min_serial=9)
+        self.assertEqual([r["rule_id"] for r in receipt["findings"]],
+                         list(RULE_IDS))
+        self.assertEqual(receipt["finding_count"], 2)
+        self.assertTrue(all(x["manual_review_required"]
+                            for x in receipt["findings"]))
+        self.assertFalse(receipt["source_authentication_verified"])
+        self.assertFalse(receipt["source_executed"])
+        self.assertFalse(receipt["auto_fix_applied"])
+        self.assertEqual(receipt["persistent_writes"], 0)
+        self.assertTrue(receipt["production_approved"])
+        bad = scanner_receipt()
+        bad["findings"][1]["public_evidence"] = (
+            "https://github.com/PowerShell/PowerShell/pull/28042")
+        with self.assertRaises(PolicyError):
+            scan_two_rule_owner_receipt(self.pack, self.public, bad)
+        bad = scanner_receipt()
+        bad["approved_rules"] = 2
+        with self.assertRaises(PolicyError):
+            scan_two_rule_owner_receipt(self.pack, self.public, bad)
+
+    def test_real_powershell_static_scan_uses_synthetic_keys_only(self):
+        shell = shutil.which("pwsh")
+        if shell is None:
+            self.skipTest("PowerShell 7 executable unavailable")
+        self.publish()
+        script = (Path(__file__).resolve().parents[1] / "scripts"
+                  / "ucie_signed_two_rule_owner_scan.ps1")
+        source = ("python -I -X disable_remote_debug -\n"
+                  "Resolve-Path '.directory\\*.txt' -Relative\n")
+        proc = subprocess.run([
+            shell, "-NoProfile", "-NonInteractive", "-File", str(script),
+            "-SourceText", source, "-PackPath", str(self.pack),
+            "-OwnerTrustPath", str(self.public),
+            "-PythonPath", sys.executable, "-MinSerial", "9",
+        ], capture_output=True, text=True, timeout=45)
+        self.assertEqual(proc.returncode, 0, msg=proc.stderr[:1000])
+        item = json.loads(proc.stdout)
+        self.assertEqual(item["finding_count"], 2)
+        self.assertEqual([r["rule_id"] for r in item["findings"]],
+                         list(RULE_IDS))
+        self.assertTrue(item["production_approved"])
+        self.assertFalse(item["auto_apply"])
+        self.assertFalse(item["source_executed"])
+        self.assertEqual(item["source_files_read"], 0)
+        self.assertEqual(item["persistent_writes"], 0)
+
+    def test_power_shell_release_receipt_never_approves_wrong_trust(self):
+        self.publish()
+        _, other = generate_keys(self.root / "bad_receiver", purpose="production")
+        with self.assertRaises(PolicyError):
+            scan_two_rule_owner_receipt(self.pack, other, scanner_receipt())
 
 
 if __name__ == "__main__":
