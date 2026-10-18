@@ -24,6 +24,7 @@ from .mixed_release import (
     publish_mixed_owner_release, verify_mixed_owner_release,
     scan_mixed_owner_receipt,
 )
+from .rule_admission import reconcile_mixed_signed_candidates
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -179,6 +180,12 @@ def main(argv=None) -> int:
     mixed_scan.add_argument("--pack", type=Path, required=True)
     mixed_scan.add_argument("--owner-trust", type=Path, required=True)
     mixed_scan.add_argument("--min-serial", type=int, default=4)
+    reconcile = sub.add_parser(
+        "reconcile-signed-public-candidates",
+        help="Read-only owner-signed mixed Rulepack vs re-derived public miner queue; never approve new candidates")
+    reconcile.add_argument("--pack", type=Path, required=True)
+    reconcile.add_argument("--owner-trust", type=Path, required=True)
+    reconcile.add_argument("--min-serial", type=int, default=4)
     args = p.parse_args(argv)
     try:
         if args.command == "keygen-demo":
@@ -356,6 +363,10 @@ def main(argv=None) -> int:
             receipt = json.loads(raw, object_pairs_hook=_strict_pairs)
             result = scan_mixed_owner_receipt(
                 args.pack, args.owner_trust, receipt,
+                min_serial=args.min_serial)
+        elif args.command == "reconcile-signed-public-candidates":
+            result = reconcile_mixed_signed_candidates(
+                ROOT, args.pack, args.owner_trust,
                 min_serial=args.min_serial)
         else:
             raise AssertionError("unreachable")
