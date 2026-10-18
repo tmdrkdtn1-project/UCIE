@@ -98,18 +98,28 @@ def power_shell_receipt(scanner: Path, source: str, root: Path) -> dict:
         source.encode("utf-8")).decode("ascii")
     encoded = base64.b64encode(
         PS_COMMAND.encode("utf-16le")).decode("ascii")
+    # Windows PowerShell 5.1 may encode STDERR using the local OEM/code page
+    # while STDOUT contains JSON. Never let Python's background pipe-reader
+    # silently lose UnicodeDecodeError and still report success.
     proc = subprocess.run(
         ["powershell.exe", "-NoProfile", "-NonInteractive",
          "-EncodedCommand", encoded],
-        cwd=root, env=env, capture_output=True, text=True,
-        timeout=45, check=False,
+        cwd=root, env=env, capture_output=True, text=False,
+        stdin=subprocess.DEVNULL, timeout=45, check=False,
     )
-    if proc.returncode != 0 or len(proc.stdout.encode("utf-8")) > 131072:
-        raise PolicyError("synthetic UCIE PowerShell AST receipt failed")
+    if (type(proc.stdout) is not bytes
+            or type(proc.stderr) is not bytes):
+        raise PolicyError("PowerShell capture did not return raw bytes")
+    if proc.returncode != 0 or proc.stderr:
+        raise PolicyError(
+            "synthetic PowerShell AST scanner emitted an error or diagnostic "
+            f"(exit={proc.returncode}, stderr_bytes={len(proc.stderr)})")
+    if not proc.stdout or len(proc.stdout) > 131072:
+        raise PolicyError("empty or oversized synthetic AST JSON response")
     try:
-        receipt = json.loads(proc.stdout)
-    except ValueError as exc:
-        raise PolicyError("PowerShell AST receipt not valid JSON") from exc
+        receipt = json.loads(proc.stdout.decode("utf-8-sig", errors="strict"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise PolicyError("PowerShell AST receipt is not strict UTF-8 JSON") from exc
     if type(receipt) is not dict:
         raise PolicyError("unexpected PowerShell AST receipt")
     return receipt
@@ -145,6 +155,56 @@ def smoke(root: Path, pack: Path, trust: Path) -> tuple[int, int, int, int]:
                != [FOURTH_ID]):
         raise PolicyError("four-rule synthetic smoke does not match expected limits")
     return counts
+
+
+def verify_existing(root: Path = ROOT) -> dict:
+    """Read-only recovery after interrupted post-signing smoke tests.
+
+    Never re-sign, read the private signing key or request owner approval.
+    Preserve existing owner-signed Serial 3 and Serial 4 bytes unchanged.
+    """
+    if os.name != "nt" or str(root).casefold() != str(ROOT).casefold():
+        raise PolicyError("owner verification allowed only in D:\\UCIE on Windows")
+    python = root / ".venv" / "Scripts" / "python.exe"
+    if (not python.is_file() or python.is_symlink()
+            or not os.path.samefile(sys.executable, python)):
+        raise PolicyError("must use existing UCIE virtualenv interpreter")
+    public = root / ".build_keys" / "production" / "public_production.pem"
+    old = root / "build" / "UCIE_Selected_Three_Rule_Serial_3.zip"
+    pack = root / "build" / "UCIE_Selected_Four_Rule_Serial_4.zip"
+    for path in (public, old, pack):
+        if path.is_symlink() or not path.is_file():
+            raise PolicyError("existing signed pack or public trust key missing")
+    original = verify_selected_owner_release(old, public, min_serial=3)
+    if (original.get("result") != "SELECTED_OWNER_RISK_PUBLIC_PACK_VERIFIED"
+            or original.get("serial") != 3
+            or original.get("owner_signature") != "VALID"
+            or original.get("rule_ids") != list(RULE_ORDER[:3])):
+        raise PolicyError("previous Serial 3 owner pack no longer verifies")
+    signed = verify_mixed_owner_release(pack, public, min_serial=SERIAL)
+    if (signed.get("result") != "MIXED_OWNER_PUBLIC_MANUAL_PACK_VERIFIED"
+            or signed.get("serial") != SERIAL
+            or signed.get("owner_signature") != "VALID"
+            or signed.get("rule_ids") != list(RULE_ORDER)
+            or signed.get("fixed_python_3_15_0_coverage_proven") is not False
+            or signed.get("unsafe_native_race_retested") is not False
+            or signed.get("auto_apply") is not False):
+        raise PolicyError("existing Serial 4 owner pack no longer verifies")
+    counts = smoke(root, pack, public)
+    # Verify Serial 3 again after read-only synthetic scanner execution.
+    if verify_selected_owner_release(
+            old, public, min_serial=3).get("owner_signature") != "VALID":
+        raise PolicyError("previous Serial 3 was not preserved")
+    return {
+        "status": "UCIE_FOUR_RULE_OWNER_READ_ONLY_VERIFIED",
+        "pack": str(pack), "serial": SERIAL, "rule_count": len(RULE_ORDER),
+        "powershell_positive": counts[0], "powershell_negative": counts[1],
+        "python_positive": counts[2], "python_negative": counts[3],
+        "serial_3_preserved": True, "owner_signature": "VALID",
+        "signing_attempted": False, "owner_approval_requested": False,
+        "private_key_read": False, "files_rewritten": False,
+        "source_executed": False, "auto_fix": False,
+    }
 
 
 def run(root: Path = ROOT) -> dict:
@@ -223,9 +283,13 @@ def run(root: Path = ROOT) -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="UCIE owner-only four-rule Serial4 one-shot with in-person risk phrases")
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--verify-existing", action="store_true",
+        help="Verify already-issued Serial 4 without approval or signing")
+    args = parser.parse_args(argv)
     try:
-        print(json.dumps(run(), sort_keys=True))
+        result = verify_existing() if args.verify_existing else run()
+        print(json.dumps(result, sort_keys=True))
         return 0
     except (PolicyError, OSError, ValueError, RuntimeError,
             subprocess.SubprocessError) as exc:
