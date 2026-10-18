@@ -114,6 +114,27 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
             "STAGE12_REVIEW_DISABLED",
             "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO"):
         raise ValueError("invalid candidate-only learning result")
+    # Stage16 shares this hourly invocation and its existing OS-held lock.
+    # Explicit pinned-run marker required; otherwise ZERO extra public GETs.
+    # If upstream API quota is already limited, defer Stage16 entirely.
+    from .public_safe_qa_cycle import optional_pinned_public_qa
+    safe_qa = optional_pinned_public_qa(
+        root, rate_paused=(
+            history["status"] == "EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO"
+            or official["status"] == "STAGE14_OFFICIAL_RATE_PAUSED_NO_GO"
+        ))
+    if (safe_qa.get("approved_rules_added") != 0
+            or safe_qa.get("production_approved") is not False
+            or safe_qa.get("status") not in {
+                "STAGE16_SAFE_QA_DISABLED",
+                "STAGE16_SAFE_QA_RATE_PAUSED_NO_GO",
+                "STAGE16_SAFE_QA_ALREADY_ATTEMPTED_NO_GO",
+                "STAGE16_SAFE_QA_24H_BUDGET_PAUSED_NO_GO",
+                "STAGE16_SAFE_QA_OBSERVED_REVIEW_REQUIRED",
+                "STAGE16_SAFE_QA_LEDGER_INCOMPLETE_NO_GO",
+                "STAGE16_SAFE_QA_FAILED_NO_GO",
+            }):
+        raise ValueError("invalid Stage16 unverified QA outcome")
     return {
         "status": STATUS_PARTIAL if history_failed else STATUS_STAGED,
         "operator_opted_in": True,
@@ -133,6 +154,9 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
         "stage13_history_gets": history.get("external_gets", 0),
         "stage12_review_status": learning["status"],
         "stage12_review_proposals_added": learning.get("new_review_proposals", 0),
+        "stage16_safe_qa_status": safe_qa["status"],
+        "stage16_safe_qa_templates": safe_qa.get("safe_templates_observed", 0),
+        "stage16_safe_qa_gets_upper_bound": safe_qa["public_gets_upper_bound"],
         "stage12_fix_evidence_input_revisions": learning.get(
             "stage15_unverified_fix_input_revisions", 0),
         "metadata_source_count": len(SOURCES),
