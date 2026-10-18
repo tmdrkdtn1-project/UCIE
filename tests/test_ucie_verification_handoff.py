@@ -1,6 +1,7 @@
 """Synthetic-only tests for the Stage 12 -> Stage 6 read-only verification gate."""
 from contextlib import closing
 from pathlib import Path
+from datetime import datetime, timezone
 import sqlite3
 import tempfile
 import unittest
@@ -12,7 +13,9 @@ from ucie_miner.public_candidate_learning import (
     optional_hourly_review_learning,
 )
 from ucie_miner.public_discovery import DiscoveryError
-from ucie_miner.verification_handoff import prepare_verification_handoff
+from ucie_miner.verification_handoff import (
+    _pinned_rule, prepare_verification_handoff,
+)
 
 
 class PublicVerificationHandoffTests(unittest.TestCase):
@@ -122,6 +125,61 @@ class PublicVerificationHandoffTests(unittest.TestCase):
         report = prepare_verification_handoff(self.root)
         self.assertEqual(report["status"], "SOURCE_REVISIONS_PENDING_NO_GO")
         self.assertEqual(report["pending_source_revisions"], 1)
+
+    def test_known_power_shell_pr_maps_generic_tags_to_precise_unapproved_rule(self):
+        stage10 = self.root / "runtime" / "stage10_unverified_public_candidates.sqlite3"
+        merge = "373f6a7b7972a0a4b73bfd9737a0d768d28b347e"
+        with closing(sqlite3.connect(stage10)) as db:
+            db.execute("""INSERT INTO public_candidate_stage
+                (source,pr_number,merge_sha,evidence_sha,skill_id,
+                 tags_json,missing_json,first_seen_utc,review_state)
+                VALUES (?,?,?,?,?,?,?,?,?)""", (
+                    "PowerShell/PowerShell", 28087, merge, "a" * 64,
+                    "powershell-safe-calls", '["API_CONTRACT"]', "[]",
+                    datetime.now(timezone.utc).isoformat(),
+                    "UNVERIFIED_CANDIDATE_ONLY"))
+            db.commit()
+        self.enable()
+        result = prepare_verification_handoff(self.root)
+        task = next(t for t in result["tasks"]
+                    if t["reference"] == f"pr:28087:{merge}")
+        proposal = task["stage6_candidate"]
+        self.assertEqual(proposal["rule_code"], "PS_RESOLVE_PATH_DOT_PREFIX")
+        self.assertEqual(proposal["source"], "PowerShell/PowerShell")
+        self.assertEqual(proposal["canonical_pr_number"], 28087)
+        self.assertEqual(proposal["status"], "UNVERIFIED_CANDIDATE_ONLY")
+        self.assertEqual(task["pattern_code"], "API_CONTRACT")  # coarse input
+        self.assertEqual(result["approved_rules"], 0)
+        self.assertFalse(result["production_approved"])
+
+    def test_same_generic_tag_with_wrong_merge_cannot_become_rule(self):
+        stage10 = self.root / "runtime" / "stage10_unverified_public_candidates.sqlite3"
+        with closing(sqlite3.connect(stage10)) as db:
+            db.execute("""INSERT INTO public_candidate_stage
+                (source,pr_number,merge_sha,evidence_sha,skill_id,
+                 tags_json,missing_json,first_seen_utc,review_state)
+                VALUES (?,?,?,?,?,?,?,?,?)""", (
+                    "PowerShell/PowerShell", 28087, "b" * 40, "a" * 64,
+                    "powershell-safe-calls", '["API_CONTRACT"]', "[]",
+                    datetime.now(timezone.utc).isoformat(),
+                    "UNVERIFIED_CANDIDATE_ONLY"))
+            db.commit()
+        self.enable()
+        task = next(t for t in prepare_verification_handoff(self.root)["tasks"]
+                    if t["reference"] == "pr:28087:" + "b" * 40)
+        self.assertIsNone(task["stage6_candidate"])
+        self.assertIn("NO_EXACT_PINNED_RULE_TEMPLATE", task["blocking_reasons"])
+
+    def test_stage15_reference_uses_exact_pinned_merge_and_never_approves(self):
+        good = "373f6a7b7972a0a4b73bfd9737a0d768d28b347e"
+        ref = f"fix-pr:28087:{good}:{'c' * 64}"
+        self.assertEqual(_pinned_rule("PowerShell/PowerShell", ref),
+                         (28087, "PS_RESOLVE_PATH_DOT_PREFIX"))
+        self.assertIsNone(_pinned_rule("PowerShell/PowerShell",
+                                      f"fix-pr:28087:{'d' * 40}:{'c' * 64}"))
+        self.assertIsNone(_pinned_rule("git/git", ref))
+        self.assertIsNone(_pinned_rule(
+            "PowerShell/PowerShell", f"pr:999999:{good}"))
 
 
 if __name__ == "__main__":
