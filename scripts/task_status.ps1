@@ -17,6 +17,9 @@ if ($Evidence) {
     } else { $null }
     $actionOk = $false
     $principalOk = $false
+    $principalUserMatches = $false
+    $principalLogonType = 'UNOBSERVED'
+    $principalRunLevel = 'UNOBSERVED'
     $cadenceConfigured = $false
     $lastResultOk = $false
     $scheduleNextUtc = $null
@@ -35,10 +38,14 @@ if ($Evidence) {
             )
         }
         $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $principalUserMatches = [string]::Equals(
+            $task.Principal.UserId, $me, [StringComparison]::OrdinalIgnoreCase)
+        $principalLogonType = [string]$task.Principal.LogonType
+        $principalRunLevel = [string]$task.Principal.RunLevel
         $principalOk = (
-            [string]::Equals($task.Principal.UserId, $me, [StringComparison]::OrdinalIgnoreCase) -and
-            [string]::Equals([string]$task.Principal.LogonType, 'Interactive', [StringComparison]::OrdinalIgnoreCase) -and
-            [string]::Equals([string]$task.Principal.RunLevel, 'Limited', [StringComparison]::OrdinalIgnoreCase)
+            $principalUserMatches -and
+            [string]::Equals($principalLogonType, 'Interactive', [StringComparison]::OrdinalIgnoreCase) -and
+            [string]::Equals($principalRunLevel, 'Limited', [StringComparison]::OrdinalIgnoreCase)
         )
         $intervals = @($task.Triggers | ForEach-Object { [string]$_.Repetition.Interval })
         $cadenceConfigured = (
@@ -146,6 +153,9 @@ if ($Evidence) {
         task_state = if ($null -eq $task) { 'ABSENT' } else { [string]$task.State }
         action_matches_ucie_only = $actionOk
         owner_least_privilege_verified = $principalOk
+        principal_user_matches_current_process = $principalUserMatches
+        principal_logon_type = $principalLogonType
+        principal_run_level = $principalRunLevel
         hourly_no_overlap_configured = $cadenceConfigured
         last_task_result_zero = $lastResultOk
         last_scheduled_run_utc = if ($null -eq $lastTaskUtc) { $null } else { $lastTaskUtc.ToString('o') }
