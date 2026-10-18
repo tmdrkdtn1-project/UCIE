@@ -51,6 +51,10 @@ jobs:
             }
           }
 
+      - name: Hourly task read-only evidence acceptance with synthetic Windows PowerShell 5.1 task
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: powershell.exe -NoProfile -NonInteractive -File ./tests/test_ucie_task_status_evidence.ps1
       - name: UCIE-owned CPython bounded behavioral regression probes (no upstream checkout)
         run: python tests/runtime_python_probes.py
       - name: Verify pinned public candidate safe QA against LIVE GitHub CI (one-shot PR only)
