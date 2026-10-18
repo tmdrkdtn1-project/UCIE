@@ -15,7 +15,7 @@ MAX_RULES = 64
 
 
 def match_signed_static_rules(scan: object, signed_rules: object, *,
-                              expected_approval: str) -> list[dict]:
+                              expected_approval: str, allow_python: bool = False) -> list[dict]:
     """Match any bounded subset of trusted and signed pinned scan rules.
 
     This is not an approval API. The signed rules must originate from a prior
@@ -48,7 +48,10 @@ def match_signed_static_rules(scan: object, signed_rules: object, *,
                 or rule.get("upstream") !=
                     f"https://github.com/{source}/pull/{number}"
                 or rule.get("approval") != expected_approval
-                or rule.get("scanner") != "ucie_powershell_static_candidates.ps1"
+                or rule.get("scanner") != (
+                    "ucie_miner.static_concurrency.inspect_python_scandir_source"
+                    if identifier == "PY_SCANDIR_SHARED_ITERATOR_RACE"
+                    else "ucie_powershell_static_candidates.ps1")
                 or rule.get("automation") != "NEVER_AUTO_APPLY"
                 or type(rule.get("safe_guidance")) is not str
                 or not rule["safe_guidance"]):
@@ -58,23 +61,30 @@ def match_signed_static_rules(scan: object, signed_rules: object, *,
         language = _check_receipt(scan)
     except (PatternError, ValueError, TypeError) as exc:
         raise PolicyError("untrusted static scanner receipt") from exc
-    if language != "powershell":
-        raise PolicyError("only inert PowerShell static receipts supported")
+    if language not in (("powershell", "python") if allow_python
+                        else ("powershell",)):
+        raise PolicyError("scanner receipt language not allowed by this release")
     findings = []
     for item in scan["findings"]:
         rule = by_id.get(item["pattern_code"])
         if rule is None:
             continue  # A valid but unsigned rule is NOT activated.
+        if (language == "python") != rule["rule_id"].startswith("PY_"):
+            raise PolicyError("signed rule and receipt language mismatch")
         if (item["public_evidence"] != rule["upstream"]
                 or item["safe_fix_guidance"] !=
                     SCANNER_GUIDANCE[rule["rule_id"]]):
             raise PolicyError("inconsistent static finding evidence")
-        findings.append({
+        finding = {
             "rule_id": rule["rule_id"],
             "line": item["line"], "column": item["column"],
             "public_evidence": rule["upstream"],
             "guidance": rule["safe_guidance"],
             "manual_review_required": True,
             "runtime_bug_confirmed_for_this_input": False,
-        })
+        }
+        if language == "python":
+            finding["iterator_binding"] = item["iterator_binding"]
+            finding["thread_boundary"] = item["thread_boundary"]
+        findings.append(finding)
     return findings
