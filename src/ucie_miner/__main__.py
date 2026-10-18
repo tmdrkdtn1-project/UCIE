@@ -34,6 +34,7 @@ from .public_fix_evidence import inspect_fix_evidence, optional_fix_evidence_enr
 from .public_evidence_chain_audit import audit_external_evidence_chain
 from .public_pr_coverage_audit import audit_public_pr_evidence_once
 from .public_git_commit_skills import discover_git_commit_skills, analyze_git_commits
+from .automated_candidate_qa import verify_public_candidate_qa
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -57,6 +58,13 @@ def main(argv=None):
     lic.add_argument("--verify-live", action="store_true",
                      help="Explicit anonymous GET of pinned official upstream license documents")
     sub.add_parser("preview-regressions", help="Generate nonexecuting regression test plans")
+    qa = sub.add_parser(
+        "verify-public-candidate-qa",
+        help="Read-only Stage12 known safe templates against exact completed public GitHub Actions; never approve")
+    qa.add_argument("--live", action="store_true",
+                    help="Explicit opt-in required for public GitHub Actions evidence GETs")
+    qa.add_argument("--run-id", type=int, required=True,
+                    help="Exact already completed UCIE main CI run ID")
     sub.add_parser("preview-acceptance", help="Read-only NO-GO host and evidence observation")
     pin = sub.add_parser("audit-merge-snapshot", help="Compare pinned public PR merge SHA, without DB writes")
     pin.add_argument("--verify-live", action="store_true",
@@ -285,6 +293,10 @@ def main(argv=None):
                 root=ROOT if args.write_separate_ledger else None,
                 allow_disk_write=args.write_separate_ledger,
             )
+        elif args.action == "verify-public-candidate-qa":
+            if not args.live:
+                raise ValueError("public CI evidence verification requires explicit --live")
+            result = verify_public_candidate_qa(ROOT, run_id=args.run_id)
         elif args.action == "inspect-public-candidate-ledger":
             result = inspect_staged_candidates(ROOT)
         elif args.action == "inspect-stage12-review":
