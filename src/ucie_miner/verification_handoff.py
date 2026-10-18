@@ -21,9 +21,34 @@ from .public_candidate_learning import (
 )
 from .public_candidate_staging import MAX_ROWS
 from .public_discovery import SOURCES, DiscoveryError
-from .rule_candidates import GUIDANCE, candidate_rulepack
+from .rule_candidates import candidate_rulepack
 
-PR_REF = re.compile(r"pr:([1-9][0-9]*):([a-f0-9]{40})\Z")
+PR_REF = re.compile(r"pr:([1-9][0-9]*):([a-f0-9]{40})\\Z")
+FIX_PR_REF = re.compile(r"fix-pr:([1-9][0-9]*):([a-f0-9]{40}):([a-f0-9]{64})\\Z")
+# Only these four publicly pinned, already-reviewed PR identities may yield
+# specific Stage 6 templates. This does not grant execution or approval.
+PINNED_RULES = {
+    ("python/cpython", 159014, "91248026c8a41910098032dd23f9a05ad2d9b513"):
+        "PS_PYTHON_REMOTE_DEBUG_XOPTION_TYPO",
+    ("python/cpython", 153462, "999a046b24cff4ba0e72b574196721f66bd08237"):
+        "PY_SCANDIR_SHARED_ITERATOR_RACE",
+    ("PowerShell/PowerShell", 28042, "bd8cb01a7d5b86129c45eaa14ab5830a63b1283f"):
+        "PS_FUZZY_GET_COMMAND_DUPLICATES",
+    ("PowerShell/PowerShell", 28087, "373f6a7b7972a0a4b73bfd9737a0d768d28b347e"):
+        "PS_RESOLVE_PATH_DOT_PREFIX",
+}
+
+
+def _pinned_rule(source: str, reference: str):
+    match = PR_REF.fullmatch(reference) or FIX_PR_REF.fullmatch(reference)
+    if not match or source not in SOURCES:
+        return None
+    number = int(match.group(1))
+    if number > 999999999:
+        raise DiscoveryError("PR identity out of range")
+    code = PINNED_RULES.get((source, number, match.group(2)))
+    return (number, code) if code is not None else None
+
 REQUIRED_VERIFICATION = (
     "PINNED_PUBLIC_SOURCE_AND_LICENSE_REVIEW",
     "AFFECTED_RUNTIME_VERSION_VALIDATION",
@@ -111,20 +136,18 @@ def prepare_verification_handoff(root: Path) -> dict:
     template_count = 0
     for row in rows:
         fingerprint, source, reference, skill, pattern, safe, regression, evidence = row[:8]
-        match = PR_REF.fullmatch(reference)
-        # No generic tag is misrepresented as a verified failure signature.
-        # Only supported Stage 6 templates with pinned PR-style identities
-        # become structured proposals; all other inputs remain review tasks.
+        # Generic Stage 12 tags are NOT prevention-rule identities.
+        # Only the exact approved source, PR and immutable merge SHA
+        # can select a specific existing non-executable Stage 6 template.
+        pinned = _pinned_rule(source, reference)
         rule = None
-        if match and source in SOURCES and pattern in GUIDANCE:
-            number = int(match.group(1))
-            if number > 999999999:
-                raise DiscoveryError("PR identity out of range")
+        if pinned is not None:
+            number, rule_code = pinned
             preview = candidate_rulepack(group_patterns([{
                 "source": source,
                 "pr_number": number,
                 "canonical_pr_number": number,
-                "pattern_code": pattern,
+                "pattern_code": rule_code,
                 "evidence_sha256": evidence,
                 "status": "UNVERIFIED_CANDIDATE_ONLY",
             }]))
@@ -134,7 +157,7 @@ def prepare_verification_handoff(root: Path) -> dict:
         if counts[(source, reference)] > 1:
             issues.append("MULTIPLE_EVIDENCE_REVISIONS_REQUIRE_SELECTION")
         if rule is None:
-            issues.append("NO_EXACT_STAGE6_RULE_TEMPLATE")
+            issues.append("NO_EXACT_PINNED_RULE_TEMPLATE")
         tasks.append({
             "candidate_id_sha256": fingerprint,
             "source": source, "reference": reference,
