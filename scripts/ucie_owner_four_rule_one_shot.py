@@ -55,6 +55,7 @@ PS_NEGATIVE = (
 )
 PS_COMMAND = r"""
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 . $env:UCIE_TEST_SCANNER
 $src = [System.Text.Encoding]::UTF8.GetString(
     [System.Convert]::FromBase64String($env:UCIE_TEST_SAMPLE))
@@ -102,7 +103,7 @@ def power_shell_receipt(scanner: Path, source: str, root: Path) -> dict:
     # while STDOUT contains JSON. Never let Python's background pipe-reader
     # silently lose UnicodeDecodeError and still report success.
     proc = subprocess.run(
-        ["powershell.exe", "-NoProfile", "-NonInteractive",
+        ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive",
          "-EncodedCommand", encoded],
         cwd=root, env=env, capture_output=True, text=False,
         stdin=subprocess.DEVNULL, timeout=45, check=False,
@@ -113,8 +114,7 @@ def power_shell_receipt(scanner: Path, source: str, root: Path) -> dict:
     if proc.returncode != 0 or proc.stderr:
         raise PolicyError(
             "synthetic PowerShell AST scanner emitted an error or diagnostic "
-            f"(exit={proc.returncode}, stderr_bytes={len(proc.stderr)}, "
-            f"stderr_prefix_hex={proc.stderr[:256].hex()})")
+            f"(exit={proc.returncode}, stderr_bytes={len(proc.stderr)})")
     if not proc.stdout or len(proc.stdout) > 131072:
         raise PolicyError("empty or oversized synthetic AST JSON response")
     try:
