@@ -62,5 +62,6 @@ class LocalOwnerOneShotTests(TestCase):
             patch("sys.stdin.isatty", return_value=True),
             patch("sys.stdout.isatty", return_value=True),
             patch("builtins.input", side_effect=[CONFIRM, RISK, "YES"]),
-        ), self.assertRaises(PolicyError):
+            self.assertRaises(PolicyError),
+        ):
             owner_input()
