@@ -167,31 +167,21 @@ def scan_multi_review_receipt(path: Path, trusted_public: Path,
     This NEVER authorizes a real production scan, code execution, or fix.
     """
     trusted = verify_multi_review(path, trusted_public, min_serial=min_serial)
-    from ucie_miner.static_rule_bridge import _check_receipt, SCANNER_GUIDANCE
-    from ucie_miner.patterns import PatternError
+    from .rule_matcher import match_signed_static_rules
 
-    try:
-        language = _check_receipt(scan)
-    except (PatternError, TypeError, ValueError) as exc:
-        raise PolicyError("untrusted scanner receipt") from exc
-    if language != "powershell":
-        raise PolicyError("only PowerShell inert receipts can be consumed")
-    mapping = {rule["rule_id"]: rule for rule in RULES}
-    findings = []
-    for item in scan["findings"]:
-        rule = mapping.get(item["pattern_code"])
-        if rule is None:
-            continue
-        if (item["safe_fix_guidance"] != SCANNER_GUIDANCE[rule["rule_id"]]
-                or item["public_evidence"] != rule["upstream"]):
-            raise PolicyError("scanner finding does not match pinned rule")
-        findings.append({
-            "rule_id": rule["rule_id"], "line": item["line"],
-            "column": item["column"], "public_evidence": rule["upstream"],
-            "guidance": rule["safe_guidance"],
+    matched = match_signed_static_rules(
+        scan, RULES, expected_approval="HUMAN_REVIEW_REQUIRED")
+    findings = [
+        {
+            "rule_id": item["rule_id"], "line": item["line"],
+            "column": item["column"],
+            "public_evidence": item["public_evidence"],
+            "guidance": item["guidance"],
             "confidence": "STATIC_HEURISTIC_REVIEW_REQUIRED",
             "approved": False,
-        })
+        }
+        for item in matched
+    ]
     return {
         "schema": "UCIE_TWO_RULE_SIGNED_REVIEW_CONSUMER_V1",
         "status": "REVIEW_CANDIDATES_ONLY",
