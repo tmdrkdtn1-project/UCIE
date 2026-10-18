@@ -9,6 +9,7 @@ from .prevention_rulepack import (
     publish_prevention_review, verify_prevention_review,
 )
 from .production_release import publish_production, verify_production
+from .owner_release import publish_owner_risk_release, verify_owner_risk_release
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -58,6 +59,21 @@ def main(argv=None) -> int:
     checkprod.add_argument("--owner-trust", required=True, type=Path)
     checkprod.add_argument("--qa-trust", required=True, type=Path)
     checkprod.add_argument("--min-serial", default=1, type=int)
+    owner_release = sub.add_parser(
+        "publish-owner-risk-release",
+        help="Owner explicitly accepts missing independent QA; requires live public GitHub CI")
+    owner_release.add_argument("--owner-private", type=Path, required=True)
+    owner_release.add_argument("--output", type=Path, required=True)
+    owner_release.add_argument("--run-id", type=int, required=True)
+    owner_release.add_argument("--serial", type=int, required=True)
+    owner_release.add_argument("--confirm", required=True)
+    owner_release.add_argument("--accept-risk", required=True)
+    owner_verify = sub.add_parser(
+        "verify-owner-risk-release",
+        help="Offline owner-signed public-only release verification; no human QA claim")
+    owner_verify.add_argument("--pack", type=Path, required=True)
+    owner_verify.add_argument("--owner-trust", type=Path, required=True)
+    owner_verify.add_argument("--min-serial", type=int, default=1)
     args = p.parse_args(argv)
     try:
         if args.command == "keygen-demo":
@@ -120,6 +136,22 @@ def main(argv=None) -> int:
         elif args.command == "verify-production":
             result = verify_production(args.pack, args.owner_trust,
                                        args.qa_trust, min_serial=args.min_serial)
+        elif args.command == "publish-owner-risk-release":
+            allowed = ROOT / ".build_keys" / "production" / "private_production.pem"
+            if args.owner_private.absolute() != allowed.absolute():
+                raise PolicyError("owner risk release signer must use dedicated production key")
+            output = publish_owner_risk_release(
+                ROOT, args.owner_private, args.output,
+                run_id=args.run_id, serial=args.serial,
+                confirmation=args.confirm, risk_acceptance=args.accept_risk)
+            result = {"result": "OWNER_RISK_ACCEPTED_PUBLIC_RELEASE_SIGNED",
+                      "path": str(output),
+                      "independent_human_qa_approved": False,
+                      "scope": "PUBLIC_ONLY_MANUAL_STATIC_SCAN",
+                      "automated_deployment": False}
+        elif args.command == "verify-owner-risk-release":
+            result = verify_owner_risk_release(
+                args.pack, args.owner_trust, min_serial=args.min_serial)
         else:
             raise AssertionError("unreachable")
         print(json.dumps(result, sort_keys=True, indent=2))
