@@ -16,6 +16,10 @@ from .multi_owner_release import (
     publish_two_rule_owner_release, verify_two_rule_owner_release,
     scan_two_rule_owner_receipt,
 )
+from .selected_release import (
+    publish_selected_owner_release, verify_selected_owner_release,
+    scan_selected_owner_receipt,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -127,6 +131,28 @@ def main(argv=None) -> int:
     multi_scan.add_argument("--pack", type=Path, required=True)
     multi_scan.add_argument("--owner-trust", type=Path, required=True)
     multi_scan.add_argument("--min-serial", type=int, default=1)
+    selected_pub = sub.add_parser(
+        "publish-selected-owner-risk-release",
+        help="Explicitly select already verified public rules; per-rule owner consent required")
+    selected_pub.add_argument("--owner-private", type=Path, required=True)
+    selected_pub.add_argument("--output", type=Path, required=True)
+    selected_pub.add_argument("--run-id", type=int, required=True)
+    selected_pub.add_argument("--serial", type=int, required=True)
+    selected_pub.add_argument("--rule-id", action="append", required=True)
+    selected_pub.add_argument("--accept-risk", action="append", required=True)
+    selected_pub.add_argument("--confirm", required=True)
+    selected_ver = sub.add_parser(
+        "verify-selected-owner-risk-release",
+        help="Verify signed selected rules and individually pinned QA evidence")
+    selected_ver.add_argument("--pack", type=Path, required=True)
+    selected_ver.add_argument("--owner-trust", type=Path, required=True)
+    selected_ver.add_argument("--min-serial", type=int, default=3)
+    selected_scan = sub.add_parser(
+        "scan-selected-owner-receipt-stdin",
+        help="Filter only selected signed rules from inert PowerShell scanner JSON")
+    selected_scan.add_argument("--pack", type=Path, required=True)
+    selected_scan.add_argument("--owner-trust", type=Path, required=True)
+    selected_scan.add_argument("--min-serial", type=int, default=3)
     args = p.parse_args(argv)
     try:
         if args.command == "keygen-demo":
@@ -247,6 +273,34 @@ def main(argv=None) -> int:
                 raise PolicyError("oversized inert scan receipt")
             receipt = json.loads(raw, object_pairs_hook=_strict_pairs)
             result = scan_two_rule_owner_receipt(
+                args.pack, args.owner_trust, receipt,
+                min_serial=args.min_serial)
+        elif args.command == "publish-selected-owner-risk-release":
+            allowed = ROOT / ".build_keys" / "production" / "private_production.pem"
+            if args.owner_private.absolute() != allowed.absolute():
+                raise PolicyError("owner signing key must remain in UCIE key location")
+            if len(args.rule_id) != len(args.accept_risk):
+                raise PolicyError("each requested rule needs its own owner risk phrase")
+            target = publish_selected_owner_release(
+                ROOT, args.owner_private, args.output, run_id=args.run_id,
+                serial=args.serial, rule_ids=args.rule_id,
+                confirmation=args.confirm,
+                risk_acceptances=dict(zip(args.rule_id, args.accept_risk, strict=True)))
+            result = {
+                "result": "SELECTED_OWNER_PUBLIC_RELEASE_SIGNED",
+                "path": str(target), "rule_count": len(args.rule_id),
+                "scope": "PUBLIC_ONLY_MANUAL_STATIC_SCAN",
+                "auto_apply": False, "automated_distribution": False,
+            }
+        elif args.command == "verify-selected-owner-risk-release":
+            result = verify_selected_owner_release(
+                args.pack, args.owner_trust, min_serial=args.min_serial)
+        elif args.command == "scan-selected-owner-receipt-stdin":
+            raw = sys.stdin.read(131073)
+            if len(raw.encode("utf-8")) > 131072:
+                raise PolicyError("oversized public-only inert receipt")
+            receipt = json.loads(raw, object_pairs_hook=_strict_pairs)
+            result = scan_selected_owner_receipt(
                 args.pack, args.owner_trust, receipt,
                 min_serial=args.min_serial)
         else:
