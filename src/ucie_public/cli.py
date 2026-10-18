@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse
 import json
+import sys
 from pathlib import Path
 from .policy import PolicyError
 from .rulepack import generate_keys, publish_demo, verify_demo
@@ -10,8 +11,19 @@ from .prevention_rulepack import (
 )
 from .production_release import publish_production, verify_production
 from .owner_release import publish_owner_risk_release, verify_owner_risk_release
+from .multi_review import publish_multi_review, verify_multi_review, scan_multi_review_receipt
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _strict_pairs(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise PolicyError("duplicate scanner receipt JSON key")
+        result[key] = value
+    return result
+
 
 
 def main(argv=None) -> int:
@@ -74,6 +86,22 @@ def main(argv=None) -> int:
     owner_verify.add_argument("--pack", type=Path, required=True)
     owner_verify.add_argument("--owner-trust", type=Path, required=True)
     owner_verify.add_argument("--min-serial", type=int, default=1)
+    two = sub.add_parser("publish-two-rule-review",
+                         help="Explicit signed two-rule REVIEW ONLY pack, never production")
+    two.add_argument("--private-key", type=Path, required=True)
+    two.add_argument("--output", type=Path, required=True)
+    two.add_argument("--serial", type=int, required=True)
+    two.add_argument("--confirm", required=True)
+    two_ver = sub.add_parser("verify-two-rule-review",
+                             help="Offline signed two-rule review validation; never production")
+    two_ver.add_argument("--pack", type=Path, required=True)
+    two_ver.add_argument("--trust", type=Path, required=True)
+    two_ver.add_argument("--min-serial", type=int, default=1)
+    two_scan = sub.add_parser("scan-two-rule-review-json-stdin",
+                              help="Review-only inert multi-rule scanner receipt, 128KiB max")
+    two_scan.add_argument("--pack", type=Path, required=True)
+    two_scan.add_argument("--trust", type=Path, required=True)
+    two_scan.add_argument("--min-serial", type=int, default=1)
     args = p.parse_args(argv)
     try:
         if args.command == "keygen-demo":
@@ -152,6 +180,26 @@ def main(argv=None) -> int:
         elif args.command == "verify-owner-risk-release":
             result = verify_owner_risk_release(
                 args.pack, args.owner_trust, min_serial=args.min_serial)
+        elif args.command == "publish-two-rule-review":
+            allowed = ROOT / ".build_keys" / "prevention" / "private_prevention.pem"
+            if args.private_key.absolute() != allowed.absolute():
+                raise PolicyError("review signing key outside UCIE prevention key directory")
+            out = publish_multi_review(
+                ROOT, args.private_key, args.output, serial=args.serial,
+                confirmation=args.confirm)
+            result = {"result": "TWO_RULE_SIGNED_REVIEW_ONLY_CREATED",
+                      "path": str(out), "production_approved": False,
+                      "deploy_allowed": False}
+        elif args.command == "verify-two-rule-review":
+            result = verify_multi_review(
+                args.pack, args.trust, min_serial=args.min_serial)
+        elif args.command == "scan-two-rule-review-json-stdin":
+            raw = sys.stdin.read(131073)
+            if len(raw.encode("utf-8")) > 131072:
+                raise PolicyError("oversized inert scanner receipt")
+            scan = json.loads(raw, object_pairs_hook=_strict_pairs)
+            result = scan_multi_review_receipt(
+                args.pack, args.trust, scan, min_serial=args.min_serial)
         else:
             raise AssertionError("unreachable")
         print(json.dumps(result, sort_keys=True, indent=2))
