@@ -6,8 +6,12 @@ records are fetched and checked LIVE from the public UCIE repository.
 """
 from __future__ import annotations
 import json
+from pathlib import Path
+import sys
 from unittest.mock import patch
 
+# File-mode execution does not inherit unittest discover's PYTHONPATH setup.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from test_ucie_automated_candidate_qa import RUN_ID, handoff
 from ucie_miner.automated_candidate_qa import verify_public_candidate_qa
 
