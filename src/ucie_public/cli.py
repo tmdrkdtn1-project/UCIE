@@ -8,6 +8,7 @@ from .rulepack import generate_keys, publish_demo, verify_demo
 from .prevention_rulepack import (
     publish_prevention_review, verify_prevention_review,
 )
+from .production_release import publish_production, verify_production
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -39,6 +40,24 @@ def main(argv=None) -> int:
     chk.add_argument("--pack", type=Path, required=True)
     chk.add_argument("--trust", type=Path, required=True)
     chk.add_argument("--min-serial", type=int, default=1)
+    prodkey = sub.add_parser("keygen-production",
+                             help="Generate SEPARATE owner production signing keys, manually")
+    prodkey.add_argument("--out", required=True, type=Path)
+    prod = sub.add_parser("publish-production",
+                          help="Requires independent QA signature AND explicit owner authorization")
+    prod.add_argument("--owner-private", required=True, type=Path)
+    prod.add_argument("--qa-claim", required=True, type=Path)
+    prod.add_argument("--qa-signature", required=True, type=Path)
+    prod.add_argument("--qa-trust", required=True, type=Path)
+    prod.add_argument("--output", required=True, type=Path)
+    prod.add_argument("--serial", required=True, type=int)
+    prod.add_argument("--confirm", required=True)
+    checkprod = sub.add_parser("verify-production",
+                               help="Recipient checks independent QA and owner signatures")
+    checkprod.add_argument("--pack", required=True, type=Path)
+    checkprod.add_argument("--owner-trust", required=True, type=Path)
+    checkprod.add_argument("--qa-trust", required=True, type=Path)
+    checkprod.add_argument("--min-serial", default=1, type=int)
     args = p.parse_args(argv)
     try:
         if args.command == "keygen-demo":
@@ -79,6 +98,28 @@ def main(argv=None) -> int:
         elif args.command == "verify-prevention-review":
             result = verify_prevention_review(
                 args.pack, args.trust, min_serial=args.min_serial)
+        elif args.command == "keygen-production":
+            directory = ROOT / ".build_keys" / "production"
+            if args.out.absolute() != directory.absolute():
+                raise PolicyError("production key path outside fixed UCIE key directory")
+            private, public = generate_keys(directory, purpose="production")
+            result = {"result": "OWNER_PRODUCTION_KEYS_CREATED",
+                      "private_key_stays_local": True, "public_key": str(public),
+                      "production_approved": False, "package_published": False}
+        elif args.command == "publish-production":
+            allowed_private = ROOT / ".build_keys" / "production" / "private_production.pem"
+            if args.owner_private.absolute() != allowed_private.absolute():
+                raise PolicyError("production signing key path not authorized")
+            output = publish_production(
+                ROOT, args.owner_private, args.qa_claim, args.qa_signature,
+                args.qa_trust, args.output, serial=args.serial,
+                confirmation=args.confirm)
+            result = {"result": "DUAL_SIGNED_PUBLIC_PRODUCTION_PACKAGE_CREATED",
+                      "path": str(output), "scope": "PUBLIC_ONLY_MANUAL_STATIC_SCAN",
+                      "automated_deployment": False}
+        elif args.command == "verify-production":
+            result = verify_production(args.pack, args.owner_trust,
+                                       args.qa_trust, min_serial=args.min_serial)
         else:
             raise AssertionError("unreachable")
         print(json.dumps(result, sort_keys=True, indent=2))
