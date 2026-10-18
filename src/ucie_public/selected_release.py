@@ -21,7 +21,8 @@ from .rulepack import (
     canonical_json, digest, key_id, _private_key, _public_key, _valid_outpath,
 )
 from .owner_release import (
-    MODE, RISK, _check_evidence, _local_clean_sha, validate_live_automated_qa,
+    MODE, RISK, JOBS, _public_json, _step_ok, _check_evidence,
+    _local_clean_sha, validate_live_automated_qa,
 )
 from .production_release import SCOPE, _parse_date
 from .multi_owner_release import (
@@ -32,13 +33,50 @@ from .rule_matcher import match_signed_static_rules
 
 SCHEMA = "UCIE_PUBLIC_SELECTED_OWNER_RELEASE_V1"
 CONFIRM = "AUTHORIZE_UCIE_SELECTED_RULES_PUBLIC_MANUAL_OWNER_RISK_RELEASE"
-RULE_ORDER = tuple(r["rule_id"] for r in RELEASE_RULES)
-# ONLY the two previously verified rules are currently release-eligible.
-# New public-miner candidates are never added automatically.
+# The third candidate is eligible for owner REVIEW AND RISK ACCEPTANCE only
+# after the exact before/after PowerShell #28042 behavior was observed by CI.
+# This does NOT sign the rule, enable automatic promotion or license claims.
+THIRD_RUN = 39107766637
+THIRD_SHA = "9dfbae4df7e23f3ebd2d78427f513c8194a300ab"
+THIRD_BRANCH = "core/third-rule-real-fuzzy-regression-20261018"
+THIRD_STEP = "Third rule fixed fuzzy behavior in official post-fix developer build (one-shot PR)"
+THIRD_BASELINE_STEP = "Third rule Get-Command fuzzy duplicates behavioral observation (disposable runner, no approval)"
+THIRD_RISK = "I_ACCEPT_POWERSHELL_FUZZY_DUPLICATES_OBSERVED_7_6_6_AND_NO_VERIFIED_RELEASE_COVERAGE"
+THIRD_RULE = {
+    "rule_id": "PS_FUZZY_GET_COMMAND_DUPLICATES",
+    "pattern": "PowerShell Get-Command -UseFuzzyMatching may return duplicate command identities",
+    "problem": "PowerShell 7.6.6 returned two matching copies of the same module command in disposable Windows and Ubuntu CI",
+    "safe_guidance": "Inspect fuzzy matches for duplicate Name/CommandType/Source identities before using results",
+    "affected_observation": "PowerShell 7.6.6 Windows/Linux; corrected 7.7.0-preview.6 development artifact; released versions not verified",
+    "upstream": "https://github.com/PowerShell/PowerShell/pull/28042",
+    "upstream_merge_sha": "bd8cb01a7d5b86129c45eaa14ab5830a63b1283f",
+    "runtime_ci": "https://github.com/tmdrkdtn1-project/UCIE/actions/runs/39107766637",
+    "scanner": "ucie_powershell_static_candidates.ps1",
+    "automation": "NEVER_AUTO_APPLY", "risk": "DUPLICATE_FUZZY_COMMAND_RESULT",
+    "approval": MODE,
+}
+THIRD_DECISION = {
+    "rule_id": THIRD_RULE["rule_id"],
+    "upstream_merge_sha": THIRD_RULE["upstream_merge_sha"],
+    "observed_runtime": "PowerShell 7.6.6 Windows/Linux",
+    "postfix_dev_build": "PowerShell 7.7.0-preview.6 development CI build",
+    "runtime_evidence": THIRD_RULE["runtime_ci"],
+    "fixed_dev_build_evidence": THIRD_RULE["runtime_ci"],
+    "release_version_coverage_proven": False,
+    "owner_risk_accepted": True,
+    "independent_human_qa": False, "legal_license_signoff": False,
+    "auto_apply": False,
+}
+RELEASE_PROFILES = [
+    *zip(RELEASE_RULES, DECISIONS, (RISK, SECOND_RISK), strict=True),
+    (THIRD_RULE, THIRD_DECISION, THIRD_RISK),
+]
+RULE_ORDER = tuple(rule["rule_id"] for rule, _, _ in RELEASE_PROFILES)
+# Only three exactly pinned and tested profiles; all other miner candidates
+# remain unverified. Explicit owner phrase is still required per rule.
 ELIGIBLE = {
-    r["rule_id"]: (r, decision, risk)
-    for r, decision, risk in zip(
-        RELEASE_RULES, DECISIONS, (RISK, SECOND_RISK), strict=True)
+    rule["rule_id"]: (rule, decision, risk)
+    for rule, decision, risk in RELEASE_PROFILES
 }
 EXPECTED_SECOND_CI = {
     "schema": "UCIE_SECOND_RULE_CI_OWNER_CHECK_V1",
@@ -47,6 +85,53 @@ EXPECTED_SECOND_CI = {
     "release_version_coverage_proven": False,
     "independent_human_qa": False,
 }
+EXPECTED_THIRD_CI = {
+    "schema": "UCIE_THIRD_RULE_CI_OWNER_CHECK_V1",
+    "repository": REPO, "run_id": THIRD_RUN, "head_sha": THIRD_SHA,
+    "patch_ci_step": THIRD_STEP, "baseline_ci_step": THIRD_BASELINE_STEP,
+    "result": "PASS_ON_PINNED_CI",
+    "released_version_coverage_proven": False,
+    "independent_human_qa": False,
+}
+
+
+def _third_ci() -> dict:
+    """Pin public GitHub CI identity and exact baseline plus patched run steps."""
+    base = f"https://api.github.com/repos/{REPO}/actions/runs/{THIRD_RUN}"
+    run, payload = _public_json(base), _public_json(base + "/jobs?per_page=100")
+    if (run.get("id") != THIRD_RUN
+            or run.get("head_sha") != THIRD_SHA
+            or run.get("repository", {}).get("full_name") != REPO
+            or run.get("event") != "pull_request"
+            or run.get("head_branch") != THIRD_BRANCH
+            or run.get("status") != "completed"
+            or run.get("conclusion") != "success"
+            or payload.get("total_count") != 4
+            or type(payload.get("jobs")) is not list
+            or len(payload["jobs"]) != 4):
+        raise PolicyError("third-rule CI identity not verified")
+    by_name = {}
+    for job in payload["jobs"]:
+        if (type(job) is not dict or job.get("name") in by_name
+                or job.get("run_id") != THIRD_RUN
+                or job.get("status") != "completed"
+                or job.get("conclusion") != "success"):
+            raise PolicyError("third-rule CI job rejected")
+        by_name[job["name"]] = job
+    if set(by_name) != JOBS:
+        raise PolicyError("third-rule CI matrix mismatch")
+    for runner in ("windows-latest", "ubuntu-latest"):
+        if not _step_ok(
+                by_name[f"Offline test / {runner} / Python 3.15"],
+                THIRD_BASELINE_STEP):
+            raise PolicyError("missing third-rule baseline runtime probe")
+    if not _step_ok(
+            by_name["Offline test / ubuntu-latest / Python 3.15"],
+            THIRD_STEP):
+        raise PolicyError("missing third-rule patched binary execution")
+    return dict(EXPECTED_THIRD_CI)
+
+
 FIELDS = frozenset({
     "schema", "channel", "scope", "serial", "created_utc", "expires_utc",
     "owner_key_id", "source_commit_sha", "rule_count", "rule_ids",
@@ -92,17 +177,20 @@ def publish_selected_owner_release(
     main = validate_live_automated_qa(run_id)
     if main["head_sha"] != local_sha:
         raise PolicyError("owner main checkout and QA commit do not match")
-    # An exact successful patched-binary CI is independently required if and
-    # ONLY if the second PowerShell rule is included.
+    # Rule-specific LIVE CI gates, independently of the standard main CI.
     second = _postfix_ci() if RULE_ORDER[1] in rule_ids else None
     if second is not None and second != EXPECTED_SECOND_CI:
         raise PolicyError("second rule CI proof differs from pinned result")
+    third = _third_ci() if RULE_ORDER[2] in rule_ids else None
+    if third is not None and third != EXPECTED_THIRD_CI:
+        raise PolicyError("third rule CI proof differs from pinned result")
 
     signer = _private_key(Path(private_path))
     now = datetime.now(timezone.utc).replace(microsecond=0)
     rules_bytes = canonical_json(rules)
     decisions_bytes = canonical_json(decisions)
-    evidence_bytes = canonical_json({"main_ci": main, "second_ci": second})
+    evidence_bytes = canonical_json({
+        "main_ci": main, "second_ci": second, "third_ci": third})
     manifest = {
         "schema": SCHEMA, "channel": MODE, "scope": SCOPE,
         "serial": serial, "rule_count": len(rules), "rule_ids": rule_ids,
@@ -172,12 +260,15 @@ def verify_selected_owner_release(
     if rules != expected_rules or decisions != expected_decisions:
         raise PolicyError("rule proof, decisions or order differs from owner-eligible pins")
     if (type(evidence) is not dict
-            or set(evidence) != {"main_ci", "second_ci"}):
+            or set(evidence) != {"main_ci", "second_ci", "third_ci"}):
         raise PolicyError("unexpected per-rule CI proof")
     _check_evidence(evidence["main_ci"])
     expected_second = (EXPECTED_SECOND_CI if RULE_ORDER[1] in man["rule_ids"]
                        else None)
+    expected_third = (EXPECTED_THIRD_CI if RULE_ORDER[2] in man["rule_ids"]
+                      else None)
     if (evidence["second_ci"] != expected_second
+            or evidence["third_ci"] != expected_third
             or evidence["main_ci"]["head_sha"] != man["source_commit_sha"]):
         raise PolicyError("owner-reported CI evidence does not match selected rules")
     try:
