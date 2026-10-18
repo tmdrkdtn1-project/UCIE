@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # Read-only access for pinned public upstream artifact trial
 
 jobs:
   offline:
@@ -55,6 +56,18 @@ jobs:
       - name: First rule real CPython 3.15 -X runtime regression (ephemeral runner only)
         if: matrix.python-version == '3.15'
         run: python tests/runtime_python_xoption_regression.py
+      - name: Download pinned upstream PowerShell patched public CI build (single PR trial)
+        if: github.event_name == 'pull_request' && github.head_ref == 'core/powershell-dotpath-postfix-evidence-20261018' && runner.os == 'Linux' && matrix.python-version == '3.15'
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: '11634185748'
+          repository: PowerShell/PowerShell
+          run-id: 37965704591
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ucie_public_ps_build
+      - name: Verify upstream patched Resolve-Path behavior in disposable CI (single PR trial)
+        if: github.event_name == 'pull_request' && github.head_ref == 'core/powershell-dotpath-postfix-evidence-20261018' && runner.os == 'Linux' && matrix.python-version == '3.15'
+        run: python -B tests/runtime_powershell_dotpath_postfix.py "${{ runner.temp }}/ucie_public_ps_build"
       - name: UCIE-owned PowerShell bounded behavioral observations (ephemeral runner only)
         if: ${{ always() && runner.os == 'Windows' }}
         shell: pwsh
