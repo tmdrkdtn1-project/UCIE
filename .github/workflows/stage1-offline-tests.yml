@@ -79,6 +79,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: ./tests/test_ucie_stage4_production_consumer.ps1
+      - name: Owner-risk automated QA public consumer (synthetic Windows 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./tests/test_ucie_owner_risk_consumer.ps1
       - name: UCIE PowerShell alias and shadowing synthetics (never execute supplied code)
         if: runner.os == 'Windows'
         shell: pwsh
