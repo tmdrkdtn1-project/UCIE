@@ -7,7 +7,6 @@ It never signs, alters the miner DB, deploys, or changes a review status.
 """
 from __future__ import annotations
 
-from collections import Counter
 from pathlib import Path
 import re
 
@@ -17,7 +16,6 @@ from .multi_owner_release import (
 from .policy import PolicyError
 
 SHA64 = re.compile(r"[a-f0-9]{64}\Z")
-SHA40 = re.compile(r"[a-f0-9]{40}\Z")
 
 
 def reconcile_existing_signed_rules(
