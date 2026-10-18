@@ -23,8 +23,8 @@ from .public_candidate_staging import MAX_ROWS
 from .public_discovery import SOURCES, DiscoveryError
 from .rule_candidates import candidate_rulepack
 
-PR_REF = re.compile(r"pr:([1-9][0-9]*):([a-f0-9]{40})\\Z")
-FIX_PR_REF = re.compile(r"fix-pr:([1-9][0-9]*):([a-f0-9]{40}):([a-f0-9]{64})\\Z")
+PR_REF = re.compile(r"pr:([1-9][0-9]*):([a-f0-9]{40})\Z")
+FIX_PR_REF = re.compile(r"fix-pr:([1-9][0-9]*):([a-f0-9]{40}):([a-f0-9]{64})\Z")
 # Only these four publicly pinned, already-reviewed PR identities may yield
 # specific Stage 6 templates. This does not grant execution or approval.
 PINNED_RULES = {
