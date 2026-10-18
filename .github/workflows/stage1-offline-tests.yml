@@ -72,6 +72,22 @@ jobs:
         if: ${{ always() && runner.os == 'Windows' }}
         shell: pwsh
         run: ./tests/runtime_powershell_probes.ps1
+      - name: Third rule Get-Command fuzzy duplicates behavioral observation (disposable runner, no approval)
+        if: matrix.python-version == '3.15'
+        shell: pwsh
+        run: ./tests/runtime_powershell_fuzzy_probe.ps1
+      - name: Download fixed public PowerShell development CI build for third rule (one-shot PR)
+        if: github.event_name == 'pull_request' && github.head_ref == 'core/third-rule-real-fuzzy-regression-20261018' && runner.os == 'Linux' && matrix.python-version == '3.15'
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: '11634185748'
+          repository: PowerShell/PowerShell
+          run-id: 37965704591
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ucie_public_ps_fuzzy
+      - name: Third rule fixed fuzzy behavior in official post-fix developer build (one-shot PR)
+        if: github.event_name == 'pull_request' && github.head_ref == 'core/third-rule-real-fuzzy-regression-20261018' && runner.os == 'Linux' && matrix.python-version == '3.15'
+        run: python -B tests/runtime_powershell_fuzzy_postfix.py "${{ runner.temp }}/ucie_public_ps_fuzzy"
       - name: Second rule actual Resolve-Path dot-prefix behavior (disposable runner, no approval)
         if: matrix.python-version == '3.15'
         shell: pwsh
