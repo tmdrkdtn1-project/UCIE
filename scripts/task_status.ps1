@@ -18,6 +18,7 @@ if ($Evidence) {
     $actionOk = $false
     $principalOk = $false
     $principalUserMatches = $false
+    $principalIdentityResolution = 'UNOBSERVED_NO_GO'
     $principalLogonType = 'UNOBSERVED'
     $principalRunLevel = 'UNOBSERVED'
     $cadenceConfigured = $false
@@ -37,9 +38,29 @@ if ($Evidence) {
                 [string]::Equals($a.WorkingDirectory.TrimEnd('\'), $root, [StringComparison]::OrdinalIgnoreCase)
             )
         }
-        $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-        $principalUserMatches = [string]::Equals(
-            $task.Principal.UserId, $me, [StringComparison]::OrdinalIgnoreCase)
+        # Compare security identities, not account display-name spelling.
+        # No account name or SID is printed to the evidence report.
+        $processSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+        $taskUserId = [string]$task.Principal.UserId
+        $principalIdentityResolution = 'UNRESOLVED_NO_GO'
+        if (-not [string]::IsNullOrWhiteSpace($taskUserId)) {
+            try {
+                $taskSid = if ($taskUserId -match '^S-[0-9]+-[0-9]+(-[0-9]+)+$') {
+                    [System.Security.Principal.SecurityIdentifier]::new($taskUserId)
+                } else {
+                    ([System.Security.Principal.NTAccount]::new($taskUserId)).Translate(
+                        [System.Security.Principal.SecurityIdentifier])
+                }
+                $principalUserMatches = $taskSid.Equals($processSid)
+                $principalIdentityResolution = if ($principalUserMatches) {
+                    'SAME_USER_SID'
+                } else {
+                    'DIFFERENT_USER_SID_NO_GO'
+                }
+            } catch {
+                $principalIdentityResolution = 'UNRESOLVED_NO_GO'
+            }
+        }
         $principalLogonType = [string]$task.Principal.LogonType
         $principalRunLevel = [string]$task.Principal.RunLevel
         $principalOk = (
@@ -107,7 +128,9 @@ if ($Evidence) {
                     # A successful scheduler exit alone may be stale or belong
                     # to a skipped run. Bind it to the newest persisted cycle.
                     $taskReceiptBound = (
-                        [Math]::Abs(($cStart.ToUniversalTime() - $lastTaskUtc).TotalMinutes) -le 10 -and
+                        # A scheduled action cannot cause a receipt begun earlier.
+                        $lastTaskUtc -le $cStart -and
+                        ($cStart.ToUniversalTime() - $lastTaskUtc).TotalMinutes -le 10 -and
                         $lastTaskUtc -ge $now.AddMinutes(-90) -and
                         $lastTaskUtc -le $now.AddMinutes(5)
                     )
@@ -154,6 +177,7 @@ if ($Evidence) {
         action_matches_ucie_only = $actionOk
         owner_least_privilege_verified = $principalOk
         principal_user_matches_current_process = $principalUserMatches
+        principal_identity_resolution = $principalIdentityResolution
         principal_logon_type = $principalLogonType
         principal_run_level = $principalRunLevel
         hourly_no_overlap_configured = $cadenceConfigured

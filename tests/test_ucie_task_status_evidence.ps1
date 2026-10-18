@@ -27,6 +27,9 @@ $root = Join-Path ([System.IO.Path]::GetTempPath()) ('UCIE_HOURLY_SYNTH_' + [gui
 $null = New-Item -ItemType Directory -Path (Join-Path $root 'runtime') -Force
 $script:mockBadAction = $false
 $script:mockBadOwner = $false
+$script:mockOtherSid = $false
+$script:mockOwnerAsSid = $false
+$script:mockLastRunSecondsOffset = -2
 $script:mockExit = 0
 $script:mockLastRunMinutesAgo = 5
 function Get-ScheduledTask {
@@ -34,6 +37,10 @@ function Get-ScheduledTask {
     $python = Join-Path $root '.venv\Scripts\python.exe'
     if ($script:mockBadAction) { $python = Join-Path $root 'unknown.exe' }
     $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    if ($script:mockOwnerAsSid) {
+        $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    }
+    if ($script:mockOtherSid) { $user = 'S-1-5-18' }
     if ($script:mockBadOwner) { $user = 'unrecognized-ucie-principal' }
     return [pscustomobject]@{
         Actions = @([pscustomobject]@{
@@ -55,7 +62,7 @@ function Get-ScheduledTaskInfo {
     param($TaskPath, $TaskName)
     return [pscustomobject]@{
         LastTaskResult = $script:mockExit
-        LastRunTime = [datetime]::Now.AddMinutes(-$script:mockLastRunMinutesAgo)
+        LastRunTime = [datetime]::Now.AddMinutes(-$script:mockLastRunMinutesAgo).AddSeconds($script:mockLastRunSecondsOffset)
         NextRunTime = [datetime]::Now.AddMinutes(55)
     }
 }
@@ -94,6 +101,7 @@ try {
         -not $report.stage13_rate_pause_protected -or
         -not $report.action_matches_ucie_only -or
         -not $report.owner_least_privilege_verified -or
+        $report.principal_identity_resolution -cne 'SAME_USER_SID' -or
         -not $report.hourly_no_overlap_configured -or
         -not $report.last_scheduled_run_matches_receipt -or
         $report.candidates_auto_approved -ne 0 -or
@@ -120,6 +128,14 @@ try {
         throw 'UCIE_HOURLY_STALE_SCHEDULER_RESULT_ACCEPTED'
     }
     $script:mockLastRunMinutesAgo = 5
+    $script:mockLastRunSecondsOffset = 20
+    Write-SyntheticReceipts -LastStage 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO'
+    $outOfOrder = (& $evaluator | ConvertFrom-Json)
+    if ($outOfOrder.status -cne 'LAST_SCHEDULED_RUN_RECEIPT_MISMATCH_NO_GO' -or
+        $outOfOrder.last_scheduled_run_matches_receipt -ne $false) {
+        throw 'UCIE_SCHEDULED_TASK_AFTER_COLLECTION_ACCEPTED'
+    }
+    $script:mockLastRunSecondsOffset = -2
     Write-SyntheticReceipts -LastStage 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO' -LastStatus 'COLLECTION_FAILED'
     $failed = (& $evaluator | ConvertFrom-Json)
     if ($failed.status -cne 'TWO_RECENT_HOURLY_CYCLES_NOT_PROVEN_NO_GO') {
@@ -136,9 +152,25 @@ try {
         throw 'UCIE_HOURLY_BAD_ACTION_ACCEPTED'
     }
     $script:mockBadAction = $false
+    $script:mockOwnerAsSid = $true
+    $sidAlias = (& $evaluator | ConvertFrom-Json)
+    if ($sidAlias.status -cne 'TWO_CYCLE_BASE_COLLECTOR_OBSERVED' -or
+        $sidAlias.principal_identity_resolution -cne 'SAME_USER_SID') {
+        throw 'UCIE_EQUIVALENT_SID_NOT_RECOGNIZED'
+    }
+    $script:mockOwnerAsSid = $false
+    $script:mockOtherSid = $true
+    $differentUser = (& $evaluator | ConvertFrom-Json)
+    if ($differentUser.status -cne 'TASK_IDENTITY_OR_CADENCE_NO_GO' -or
+        $differentUser.principal_identity_resolution -cne 'DIFFERENT_USER_SID_NO_GO') {
+        throw 'UCIE_DIFFERENT_SID_ACCEPTED'
+    }
+    $script:mockOtherSid = $false
     $script:mockBadOwner = $true
-    if ((& $evaluator | ConvertFrom-Json).status -cne 'TASK_IDENTITY_OR_CADENCE_NO_GO') {
-        throw 'UCIE_HOURLY_BAD_OWNER_ACCEPTED'
+    $unresolved = (& $evaluator | ConvertFrom-Json)
+    if ($unresolved.status -cne 'TASK_IDENTITY_OR_CADENCE_NO_GO' -or
+        $unresolved.principal_identity_resolution -cne 'UNRESOLVED_NO_GO') {
+        throw 'UCIE_UNRESOLVED_OWNER_ACCEPTED'
     }
     $script:mockBadOwner = $false
     $script:mockExit = 1
