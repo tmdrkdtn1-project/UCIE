@@ -59,6 +59,10 @@ jobs:
         if: ${{ always() && runner.os == 'Windows' }}
         shell: pwsh
         run: ./tests/runtime_powershell_probes.ps1
+      - name: Second rule actual Resolve-Path dot-prefix behavior (disposable runner, no approval)
+        if: matrix.python-version == '3.15'
+        shell: pwsh
+        run: ./tests/runtime_powershell_dotpath_probe.ps1
       - name: UCIE-authored inert PowerShell AST candidate tests (no user code)
         if: runner.os == 'Windows'
         shell: pwsh
