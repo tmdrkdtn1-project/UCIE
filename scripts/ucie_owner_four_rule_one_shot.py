@@ -113,7 +113,8 @@ def power_shell_receipt(scanner: Path, source: str, root: Path) -> dict:
     if proc.returncode != 0 or proc.stderr:
         raise PolicyError(
             "synthetic PowerShell AST scanner emitted an error or diagnostic "
-            f"(exit={proc.returncode}, stderr_bytes={len(proc.stderr)})")
+            f"(exit={proc.returncode}, stderr_bytes={len(proc.stderr)}, "
+            f"stderr_prefix_hex={proc.stderr[:256].hex()})")
     if not proc.stdout or len(proc.stdout) > 131072:
         raise PolicyError("empty or oversized synthetic AST JSON response")
     try:
