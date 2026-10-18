@@ -149,3 +149,160 @@ def reconcile_existing_signed_rules(
         "production_approved_for_new_candidates": False,
         "deploy_allowed": False, "persistent_writes": 0,
     }
+
+
+def reconcile_mixed_signed_candidates(
+        root: Path, pack: Path, trust: Path, *,
+        min_serial: int = 4) -> dict:
+    """End-to-end read-only pipeline: authenticated N-rule pack vs miner queue.
+
+    Signed rule truth comes ONLY from the verified owner Rulepack. Staged
+    candidate metadata is untrusted and is NEVER a substitute for owner QA,
+    consent or signing. A missing/incomplete miner queue cannot downgrade or
+    revoke a previously signed pack; it blocks the fresh-miner handoff.
+    Future additional rules are obtained from authenticated release profiles,
+    not a hard-coded first/two-rule list.
+    """
+    from ucie_miner.verification_handoff import (
+        PINNED_RULES, PR_REF, FIX_PR_REF, prepare_verification_handoff,
+    )
+    from ucie_miner.static_rule_bridge import SOURCE_BINDINGS
+    from .mixed_release import (
+        selected_payload, verify_mixed_owner_release,
+    )
+
+    verified = verify_mixed_owner_release(
+        Path(pack), Path(trust), min_serial=min_serial)
+    ids = verified.get("rule_ids")
+    if (verified.get("result") != "MIXED_OWNER_PUBLIC_MANUAL_PACK_VERIFIED"
+            or verified.get("owner_signature") != "VALID"
+            or verified.get("scope") != "PUBLIC_ONLY_MANUAL_STATIC_SCAN"
+            or type(ids) is not list or not ids
+            or verified.get("rule_count") != len(ids)
+            or verified.get("auto_apply") is not False):
+        raise PolicyError("mixed owner-signed release not authenticated")
+    rules, _ = selected_payload(ids)
+    by_id = {x["rule_id"]: x for x in rules}
+    if len(by_id) != len(rules) or set(by_id) != set(ids):
+        raise PolicyError("signed release selection has conflicting identities")
+    for rule_id, rule in by_id.items():
+        pair = SOURCE_BINDINGS.get(rule_id)
+        if (pair is None or PINNED_RULES.get(
+                (pair[0], pair[1], rule["upstream_merge_sha"])) != rule_id
+                or rule["upstream"] !=
+                    f"https://github.com/{pair[0]}/pull/{pair[1]}"):
+            raise PolicyError("signed source cannot be bound to miner candidate")
+
+    report = prepare_verification_handoff(Path(root))
+    if (type(report) is not dict
+            or report.get("schema") !=
+               "UCIE_PUBLIC_CANDIDATE_VERIFICATION_HANDOFF_V1"
+            or report.get("auto_promoted") is not False
+            or report.get("production_approved") is not False
+            or report.get("deploy_allowed") is not False
+            or type(report.get("tasks")) is not list):
+        raise PolicyError("untrusted public candidate handoff")
+    linked = (report.get("status") == "LINKED_UNVERIFIED_NO_GO"
+              and report.get("pending_source_revisions") == 0
+              and type(report.get("linked_revisions")) is int
+              and type(report.get("source_revisions")) is int
+              and report["linked_revisions"] == report["source_revisions"])
+    # Fail closed on a completely unexpected state even if row counts agree.
+    if report.get("status") not in (
+            "LINKED_UNVERIFIED_NO_GO", "REVIEW_LEDGER_ABSENT_NO_GO",
+            "SOURCE_REVISIONS_PENDING_NO_GO"):
+        raise PolicyError("unexpected miner review-queue state")
+
+    matches = {rid: [] for rid in ids}
+    unmatched = 0
+    fingerprints = set()
+    for entry in report["tasks"]:
+        if (type(entry) is not dict
+                or entry.get("status") != "UNVERIFIED_CANDIDATE_ONLY"
+                or entry.get("approval") is not False
+                or type(entry.get("blocking_reasons")) is not list
+                or "VERIFICATION_NOT_PERFORMED"
+                   not in entry["blocking_reasons"]):
+            raise PolicyError("candidate ledger forged an approval")
+        fp = entry.get("candidate_id_sha256")
+        evidence = entry.get("evidence_sha256")
+        if (type(fp) is not str or SHA64.fullmatch(fp) is None
+                or type(evidence) is not str
+                or SHA64.fullmatch(evidence) is None
+                or fp in fingerprints):
+            raise PolicyError("invalid/duplicate candidate evidence identity")
+        fingerprints.add(fp)
+        proposal = entry.get("stage6_candidate")
+        if proposal is None:
+            unmatched += 1
+            continue
+        if (type(proposal) is not dict
+                or proposal.get("status") != "UNVERIFIED_CANDIDATE_ONLY"
+                or proposal.get("executable_command") is not None
+                or type(proposal.get("required_gates")) is not dict
+                or not proposal["required_gates"]
+                or any(value != "NOT_VERIFIED"
+                       for value in proposal["required_gates"].values())):
+            raise PolicyError("staged public candidate is executable or promoted")
+        code = proposal.get("rule_code")
+        if code not in by_id:
+            unmatched += 1
+            continue
+        ref = entry.get("reference")
+        found = (PR_REF.fullmatch(ref) or FIX_PR_REF.fullmatch(ref)
+                 if type(ref) is str else None)
+        source, number = SOURCE_BINDINGS[code]
+        if (found is None
+                or int(found.group(1)) != number
+                or found.group(2) != by_id[code]["upstream_merge_sha"]
+                or entry.get("source") != source
+                or proposal.get("source") != source
+                or proposal.get("canonical_pr_number") != number
+                or PINNED_RULES.get((source, number, found.group(2))) != code):
+            raise PolicyError("staged candidate claims wrong signed source")
+        matches[code].append({
+            "candidate_id_sha256": fp,
+            "evidence_sha256": evidence,
+            "duplicate_revision_flag": (
+                "MULTIPLE_EVIDENCE_REVISIONS_REQUIRE_SELECTION"
+                in entry["blocking_reasons"]),
+        })
+    states = []
+    count = 0
+    for code in ids:
+        rows = matches[code] if linked else []
+        unique = len(rows) == 1 and not rows[0]["duplicate_revision_flag"]
+        if unique:
+            count += 1
+        states.append({
+            "rule_id": code,
+            "existing_owner_signature_verified": True,
+            "miner_provenance": (
+                "EXACT_SINGLE_REVISION_UNVERIFIED"
+                if unique else "DUPLICATE_REVISIONS_NO_GO"
+                if len(rows) > 1
+                or any(x["duplicate_revision_flag"] for x in rows)
+                else "NOT_LINKED_NO_GO"),
+            "candidate_id_sha256": (
+                rows[0]["candidate_id_sha256"] if unique else None),
+            "new_candidate_qa_passed": False,
+            "new_candidate_owner_approved": False,
+        })
+    return {
+        "schema": "UCIE_SIGNED_MIXED_MINER_PIPELINE_V1",
+        "status": ("SIGNED_PACK_AND_LEDGER_RECONCILED_NO_NEW_APPROVAL"
+                   if linked else "SIGNED_PACK_VALID_MINER_LEDGER_NO_GO"),
+        "owner_pack_serial": verified["serial"],
+        "signed_rule_count": len(ids),
+        "signed_rule_ids": list(ids),
+        "owner_signature": "VALID",
+        "miner_handoff_status": report["status"],
+        "matched_signed_rule_revisions": count,
+        "unmatched_unsigned_candidate_revisions": unmatched,
+        "new_rules_approved": 0,
+        "results": states,
+        "auto_promoted": False,
+        "new_production_approval_granted": False,
+        "automatic_deployment": False,
+        "persistent_writes": 0,
+    }
