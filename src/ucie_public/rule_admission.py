@@ -88,9 +88,10 @@ def reconcile_existing_signed_rules(
             continue
         if (type(proposal) is not dict
                 or proposal.get("status") != "UNVERIFIED_CANDIDATE_ONLY"
-                or proposal.get("executable_command") is not None
-                or proposal.get("rule_code") not in signed):
-            continue  # Any unsigned or not yet approved rule remains blocked.
+                or proposal.get("executable_command") is not None):
+            raise PolicyError("unsafe or executable staged rule proposal")
+        if proposal.get("rule_code") not in signed:
+            continue  # An unsigned/not-approved rule cannot be activated.
         code = proposal["rule_code"]
         source = entry.get("source")
         ref = entry.get("reference")
