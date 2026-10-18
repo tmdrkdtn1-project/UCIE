@@ -170,7 +170,7 @@ class Stage18ProbeTests(unittest.TestCase):
     def test_synthetic_subprocess_argument_is_fixed_and_shell_free(self):
         class Result:
             returncode = 0
-            stdout = "False\\n"
+            stdout = "False"
             stderr = ""
         # Use a representative fully synthetic subprocess result.
         with patch("ucie_miner.stage18_first_rule.subprocess.run",
