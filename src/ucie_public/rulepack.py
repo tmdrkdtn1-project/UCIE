@@ -35,7 +35,7 @@ def digest(b: bytes) -> str:
 
 
 def generate_keys(directory: Path, *, purpose: str = "demo") -> tuple[Path, Path]:
-    if purpose not in ("demo", "prevention"):
+    if purpose not in ("demo", "prevention", "production", "qa"):
         raise PolicyError("unsupported key purpose")
     if directory.is_symlink():
         raise PolicyError("key directory cannot be symlink")
