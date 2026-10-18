@@ -125,8 +125,17 @@ function Find-UCIEPowerShellCandidate {
         })
     }
 
-    $sourceDigest = [Convert]::ToHexString(
-        [System.Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+    # SHA256.HashData and Convert.ToHexString require newer .NET and fail
+    # under Windows PowerShell 5.1 (.NET Framework). Use the supported
+    # Create/ComputeHash/BitConverter API with the same lowercase SHA256.
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $digestBytes = $hasher.ComputeHash($bytes)
+    }
+    finally {
+        $hasher.Dispose()
+    }
+    $sourceDigest = [BitConverter]::ToString($digestBytes).Replace('-', '').ToLowerInvariant()
     return [pscustomobject]@{
         schema = 'UCIE_POWERSHELL_STATIC_CANDIDATES_V1'
         source_sha256 = $sourceDigest
