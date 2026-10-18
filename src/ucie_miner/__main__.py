@@ -35,6 +35,7 @@ from .public_evidence_chain_audit import audit_external_evidence_chain
 from .public_pr_coverage_audit import audit_public_pr_evidence_once
 from .public_git_commit_skills import discover_git_commit_skills, analyze_git_commits
 from .automated_candidate_qa import verify_public_candidate_qa
+from .stage17_review_docket import inspect_stage17_review
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -65,6 +66,9 @@ def main(argv=None):
                     help="Explicit opt-in required for public GitHub Actions evidence GETs")
     qa.add_argument("--run-id", type=int, required=True,
                     help="Exact already completed UCIE main CI run ID")
+    sub.add_parser(
+        "inspect-stage17-review",
+        help="Offline read-only candidate QA/security handoff with Stage16 receipt binding; always NO-GO")
     sub.add_parser("preview-acceptance", help="Read-only NO-GO host and evidence observation")
     pin = sub.add_parser("audit-merge-snapshot", help="Compare pinned public PR merge SHA, without DB writes")
     pin.add_argument("--verify-live", action="store_true",
@@ -297,6 +301,8 @@ def main(argv=None):
             if not args.live:
                 raise ValueError("public CI evidence verification requires explicit --live")
             result = verify_public_candidate_qa(ROOT, run_id=args.run_id)
+        elif args.action == "inspect-stage17-review":
+            result = inspect_stage17_review(ROOT)
         elif args.action == "inspect-public-candidate-ledger":
             result = inspect_staged_candidates(ROOT)
         elif args.action == "inspect-stage12-review":
