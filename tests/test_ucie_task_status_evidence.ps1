@@ -28,6 +28,7 @@ $null = New-Item -ItemType Directory -Path (Join-Path $root 'runtime') -Force
 $script:mockBadAction = $false
 $script:mockBadOwner = $false
 $script:mockExit = 0
+$script:mockLastRunMinutesAgo = 5
 function Get-ScheduledTask {
     param($TaskPath, $TaskName, $ErrorAction)
     $python = Join-Path $root '.venv\Scripts\python.exe'
@@ -54,13 +55,14 @@ function Get-ScheduledTaskInfo {
     param($TaskPath, $TaskName)
     return [pscustomobject]@{
         LastTaskResult = $script:mockExit
-        LastRunTime = [datetime]::Now.AddMinutes(-5)
+        LastRunTime = [datetime]::Now.AddMinutes(-$script:mockLastRunMinutesAgo)
         NextRunTime = [datetime]::Now.AddMinutes(55)
     }
 }
 function Write-SyntheticReceipts {
     param([string]$LastStage, [string]$LastStatus = 'COLLECTED_UNVERIFIED',
-          [int]$GapMinutes = 60)
+          [int]$GapMinutes = 60,
+          [string]$PreviousStage = 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO')
     $base = [DateTimeOffset]::UtcNow.AddMinutes(-65)
     $two = @()
     foreach ($i in 0,1) {
@@ -75,7 +77,7 @@ function Write-SyntheticReceipts {
             verification_pass = 0
             production_approved = $false
             stage13_history_status = if ($i -eq 1) { $LastStage }
-                else { 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO' }
+                else { $PreviousStage }
             stage12_review_status = 'STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO'
         }
     }
@@ -93,6 +95,7 @@ try {
         -not $report.action_matches_ucie_only -or
         -not $report.owner_least_privilege_verified -or
         -not $report.hourly_no_overlap_configured -or
+        -not $report.last_scheduled_run_matches_receipt -or
         $report.candidates_auto_approved -ne 0 -or
         $report.database_modified -ne $false) {
         throw 'UCIE_HOURLY_RATE_BUDGET_STATE_NO_GO'
@@ -102,6 +105,21 @@ try {
     if ($normal.status -cne 'TWO_CYCLE_BASE_COLLECTOR_OBSERVED') {
         throw 'UCIE_HOURLY_TWO_CYCLE_STATE_NO_GO'
     }
+    Write-SyntheticReceipts -LastStage 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO' -PreviousStage 'EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO'
+    $resumed = (& $evaluator | ConvertFrom-Json)
+    if ($resumed.status -cne 'TWO_CYCLE_BASE_COLLECTOR_OBSERVED_STAGE13_RESUMED' -or
+        -not $resumed.stage13_pause_then_success_observed -or
+        $resumed.stage13_resumed_after_quota_reset -ne $false) {
+        throw 'UCIE_HOURLY_RESUME_EVIDENCE_NO_GO'
+    }
+    Write-SyntheticReceipts -LastStage 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO'
+    $script:mockLastRunMinutesAgo = 25
+    $stale = (& $evaluator | ConvertFrom-Json)
+    if ($stale.status -cne 'LAST_SCHEDULED_RUN_RECEIPT_MISMATCH_NO_GO' -or
+        $stale.two_recent_hourly_successes -ne $false) {
+        throw 'UCIE_HOURLY_STALE_SCHEDULER_RESULT_ACCEPTED'
+    }
+    $script:mockLastRunMinutesAgo = 5
     Write-SyntheticReceipts -LastStage 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO' -LastStatus 'COLLECTION_FAILED'
     $failed = (& $evaluator | ConvertFrom-Json)
     if ($failed.status -cne 'TWO_RECENT_HOURLY_CYCLES_NOT_PROVEN_NO_GO') {
