@@ -53,6 +53,11 @@ jobs:
 
       - name: UCIE-owned CPython bounded behavioral regression probes (no upstream checkout)
         run: python tests/runtime_python_probes.py
+      - name: Fourth rule safe scandir guarded runtime and inert AST positives and negatives
+        run: python -B tests/runtime_python_scandir_rule_probe.py
+      - name: Fourth rule exact official release-versus-patch source proof (one-shot PR only)
+        if: github.event_name == 'pull_request' && github.head_ref == 'core/fourth-rule-scandir-source-and-safe-regression-20261018' && runner.os == 'Linux' && matrix.python-version == '3.15'
+        run: python -B tests/runtime_python_scandir_pinned_source.py
       - name: First rule real CPython 3.15 -X runtime regression (ephemeral runner only)
         if: matrix.python-version == '3.15'
         run: python tests/runtime_python_xoption_regression.py
