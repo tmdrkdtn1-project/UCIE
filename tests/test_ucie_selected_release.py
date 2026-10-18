@@ -18,10 +18,49 @@ from ucie_public.multi_owner_release import (
     verify_two_rule_owner_release,
 )
 from ucie_public.selected_release import (
-    CONFIRM, ELIGIBLE, RULE_ORDER, EXPECTED_SECOND_CI,
-    selected_payload, publish_selected_owner_release,
+    CONFIRM, ELIGIBLE, RULE_ORDER, EXPECTED_SECOND_CI, EXPECTED_THIRD_CI,
+    THIRD_RUN, THIRD_SHA, THIRD_BRANCH, THIRD_STEP, THIRD_BASELINE_STEP,
+    _third_ci, selected_payload, publish_selected_owner_release,
     verify_selected_owner_release, scan_selected_owner_receipt,
 )
+from ucie_public.owner_release import JOBS
+
+
+def three_receipt():
+    sample = scanner_receipt()
+    sample["findings"].append({
+        "pattern_code": "PS_FUZZY_GET_COMMAND_DUPLICATES",
+        "line": 3, "column": 1,
+        "confidence": "STATIC_HEURISTIC_REVIEW_REQUIRED",
+        "safe_fix_guidance": "Inspect fuzzy matches for duplicate Name/CommandType/Source identities before using results",
+        "public_evidence": "https://github.com/PowerShell/PowerShell/pull/28042",
+        "runtime_bug_reproduced": False,
+    })
+    sample["finding_count"] = len(sample["findings"])
+    return sample
+
+
+def fake_third():
+    run = {
+        "id": THIRD_RUN, "head_sha": THIRD_SHA,
+        "repository": {"full_name": "tmdrkdtn1-project/UCIE"},
+        "event": "pull_request", "head_branch": THIRD_BRANCH,
+        "status": "completed", "conclusion": "success",
+    }
+    jobs = []
+    for name in sorted(JOBS):
+        steps = []
+        if name.endswith("Python 3.15"):
+            steps.append({"name": THIRD_BASELINE_STEP, "status": "completed",
+                          "conclusion": "success"})
+        if name == "Offline test / ubuntu-latest / Python 3.15":
+            steps.append({"name": THIRD_STEP, "status": "completed",
+                          "conclusion": "success"})
+        jobs.append({"run_id": THIRD_RUN, "name": name,
+                     "status": "completed", "conclusion": "success",
+                     "steps": steps})
+    return run, {"total_count": 4, "jobs": jobs}
+
 
 
 class SelectedOwnerReleaseTests(unittest.TestCase):
@@ -52,24 +91,26 @@ class SelectedOwnerReleaseTests(unittest.TestCase):
                   side_effect=[self.main, self.jobs]),
             patch("ucie_public.selected_release._postfix_ci",
                   return_value=EXPECTED_SECOND_CI) as second,
+            patch("ucie_public.selected_release._third_ci",
+                  return_value=EXPECTED_THIRD_CI),
         ):
             result = publish_selected_owner_release(
                 self.root, self.private, self.pack, **params)
         return result, second.call_count
 
-    def test_both_rules_explicitly_selected_and_scanned(self):
+    def test_three_rules_explicitly_selected_and_scanned(self):
         _, calls = self.publish()
         self.assertEqual(calls, 1)
         verified = verify_selected_owner_release(self.pack, self.trust,
                                                  min_serial=8)
         self.assertEqual(verified["rule_ids"], list(RULE_ORDER))
         self.assertEqual(verified["owner_signature"], "VALID")
-        self.assertEqual(verified["rule_count"], 2)
+        self.assertEqual(verified["rule_count"], 3)
         self.assertFalse(verified["independent_human_qa_approved"])
         self.assertFalse(verified["auto_apply"])
         result = scan_selected_owner_receipt(
-            self.pack, self.trust, scanner_receipt(), min_serial=8)
-        self.assertEqual(result["finding_count"], 2)
+            self.pack, self.trust, three_receipt(), min_serial=8)
+        self.assertEqual(result["finding_count"], 3)
         self.assertEqual([i["rule_id"] for i in result["findings"]],
                          list(RULE_ORDER))
         self.assertFalse(result["auto_fix_applied"])
@@ -106,6 +147,9 @@ class SelectedOwnerReleaseTests(unittest.TestCase):
             {"risk_acceptances": {**{
                 code: ELIGIBLE[code][2] for code in RULE_ORDER},
                 RULE_ORDER[1]: "I_DID_NOT_ACCEPT"}},
+            {"risk_acceptances": {**{
+                code: ELIGIBLE[code][2] for code in RULE_ORDER},
+                RULE_ORDER[2]: "I_DID_NOT_ACCEPT"}},
             {"serial": True}, {"serial": 2},
         ):
             with self.subTest(changed=changed), self.assertRaises(PolicyError):
@@ -141,6 +185,51 @@ class SelectedOwnerReleaseTests(unittest.TestCase):
                 rule_ids=[RULE_ORDER[0]], confirmation=CONFIRM,
                 risk_acceptances={RULE_ORDER[0]: ELIGIBLE[RULE_ORDER[0]][2]})
         self.assertFalse(self.pack.exists())
+
+    def test_live_third_ci_pinning_fails_for_bad_identity_or_missing_proof(self):
+        good, jobs = fake_third()
+        with patch("ucie_public.selected_release._public_json",
+                   side_effect=[good, jobs]):
+            self.assertEqual(_third_ci(), EXPECTED_THIRD_CI)
+        for kind in ("wrong_sha", "wrong_branch", "failed", "missing_fix",
+                     "missing_windows_observation"):
+            run = deepcopy(good)
+            matrix = deepcopy(jobs)
+            if kind == "wrong_sha":
+                run["head_sha"] = "f" * 40
+            elif kind == "wrong_branch":
+                run["head_branch"] = "unapproved-branch"
+            elif kind == "failed":
+                run["conclusion"] = "failure"
+            elif kind == "missing_fix":
+                name = "Offline test / ubuntu-latest / Python 3.15"
+                next(j for j in matrix["jobs"] if j["name"] == name)["steps"] = [
+                    {"name": THIRD_BASELINE_STEP, "status": "completed",
+                     "conclusion": "success"}]
+            else:
+                name = "Offline test / windows-latest / Python 3.15"
+                next(j for j in matrix["jobs"] if j["name"] == name)["steps"] = []
+            with self.subTest(kind=kind), patch(
+                "ucie_public.selected_release._public_json",
+                side_effect=[run, matrix],
+            ), self.assertRaises(PolicyError):
+                _third_ci()
+
+    def test_third_rule_requires_independent_owner_risk(self):
+        first_two = list(RULE_ORDER[:2])
+        _, _ = self.publish(ids=first_two)
+        result = verify_selected_owner_release(self.pack, self.trust)
+        self.assertEqual(result["rule_ids"], first_two)
+        self.assertNotIn(RULE_ORDER[2], result["rule_ids"])
+        scan = scan_selected_owner_receipt(
+            self.pack, self.trust, three_receipt())
+        self.assertEqual(scan["finding_count"], 2)
+
+    def test_third_rule_ci_not_claimed_when_unselected(self):
+        self.publish(ids=[RULE_ORDER[0]])
+        with zipfile.ZipFile(self.pack) as z:
+            evidence = json.loads(z.read("evidence/automated_ci.json"))
+        self.assertIsNone(evidence["third_ci"])
 
     def test_rollback_expiry_untrusted_key_no_overwrite(self):
         self.publish()
