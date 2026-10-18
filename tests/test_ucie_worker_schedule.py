@@ -198,6 +198,50 @@ class WorkerScheduleTests(unittest.TestCase):
         self.assertNotIn("stage13_failure_source", result)
         self.assertNotIn("stage12_review_status", result)
 
+    def test_stage16_observation_is_persisted_without_approving_any_rule(self):
+        def with_safe_qa(root):
+            legacy = self.collect(root)
+            legacy["stage10"] = {
+                "status": "STAGE10_UNVERIFIED_STAGED_NO_GO",
+                "stage16_safe_qa_status":
+                    "STAGE16_SAFE_QA_OBSERVED_REVIEW_REQUIRED",
+                "stage16_safe_qa_templates": 2,
+                "stage16_safe_qa_gets_upper_bound": 9,
+            }
+            return legacy
+        out = run_cycle(self.root, collect=with_safe_qa,
+                        write_report=self.write_report)
+        self.assertEqual(out["status"], "COLLECTED_UNVERIFIED")
+        self.assertEqual(out["stage16_safe_qa_templates"], 2)
+        self.assertEqual(out["stage16_safe_qa_gets_upper_bound"], 9)
+        self.assertEqual(out["verification_pass"], 0)
+        self.assertFalse(out["production_approved"])
+        persisted = json.loads((self.root / "runtime" / "last_run.json").read_text())
+        self.assertEqual(persisted["stage16_safe_qa_status"],
+                         "STAGE16_SAFE_QA_OBSERVED_REVIEW_REQUIRED")
+        self.assertNotIn("approved_rules", persisted)
+
+    def test_stage16_bad_telemetry_fails_closed(self):
+        for status, templates, gets in (
+                ("AUTO_APPROVED", 1, 9),
+                ("STAGE16_SAFE_QA_DISABLED", 1, 9),
+                ("STAGE16_SAFE_QA_OBSERVED_REVIEW_REQUIRED", 5, 9),
+                ("STAGE16_SAFE_QA_OBSERVED_REVIEW_REQUIRED", 2, 100)):
+            def fake(root):
+                legacy = self.collect(root)
+                legacy["stage10"] = {
+                    "status": "STAGE10_UNVERIFIED_STAGED_NO_GO",
+                    "stage16_safe_qa_status": status,
+                    "stage16_safe_qa_templates": templates,
+                    "stage16_safe_qa_gets_upper_bound": gets,
+                }
+                return legacy
+            with self.subTest(status=status, templates=templates, gets=gets):
+                result = run_cycle(self.root, collect=fake,
+                                   write_report=self.write_report)
+                self.assertEqual(result["status"], "COLLECTION_FAILED")
+                self.assertNotIn("stage16_safe_qa_status", result)
+
     def test_legacy_unscheduled_mode_remains_available(self):
         a = run_cycle(self.root, collect=self.collect, write_report=self.write_report)
         b = run_cycle(self.root, collect=self.collect, write_report=self.write_report)
