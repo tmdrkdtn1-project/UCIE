@@ -12,6 +12,10 @@ from .prevention_rulepack import (
 from .production_release import publish_production, verify_production
 from .owner_release import publish_owner_risk_release, verify_owner_risk_release
 from .multi_review import publish_multi_review, verify_multi_review, scan_multi_review_receipt
+from .multi_owner_release import (
+    publish_two_rule_owner_release, verify_two_rule_owner_release,
+    scan_two_rule_owner_receipt,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -102,6 +106,27 @@ def main(argv=None) -> int:
     two_scan.add_argument("--pack", type=Path, required=True)
     two_scan.add_argument("--trust", type=Path, required=True)
     two_scan.add_argument("--min-serial", type=int, default=1)
+
+    multi_prod = sub.add_parser(
+        "publish-two-rule-owner-risk-release",
+        help="EXPLICIT two-rule PUBLIC_ONLY manual owner-risk release, never automated")
+    multi_prod.add_argument("--owner-private", type=Path, required=True)
+    multi_prod.add_argument("--output", type=Path, required=True)
+    multi_prod.add_argument("--run-id", type=int, required=True)
+    multi_prod.add_argument("--serial", type=int, required=True)
+    multi_prod.add_argument("--confirm", required=True)
+    multi_prod.add_argument("--accept-risk", required=True)
+    multi_prod.add_argument("--accept-second-risk", required=True)
+    multi_ver = sub.add_parser("verify-two-rule-owner-risk-release",
+                               help="Offline authenticated two-rule owner-risk release")
+    multi_ver.add_argument("--pack", type=Path, required=True)
+    multi_ver.add_argument("--owner-trust", type=Path, required=True)
+    multi_ver.add_argument("--min-serial", type=int, default=1)
+    multi_scan = sub.add_parser("scan-two-rule-owner-receipt-stdin",
+                               help="Review manually supplied inert PowerShell scanner JSON")
+    multi_scan.add_argument("--pack", type=Path, required=True)
+    multi_scan.add_argument("--owner-trust", type=Path, required=True)
+    multi_scan.add_argument("--min-serial", type=int, default=1)
     args = p.parse_args(argv)
     try:
         if args.command == "keygen-demo":
@@ -200,6 +225,30 @@ def main(argv=None) -> int:
             scan = json.loads(raw, object_pairs_hook=_strict_pairs)
             result = scan_multi_review_receipt(
                 args.pack, args.trust, scan, min_serial=args.min_serial)
+
+        elif args.command == "publish-two-rule-owner-risk-release":
+            allowed = ROOT / ".build_keys" / "production" / "private_production.pem"
+            if args.owner_private.absolute() != allowed.absolute():
+                raise PolicyError("owner production key outside dedicated UCIE key location")
+            output = publish_two_rule_owner_release(
+                ROOT, args.owner_private, args.output, run_id=args.run_id,
+                serial=args.serial, confirmation=args.confirm,
+                risk_acceptance=args.accept_risk,
+                second_risk_acceptance=args.accept_second_risk)
+            result = {"result": "EXPLICIT_TWO_RULE_OWNER_RISK_RELEASE_SIGNED",
+                      "output": str(output), "scope": "PUBLIC_ONLY_MANUAL_STATIC_SCAN",
+                      "automated_distribution": False, "auto_apply": False}
+        elif args.command == "verify-two-rule-owner-risk-release":
+            result = verify_two_rule_owner_release(
+                args.pack, args.owner_trust, min_serial=args.min_serial)
+        elif args.command == "scan-two-rule-owner-receipt-stdin":
+            raw = sys.stdin.read(131073)
+            if len(raw.encode("utf-8")) > 131072:
+                raise PolicyError("oversized inert scan receipt")
+            receipt = json.loads(raw, object_pairs_hook=_strict_pairs)
+            result = scan_two_rule_owner_receipt(
+                args.pack, args.owner_trust, receipt,
+                min_serial=args.min_serial)
         else:
             raise AssertionError("unreachable")
         print(json.dumps(result, sort_keys=True, indent=2))
