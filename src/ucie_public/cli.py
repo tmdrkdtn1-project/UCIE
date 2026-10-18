@@ -20,6 +20,10 @@ from .selected_release import (
     publish_selected_owner_release, verify_selected_owner_release,
     scan_selected_owner_receipt,
 )
+from .mixed_release import (
+    publish_mixed_owner_release, verify_mixed_owner_release,
+    scan_mixed_owner_receipt,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -153,6 +157,28 @@ def main(argv=None) -> int:
     selected_scan.add_argument("--pack", type=Path, required=True)
     selected_scan.add_argument("--owner-trust", type=Path, required=True)
     selected_scan.add_argument("--min-serial", type=int, default=3)
+    mixed_pub = sub.add_parser(
+        "publish-mixed-owner-risk-release",
+        help="Explicit owner consent for each selected Python/PowerShell rule in V2 pack")
+    mixed_pub.add_argument("--owner-private", type=Path, required=True)
+    mixed_pub.add_argument("--output", type=Path, required=True)
+    mixed_pub.add_argument("--run-id", type=int, required=True)
+    mixed_pub.add_argument("--serial", type=int, required=True)
+    mixed_pub.add_argument("--rule-id", action="append", required=True)
+    mixed_pub.add_argument("--accept-risk", action="append", required=True)
+    mixed_pub.add_argument("--confirm", required=True)
+    mixed_ver = sub.add_parser(
+        "verify-mixed-owner-risk-release",
+        help="Offline signature and exact per-rule source/QA evidence receiver")
+    mixed_ver.add_argument("--pack", type=Path, required=True)
+    mixed_ver.add_argument("--owner-trust", type=Path, required=True)
+    mixed_ver.add_argument("--min-serial", type=int, default=4)
+    mixed_scan = sub.add_parser(
+        "scan-mixed-owner-receipt-stdin",
+        help="Inert Python or PowerShell static receipt against signed V2 rule selection")
+    mixed_scan.add_argument("--pack", type=Path, required=True)
+    mixed_scan.add_argument("--owner-trust", type=Path, required=True)
+    mixed_scan.add_argument("--min-serial", type=int, default=4)
     args = p.parse_args(argv)
     try:
         if args.command == "keygen-demo":
@@ -301,6 +327,34 @@ def main(argv=None) -> int:
                 raise PolicyError("oversized public-only inert receipt")
             receipt = json.loads(raw, object_pairs_hook=_strict_pairs)
             result = scan_selected_owner_receipt(
+                args.pack, args.owner_trust, receipt,
+                min_serial=args.min_serial)
+        elif args.command == "publish-mixed-owner-risk-release":
+            allowed = ROOT / ".build_keys" / "production" / "private_production.pem"
+            if args.owner_private.absolute() != allowed.absolute():
+                raise PolicyError("mixed signing key must stay in dedicated UCIE directory")
+            if len(args.rule_id) != len(args.accept_risk):
+                raise PolicyError("each selected rule requires its own owner risk acceptance")
+            target = publish_mixed_owner_release(
+                ROOT, args.owner_private, args.output, run_id=args.run_id,
+                serial=args.serial, rule_ids=args.rule_id,
+                confirmation=args.confirm,
+                risk_acceptances=dict(zip(args.rule_id, args.accept_risk, strict=True)))
+            result = {
+                "result": "MIXED_OWNER_PUBLIC_RULEPACK_SIGNED",
+                "path": str(target), "rule_count": len(args.rule_id),
+                "scope": "PUBLIC_ONLY_MANUAL_STATIC_SCAN",
+                "auto_apply": False, "automated_distribution": False,
+            }
+        elif args.command == "verify-mixed-owner-risk-release":
+            result = verify_mixed_owner_release(
+                args.pack, args.owner_trust, min_serial=args.min_serial)
+        elif args.command == "scan-mixed-owner-receipt-stdin":
+            raw = sys.stdin.read(131073)
+            if len(raw.encode("utf-8")) > 131072:
+                raise PolicyError("oversized inert mixed-language receipt")
+            receipt = json.loads(raw, object_pairs_hook=_strict_pairs)
+            result = scan_mixed_owner_receipt(
                 args.pack, args.owner_trust, receipt,
                 min_serial=args.min_serial)
         else:
