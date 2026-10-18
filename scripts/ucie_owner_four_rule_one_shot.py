@@ -1,4 +1,4 @@
-"""ONE local owner-PC command for UCIE four-rule public-only acceptance.
+r"""ONE local owner-PC command for UCIE four-rule public-only acceptance.
 
 Only D:\UCIE, clean main, matching live GitHub CI and explicit in-person
 consent. No private-project scanning, auto-deploy, scheduler, key export or
@@ -15,8 +15,9 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ucie_owner_two_rule_one_shot import git, ORIGINS, select_exact_ci
+from scripts.ucie_owner_two_rule_one_shot import git, ORIGINS, select_exact_ci
 from ucie_public.owner_release import (
     REPO, _public_json, validate_live_automated_qa,
 )
