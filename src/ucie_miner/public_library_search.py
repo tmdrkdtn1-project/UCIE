@@ -28,9 +28,12 @@ MAX_RESULTS = 50
 
 
 def _terms(source, skill_id, tag, limit):
-    if (source is not None and source not in SOURCES
-            or skill_id is not None and skill_id not in PROFILE
-            or tag is not None and tag not in ALL_TAGS
+    if (source is not None and
+            (type(source) is not str or source not in SOURCES)
+            or skill_id is not None and
+            (type(skill_id) is not str or skill_id not in PROFILE)
+            or tag is not None and
+            (type(tag) is not str or tag not in ALL_TAGS)
             or type(limit) is not int or not 1 <= limit <= MAX_RESULTS):
         raise DiscoveryError("library query must use approved public taxonomy")
     if (source is not None and skill_id is not None
@@ -199,8 +202,19 @@ def search_public_library(root: Path, *, source=None, skill_id=None, tag=None,
     """
     source, skill_id, tag, limit = _terms(source, skill_id, tag, limit)
     root = Path(root)
-    history_path = _root_path(root)
-    recent_path = _dedicated_path(root, allow_absent_runtime=False)
+    runtime = root / "runtime"
+    if (root.name.casefold() != "ucie" or root.is_symlink()
+            or not root.is_dir() or runtime.is_symlink()
+            or (runtime.exists() and not runtime.is_dir())):
+        raise DiscoveryError("UCIE-only public library directory required")
+    # A fresh UCIE checkout has no runtime folder. An empty query does not
+    # create one, and never changes an existing checkout.
+    if runtime.is_dir():
+        history_path = _root_path(root)
+        recent_path = _dedicated_path(root, allow_absent_runtime=False)
+    else:
+        history_path = runtime / "missing-stage13.sqlite3"
+        recent_path = runtime / "missing-stage10.sqlite3"
     try:
         history, has_history = _historical(
             history_path, source=source, skill_id=skill_id,
