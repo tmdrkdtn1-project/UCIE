@@ -54,6 +54,40 @@ This is a pure in-memory API, not a scheduler, command-line installer, service
 or network endpoint. `catalog_sha256` is a deterministic comparison digest,
 **not** a digital signature or provenance attestation.
 
+## New bounded knowledge graph and revision preview
+
+`public_library_graph.preview_library_knowledge_graph(current, previous)`
+reuses the strictly validated catalog and the existing batch digest. It
+provides three bounded first-party relationship kinds:
+
+- `CLASSIFIED_BY_APPROVED_SOURCE_MAPPING`: exact approved upstream maps to
+  one of five UCIE-authored technical skill profiles.
+- `BOUNDED_METADATA_TAG_MATCH`: each unverified public lead is connected to a
+  bounded, first-party technical tag.
+- `SHARED_METADATA_TAGS_NO_CAUSAL_CLAIM`: two selected leads share one or
+  more metadata tags. It does **not** prove either fix works, or that the two
+  technologies actually depend on one another.
+
+The nested `UCIE_PUBLIC_LIBRARY_REVISION_SNAPSHOT_PREVIEW_V1` records exact
+pinned merge-commit SHA or direct Git commit SHA, hash-only evidence identity,
+previously selected reference values if supplied, and bounded-scope
+change/not-seen classes. Upstream *released product versions* are always
+`null` until independently verified; a merge commit is not a version number.
+No signed artifact or accepted/installed skill is emitted.
+
+To inspect a previously obtained bounded, unapproved research batch without
+network, Windows task changes or disk writes:
+
+```powershell
+# Supply exact JSON envelope through stdin:
+# {\"current\": <UCIE_PUBLIC_RESEARCH_BATCH_PREVIEW_V1>, \"previous\": null}
+# .\\.venv\\Scripts\\python.exe -m ucie_miner preview-library-graph-stdin
+```
+
+The command refuses duplicate JSON keys, oversized input and non-object
+current/previous values. Only in-memory UCIE-authored catalog output is
+returned; the checksum is **not** a signature or publication authorization.
+
 ## Future gated development
 
 1. Review and independently test the source, exact revision, version
@@ -69,7 +103,8 @@ or network endpoint. `catalog_sha256` is a deterministic comparison digest,
 
 ## Verification and status
 
-Synthetic offline tests: `tests/test_ucie_public_library_catalog.py`.
+Synthetic offline tests: `tests/test_ucie_public_library_catalog.py` and
+`tests/test_ucie_public_library_graph.py`.
 They verify fixed five-skill taxonomy, bounded candidate output, deterministic
 comparison, missing-selection semantics, forged approval rejection, and
 prompt-injection guidance rejection. Passing CI does not establish real-world
