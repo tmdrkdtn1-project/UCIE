@@ -135,6 +135,7 @@ def main(argv=None):
     library.add_argument("--skill-id", choices=tuple(SOURCE_SKILL.values()))
     library.add_argument("--tag", choices=sorted(set(CATEGORIES) | set(TAGS)))
     library.add_argument("--limit", type=int, default=20)
+    library.add_argument("--index", choices=("both", "history", "recent"), default="both")
     sub.add_parser("preflight-public-batch-host", help="UCIE-local Windows 3.15/SQLite read-only acceptance preview; always NO-GO")
     stage = sub.add_parser(
         "stage-public-candidates-stdin",
@@ -187,7 +188,7 @@ def main(argv=None):
         if args.action == "search-library":
             result = search_public_library(
                 ROOT, source=args.source, skill_id=args.skill_id,
-                tag=args.tag, limit=args.limit)
+                tag=args.tag, limit=args.limit, index=args.index)
         elif args.action == "mine-once":
             result = mine_once(ROOT, sources=(args.source,) if args.source else PUBLIC_SOURCES,
                                max_new_per_source=args.limit)
