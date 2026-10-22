@@ -1,5 +1,10 @@
 """UCIE-only inert graph / revision preview tests, no outside data access."""
 from copy import deepcopy
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
 import unittest
 
 from ucie_miner.public_batch import build_public_batch, _fingerprint
@@ -21,6 +26,9 @@ def research_batch(*, limit=3, with_git=False):
         git_commit_fetch=git_fetch,
         include_git_commits=with_git,
         now=NOW, max_enrich=limit)
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class PublicLibraryGraphTests(unittest.TestCase):
@@ -126,6 +134,32 @@ class PublicLibraryGraphTests(unittest.TestCase):
                 current["candidate_skill_queue"])
             with self.subTest(field=field), self.assertRaises(DiscoveryError):
                 preview_library_knowledge_graph(current)
+
+    def test_offline_graph_cli_and_invalid_stdin(self):
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(ROOT / "src")
+        sample = research_batch()
+        good = subprocess.run(
+            [sys.executable, "-m", "ucie_miner",
+             "preview-library-graph-stdin"],
+            input=json.dumps({"current": sample, "previous": sample}),
+            text=True, capture_output=True, env=env, cwd=ROOT, timeout=15)
+        self.assertEqual(good.returncode, 0, good.stderr)
+        graph = json.loads(good.stdout)
+        self.assertEqual(graph["schema"],
+                         "UCIE_PUBLIC_LIBRARY_KNOWLEDGE_GRAPH_PREVIEW_V1")
+        self.assertFalse(graph["production_approved"])
+        for payload in (
+            '{"current":{},"current":{},"previous":null}',
+            '{"current":[],"previous":null}',
+        ):
+            bad = subprocess.run(
+                [sys.executable, "-m", "ucie_miner",
+                 "preview-library-graph-stdin"],
+                input=payload, text=True, capture_output=True,
+                env=env, cwd=ROOT, timeout=15)
+            self.assertEqual(bad.returncode, 2, bad.stderr)
+            self.assertEqual(json.loads(bad.stdout)["status"], "FAIL_CLOSED")
 
     def test_unapproved_source_url_fails_closed(self):
         current = research_batch()
