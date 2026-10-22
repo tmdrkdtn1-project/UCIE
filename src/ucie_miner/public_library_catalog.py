@@ -9,7 +9,8 @@ from __future__ import annotations
 import hashlib
 import json
 
-from .public_discovery import SOURCES, SOURCE_SKILL, DiscoveryError
+from .public_discovery import SOURCES, SOURCE_SKILL, CATEGORIES, DiscoveryError
+from .public_evidence_routes import TAGS
 from .public_skill_digest import compare_public_skill_batches
 from .skill_profiles import PROFILE
 
@@ -21,9 +22,7 @@ _ALLOWED_CHANGE = frozenset({
     "PUBLIC_EVIDENCE_FINGERPRINT_CHANGED",
     "UNCHANGED_WITHIN_BATCH_SCOPE",
 })
-_ALLOWED_TAGS = frozenset({
-    "SECURITY", "CRASH", "REGRESSION", "COMPATIBILITY", "TESTING",
-})
+_ALLOWED_TAGS = frozenset(TAGS) | frozenset(CATEGORIES)
 
 
 def _digest(data: object) -> str:
