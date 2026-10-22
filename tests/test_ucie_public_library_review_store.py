@@ -180,7 +180,10 @@ class LibrarySignedReviewStoreTests(unittest.TestCase):
                 expected_head_sha256=ZERO_HEAD, **self.args)
         elsewhere = Path(self.temp.name) / "out.sqlite3"
         elsewhere.write_bytes(b"not a database")
-        self.root.joinpath("runtime", DB_NAME).symlink_to(elsewhere)
+        try:
+            self.root.joinpath("runtime", DB_NAME).symlink_to(elsewhere)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlink creation unavailable on this CI host")
         with self.assertRaises(PolicyError):
             self.inspect()
 
