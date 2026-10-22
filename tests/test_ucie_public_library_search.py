@@ -86,13 +86,24 @@ class PublicLibrarySearchTests(unittest.TestCase):
             self.root, skill_id="mcp-api-compatibility")
         self.assertTrue(all(x["source"] == "modelcontextprotocol/python-sdk"
                             for x in all_skills["results"]))
+        historical_only = search_public_library(
+            self.root, index="history", limit=10)
+        self.assertEqual(historical_only["result_count"], 5)
+        self.assertTrue(all(x["record_origin"] == "STAGE13_PUBLIC_HISTORY"
+                            for x in historical_only["results"]))
+        recent_only = search_public_library(
+            self.root, index="recent", limit=10)
+        self.assertGreaterEqual(recent_only["result_count"], 1)
+        self.assertTrue(all(x["record_origin"] ==
+                            "STAGE10_UNVERIFIED_RESEARCH"
+                            for x in recent_only["results"]))
         self.assertEqual(
             {p: p.read_bytes() for p in prev}, prev)
 
     def test_filters_fail_closed_without_any_io(self):
         for args in (
             {"source": "unknown/private"}, {"skill_id": "unsafe-execute"},
-            {"tag": "PRIVATE"}, {"limit": 51}, {"limit": True},
+            {"tag": "PRIVATE"}, {"index": "private"}, {"limit": 51}, {"limit": True},
             {"source": "python/cpython", "skill_id": "powershell-safe-calls"},
         ):
             with self.subTest(args=args), self.assertRaises(DiscoveryError):
