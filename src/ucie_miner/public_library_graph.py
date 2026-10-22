@@ -66,8 +66,8 @@ def preview_library_knowledge_graph(current: dict,
     old_catalog = (None if previous is None else
                    preview_library_skill_catalog(previous))
     identities = _identities(current)
-    if old_catalog is not None:
-        _identities(previous)
+    previous_identities = (_identities(previous)
+                           if old_catalog is not None else {})
 
     cards = {}
     shelves = {}
@@ -139,7 +139,13 @@ def preview_library_knowledge_graph(current: dict,
             "classification": card["change_in_bounded_selection"],
             "revision_kind": revision["revision_kind"],
             "pinned_revision_sha": revision["revision_sha"],
+            "previous_pinned_revision_sha": (
+                previous_identities[url]["revision_sha"]
+                if url in previous_identities else None),
             "evidence_fingerprint_sha256": revision["public_evidence_sha256"],
+            "previous_evidence_fingerprint_sha256": (
+                previous_identities[url]["public_evidence_sha256"]
+                if url in previous_identities else None),
             "actual_technology_version_verified": False,
             "eligible_for_skill_install": False,
         })
@@ -177,6 +183,10 @@ def preview_library_knowledge_graph(current: dict,
                                  if old_catalog is not None else None),
         "candidate_count": len(change_events),
         "change_events": change_events,
+        "previously_selected_not_seen": [{
+            "public_url": url,
+            "status": "NOT_IN_THIS_BOUNDED_SELECTION_NOT_DELETED",
+        } for url in sorted(set(previous_identities) - set(cards))],
         "bounded_absence_is_deletion": False,
         "source_release_versions_verified": False,
         "approved_skill_payloads": [],
