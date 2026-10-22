@@ -88,6 +88,58 @@ The command refuses duplicate JSON keys, oversized input and non-object
 current/previous values. Only in-memory UCIE-authored catalog output is
 returned; the checksum is **not** a signature or publication authorization.
 
+## Signed-review and revocation inspection (in-memory only)
+
+`public_library_signed_review.inspect_library_signed_review_ledger` reuses
+the repository's existing canonical JSON, Ed25519, key fingerprint and UTC
+timestamp helpers. It accepts only a bounded, **caller-supplied** ordered list
+of signed first-party review decisions for the *currently selected* public
+research references. It does not create keypairs, sign, write to a database,
+register periodic work, install skills, or contact a receiving project.
+
+- `REVIEW_ATTESTED` requires signatures on the same exact event from two
+  independently supplied and distinct public trust anchors (QA and owner).
+  The event pins the exact public URL, upstream SHA, evidence hash, claimed
+  source version, claimed license/security/regression/release review result,
+  issue/expiry timestamps and serial number.
+- `REVOKE` requires the owner's valid signature, matching public identity
+  and a higher serial. It acts as an in-memory tombstone; a later approval
+  cannot silently override it.
+- An expired review does not count as a current review. Missing, duplicate,
+  tampered, unapproved, future-dated, noncanonical or wrong-key claims fail
+  closed.
+- A valid signature **only authenticates a keyholder assertion**. It does not
+  independently prove the signer is a separate human reviewer, that tests
+  passed, that source-license terms were accepted, or that a released version
+  actually includes a fix.
+- The input is a bounded preview, **not a persistent, authoritative approval
+  or complete revocation ledger**. A caller can omit prior decisions; genuine
+  anti-rollback and opt-out persistence therefore remain unimplemented.
+- All outputs keep `distribution_authorized=false`,
+  `approved_installable_skill_count=0` and
+  `production_approved=false`. No ability to promote candidates into
+  distributable skills is introduced in this PR.
+
+API usage is **only** after independent reviewer claims actually exist and
+have separately established public trust keys:
+
+```python
+from ucie_miner.public_library_signed_review import (
+    inspect_library_signed_review_ledger,
+)
+
+result = inspect_library_signed_review_ledger(
+    current=batch_receipt,
+    entries=external_signed_decisions,
+    owner_trust=separately_verified_owner_ed25519_public_key,
+    qa_trust=separately_verified_qa_ed25519_public_key,
+)
+assert result["distribution_authorized"] is False
+```
+
+Synthetic tests generate disposable first-party keypairs only in memory.
+They neither create real approvals nor establish independent human QA.
+
 ## Future gated development
 
 1. Review and independently test the source, exact revision, version
@@ -104,7 +156,8 @@ returned; the checksum is **not** a signature or publication authorization.
 ## Verification and status
 
 Synthetic offline tests: `tests/test_ucie_public_library_catalog.py` and
-`tests/test_ucie_public_library_graph.py`.
+`tests/test_ucie_public_library_graph.py` plus
+`tests/test_ucie_public_library_signed_review.py`.
 They verify fixed five-skill taxonomy, bounded candidate output, deterministic
 comparison, missing-selection semantics, forged approval rejection, and
 prompt-injection guidance rejection. Passing CI does not establish real-world
