@@ -366,7 +366,10 @@ def main(argv=None):
             envelope = json.loads(data.decode("utf-8", errors="strict"),
                                   object_pairs_hook=no_duplicates)
             if (not isinstance(envelope, dict)
-                    or set(envelope) != {"current", "previous"}):
+                    or set(envelope) != {"current", "previous"}
+                    or not isinstance(envelope["current"], dict)
+                    or (envelope["previous"] is not None and
+                        not isinstance(envelope["previous"], dict))):
                 raise ValueError("public current/previous receipts required")
             result = (compare_public_skill_batches(
                 envelope["current"], envelope["previous"])
