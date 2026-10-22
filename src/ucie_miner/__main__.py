@@ -30,6 +30,7 @@ from .public_batch_host import inspect_public_batch_host
 from .public_skill_digest import compare_public_skill_batches
 from .public_library_graph import preview_library_knowledge_graph
 from .public_library_search import search_public_library
+from .public_library_mcp_adapter import preview_public_skill_feed
 from .public_candidate_staging import stage_public_candidates, inspect_staged_candidates
 from .public_candidate_learning import inspect_review_learning, update_unverified_review_queue, optional_hourly_review_learning
 from .public_external_history import inspect_external_history, optional_external_history_backfill
@@ -136,6 +137,9 @@ def main(argv=None):
     library.add_argument("--tag", choices=sorted(set(CATEGORIES) | set(TAGS)))
     library.add_argument("--limit", type=int, default=20)
     library.add_argument("--index", choices=("both", "history", "recent"), default="both")
+    feed = sub.add_parser("preview-library-skill-feed",
+                   help="Read-only five-domain public skill research feed; not installable")
+    feed.add_argument("--references-per-domain", type=int, default=3)
     sub.add_parser("preflight-public-batch-host", help="UCIE-local Windows 3.15/SQLite read-only acceptance preview; always NO-GO")
     stage = sub.add_parser(
         "stage-public-candidates-stdin",
@@ -185,7 +189,10 @@ def main(argv=None):
                    help="Inert bounded offline git/git commit metadata -> unsigned skill tasks")
     args = parser.parse_args(argv)
     try:
-        if args.action == "search-library":
+        if args.action == "preview-library-skill-feed":
+            result = preview_public_skill_feed(
+                ROOT, references_per_domain=args.references_per_domain)
+        elif args.action == "search-library":
             result = search_public_library(
                 ROOT, source=args.source, skill_id=args.skill_id,
                 tag=args.tag, limit=args.limit, index=args.index)
