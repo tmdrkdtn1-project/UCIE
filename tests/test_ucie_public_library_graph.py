@@ -69,6 +69,10 @@ class PublicLibraryGraphTests(unittest.TestCase):
         self.assertEqual(len(events), 3)
         self.assertEqual({e["classification"] for e in events},
                          {"UNCHANGED_WITHIN_BATCH_SCOPE"})
+        self.assertTrue(all(
+            e["pinned_revision_sha"] == e["previous_pinned_revision_sha"]
+            and e["evidence_fingerprint_sha256"] ==
+                e["previous_evidence_fingerprint_sha256"] for e in events))
 
     def test_public_fingerprint_change_recheck_not_fix_verified(self):
         previous = research_batch()
@@ -122,6 +126,10 @@ class PublicLibraryGraphTests(unittest.TestCase):
         self.assertEqual(result["reference_count"], 1)
         self.assertFalse(
             result["revision_snapshot"]["bounded_absence_is_deletion"])
+        unseen = result["revision_snapshot"]["previously_selected_not_seen"]
+        self.assertEqual(len(unseen), 2)
+        self.assertTrue(all(x["status"] ==
+            "NOT_IN_THIS_BOUNDED_SELECTION_NOT_DELETED" for x in unseen))
 
     def test_forged_approval_and_prompt_injection_fail_closed(self):
         for field, value in (
