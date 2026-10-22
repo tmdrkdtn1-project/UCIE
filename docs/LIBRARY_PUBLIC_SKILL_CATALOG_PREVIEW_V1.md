@@ -140,6 +140,64 @@ assert result["distribution_authorized"] is False
 Synthetic tests generate disposable first-party keypairs only in memory.
 They neither create real approvals nor establish independent human QA.
 
+## UCIE-only persistent review history (opt-in, never production approval)
+
+`src/ucie_miner/public_library_review_store.py` adds an isolated SQLite
+signed-decision **history**, reusing the existing validation API rather than
+creating a new signature scheme:
+
+- Database: `runtime/library_signed_review_history.sqlite3` inside an
+  explicitly supplied UCIE checkout. Does not access or migrate the public
+  miner, Stage 10 candidate staging, or existing knowledge database.
+- `append_local_library_review_history` requires exact approved public
+  batch identity, existing trusted owner/QA public keys, an explicit
+  `allow_disk_write=True`, and the latest expected history-head SHA-256.
+  No implicit write, scheduler, or tool-based signer.
+- Each signed review claim or owner revocation tombstone is stored in a
+  single SQLite transaction as canonical JSON with a global increasing
+  serial, previous-event head and SHA-256 hash chain. The table includes
+  guards against ordinary UPDATE and DELETE. Revocation cannot be silently
+  undone by a later review of the same public reference.
+- `inspect_local_library_review_history` opens an existing database
+  **read only** and checks SQLite integrity, expected schema, event ordering,
+  all signatures and the hash chain. Inspection never creates a database.
+  Statuses distinguish missing, valid, expired and revoked claims; none
+  imply the real-world fix, license, release or genuine independent QA passed.
+- **Critical rollback boundary:** SQLite plus an in-file hash chain cannot
+  detect replacement with an old *valid* database. Only a separately retained
+  trusted `head_sha256` can expose that situation. The append API requires
+  the caller's expected head; read-only inspection can compare one supplied
+  externally. This PR does not implement remote anchoring, tamper-proof
+  storage, key lifecycle management, backup recovery, or project integration.
+
+One-shot developer integration from an independently authorized UCIE-only
+runtime, after authenticating real trust anchors and decisions:
+
+```python
+from ucie_miner.public_library_review_store import (
+    ZERO_HEAD, inspect_local_library_review_history,
+    append_local_library_review_history,
+)
+
+# Normal inspection never writes. A real operator would separately preserve
+# the returned head outside the UCIE database before any later append.
+state = inspect_local_library_review_history(
+    root, owner_trust=owner_public_key, qa_trust=qa_public_key,
+    expected_head_sha256=ZERO_HEAD,
+)
+# Explicit, separately approved write only; DO NOT execute with fictional QA.
+# appended = append_local_library_review_history(
+#     root, current=batch_receipt, entries=[independently_signed_decision],
+#     owner_trust=owner_public_key, qa_trust=qa_public_key,
+#     expected_head_sha256=state["head_sha256"], allow_disk_write=True)
+```
+
+**No production records were inserted or migrated by this development.**
+Synthetic CI tests use temporary UCIE-only directories and disposable key
+pairs, including a whole-file rollback case which demonstrates the need for an
+external head checkpoint. This does **not** create a ready-to-distribute
+knowledge package or a real approved library skill.
+
 ## Future gated development
 
 1. Review and independently test the source, exact revision, version
@@ -157,7 +215,8 @@ They neither create real approvals nor establish independent human QA.
 
 Synthetic offline tests: `tests/test_ucie_public_library_catalog.py` and
 `tests/test_ucie_public_library_graph.py` plus
-`tests/test_ucie_public_library_signed_review.py`.
+`tests/test_ucie_public_library_signed_review.py` and
+`tests/test_ucie_public_library_review_store.py`.
 They verify fixed five-skill taxonomy, bounded candidate output, deterministic
 comparison, missing-selection semantics, forged approval rejection, and
 prompt-injection guidance rejection. Passing CI does not establish real-world
