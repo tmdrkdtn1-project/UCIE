@@ -1,4 +1,5 @@
 """UCIE local signed review history: one synthetic append/inspect/revoke path."""
+from contextlib import closing
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
@@ -144,7 +145,9 @@ class LibrarySignedReviewStoreTests(unittest.TestCase):
     def test_sqlite_history_mutation_and_corruption_fail_closed(self):
         first = self.add([self.event()])
         db = self.root / "runtime" / DB_NAME
-        with sqlite3.connect(db) as conn:
+        # sqlite3.Connection.__exit__ commits but does not close the file.
+        # Explicit close is required before TemporaryDirectory cleanup on Windows.
+        with closing(sqlite3.connect(db)) as conn, conn:
             with self.assertRaises(sqlite3.DatabaseError):
                 conn.execute("UPDATE review_history SET serial=99")
             with self.assertRaises(sqlite3.DatabaseError):
