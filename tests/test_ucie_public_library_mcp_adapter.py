@@ -2,6 +2,9 @@
 from copy import deepcopy
 from pathlib import Path
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -111,6 +114,22 @@ class PublicLibraryMcpAdapterTests(unittest.TestCase):
                             for x in first["topics"]))
         with self.assertRaises(DiscoveryError):
             preview_public_skill_feed(self.root, references_per_domain=0)
+
+    def test_offline_feed_cli_output_contains_no_installable_skills(self):
+        repo = Path(__file__).resolve().parents[1]
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(repo / "src")
+        run = subprocess.run(
+            [sys.executable, "-m", "ucie_miner",
+             "preview-library-skill-feed", "--references-per-domain", "2"],
+            cwd=repo, env=env, text=True, capture_output=True, timeout=15)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        payload = json.loads(run.stdout)
+        self.assertEqual(payload["schema"],
+                         "UCIE_LIBRARY_PUBLIC_SKILL_FEED_PREVIEW_V1")
+        self.assertEqual(payload["topic_count"], 5)
+        self.assertEqual(payload["installable_skills"], [])
+        self.assertFalse(payload["production_approved"])
 
     def test_absent_indexes_create_nothing(self):
         before = list((self.root / "runtime").iterdir())
