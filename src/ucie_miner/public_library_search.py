@@ -12,7 +12,7 @@ import json
 import re
 import sqlite3
 
-from .public_discovery import SOURCES, SOURCE_SKILL, CATEGORIES, DiscoveryError
+from .public_discovery import SOURCES, SOURCE_SKILL, CATEGORIES, DiscoveryError, _utc
 from .public_evidence_routes import TAGS
 from .public_external_history import _root_path, _schema as history_schema, MAX_STORED
 from .public_candidate_staging import (
@@ -27,19 +27,20 @@ ALL_TAGS = frozenset(CATEGORIES) | frozenset(TAGS)
 MAX_RESULTS = 50
 
 
-def _terms(source, skill_id, tag, limit):
+def _terms(source, skill_id, tag, limit, index):
     if (source is not None and
             (type(source) is not str or source not in SOURCES)
             or skill_id is not None and
             (type(skill_id) is not str or skill_id not in PROFILE)
             or tag is not None and
             (type(tag) is not str or tag not in ALL_TAGS)
-            or type(limit) is not int or not 1 <= limit <= MAX_RESULTS):
+            or type(limit) is not int or not 1 <= limit <= MAX_RESULTS
+            or index not in ("both", "history", "recent")):
         raise DiscoveryError("library query must use approved public taxonomy")
     if (source is not None and skill_id is not None
             and SOURCE_SKILL[source] != skill_id):
         raise DiscoveryError("incompatible approved source and skill")
-    return (source, skill_id, tag, limit)
+    return (source, skill_id, tag, limit, index)
 
 
 def _decode_tags(blob, *, taxonomy):
@@ -100,8 +101,9 @@ def _historical(path, *, source, skill_id, tag, cap):
                 or skill != SOURCE_SKILL[src]
                 or type(sha) is not str or not SHA40.fullmatch(sha)
                 or type(proof) is not str or not SHA64.fullmatch(proof)
-                or type(merged_at) is not str or not merged_at.endswith("Z")):
+                or type(merged_at) is not str):
             raise DiscoveryError("untrusted historical public research row")
+        _utc(merged_at)  # Never emit unvalidated upstream/local timestamp text.
         result.append({
             "source": src, "skill_id": skill,
             "public_url": f"https://github.com/{src}/pull/{number}",
@@ -193,14 +195,15 @@ def _recent(path, *, source, skill_id, tag, cap):
 
 
 def search_public_library(root: Path, *, source=None, skill_id=None, tag=None,
-                          limit=20):
+                          limit=20, index="both"):
     """Search existing UCIE-only public metadata; no filesystem writes.
 
     Bounded first page by source/PR metadata, not semantic or exhaustive
-    corpus search. Stage10 evidence supersedes a same-source same-SHA
-    historical PR observation in this preview; distinct revisions remain.
+    corpus search. Evidence revisions are distinct even for the same commit, so the search
+    does not erase changed knowledge by over-deduplicating source identities.
     """
-    source, skill_id, tag, limit = _terms(source, skill_id, tag, limit)
+    source, skill_id, tag, limit, index = _terms(
+        source, skill_id, tag, limit, index)
     root = Path(root)
     runtime = root / "runtime"
     if (root.name.casefold() != "ucie" or root.is_symlink()
@@ -218,22 +221,24 @@ def search_public_library(root: Path, *, source=None, skill_id=None, tag=None,
     try:
         history, has_history = _historical(
             history_path, source=source, skill_id=skill_id,
-            tag=tag, cap=limit)
+            tag=tag, cap=limit) if index in ("both", "history") else ([], False)
         recent, has_recent = _recent(
             recent_path, source=source, skill_id=skill_id,
-            tag=tag, cap=limit)
+            tag=tag, cap=limit) if index in ("both", "recent") else ([], False)
     except sqlite3.DatabaseError as exc:
         raise DiscoveryError("UCIE public library metadata query unavailable") from exc
-    # Favor the newer independently staged metadata when the same upstream
-    # PR/revision is observed by both existing index systems.
+    # Preserve distinct evidence revisions; de-duplicate only identical
+    # URL + pinned upstream SHA + evidence hash. Prefer recent candidates.
     keyed = {}
     for record in history + recent:
-        key = (record["public_url"], record["revision_sha"])
+        key = (record["public_url"], record["revision_sha"],
+               record["evidence_sha256"])
         if key not in keyed or record["record_origin"] == "STAGE10_UNVERIFIED_RESEARCH":
             keyed[key] = record
     selected = sorted(keyed.values(), key=lambda row: (
-        SOURCES.index(row["source"]), row["kind"],
-        row["public_url"], row["revision_sha"],
+        0 if row["record_origin"] == "STAGE10_UNVERIFIED_RESEARCH" else 1,
+        SOURCES.index(row["source"]), row["kind"], row["public_url"],
+        row["revision_sha"], row["evidence_sha256"],
     ))[:limit]
     for item in selected:
         skill = PROFILE[item["skill_id"]]
@@ -249,7 +254,8 @@ def search_public_library(root: Path, *, source=None, skill_id=None, tag=None,
         "status": ("PUBLIC_LIBRARY_INDEX_SEARCH_PREVIEW_NO_GO"
                    if has_recent or has_history
                    else "PUBLIC_LIBRARY_INDEXES_ABSENT_NO_GO"),
-        "filters": {"source": source, "skill_id": skill_id, "tag": tag},
+        "filters": {"source": source, "skill_id": skill_id, "tag": tag,
+                    "index": index},
         "result_limit": limit, "result_count": len(selected),
         "bounded_selection_not_exhaustive": True,
         "stage13_history_present": has_history,
