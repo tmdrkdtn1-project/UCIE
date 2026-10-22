@@ -14,11 +14,12 @@ $env:PYTHONPATH = 'D:\UCIE\src'
 & 'D:\UCIE\.venv\Scripts\python.exe' -B -m ucie_miner search-library --source python/cpython --limit 10
 & 'D:\UCIE\.venv\Scripts\python.exe' -B -m ucie_miner search-library --skill-id mcp-api-compatibility
 & 'D:\UCIE\.venv\Scripts\python.exe' -B -m ucie_miner search-library --tag REGRESSION
+& 'D:\UCIE\.venv\Scripts\python.exe' -B -m ucie_miner search-library --index history --limit 20
 ```
 
 The query creates no DB or network request and does not touch operating miner or knowledge data. A new UCIE checkout without an index returns `PUBLIC_LIBRARY_INDEXES_ABSENT_NO_GO` and an empty result set, not fictional knowledge. Results are a bounded first-page selection only (maximum 50); high-volume corpus pagination and contextual relevance are future work.
 
-Results contain canonical approved public PR / git commit references, exact pinned revision and evidence hashes, fixed first-party technology domain, source-matched technical labels, safe review question, and a non-executing review suggestion. Historical and recent copies of the same upstream PR + pinned revision are shown once, preferring Stage 10 review metadata; distinct upstream revisions remain visible.
+Results contain canonical approved public PR / git commit references, exact pinned revision and evidence hashes, fixed first-party technology domain, source-matched technical labels, safe review question, and a non-executing review suggestion. Only exact duplicate public URL + pinned upstream SHA + evidence fingerprint records are deduplicated; distinct evidence revisions remain visible. Recent Stage 10 records appear first by default. Use `--index history` or `--index recent` to inspect either index independently.
 
 Every returned record remains `UNVERIFIED_PUBLIC_RESEARCH_ONLY_NO_GO`. No signed skill payload is installed or injected. Public evidence metadata is not proof of a fixed product release or licensing/QA acceptance.
 
