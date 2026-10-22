@@ -26,6 +26,7 @@ from .public_knowledge_pipeline import collect_public_knowledge_candidate, previ
 from .public_batch import build_public_batch, review_batch_preview
 from .public_batch_host import inspect_public_batch_host
 from .public_skill_digest import compare_public_skill_batches
+from .public_library_graph import preview_library_knowledge_graph
 from .public_candidate_staging import stage_public_candidates, inspect_staged_candidates
 from .public_candidate_learning import inspect_review_learning, update_unverified_review_queue, optional_hourly_review_learning
 from .public_external_history import inspect_external_history, optional_external_history_backfill
@@ -123,6 +124,8 @@ def main(argv=None):
                    help="Review bounded offline public-only batch receipt, never sign or auto-promote")
     sub.add_parser("preview-public-skill-digest-stdin",
                    help="Compare two bounded public-only batches and report new/changed skill leads; no writes")
+    sub.add_parser("preview-library-graph-stdin",
+                   help="Inert PUBLIC_ONLY taxonomy graph and unsigned revision snapshot; no writes")
     sub.add_parser("preflight-public-batch-host", help="UCIE-local Windows 3.15/SQLite read-only acceptance preview; always NO-GO")
     stage = sub.add_parser(
         "stage-public-candidates-stdin",
@@ -348,7 +351,8 @@ def main(argv=None):
             result = inspect_public_batch_host(
                 ROOT, is_windows=os.name == "nt",
                 python_version=tuple(sys.version_info[:2]))
-        elif args.action == "preview-public-skill-digest-stdin":
+        elif args.action in ("preview-public-skill-digest-stdin",
+                            "preview-library-graph-stdin"):
             data = sys.stdin.buffer.read(262145)
             if len(data) > 262144:
                 raise ValueError("oversized public skill digest input")
@@ -364,8 +368,11 @@ def main(argv=None):
             if (not isinstance(envelope, dict)
                     or set(envelope) != {"current", "previous"}):
                 raise ValueError("public current/previous receipts required")
-            result = compare_public_skill_batches(
+            result = (compare_public_skill_batches(
                 envelope["current"], envelope["previous"])
+                if args.action == "preview-public-skill-digest-stdin"
+                else preview_library_knowledge_graph(
+                    envelope["current"], envelope["previous"]))
         elif args.action == "preview-public-batch-stdin":
             data = sys.stdin.buffer.read(262145)
             if len(data) > 262144:
