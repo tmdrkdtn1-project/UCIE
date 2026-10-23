@@ -18,6 +18,7 @@ from ucie_miner.public_library_mcp_adapter import (
     search_ucie_public_library_for_mcp, preview_public_skill_feed,
     extend_existing_ucie_mcp_evidence_response,
     extend_existing_ucie_mcp_wire_response,
+    extend_existing_ucie_mcp_wire_response_if_public,
 )
 from test_ucie_stage9_batch import NOW, metadata, evidence
 from test_ucie_stage13_external_history import upstream_pr
@@ -200,6 +201,49 @@ class PublicLibraryMcpAdapterTests(unittest.TestCase):
                 extend_existing_ucie_mcp_wire_response(
                     self.root, invalid, query="Python")
         self.assertEqual(list((self.root / "runtime").iterdir()), [])
+
+    def test_optional_extension_preserves_original_error_returns(self):
+        early = (
+            {"status": "INVALID_QUERY", "results": [], "error": "bad input"},
+            {"status": "NO_EVIDENCE", "results": []},
+            None,
+            "plain failure",
+            '{"status":"NO_EVIDENCE","results":[]}',
+            '{"status":"UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",'
+            '"status":"UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY","results":[]}',
+        )
+        for value in early:
+            with self.subTest(value=value):
+                output = extend_existing_ucie_mcp_wire_response_if_public(
+                    self.root, value, query="Python", top=2)
+                self.assertIs(output, value)
+
+    def test_optional_extension_appends_only_to_valid_public_success(self):
+        self.fill()
+        original = {
+            "status": "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",
+            "results": [{"source_key": "python/cpython"}],
+        }
+        result = extend_existing_ucie_mcp_wire_response_if_public(
+            self.root, original, query="Python", top=3)
+        self.assertEqual(result["results"], original["results"])
+        self.assertEqual(result["ucie_public_research_index"]
+                         ["selected_skill_id"], "python-runtime-safety")
+        self.assertGreaterEqual(result["ucie_public_research_index"]
+                                ["result_count"], 1)
+        self.assertFalse(result["ucie_public_research_index"]
+                         ["production_approved"])
+
+    def test_optional_extension_read_failure_preserves_public_success(self):
+        original = {
+            "status": "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",
+            "results": [{"source_key": "python/cpython"}],
+        }
+        # A nonexistent UCIE checkout causes the optional index to fail.
+        # No existing MCP response field may be lost as a result.
+        returned = extend_existing_ucie_mcp_wire_response_if_public(
+            self.root / "not_available", original, query="Python")
+        self.assertIs(returned, original)
 
     def test_absent_indexes_create_nothing(self):
         before = list((self.root / "runtime").iterdir())
