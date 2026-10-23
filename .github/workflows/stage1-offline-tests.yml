@@ -51,6 +51,28 @@ jobs:
             }
           }
 
+      - name: UCIE owner MCP launcher - Windows PowerShell 5.1 parse only (never run)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $scriptPath = (Resolve-Path 'scripts/ucie_owner_admin_mcp_launch.ps1').Path
+          $tokens = $null
+          $parseErrors = $null
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
+          if ($null -eq $ast -or $parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error ("UCIE parser error at line " + $_.Extent.StartLineNumber + ": " + $_.Message) }
+            throw 'UCIE_OWNER_LAUNCH_SCRIPT_PARSE_FAILED'
+          }
+          $raw = [System.IO.File]::ReadAllText($scriptPath)
+          $beginToken = "$" + "probe = @'"
+          $endToken = "'@"
+          if (($raw.Split([string[]]@($beginToken), [StringSplitOptions]::None).Count -ne 2) -or
+              ($raw.Split([string[]]@($endToken), [StringSplitOptions]::None).Count -ne 2) -or
+              ($raw.Split([string[]]@("Read-Host 'UCIE one-session authorization: type APPROVE'"), [StringSplitOptions]::None).Count -ne 2)) {
+            throw 'UCIE_OWNER_LAUNCH_SCRIPT_DUPLICATED_OR_TRUNCATED'
+          }
+          Write-Output 'UCIE_OWNER_LAUNCH_POWERSHELL_51_PARSE_PASS'
+
       - name: Hourly task read-only evidence acceptance with synthetic Windows PowerShell 5.1 task
         if: runner.os == 'Windows'
         shell: pwsh
