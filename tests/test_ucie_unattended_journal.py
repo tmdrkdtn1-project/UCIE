@@ -1,6 +1,7 @@
 """Offline durable-claim tests, confined to fresh temporary UCIE fixtures."""
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
@@ -58,7 +59,7 @@ class UCIEJournalTests(unittest.TestCase):
         self.assertFalse(receipt["rule_promoted"])
         with self.assertRaises(PolicyError):
             self.claim(grant)
-        with sqlite3.connect(self.root / DB_NAME) as db:
+        with closing(sqlite3.connect(self.root / DB_NAME)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM grants").fetchone()[0], 1)
 
     def test_ascending_serial_and_uniqueness(self):
@@ -71,7 +72,7 @@ class UCIEJournalTests(unittest.TestCase):
             self.claim(payload(serial=2, task="UCIE-JOB-TWO-20261023", nonce="a"*32))
         self.assertEqual(self.claim(payload(
             serial=2, task="UCIE-JOB-TWO-20261023", nonce="b"*32))["sequence"], 2)
-        with sqlite3.connect(self.root / DB_NAME) as db:
+        with closing(sqlite3.connect(self.root / DB_NAME)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM grants").fetchone()[0], 2)
 
     def test_forgery_never_advances_sequence(self):
