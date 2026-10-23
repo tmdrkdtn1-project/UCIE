@@ -39,6 +39,8 @@ class UCIENoWindowSourceContracts(unittest.TestCase):
         s = self.miner
         for fragment in (
             "$taskName = 'UCIE-PublicMiner-Hourly'",
+            "D:\\UCIE_PREVIEW\\UCIE_ADMIN",
+            "if ($QuietExisting -and [string]::Equals(",
             "[switch]$QuietExisting",
             "UCIE_SCHEDULE_ALREADY_EXISTS_REFUSE_OVERWRITE",
             "UCIE_HOURLY_TASK_PRINCIPAL_OR_POLICY_MISMATCH_NO_CHANGE",
