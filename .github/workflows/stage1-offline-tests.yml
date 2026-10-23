@@ -68,6 +68,11 @@ jobs:
       - name: First rule real CPython 3.15 -X runtime regression (ephemeral runner only)
         if: matrix.python-version == '3.15'
         run: python tests/runtime_python_xoption_regression.py
+      - name: Exact CPython PR159014 public docs and live isolated runtime observation (PR77 only)
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 77 && github.head_ref == 'feat/library-public-skill-catalog-preview-20261022' && matrix.python-version == '3.15'
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B tests/runtime_public_cpython_159014_live.py
       - name: Download pinned upstream PowerShell patched public CI build (single PR trial)
         if: github.event_name == 'pull_request' && github.head_ref == 'core/powershell-dotpath-postfix-evidence-20261018' && runner.os == 'Linux' && matrix.python-version == '3.15'
         uses: actions/download-artifact@v8

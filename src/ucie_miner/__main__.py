@@ -21,11 +21,17 @@ from .static_concurrency import MAX_SOURCE_BYTES, inspect_python_scandir_source
 from .static_rule_bridge import preview_static_rule_candidates
 from .review_docket import prepare_independent_review_docket
 from .public_discovery import SOURCES as DISCOVERY_SOURCES, public_feed_get
+from .public_discovery import SOURCE_SKILL, CATEGORIES
+from .public_evidence_routes import TAGS
 from .public_intelligence import discover_and_prioritize_live, public_intelligence_preview
 from .public_knowledge_pipeline import collect_public_knowledge_candidate, preview_public_knowledge_receipt
 from .public_batch import build_public_batch, review_batch_preview
 from .public_batch_host import inspect_public_batch_host
 from .public_skill_digest import compare_public_skill_batches
+from .public_library_graph import preview_library_knowledge_graph
+from .public_library_assessment import preview_library_evidence_assessment
+from .public_library_search import search_public_library
+from .public_library_mcp_adapter import preview_public_skill_feed
 from .public_candidate_staging import stage_public_candidates, inspect_staged_candidates
 from .public_candidate_learning import inspect_review_learning, update_unverified_review_queue, optional_hourly_review_learning
 from .public_external_history import inspect_external_history, optional_external_history_backfill
@@ -123,6 +129,20 @@ def main(argv=None):
                    help="Review bounded offline public-only batch receipt, never sign or auto-promote")
     sub.add_parser("preview-public-skill-digest-stdin",
                    help="Compare two bounded public-only batches and report new/changed skill leads; no writes")
+    sub.add_parser("preview-library-graph-stdin",
+                   help="Inert PUBLIC_ONLY taxonomy graph and unsigned revision snapshot; no writes")
+    sub.add_parser("preview-library-assessment-stdin",
+                   help="Read-only multidimensional evidence gaps and changed-only independent review queue")
+    library = sub.add_parser("search-library",
+                   help="Search existing UCIE public history and recent candidate indexes, read-only")
+    library.add_argument("--source", choices=DISCOVERY_SOURCES)
+    library.add_argument("--skill-id", choices=tuple(SOURCE_SKILL.values()))
+    library.add_argument("--tag", choices=sorted(set(CATEGORIES) | set(TAGS)))
+    library.add_argument("--limit", type=int, default=20)
+    library.add_argument("--index", choices=("both", "history", "recent"), default="both")
+    feed = sub.add_parser("preview-library-skill-feed",
+                   help="Read-only five-domain public skill research feed; not installable")
+    feed.add_argument("--references-per-domain", type=int, default=3)
     sub.add_parser("preflight-public-batch-host", help="UCIE-local Windows 3.15/SQLite read-only acceptance preview; always NO-GO")
     stage = sub.add_parser(
         "stage-public-candidates-stdin",
@@ -172,7 +192,14 @@ def main(argv=None):
                    help="Inert bounded offline git/git commit metadata -> unsigned skill tasks")
     args = parser.parse_args(argv)
     try:
-        if args.action == "mine-once":
+        if args.action == "preview-library-skill-feed":
+            result = preview_public_skill_feed(
+                ROOT, references_per_domain=args.references_per_domain)
+        elif args.action == "search-library":
+            result = search_public_library(
+                ROOT, source=args.source, skill_id=args.skill_id,
+                tag=args.tag, limit=args.limit, index=args.index)
+        elif args.action == "mine-once":
             result = mine_once(ROOT, sources=(args.source,) if args.source else PUBLIC_SOURCES,
                                max_new_per_source=args.limit)
         elif args.action == "scan-python-stdin":
@@ -348,7 +375,9 @@ def main(argv=None):
             result = inspect_public_batch_host(
                 ROOT, is_windows=os.name == "nt",
                 python_version=tuple(sys.version_info[:2]))
-        elif args.action == "preview-public-skill-digest-stdin":
+        elif args.action in ("preview-public-skill-digest-stdin",
+                            "preview-library-graph-stdin",
+                            "preview-library-assessment-stdin"):
             data = sys.stdin.buffer.read(262145)
             if len(data) > 262144:
                 raise ValueError("oversized public skill digest input")
@@ -362,10 +391,20 @@ def main(argv=None):
             envelope = json.loads(data.decode("utf-8", errors="strict"),
                                   object_pairs_hook=no_duplicates)
             if (not isinstance(envelope, dict)
-                    or set(envelope) != {"current", "previous"}):
+                    or set(envelope) != {"current", "previous"}
+                    or not isinstance(envelope["current"], dict)
+                    or (envelope["previous"] is not None and
+                        not isinstance(envelope["previous"], dict))):
                 raise ValueError("public current/previous receipts required")
-            result = compare_public_skill_batches(
-                envelope["current"], envelope["previous"])
+            if args.action == "preview-public-skill-digest-stdin":
+                result = compare_public_skill_batches(
+                    envelope["current"], envelope["previous"])
+            elif args.action == "preview-library-graph-stdin":
+                result = preview_library_knowledge_graph(
+                    envelope["current"], envelope["previous"])
+            else:
+                result = preview_library_evidence_assessment(
+                    envelope["current"], envelope["previous"])
         elif args.action == "preview-public-batch-stdin":
             data = sys.stdin.buffer.read(262145)
             if len(data) > 262144:
