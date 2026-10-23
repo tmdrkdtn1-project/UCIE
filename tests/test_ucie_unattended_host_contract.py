@@ -41,6 +41,11 @@ class UCIEHostInspectorContracts(unittest.TestCase):
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, text)
+        self.assertIn("Get-Acl -LiteralPath $journalDir", text)
+        self.assertIn(".ucie_bridge_state", text)
+        self.assertIn("ucie_journal_acl_inheritance_disabled", text)
+        self.assertIn("ucie_journal_broad_write_ace_denied", text)
+        self.assertIn("owner_acl_independently_verified = $false", text)
         self.assertIn("Get-ScheduledTask", text)
         self.assertIn("git -C $repo status --porcelain", text)
         self.assertNotIn("Get-ChildItem -Recurse", text)
