@@ -49,7 +49,7 @@ def search_ucie_evidence(query, category=None, tag=None, top=5):
 '''
         modified = patch.propose_link(original)
         self.assertEqual(modified.count("UCIE_LIBRARY_BRIDGE_V1"), 1)
-        self.assertEqual(modified.count("_ucie_library_bridge(r\"D:"), 3)
+        self.assertEqual(modified.count("_ucie_library_bridge(r\"D:"), 4)
         compile(modified, "mcp_stdio_server.py", "exec")
         namespace = {}
         exec(modified, namespace)
@@ -97,14 +97,15 @@ def search_ucie_evidence(query, category=None, tag=None, top=5):
         with self.assertRaises(patch.LinkError):
             patch.propose_link(EXAMPLE + EXAMPLE)
 
-    def test_rejects_inline_return_source(self):
+    def test_inline_return_inside_if_preserves_syntax(self):
         source = '''
 def search_ucie_evidence(query, category=None, tag=None, top=5):
     if query: return {"status":"UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",
                       "results":[]}
 '''
-        with self.assertRaises(patch.LinkError):
-            patch.propose_link(source)
+        result = patch.propose_link(source)
+        compile(result, "mcp_stdio_server.py", "exec")
+        self.assertEqual(result.count("_ucie_library_bridge(r\"D:"), 1)
 
     def test_nested_async_handler_syntax_preserved(self):
         source = '''
