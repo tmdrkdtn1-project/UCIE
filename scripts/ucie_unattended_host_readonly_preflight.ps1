@@ -11,8 +11,12 @@ $repo = 'D:\UCIE'
 $gitDir = Join-Path $repo '.git'
 $miner = Join-Path $repo 'scripts\public_miner_cycle.py'
 $python = Join-Path $repo '.venv\Scripts\python.exe'
-$profile = 'D:\UCIE_DATA\mcp_tunnel_profiles\ucie-private-c40.yaml'
-$client = 'D:\UCIE_DATA\tools\tunnel-client-v0.0.16\tunnel-client.exe'
+# Explicit UCIE-only alternatives. Never discover or scan unrelated paths.
+# A match must be a complete, unique profile + client pair.
+$c40Pairs = @(
+    @{ Profile = 'D:\UCIE\profiles\ucie-private-c40.yaml'; Client = 'D:\UCIE\tools\tunnel-client-v0.0.16\tunnel-client.exe' },
+    @{ Profile = 'D:\UCIE_DATA\mcp_tunnel_profiles\ucie-private-c40.yaml'; Client = 'D:\UCIE_DATA\tools\tunnel-client-v0.0.16\tunnel-client.exe' }
+)
 $taskName = 'UCIE-PublicMiner-Hourly'
 $supervisorTask = 'UCIE-C40-Supervisor'
 $expectedRemote = 'https://github.com/tmdrkdtn1-project/UCIE.git'
@@ -34,8 +38,18 @@ $rootValid = Test-DirectoryNoLink $repo
 $gitPresent = $rootValid -and (Test-Path -LiteralPath $gitDir)
 $workerPresent = Test-RegularNoLink $miner
 $pythonPresent = Test-RegularNoLink $python
-$profilePresent = Test-RegularNoLink $profile
-$clientPresent = Test-RegularNoLink $client
+$matchingPairs = @($c40Pairs | Where-Object {
+    (Test-RegularNoLink $_.Profile) -and (Test-RegularNoLink $_.Client)
+})
+$uniquePair = $matchingPairs.Count -eq 1
+$profilePresent = $uniquePair
+$clientPresent = $uniquePair
+$profile = $null
+$client = $null
+if ($uniquePair) {
+    $profile = [string]$matchingPairs[0].Profile
+    $client = [string]$matchingPairs[0].Client
+}
 
 $originMatches = $false
 $clean = $false
@@ -135,6 +149,8 @@ if ($journalDirPresent) {
     existing_hourly_miner_principal_matches_current_user = [bool]$minerTaskOwnerCurrent
     existing_hourly_miner_action_matches = [bool]$minerTaskActionExact
     existing_hourly_miner_state = $minerState
+    c40_exact_ucie_profile_client_pair_unique = [bool]$uniquePair
+    c40_matched_pairs_count = [int]$matchingPairs.Count
     c40_profile_regular_file_present = [bool]$profilePresent
     c40_client_regular_file_present = [bool]$clientPresent
     c40_profile_sha256 = $profileHash
