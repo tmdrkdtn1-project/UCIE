@@ -63,9 +63,10 @@ def _require_utc(now: datetime) -> str:
 
 def _check_rows(rows: list[tuple]) -> None:
     previous = GENESIS
+    previous_number = 0
     task_state: dict[str, tuple[str, str, str]] = {}
     for number, task, grant, op, state, detail, time, prev, event in rows:
-        if (type(number) is not int or number <= 0 or
+        if (type(number) is not int or number != previous_number + 1 or
                 type(task) is not str or TASK.fullmatch(task) is None or
                 type(grant) is not str or SHA64.fullmatch(grant) is None or
                 op not in OP or state not in START | TERMINAL | frozenset(TRANSITIONS) |
@@ -90,6 +91,7 @@ def _check_rows(rows: list[tuple]) -> None:
                 raise PolicyError("UCIE operation lifecycle unauthorized transition")
         task_state[task] = (state, grant, op)
         previous = event
+        previous_number = number
 
 
 def append_operation_receipt(
@@ -105,7 +107,7 @@ def append_operation_receipt(
     """
     if (type(task_id) is not str or TASK.fullmatch(task_id) is None
             or type(grant_sha256) is not str or SHA64.fullmatch(grant_sha256) is None
-            or operation not in OP or type(operation) is not str
+            or type(operation) is not str or operation not in OP
             or type(next_state) is not str or
             next_state not in START | TERMINAL | frozenset(TRANSITIONS)
             | frozenset(x for values in TRANSITIONS.values() for x in values)
