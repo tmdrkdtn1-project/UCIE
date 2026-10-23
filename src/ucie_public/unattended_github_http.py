@@ -14,7 +14,7 @@ import urllib.request
 from .policy import PolicyError
 from .rulepack import canonical_json
 from .unattended_github import GH_API_REPO
-from .unattended_ops import BRANCH, SHA40
+from .unattended_ops import BRANCH, SHA40, _path_allowed
 
 HOST = "https://api.github.com"
 MAX_RESPONSE_BYTES = 180000
@@ -57,6 +57,68 @@ def _json_unique(pairs):
     return out
 
 
+def _safe_body(method: str, path: str, payload: object, branch: str,
+               base_sha: str) -> bool:
+    """Refuse a protected ref even through an allowed REST endpoint."""
+    if method == "GET":
+        return payload is None
+    if type(payload) is not dict:
+        return False
+    suffix = path[len(GH_API_REPO):]
+    if suffix == "/git/blobs":
+        if set(payload) != {"content", "encoding"} or payload["encoding"] != "base64":
+            return False
+        try:
+            import base64
+            body = base64.b64decode(payload["content"], validate=True)
+            return 1 <= len(body) <= 65536
+        except (ValueError, TypeError, UnicodeError):
+            return False
+    if suffix == "/git/trees":
+        if (set(payload) != {"base_tree", "tree"} or
+                type(payload["base_tree"]) is not str or
+                SHA40.fullmatch(payload["base_tree"]) is None or
+                type(payload["tree"]) is not list or
+                not 1 <= len(payload["tree"]) <= 25):
+            return False
+        names = []
+        for part in payload["tree"]:
+            if (type(part) is not dict or set(part) != {"path", "mode", "type", "sha"}
+                    or not _path_allowed(part["path"]) or
+                    part["mode"] != "100644" or part["type"] != "blob" or
+                    type(part["sha"]) is not str or
+                    SHA40.fullmatch(part["sha"]) is None):
+                return False
+            names.append(part["path"])
+        return len(names) == len(set(names))
+    if suffix == "/git/commits":
+        return (set(payload) == {"message", "tree", "parents"} and
+                type(payload["message"]) is str and
+                payload["message"].startswith("ucie(automation): ") and
+                "\n" not in payload["message"] and
+                type(payload["tree"]) is str and
+                SHA40.fullmatch(payload["tree"]) is not None and
+                type(payload["parents"]) is list and
+                payload["parents"] == [base_sha])
+    if suffix == "/git/refs":
+        return (set(payload) == {"ref", "sha"} and
+                payload["ref"] == "refs/heads/" + branch and
+                type(payload["sha"]) is str and
+                SHA40.fullmatch(payload["sha"]) is not None)
+    if suffix == "/pulls":
+        return (set(payload) == {
+                    "title", "head", "base", "draft", "body",
+                    "maintainer_can_modify"} and
+                payload["head"] == branch and payload["base"] == "main" and
+                payload["draft"] is True and
+                payload["maintainer_can_modify"] is False and
+                type(payload["title"]) is str and
+                payload["title"].startswith("UCIE automation: ") and
+                type(payload["body"]) is str and
+                len(payload["body"]) < 600)
+    return False
+
+
 class UCIERestrictedGitHubHTTP:
     """Explicitly supplied owner-scoped token; no environment fallback.
 
@@ -67,7 +129,8 @@ class UCIERestrictedGitHubHTTP:
 
     ucie_synthetic_only = False
 
-    def __init__(self, bearer_token: str, *, allow_live: bool = False, opener=None):
+    def __init__(self, bearer_token: str, *, branch: str, base_sha: str,
+                 allow_live: bool = False, opener=None):
         if allow_live is not True:
             raise PolicyError("UCIE GitHub live HTTP disabled by default")
         if (type(bearer_token) is not str or
@@ -75,6 +138,11 @@ class UCIERestrictedGitHubHTTP:
                 not bearer_token.isascii() or
                 any(c.isspace() or ord(c) < 33 for c in bearer_token)):
             raise PolicyError("owner-scoped UCIE GitHub token unavailable")
+        if (type(branch) is not str or BRANCH.fullmatch(branch) is None or
+                type(base_sha) is not str or SHA40.fullmatch(base_sha) is None):
+            raise PolicyError("owner-bound UCIE branch and base SHA required")
+        self.__branch = branch
+        self.__base_sha = base_sha
         self.__token = bearer_token
         self.__opener = opener if opener is not None else urllib.request.build_opener(_DenyRedirect)
         if not hasattr(self.__opener, "open"):
@@ -86,9 +154,13 @@ class UCIERestrictedGitHubHTTP:
     def __call__(self, method: str, path: str, payload: object = None) -> dict:
         if not _allowed_route(method, path):
             raise PolicyError("GitHub request path or method outside UCIE allowlist")
+        if not _safe_body(method, path, payload, self.__branch, self.__base_sha):
+            raise PolicyError("UCIE GitHub REST body outside approved branch intent")
         if method == "GET":
-            if payload is not None:
-                raise PolicyError("GET may not carry a payload")
+            if path.startswith(GH_API_REPO + "/git/ref/heads/automation/") and path != GH_API_REPO + "/git/ref/heads/" + self.__branch:
+                raise PolicyError("unapproved automation branch lookup")
+            if path.startswith(GH_API_REPO + "/git/commits/") and path != GH_API_REPO + "/git/commits/" + self.__base_sha:
+                raise PolicyError("unapproved base commit lookup")
             body = None
         else:
             if type(payload) is not dict:
