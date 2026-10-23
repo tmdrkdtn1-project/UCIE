@@ -40,30 +40,77 @@ expected hashes and backups stay mandatory**. Writing Python/PowerShell
 source can indirectly execute code upon a later restart, so tools must only
 be registered on an authorized UCIE owner-specific MCP connection.
 
-## Registration in existing UCIE MCP server — owner-managed action
+## Registration in existing UCIE MCP server — single-use handoff
 
-1. Bring this reviewed UCIE source into the existing MCP Python import path
-   without accessing other local projects or resetting the current tunnel.
-2. Locate the actual `FastMCP` application object in the existing
-   UCIE-only `mcp_stdio_server.py`.
-3. Register once, immediately after that object is initialized:
+The UCIE owner observed the following via read-only AST inspection:
 
-   ```python
-   from ucie_admin.mcp_registration import register_ucie_local_admin_tools
-   register_ucie_local_admin_tools(existing_fastmcp_instance)
-   ```
+- `mcp_stdio_server.py` has exactly one `search_ucie_evidence` handler.
+- The handler uses `@server.tool`.
+- `make_server` starts on line 24 and creates local `server` at line 30.
+- Existing UCIE Library PR #77 handler file was backed up and patched;
+  SHA-256 after that patch:
+  `1a9ce892cbbf17d11078082150cea2b286528ef113935a28b254b511cd1b5304`.
+- No MCP process restart or tunnel ID change was observed.
 
-   The variable `existing_fastmcp_instance` is a placeholder; use the actual
-   UCIE server variable, and never make a new server to register the tools.
-4. Give these elevated tools a separately authorized UCIE Admin permission
-   or plugin context. **Do not silently turn a general readonly consumer
-   into a host file editor.** If the existing ChatGPT plugin does not support
-   this separation, plan a distinct UCIE Admin connection backed by the
-   same trusted host infrastructure.
-5. A separately approved controlled MCP server restart/refresh might be
-   needed. Do not change the tunnel profile/ID. Verify one harmless
-   `ucie_admin_capabilities` call, then an ordinary `ucie_admin_read_text`
-   call before any actual write.
+Use the dedicated **one-time AST patcher**
+`scripts/prepare_ucie_admin_mcp_registration.py`. It inserts **one gated
+registration** immediately after the local `server` assignment inside
+`make_server`, before the existing `@server.tool` decorators. It preserves
+the PR #77 Library source patch, all existing read-only tools and original
+`server` identity.
+
+### Stage PR #78 without touching operating D:\UCIE checkout
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$repo = 'D:\UCIE'
+$preview = 'D:\UCIE_PREVIEW\UCIE_ADMIN'
+
+if (Test-Path $preview) {
+    throw 'UCIE Admin staging folder already exists; inspect it first'
+}
+
+git -C $repo fetch --no-tags origin pull/78/head
+if ($LASTEXITCODE -ne 0) { throw 'UCIE Admin fetch failed' }
+
+git -C $repo worktree add --detach $preview FETCH_HEAD
+if ($LASTEXITCODE -ne 0) { throw 'UCIE Admin worktree creation failed' }
+
+$env:UCIE_ADMIN_SOURCE_DIR = "$preview\src"
+& 'D:\UCIE\.venv\Scripts\python.exe' -B "$preview\scripts\prepare_ucie_admin_mcp_registration.py"
+if ($LASTEXITCODE -ne 0) { throw 'UCIE Admin static preflight failed' }
+```
+
+The expected output begins
+`READY_FOR_UCIE_ADMIN_REGISTRATION`, and shows the real source SHA before
+and after. This does not modify the MCP server.
+
+After the owner explicitly approves modifying that **one UCIE-only server
+file**, a separate optional command applies the patch and retains another
+hash-named backup:
+
+```powershell
+$env:UCIE_ADMIN_SOURCE_DIR = 'D:\UCIE_PREVIEW\UCIE_ADMIN\src'
+& 'D:\UCIE\.venv\Scripts\python.exe' -B 'D:\UCIE_PREVIEW\UCIE_ADMIN\scripts\prepare_ucie_admin_mcp_registration.py' --apply --approval APPROVE_UCIE_ADMIN_MCP_HANDLER_REGISTRATION_ONCE
+```
+
+Output `UCIE_ADMIN_REGISTRATION_FILE_PATCHED_GATED` means **source only**
+was changed. The 9 admin tools are deliberately OFF by default: the
+authorized process environment must explicitly set
+`UCIE_ADMIN_TOOLS_ENABLED=1` before the *next authorized server launch*.
+Never set it on a broadly shared/anonymous MCP endpoint; use a separate
+owner-only admin context when necessary.
+
+The patcher does NOT restart UCIE, alter Cloudflare tunnel configuration,
+register any ChatGPT plugin, change Windows scheduled tasks, or grant any
+outside-project access. Do not claim the local ChatGPT tools are live until
+an authorized server refresh, ChatGPT tool discovery and one
+`ucie_admin_capabilities` read-only call actually succeed.
+
+**Known blocker:** the actual server process launch/refresh owner remains
+unobserved; `UCIE_MCP_PROCESS=NOT_FOUND_BY_COMMANDLINE` was only an
+unsuccessful process-name/command-line filter, not evidence of downtime.
+Do not blindly terminate processes or restart the tunnel.
 
 ## Synthetic developer acceptance (no host write)
 
