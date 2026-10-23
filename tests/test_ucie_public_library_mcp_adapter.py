@@ -16,6 +16,7 @@ from ucie_miner.public_external_history import (
 )
 from ucie_miner.public_library_mcp_adapter import (
     search_ucie_public_library_for_mcp, preview_public_skill_feed,
+    extend_existing_ucie_mcp_evidence_response,
 )
 from test_ucie_stage9_batch import NOW, metadata, evidence
 from test_ucie_stage13_external_history import upstream_pr
@@ -130,6 +131,42 @@ class PublicLibraryMcpAdapterTests(unittest.TestCase):
         self.assertEqual(payload["topic_count"], 5)
         self.assertEqual(payload["installable_skills"], [])
         self.assertFalse(payload["production_approved"])
+
+    def test_additive_existing_mcp_search_contract_is_preserved(self):
+        self.fill()
+        legacy = {
+            "status": "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",
+            "results": [{"source_key": "modelcontextprotocol/python-sdk",
+                         "catalog_status": "METADATA_ONLY"}],
+            "limitations": "untrusted metadata",
+        }
+        original = deepcopy(legacy)
+        output = extend_existing_ucie_mcp_evidence_response(
+            self.root, legacy, query="Python regression",
+            category="Python", tag="REGRESSION", top=3)
+        self.assertEqual(legacy, original)
+        for key, value in legacy.items():
+            self.assertEqual(output[key], value)
+        extra = output["ucie_public_research_index"]
+        self.assertEqual(extra["selected_skill_id"], "python-runtime-safety")
+        self.assertTrue(all(not result["installable_skill"]
+                            for result in extra["results"]))
+        self.assertFalse(extra["production_approved"])
+        self.assertFalse(extra["auto_install"])
+        self.assertFalse(output.get("production_approved", False))
+
+    def test_unrecognized_mcp_response_not_silently_replaced(self):
+        for response in (
+            {"status": "OTHER_PROJECT", "results": []},
+            {"status": "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",
+             "results": "not-a-list"},
+            {"status": "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",
+             "results": [], "ucie_public_research_index": "spoofed"},
+        ):
+            with self.subTest(response=response), self.assertRaises(DiscoveryError):
+                extend_existing_ucie_mcp_evidence_response(
+                    self.root, response, query="Python")
+        self.assertEqual(list((self.root / "runtime").iterdir()), [])
 
     def test_absent_indexes_create_nothing(self):
         before = list((self.root / "runtime").iterdir())
