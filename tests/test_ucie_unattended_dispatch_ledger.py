@@ -102,6 +102,14 @@ class UCIEOperationReceiptTests(unittest.TestCase):
             inspect_lifecycle(self.root, expected_external_head=GENESIS)["event_count"], 0)
         with self.assertRaises(PolicyError):
             inspect_lifecycle(self.root, expected_external_head="a" * 64)
+        db = self.root / "ucie_unattended_claims.sqlite3"
+        with closing(sqlite3.connect(db)) as conn:
+            conn.execute("CREATE TABLE grants(sequence INTEGER PRIMARY KEY)")
+            conn.commit()
+        self.assertEqual(
+            inspect_lifecycle(self.root, expected_external_head=GENESIS)["event_count"], 0)
+        with self.assertRaises(PolicyError):
+            inspect_lifecycle(self.root, expected_external_head="a" * 64)
 
 
 if __name__ == "__main__":
