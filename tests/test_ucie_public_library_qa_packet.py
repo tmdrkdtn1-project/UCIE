@@ -19,6 +19,9 @@ from ucie_miner.public_library_graph import preview_library_knowledge_graph
 from ucie_miner.public_library_qa_packet import (
     SCHEMA, BLOB_NAMES, FIXED_CLAIM, inspect_library_candidate_qa_packet,
 )
+from ucie_miner.public_library_runner_ci import (
+    recheck_signed_packet_runner_ci, _fetch_exact_ucie_ci_run, WORKFLOW_PATH,
+)
 from ucie_miner.public_library_review_store import (
     ZERO_HEAD, DB_NAME, append_local_library_review_history,
 )
@@ -60,7 +63,7 @@ class LibraryQAPacketTests(unittest.TestCase):
                 "recommended_action"],
             "tested_pinned_revision_sha": self.card["pinned_revision_sha"],
             "runner_repository": "tmdrkdtn1-project/UCIE",
-            "runner_run_id": 39931043522,
+            "runner_run_id": 12345,
             "runner_commit_sha": "b" * 40,
             "observation_utc": (
                 STAMP - timedelta(minutes=30)).isoformat().replace("+00:00", "Z"),
@@ -196,6 +199,115 @@ class LibraryQAPacketTests(unittest.TestCase):
                 altered["candidate_skill_queue"])
             with self.subTest(changed=changed), self.assertRaises(PolicyError):
                 self._inspect(head, current=altered)
+
+    def _runner_metadata(self, **overrides):
+        value = {
+            "id": self.packet["runner_run_id"],
+            "repository": {"full_name": "tmdrkdtn1-project/UCIE"},
+            "html_url": (
+                "https://github.com/tmdrkdtn1-project/UCIE/actions/runs/"
+                + str(self.packet["runner_run_id"])),
+            "path": WORKFLOW_PATH + "refs/pull/77/merge",
+            "head_sha": self.packet["runner_commit_sha"],
+            "status": "completed", "conclusion": "success",
+            "updated_at": (STAMP - timedelta(minutes=1)).isoformat()
+                .replace("+00:00", "Z"),
+        }
+        value.update(overrides)
+        return value
+
+    def _runner(self, head, *, fetch, live=True, **opts):
+        return recheck_signed_packet_runner_ci(
+            self.root, self.current, self.card["public_url"],
+            self.packet, self.artifacts,
+            expected_head_sha256=head, live=live, fetch=fetch,
+            **{**self.trust, **opts})
+
+    def test_generic_runner_ci_can_match_signed_packet_but_never_qa(self):
+        head = self._append([self._sign_event("REVIEW_ATTESTED", 1)])["head_sha256"]
+        db = self.root / "runtime" / DB_NAME
+        before = db.read_bytes()
+        urls = []
+        def fake(url):
+            urls.append(url)
+            return self._runner_metadata(), 90
+        result = self._runner(head, fetch=fake)
+        self.assertEqual(urls, [
+            "https://api.github.com/repos/tmdrkdtn1-project/UCIE/actions/runs/12345"
+        ])
+        self.assertEqual(db.read_bytes(), before)
+        self.assertEqual(result["status"],
+                         "SYNTHETIC_CI_METADATA_MATCH_NOT_LIVE_NO_GO")
+        self.assertTrue(result["runner_commit_sha_matches"])
+        self.assertTrue(result["runner_completed_success_claim_matches_metadata"])
+        self.assertFalse(result["public_api_response_retrieved_live"])
+        self.assertEqual(result["http_get_attempts"], 0)
+        self.assertEqual(result["transport_invocations"], 1)
+        for flag in (
+            "candidate_specific_test_steps_observed",
+            "upstream_candidate_revision_tested_by_runner_proven",
+            "affected_vs_fixed_behavior_reproduced_independently",
+            "release_license_and_security_independently_reviewed",
+            "human_reviewer_independence_verified",
+            "owner_release_approval", "production_approved",
+        ):
+            self.assertFalse(result[flag])
+        self.assertEqual(result["automatic_rule_promotions"], 0)
+
+    def test_wrong_runner_commit_failed_run_and_rate_pause(self):
+        head = self._append([self._sign_event("REVIEW_ATTESTED", 1)])["head_sha256"]
+        mismatch = self._runner(
+            head, fetch=lambda _: (
+                self._runner_metadata(head_sha="a" * 40), 99))
+        self.assertEqual(mismatch["status"], "UCIE_RUNNER_CI_SHA_MISMATCH_NO_GO")
+        failed = self._runner(
+            head, fetch=lambda _: (
+                self._runner_metadata(conclusion="failure"), 99))
+        self.assertEqual(
+            failed["status"], "UCIE_RUNNER_CI_NOT_COMPLETED_SUCCESSFULLY_NO_GO")
+        paused = self._runner(
+            head, fetch=lambda _: (self._runner_metadata(), 1))
+        self.assertEqual(paused["status"], "PUBLIC_RUNNER_API_RATE_PAUSED_NO_GO")
+        self.assertFalse(paused["public_api_response_retrieved_live"])
+
+    def test_foreign_runner_identity_and_transport_are_rejected(self):
+        head = self._append([self._sign_event("REVIEW_ATTESTED", 1)])["head_sha256"]
+        for change in (
+            {"repository": {"full_name": "foreign/private"}},
+            {"id": 9876},
+            {"path": "foreign/private/.github/workflows/attack.yml@main"},
+            {"html_url": "https://example.invalid/run/12345"},
+            {"updated_at": "2028-01-01T00:00:00Z"},
+            {"status": "in_progress", "conclusion": "success"},
+        ):
+            with self.subTest(change=change), self.assertRaises(PolicyError):
+                self._runner(head, fetch=lambda _, x=change: (
+                    self._runner_metadata(**x), 80))
+        for bad in (self._runner_metadata(),
+                    (self._runner_metadata(), True),
+                    (self._runner_metadata(), -1),
+                    ([], None)):
+            with self.subTest(bad=type(bad)), self.assertRaises(PolicyError):
+                self._runner(head, fetch=lambda _, x=bad: x)
+        for url in (
+            "https://api.github.com/repos/foreign/repo/actions/runs/123",
+            "http://api.github.com/repos/tmdrkdtn1-project/UCIE/actions/runs/123",
+            "https://api.github.com/repos/tmdrkdtn1-project/UCIE/actions/runs/123/jobs",
+        ):
+            with self.subTest(url=url), self.assertRaises(PolicyError):
+                _fetch_exact_ucie_ci_run(url)
+
+    def test_unauthorized_run_or_revoked_packet_never_fetches_ci(self):
+        def must_not_run(_):
+            raise AssertionError("unauthorized remote call occurred")
+        with self.assertRaises(PolicyError):
+            self._runner(ZERO_HEAD, fetch=must_not_run, live=False)
+        first = self._append([self._sign_event("REVIEW_ATTESTED", 1)])
+        revoked = self._append(
+            [self._sign_event("REVOKE", 2)],
+            first["head_sha256"])
+        with self.assertRaises(PolicyError):
+            self._runner(revoked["head_sha256"], fetch=must_not_run)
 
     def test_missing_history_and_foreign_root_fail_closed(self):
         with self.assertRaises(PolicyError):
