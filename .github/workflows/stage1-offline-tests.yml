@@ -41,7 +41,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          foreach ($path in @('scripts/install_hourly_task.ps1', 'scripts/task_status.ps1', 'scripts/remove_hourly_task.ps1', 'scripts/ucie_stage10_operator_readonly_trial.ps1', 'scripts/inspect_ucie_mcp_activation.ps1')) {
+          foreach ($path in @('scripts/install_hourly_task.ps1', 'scripts/task_status.ps1', 'scripts/remove_hourly_task.ps1', 'scripts/ucie_stage10_operator_readonly_trial.ps1', 'scripts/inspect_ucie_mcp_activation.ps1', 'scripts/ucie_owner_admin_mcp_launch.ps1')) {
             $tokens = $null
             $errors = $null
             $null = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path, [ref]$tokens, [ref]$errors)
