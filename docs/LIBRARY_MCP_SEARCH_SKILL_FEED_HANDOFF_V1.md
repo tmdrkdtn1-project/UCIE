@@ -72,13 +72,32 @@ the existing public-only response marker and rejects multiple return
 paths, unknown signatures, or repeat attempts. It never inspects another
 project, reads credentials, modifies plugin registration or restarts a tunnel.
 
-Run only on the authorized UCIE Windows host after the reviewed PR source
-is present at `D:\UCIE\src`. Missing adapter code fails closed.
+Prefer an isolated UCIE Git worktree for this preview so the active
+`D:\UCIE` checkout, public miner and scheduled scripts are NOT switched to
+a feature branch. The patcher allows only two exact import source roots:
+`D:\UCIE\src` (legacy) or `D:\UCIE_PREVIEW\UCIE\src`
+(isolated reviewed feature). It does not read other project roots.
+
+One-time prepare the approved PR #77 source (this fetch does not switch the
+existing UCIE worktree):
+
+```powershell
+$repo = 'D:\UCIE'
+$staging = 'D:\UCIE_PREVIEW\UCIE'
+git -C $repo fetch --no-tags origin pull/77/head
+New-Item -ItemType Directory -Path 'D:\UCIE_PREVIEW' -Force | Out-Null
+git -C $repo worktree add --detach $staging FETCH_HEAD
+$env:UCIE_LIBRARY_SOURCE_DIR = 'D:\UCIE_PREVIEW\UCIE\src'
+```
+
+Stop on any Git error or existing worktree conflict; do not force, delete,
+reset or switch the operating UCIE checkout. The stage is read-only source
+until the operator separately authorizes a handler edit.
 
 One non-mutating preflight:
 
 ```powershell
-& 'D:\UCIE\.venv\Scripts\python.exe' -B 'D:\UCIE\scripts\prepare_ucie_mcp_library_link.py'
+& 'D:\UCIE\.venv\Scripts\python.exe' -B 'D:\UCIE_PREVIEW\UCIE\scripts\prepare_ucie_mcp_library_link.py'
 ```
 
 A result of `READY_FOR_ONE_TIME_UCIE_MCP_HANDLER_LINK` confirms
@@ -88,10 +107,10 @@ After independent owner approval to change the running UCIE MCP file,
 an opt-in atomic patch is available:
 
 ```powershell
-& 'D:\UCIE\.venv\Scripts\python.exe' -B 'D:\UCIE\scripts\prepare_ucie_mcp_library_link.py' --apply --approval APPROVE_UCIE_EXISTING_MCP_LIBRARY_HANDLER_ONCE
+& 'D:\UCIE\.venv\Scripts\python.exe' -B 'D:\UCIE_PREVIEW\UCIE\scripts\prepare_ucie_mcp_library_link.py' --apply --approval APPROVE_UCIE_EXISTING_MCP_LIBRARY_HANDLER_ONCE
 ```
 
-The script inserts a local import for the UCIE-only module and wraps
+The patch pins the selected source path from UCIE_LIBRARY_SOURCE_DIR at file-edit time; ensure the reviewed staging directory remains present until a separately authorized deployment replaces it with a stable UCIE package. The script inserts a local import for the UCIE-only module and wraps
 the original handler return value via `extend_existing_ucie_mcp_wire_response`,
 which accepts existing JSON text or dict outputs while preserving legacy
 `status` and `results`. It writes a SHA-named backup of the old MCP server
