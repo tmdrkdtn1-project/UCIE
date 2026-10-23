@@ -27,6 +27,34 @@ State: **SOURCE ONLY / NO LIVE GIT PUSH / NO LIVE SERVICE RESTART / NO AUTO RULE
   two-probe failure, false health, duplicate process, restart storm, owner
   signed plan and denial paths.
 
+### Additional staged permissions and HTTPS boundary
+
+- \`src/ucie_public/unattended_github_http.py\` adds an explicit-injection,
+  deny-redirect HTTPS transport restricted to \`api.github.com\` and the exact
+  UCIE GitHub REST paths. It requires the caller to pin the allowed
+  \`automation/ucie-*\` branch, exact 40-hex base commit and a separately
+  owner-provisioned repo-scoped credential. **Default construction denies
+  live mode.** Its POST payload guard refuses main ref writes, commits on
+  foreign parents, unauthorized trees and non-Draft pull requests. No
+  credential loader, permanent token, or Windows service is installed.
+- \`src/ucie_public/unattended_standing_policy.py\` verifies a separately
+  owner-signed, **revocable**, expiration-limited standing operational policy.
+  It permits up to **3 GitHub Draft PRs/day** on source/test/doc paths, with
+  no auto-merge or main write, or **C40 recovery capped at 2/hour, 4/day,
+  20-minute minimum cooldown** with fixed owner-approved executable/profile
+  SHA identities. The allowed scope is exact and cannot authorize arbitrary
+  commands, Rulepack signing or automatic promotion. External revocation
+  epoch and owner-held signer trust must be supplied on every use.
+- Standing policies remove the need for the owner to reapprove each routine
+  Draft PR/recovery, **once the policy has been explicitly signed**. A source
+  verifier reading a caller-provided epoch does not prove its OS-protected
+  origin. The future Windows owner host must provide an externally pinned
+  revocation checkpoint, expiry enforcement, actual quota counter and
+  audit receipts, and reject rollbacks.
+
+These additions are first-party **source implementations** with synthetic
+mock transport, not a live control-plane deployment.
+
 ## Host activation *not* performed
 
 None of these sources install a Windows supervisor, register or restart a
