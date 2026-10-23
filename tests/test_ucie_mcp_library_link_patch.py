@@ -81,11 +81,13 @@ def search_ucie_evidence(query, category=None, tag=None, top=5):
         self.assertEqual(patched.count("_ucie_library_bridge(r\"D:"), 2)
         compile(patched, "mcp_stdio_server.py", "exec")
 
-    def test_missing_status_or_different_parameters_fails_closed(self):
-        without_status = EXAMPLE.replace(
+    def test_imported_status_helper_is_allowed_but_signature_must_match(self):
+        without_literal = EXAMPLE.replace(
             "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY", "OTHER_STATUS")
-        with self.assertRaises(patch.LinkError):
-            patch.propose_link(without_status)
+        patched = patch.propose_link(without_literal)
+        compile(patched, "mcp_stdio_server.py", "exec")
+        # Only the actual runtime UCIE public-success status can gain
+        # research metadata; all other statuses pass through unchanged.
         with self.assertRaises(patch.LinkError):
             patch.propose_link(
                 EXAMPLE.replace("query, category=None, tag=None, top=5",
