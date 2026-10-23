@@ -209,3 +209,59 @@ Official references:
 
 **Status:** host file patched; local registration and true runtime launch
 pending observation; ChatGPT still displays only the legacy tool.
+
+
+### Observed permission denial before server initialization
+
+On 2026-10-23 the owner ran the consolidated UCIE-only local
+checkpoint at PR #78 SHA e26ba54 and supplied:
+
+- expected server SHA matched
+- one UCIE tunnel ID was present in the expected UCIE-only profile
+- profile mentions both the existing stdio server and Python runtime
+- no UCIE matching process or UCIE tunnel scheduled task was found by
+  the bounded filters (not proof that a tunnel never runs)
+- calling make_server from an *untrusted ad hoc Python import* failed
+  with PermissionError at mcp_stdio_server.py line 21, called from
+  make_server line 25, before the local server assignment at line 30.
+
+This is a meaningful **startup authorization gate**, not evidence of a
+broken MCP decorator or of the 9 admin tool declarations being absent.
+Do not patch away or fake this gate. An MCP launched from an authenticated
+runtime may satisfy the original guard and work normally; that has not
+been observed yet.
+
+The next observation must be **static**, not another unapproved direct
+import or test invocation of make_server. A fixed script
+`scripts/inspect_ucie_mcp_permission_gate.py` was added: it reads only
+the exact UCIE MCP source with owner-reported SHA, parses its AST, and
+reports the guard function name, initial call order, UCIE-prefixed
+environment *names* plus boolean presence, and symbolic error codes
+where safe. It does not execute server code or print variable values,
+tokens, raw source, process commands, or other projects.
+
+Use the already-created detached PR #78 UCIE_ADMIN worktree (no new
+worktree, no service modification):
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$preview = 'D:\UCIE_PREVIEW\UCIE_ADMIN'
+if ((git -C $preview status --porcelain)) {
+    throw 'UCIE Admin preview has uncommitted changes; stop'
+}
+git -C $preview fetch --no-tags origin pull/78/head
+if ($LASTEXITCODE -ne 0) { throw 'UCIE PR fetch failed' }
+git -C $preview switch --detach FETCH_HEAD
+if ($LASTEXITCODE -ne 0) { throw 'UCIE worktree update failed' }
+& 'D:\UCIE\.venv\Scripts\python.exe' -B "$preview\scripts\inspect_ucie_mcp_permission_gate.py"
+if ($LASTEXITCODE -ne 0) { throw 'UCIE permission-gate static inspection incomplete' }
+```
+
+After the true UCIE guard is understood, preserve it and use the
+**documented existing owner-authorized tunnel-client profile** for
+server launch. Never blindly set arbitrary environmental permissions,
+run the server in an untrusted context, start a second client, or
+grant the already-shared readonly consumer write access by accident.
+
+**Current evidence state:** HOST_SOURCE_PATCHED, MCP_RUNTIME_PERMISSION_GATE,
+LOCAL_ADMIN_9_NOT_OBSERVED, CHATGPT_ADMIN_0_OF_9, NO_LIVE_PASS.
