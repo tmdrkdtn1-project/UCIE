@@ -179,7 +179,8 @@ def simulate_github_publish(verified: dict, files: dict, transport) -> dict:
             verified.get("status") != "UCIE_SIGNED_GITHUB_BUNDLE_VERIFIED_NO_NETWORK" or
             type(files) is not dict or
             set(files) != set(verified["files_sha256"]) or
-            transport is None or not callable(transport)):
+            transport is None or not callable(transport) or
+            getattr(transport, "ucie_synthetic_only", None) is not True):
         raise PolicyError("UCIE publisher simulation input mismatch")
     for p, b in files.items():
         if type(b) is not bytes or hashlib.sha256(b).hexdigest() != verified["files_sha256"][p]:
