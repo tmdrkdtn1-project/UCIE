@@ -9,7 +9,7 @@ $adminSource = 'D:\UCIE_PREVIEW\UCIE_ADMIN\src'
 $librarySource = 'D:\UCIE_PREVIEW\UCIE\src'
 $libraryApp = 'D:\UCIE_DATA\library_app'
 $expectedHash = '83b58b68ad0c15a32991e03e82b3c309a5e045da1d4c9a4c8ca3101d8b010d8e'
-$expectedTunnelId = 'tunnel_6ad7069404d481918e33a832393dc3b9'
+$expectedTunnelId = [string]$env:UCIE_EXPECTED_TUNNEL_ID
 
 if (-not (Test-Path -LiteralPath $server -PathType Leaf)) {
     throw 'UCIE local MCP server is missing; no operation performed'
@@ -18,6 +18,7 @@ if (-not (Test-Path -LiteralPath $server -PathType Leaf)) {
 $hash = (Get-FileHash -LiteralPath $server -Algorithm SHA256).Hash.ToLowerInvariant()
 $profilePresent = Test-Path -LiteralPath $profile -PathType Leaf
 $profileHasId = $false
+$profileMatchesExpected = $null
 $profileStdioHint = $false
 $profilePythonHint = $false
 if ($profilePresent) {
@@ -25,7 +26,11 @@ if ($profilePresent) {
     if ($raw.Length -gt 150000) {
         throw 'UCIE tunnel profile unexpectedly large; no operation performed'
     }
-    $profileHasId = $raw.Contains($expectedTunnelId)
+    $ids = @([regex]::Matches($raw, 'tunnel_[0-9a-fA-F]{32}') | ForEach-Object { $_.Value.ToLowerInvariant() } | Select-Object -Unique)
+    $profileHasId = ($ids.Count -eq 1)
+    if ($expectedTunnelId) {
+        $profileMatchesExpected = ($ids -contains $expectedTunnelId.ToLowerInvariant())
+    }
     $profileStdioHint = (
         $raw.Contains('mcp_stdio_server') -or
         $raw.Contains('private_lib.mcp_stdio_server')
@@ -189,7 +194,8 @@ finally {
     status = 'UCIE_MCP_ACTIVATION_CHECKPOINT_READ_ONLY'
     server_hash_matches_admin_patch = ($hash -eq $expectedHash)
     expected_ucie_profile_present = $profilePresent
-    expected_ucie_tunnel_id_in_profile = $profileHasId
+    profile_contains_one_tunnel_id = $profileHasId
+    profile_matches_locally_supplied_expected_id = $profileMatchesExpected
     profile_mentions_stdio_server = $profileStdioHint
     profile_mentions_python = $profilePythonHint
     ucie_candidate_processes = $ucieProcesses
