@@ -3,6 +3,7 @@
 # Does not change profile, tunnel ID, scheduled tasks, other projects, or files.
 # Usage:
 #   .\scripts\ucie_owner_admin_mcp_launch.ps1 -Mode Probe
+# Operator explicitly types APPROVE; this is a one-process consent action.
 #   .\scripts\ucie_owner_admin_mcp_launch.ps1 -Mode Launch -OwnerOnlyConfirmed
 # Launch mode requires the user to have independently confirmed that the
 # UCIE tunnel's ChatGPT app connection is restricted to the owner.
@@ -21,6 +22,9 @@ $python = 'D:\UCIE_DATA\.venv_mcp\Scripts\python.exe'
 $adminSource = 'D:\UCIE_PREVIEW\UCIE_ADMIN\src'
 $librarySource = 'D:\UCIE_PREVIEW\UCIE\src'
 $libraryApp = 'D:\UCIE_DATA\library_app'
+$clientExe = 'D:\UCIE_DATA\tools\tunnel-client-v0.0.16\tunnel-client.exe'
+$healthFile = 'D:\UCIE_DATA\mcp_tunnel_profiles\c40_health.url'
+$expectedOwnerMarker = 'UCIE_PRIVATE_READONLY_APPROVED'
 
 if ($Mode -eq 'Launch' -and -not $OwnerOnlyConfirmed) {
     throw 'UCIE_OWNER_ONLY_AUDIENCE_NOT_ATTESTED: do not publish admin tools to readonly users'
@@ -60,31 +64,31 @@ if ($Mode -eq 'Launch') {
     }
 }
 
-$client = $null
 if ($Mode -eq 'Launch') {
-    $client = Get-Command tunnel-client -CommandType Application -ErrorAction SilentlyContinue
-    if ($null -eq $client) {
-        throw 'UCIE_TUNNEL_CLIENT_BINARY_NOT_ON_PATH_STOP'
+    if (-not (Test-Path -LiteralPath $clientExe -PathType Leaf)) {
+        throw 'UCIE_C40_PINNED_TUNNEL_CLIENT_MISSING_STOP'
+    }
+    if (-not (Test-Path -LiteralPath (Split-Path -Parent $healthFile) -PathType Container)) {
+        throw 'UCIE_C40_HEALTH_FILE_PARENT_MISSING_STOP'
     }
 }
 
-# The owner enters the previously approved operator value locally. No value
-# is printed, persisted, inferred from code, committed or sent to ChatGPT.
-Write-Host 'Enter the existing UCIE MCP operator approval value, locally.'
-$secret = Read-Host -AsSecureString 'UCIE owner approval'
-if ($null -eq $secret -or $secret.Length -eq 0) {
-    throw 'UCIE_OWNER_APPROVAL_NOT_PROVIDED'
+# Previous operator-approved 2026-10-22 session contract:
+# Owner types APPROVE; the already-existing UCIE readonly marker is applied
+# only to the current process and its children. This is NOT a reusable token.
+# The marker by itself MUST NOT authorize admin access to shared clients.
+$ownerDecision = Read-Host 'UCIE one-session authorization: type APPROVE'
+if ($ownerDecision -cne 'APPROVE') {
+    throw 'UCIE_OWNER_EXPLICIT_APPROVAL_REQUIRED'
 }
 
 $oldApproval = $env:UCIE_MCP_OWNER_APPROVAL
 $oldTunnelId = $env:UCIE_MCP_TUNNEL_ID
 $oldAdminGate = $env:UCIE_ADMIN_TOOLS_ENABLED
 $oldPythonPath = $env:PYTHONPATH
-$bstr = [IntPtr]::Zero
 
 try {
-    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)
-    $env:UCIE_MCP_OWNER_APPROVAL = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    $env:UCIE_MCP_OWNER_APPROVAL = $expectedOwnerMarker
     $env:UCIE_MCP_TUNNEL_ID = $tunnelId
     $env:UCIE_ADMIN_TOOLS_ENABLED = '1'
     $env:PYTHONPATH = @($adminSource, $librarySource, $libraryApp) -join ';'
@@ -154,7 +158,7 @@ except Exception as exc:
         # Official Secure MCP Tunnel supported command. Blocks in this
         # console; operator must keep this process alive. No task/service
         # registration, new tunnel, or changes to its profile.
-        & $client.Source run --profile $profile
+        & $clientExe run --profile-file $profile --control-plane.tunnel-id $tunnelId --health.url-file $healthFile
         if ($LASTEXITCODE -ne 0) {
             throw 'UCIE_OWNER_TUNNEL_CLIENT_EXITED_WITH_ERROR'
         }
@@ -162,10 +166,7 @@ except Exception as exc:
     }
 }
 finally {
-    if ($bstr -ne [IntPtr]::Zero) {
-        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-    }
-    $secret.Dispose()
+    $ownerDecision = $null
     $env:UCIE_MCP_OWNER_APPROVAL = $oldApproval
     $env:UCIE_MCP_TUNNEL_ID = $oldTunnelId
     $env:UCIE_ADMIN_TOOLS_ENABLED = $oldAdminGate
