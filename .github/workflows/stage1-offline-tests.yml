@@ -72,6 +72,15 @@ jobs:
             throw 'UCIE_OWNER_LAUNCH_SCRIPT_DUPLICATED_OR_TRUNCATED'
           }
           Write-Output 'UCIE_OWNER_LAUNCH_POWERSHELL_51_PARSE_PASS'
+          $instancePath = (Resolve-Path 'scripts/inspect_ucie_tunnel_runtime_instances.ps1').Path
+          $instanceTokens = $null
+          $instanceErrors = $null
+          $instanceAst = [System.Management.Automation.Language.Parser]::ParseFile($instancePath, [ref]$instanceTokens, [ref]$instanceErrors)
+          if ($null -eq $instanceAst -or $instanceErrors.Count -gt 0) {
+            $instanceErrors | ForEach-Object { Write-Error ("UCIE instance probe syntax error at line " + $_.Extent.StartLineNumber + ": " + $_.Message) }
+            throw 'UCIE_TUNNEL_INSTANCE_PROBE_POWERSHELL_51_PARSE_FAILED'
+          }
+          Write-Output 'UCIE_TUNNEL_INSTANCE_PROBE_POWERSHELL_51_PARSE_PASS'
 
       - name: Hourly task read-only evidence acceptance with synthetic Windows PowerShell 5.1 task
         if: runner.os == 'Windows'
