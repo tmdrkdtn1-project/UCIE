@@ -45,7 +45,7 @@ class UCIEAdminMakeServerLinkTests(unittest.TestCase):
             env = {}
             exec(updated, env)
             server = env["make_server"]()
-        self.assertTrue(callable(server))
+        self.assertTrue(callable(server.tool))
         with self.assertRaises(module.RegistrationError):
             module.prepare_registration(updated)
 
