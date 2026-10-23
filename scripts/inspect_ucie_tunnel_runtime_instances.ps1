@@ -75,7 +75,7 @@ try {
         Where-Object {
             [string]::Equals([string]$_.ExecutablePath, $expectedPython,
                 [StringComparison]::OrdinalIgnoreCase) -and
-            ([string]$_.CommandLine -match '(?i)(mcp_stdio_server|private_lib[./\]mcp)')
+            ([string]$_.CommandLine -match '(?i)mcp_stdio_server')
         } |
         ForEach-Object {
             [pscustomobject]@{
