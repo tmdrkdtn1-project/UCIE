@@ -69,6 +69,73 @@ def make_server():
         self.assertFalse(found["guard_has_condition_or_control_flow"])
         self.assertFalse(found["executed_make_server"])
 
+    def test_environment_alias_key_is_detected_without_approval_value(self):
+        source = """
+import os
+def require_runtime_approval():
+    e = os.environ
+    if e.get("UCIE_MCP_OPERATOR_APPROVAL") != "very-sensitive-phrase":
+        raise PermissionError("UCIE_MCP_OPERATOR_GATE_HOLD")
+def make_server():
+    require_runtime_approval()
+    server = object()
+    return server
+"""
+        found = inspector.analyze(
+            source,
+            env={"UCIE_MCP_OPERATOR_APPROVAL": "PRIVATE_SHOULD_NOT_PRINT"},
+            error_line=6, caller_line=8)
+        self.assertTrue(found["operator_gate_environment_alias_detected"])
+        self.assertEqual(found["operator_gate_environment_alias_names"], ["e"])
+        self.assertEqual(
+            found["operator_gate_ucie_variable_presence_only"],
+            {"UCIE_MCP_OPERATOR_APPROVAL": True})
+        self.assertEqual(
+            found["operator_gate_comparison_operator_types"], ["NotEq"])
+        self.assertEqual(
+            found["operator_gate_comparison_literal_hint"],
+            "MASKED_TEXT_LITERAL")
+        self.assertNotIn("very-sensitive-phrase", str(found))
+        self.assertNotIn("PRIVATE_SHOULD_NOT_PRINT", str(found))
+
+    def test_copy_of_environment_alias_is_supported(self):
+        source = """
+import os
+def require_runtime_approval():
+    e = os.environ.copy()
+    if e.get("UCIE_MCP_OPERATOR_APPROVAL") != "1":
+        raise PermissionError("UCIE_MCP_OPERATOR_GATE_HOLD")
+def make_server():
+    require_runtime_approval()
+    server = object()
+    return server
+"""
+        found = inspector.analyze(
+            source, env={}, error_line=6, caller_line=8)
+        self.assertTrue(found["operator_gate_environment_alias_detected"])
+        self.assertEqual(
+            found["operator_gate_ucie_variable_presence_only"],
+            {"UCIE_MCP_OPERATOR_APPROVAL": False})
+        self.assertEqual(found["operator_gate_comparison_literal_hint"], "1")
+
+    def test_other_project_key_is_not_exposed(self):
+        source = """
+import os
+def require_runtime_approval():
+    e = os.environ
+    if e.get("SOME_OTHER_PROJECT_SECRET") != "never-emit-this":
+        raise PermissionError("UCIE_MCP_OPERATOR_GATE_HOLD")
+def make_server():
+    require_runtime_approval()
+    server = object()
+    return server
+"""
+        found = inspector.analyze(
+            source, env={}, error_line=6, caller_line=8)
+        self.assertEqual(found["operator_gate_ucie_variable_presence_only"], {})
+        self.assertNotIn("SOME_OTHER_PROJECT_SECRET", str(found))
+        self.assertNotIn("never-emit-this", str(found))
+
     def test_missing_authorized_context_is_only_reported_not_bypassed(self):
         found = inspector.analyze(
             EXAMPLE, env={}, error_line=6, caller_line=9)
