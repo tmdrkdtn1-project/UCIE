@@ -44,6 +44,31 @@ class UCIEStaticStartupGuardTests(unittest.TestCase):
         self.assertTrue(found["guard_function_differs_from_factory"])
         self.assertNotIn("PRIVATE_SHOULD_NOT_PRINT", str(found))
 
+    def test_guard_branch_shape_and_call_names_without_values(self):
+        found = inspector.analyze(
+            EXAMPLE, env={}, error_line=6, caller_line=9)
+        self.assertEqual(
+            found["guard_top_level_statement_types"], ["If"])
+        self.assertTrue(found["guard_has_condition_or_control_flow"])
+        self.assertFalse(found["guard_is_single_unconditional_raise"])
+        self.assertIn("os.environ.get", found["guard_callable_names_only"])
+        self.assertNotIn("PRIVATE_SHOULD_NOT_PRINT", str(found))
+
+    def test_unconditional_hold_is_identified_without_bypass(self):
+        source = """
+def require_runtime_approval():
+    raise PermissionError("UCIE_MCP_OPERATOR_GATE_HOLD")
+def make_server():
+    require_runtime_approval()
+    server = object()
+    return server
+"""
+        found = inspector.analyze(
+            source, env={}, error_line=3, caller_line=5)
+        self.assertTrue(found["guard_is_single_unconditional_raise"])
+        self.assertFalse(found["guard_has_condition_or_control_flow"])
+        self.assertFalse(found["executed_make_server"])
+
     def test_missing_authorized_context_is_only_reported_not_bypassed(self):
         found = inspector.analyze(
             EXAMPLE, env={}, error_line=6, caller_line=9)
