@@ -177,10 +177,15 @@ def inspect_library_review_closure(
              "state": x["review_state"], "next_action": x["next_action"]}
             for x in joined
             if x["revision_change"] != "UNCHANGED_WITHIN_BATCH_SCOPE"
-            or x["review_state"] in (
+        ],
+        # Revocation and stale-proof blockers stay visible in review_records.
+        # Without a previously authenticated LEDGER head, there is no proof
+        # that a revocation event is *new* since the last user notification.
+        "blocked_reference_count": sum(
+            x["review_state"] in (
                 "OWNER_REVOKED_BLOCKED_NO_GO",
                 "REVIEW_FOR_OLDER_PINNED_EVIDENCE_NO_GO")
-        ],
+            for x in joined),
         "previously_selected_not_seen": assessment["previously_selected_not_seen"],
         "bounded_nonselection_does_not_mean_deleted": True,
         "owner_and_qa_signatures_mean": "KEYHOLDER_ASSERTIONS_ONLY_NOT_ACTUAL_INDEPENDENT_QA",
