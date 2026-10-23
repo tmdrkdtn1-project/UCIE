@@ -225,7 +225,7 @@ except Exception as exc:
             '--health.url-file', ('"' + $healthFile + '"')
         )
         $child = Start-Process -FilePath $clientExe -ArgumentList $args `
-            -WorkingDirectory $libraryApp -WindowStyle Hidden -PassThru -ErrorAction Stop
+            -WorkingDirectory (Get-Location).ProviderPath -WindowStyle Hidden -PassThru -ErrorAction Stop
         if ($null -eq $child -or $child.Id -le 0) {
             throw 'UCIE_BACKGROUND_START_RETURNED_NO_PID'
         }
