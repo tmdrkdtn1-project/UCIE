@@ -24,7 +24,17 @@ $expectedRemote = 'https://github.com/tmdrkdtn1-project/UCIE.git'
 function Test-RegularNoLink([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
     $item = Get-Item -LiteralPath $Path -Force
-    return (-not [bool]($item.Attributes -band [IO.FileAttributes]::ReparsePoint))
+    if ([bool]($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { return $false }
+    $parent = Split-Path -Path $Path -Parent
+    while (-not [string]::IsNullOrWhiteSpace($parent)) {
+        if (-not (Test-Path -LiteralPath $parent -PathType Container)) { return $false }
+        $dir = Get-Item -LiteralPath $parent -Force
+        if ([bool]($dir.Attributes -band [IO.FileAttributes]::ReparsePoint)) { return $false }
+        $up = Split-Path -Path $parent -Parent
+        if ([string]::IsNullOrWhiteSpace($up) -or $up -ceq $parent) { break }
+        $parent = $up
+    }
+    return $true
 }
 function Test-DirectoryNoLink([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return $false }
