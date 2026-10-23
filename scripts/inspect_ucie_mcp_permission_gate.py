@@ -72,6 +72,82 @@ def _env_keys_in_function(fn):
     return sorted(keys)
 
 
+def _operator_gate_environment_metadata(fn, env):
+    """Inspect environment aliases like 'e = os.environ' without values."""
+    if fn is None:
+        return {"alias_found": False, "keys": {}, "comparison": [],
+                "required_literal_hint": "NOT_ESTABLISHED"}
+
+    aliases = set()
+    for stmt in fn.body:
+        if not isinstance(stmt, (ast.Assign, ast.AnnAssign)):
+            continue
+        rhs = stmt.value
+        origin = _call_name(rhs)
+        if isinstance(rhs, ast.Call):
+            call_name = _call_name(rhs.func)
+            if call_name in ("os.environ.copy", "environ.copy"):
+                origin = "os.environ"
+            elif (call_name == "dict" and len(rhs.args) == 1
+                  and _call_name(rhs.args[0]) in ("os.environ", "environ")):
+                origin = "os.environ"
+        if origin not in ("os.environ", "environ"):
+            continue
+        targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
+        for target in targets:
+            if isinstance(target, ast.Name):
+                aliases.add(target.id)
+
+    key_names = set()
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        func = node.func
+        if (isinstance(func, ast.Attribute) and func.attr == "get"
+                and isinstance(func.value, ast.Name)
+                and func.value.id in aliases
+                and isinstance(node.args[0], ast.Constant)
+                and type(node.args[0].value) is str):
+            key = node.args[0].value
+            if SAFE_ENV_NAME.fullmatch(key):
+                key_names.add(key)
+
+    comparisons = []
+    hints = set()
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.If):
+            continue
+        for compare in ast.walk(node.test):
+            if not isinstance(compare, ast.Compare):
+                continue
+            comparisons.extend(type(op).__name__ for op in compare.ops)
+            for operand in (compare.left, *compare.comparators):
+                if isinstance(operand, ast.Constant):
+                    value = operand.value
+                    if type(value) is str:
+                        hints.add(value if value in ("1", "0", "true",
+                                                     "false", "yes", "no")
+                                  else "MASKED_TEXT_LITERAL")
+                    elif value is None:
+                        hints.add("NONE_LITERAL")
+                    elif type(value) is bool:
+                        hints.add("BOOLEAN_LITERAL")
+                    else:
+                        hints.add("OTHER_LITERAL")
+    # Absence of the alias or matching UCIE key is not proof of no gate:
+    # the source may use a more complex mapping or nonstandard names.
+    return {
+        "alias_found": bool(aliases),
+        "alias_names": sorted(aliases)[:4],
+        "keys": {name: name in env for name in sorted(key_names)},
+        "comparison": sorted(set(comparisons))[:8],
+        "required_literal_hint": (
+            next(iter(hints)) if len(hints) == 1 else
+            ("MULTIPLE_OR_UNKNOWN" if hints else "NOT_ESTABLISHED")
+        ),
+    }
+
+
 def analyze(source: str, env=None, error_line: int = 21,
             caller_line: int = 25) -> dict:
     """Return AST structure and environment presence bits only."""
@@ -136,6 +212,7 @@ def analyze(source: str, env=None, error_line: int = 21,
     env_keys.update(_env_keys_in_function(factory))
     if env is None:
         env = os.environ
+    operator_gate = _operator_gate_environment_metadata(gate, env)
     return {
         "status": "UCIE_MCP_EARLY_PERMISSION_GATE_STATIC_OBSERVED",
         "guard_line": error_line,
@@ -155,6 +232,11 @@ def analyze(source: str, env=None, error_line: int = 21,
         "ucie_env_key_presence_only": {
             name: name in env for name in sorted(env_keys)
         },
+        "operator_gate_environment_alias_detected": operator_gate["alias_found"],
+        "operator_gate_environment_alias_names": operator_gate["alias_names"],
+        "operator_gate_ucie_variable_presence_only": operator_gate["keys"],
+        "operator_gate_comparison_operator_types": operator_gate["comparison"],
+        "operator_gate_comparison_literal_hint": operator_gate["required_literal_hint"],
         "executed_make_server": False,
         "read_credentials_or_secret_values": False,
         "server_restarted": False,
