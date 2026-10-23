@@ -22,38 +22,59 @@ only a comparison fingerprint, not an attested or signed version release.
 
 ## Integration into the **existing** UCIE Private Readonly MCP runtime
 
-There is deliberately no new local service. An operator maintaining the
-existing UCIE-owned MCP runtime can, after reviewing and deploying this code
-into the **same trusted UCIE environment**, route that service's existing
-`search_ucie_evidence` handler to:
+There is deliberately no new local service. The existing UCIE tool currently
+returns `status=UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY` and a `results`
+list. **Preserve that live tool response and its authentication and legacy
+library search.** Add a separate, explicitly unverified key rather than
+replacing the existing handler's response.
+
+The trusted UCIE runtime is maintained outside this GitHub repo. Only after
+the runtime owner reviews the exact installed handler body, an additive
+integration is appropriate:
 
 ```python
 from pathlib import Path
 from ucie_miner.public_library_mcp_adapter import (
-    search_ucie_public_library_for_mcp,
-    preview_public_skill_feed,
+    extend_existing_ucie_mcp_evidence_response,
 )
 
 UCIE_ROOT = Path(r"D:\UCIE")
 
-def existing_ucie_public_search_handler(
-        query: str, category: str | None = None,
-        tag: str | None = None, top: int = 5):
-    return search_ucie_public_library_for_mcp(
-        UCIE_ROOT, query=query, category=category, tag=tag, top=top)
-
-# For a separately operator-approved read-only catalog tool endpoint:
-def ucie_public_skill_catalog_handler():
-    return preview_public_skill_feed(UCIE_ROOT)
+# In the *existing* search_ucie_evidence handler, after its current
+# authorization/legacy search logic (not as a new top-level MCP handler):
+#
+# existing_response = <the current handler's normal response dict>
+# return extend_existing_ucie_mcp_evidence_response(
+#     UCIE_ROOT, existing_response, query=query,
+#     category=category, tag=tag, top=top)
 ```
 
-This code sample is a **handoff for the existing runtime**, not evidence of
-runtime installation. The currently installed MCP server is maintained
-outside this public GitHub repository. This PR cannot change its tool
-registry or its running tunnel. **Do not** replace that server, restart
-the tunnel, or expose any new recipient-facing tool without a separate
-operator-approved deployment. The existing MCP service's public-only
-metadata and authorization boundaries must remain in effect.
+The function returns a **new** dictionary containing every old field
+unchanged plus `ucie_public_research_index`. A malformed/foreign legacy
+response is rejected rather than being treated as UCIE evidence. A fixed
+taxonomy query may produce an empty public research result; this does not
+remove or alter the old Library results.
+
+**Do not blind-edit the runtime MCP server**: inspect its current handler
+first to identify its output shape, authorization logic and import path. The
+runtime executable at `D:\UCIE_DATA\.venv_mcp\Scripts\python.exe` needs
+access to the reviewed UCIE source under `D:\UCIE\src` for the import, but
+only through the runtime's approved UCIE-only package/path setup. A GitHub
+commit by itself does not change this environment.
+
+One necessary, non-mutating operator import probe after an approved checkout:
+
+```powershell
+$env:PYTHONPATH = 'D:\UCIE\src'
+& 'D:\UCIE_DATA\.venv_mcp\Scripts\python.exe' -B -c "from ucie_miner.public_library_mcp_adapter import extend_existing_ucie_mcp_evidence_response; print('UCIE_LIBRARY_ADAPTER_IMPORT_OK')"
+```
+
+Do not restart the tunnel or change the MCP tool registry as part of this
+source-only PR. Once the authorized local handler modification is actually
+deployed, one fresh live `search_ucie_evidence` call must preserve
+`status` and `results` and additionally return
+`ucie_public_research_index.schema=UCIE_LIBRARY_MCP_PUBLIC_SEARCH_CONTRACT_V1`.
+Until that is observed, live integration remains **NOT DEPLOYED**.
 
 ### Query contract
 
