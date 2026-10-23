@@ -26,8 +26,32 @@ class UCIEOwnerMcpSessionContractTests(unittest.TestCase):
         self.assertEqual(source.count("'@"), 1)
         self.assertEqual(source.count("UCIE_TUNNEL_ALREADY_RUNNING_DO_NOT_DUPLICATE"), 1)
         self.assertEqual(source.count("\nfinally {"), 1)
-        self.assertLess(len(source.splitlines()), 200)
+        self.assertLess(len(source.splitlines()), 270)
         self.assertEqual(source.rstrip().splitlines()[-1], "}")
+
+    def test_pr77_library_package_precedes_admin_source(self):
+        source = self.source
+        self.assertIn(
+            "$env:PYTHONPATH = @($librarySource, $adminSource, $libraryApp) -join ';'",
+            source)
+        self.assertNotIn(
+            "$env:PYTHONPATH = @($adminSource, $librarySource, $libraryApp) -join ';'",
+            source)
+        self.assertIn("ucie_miner\\public_library_mcp_adapter.py", source)
+        self.assertIn("ucie_admin\\mcp_registration.py", source)
+        self.assertIn("VERIFY_LIBRARY_ADAPTER_ORIGIN", source)
+        self.assertIn("UCIE_LIBRARY_ADAPTER_SHADOWED", source)
+
+    def test_local_probe_invokes_legacy_search_before_launch(self):
+        source = self.source
+        self.assertIn('server.call_tool("search_ucie_evidence"', source)
+        self.assertIn("CALL_EXISTING_PUBLIC_SEARCH", source)
+        self.assertIn('"legacy_search_call_verified":True', source)
+        self.assertIn("UCIE_LEGACY_PUBLIC_SEARCH_CONTRACT_NOT_MET", source)
+        self.assertLess(
+            source.index('server.call_tool("search_ucie_evidence"'),
+            source.index('& $clientExe run --profile-file $profile'))
+        self.assertIn('"live_chatgpt_tools_verified":False', source)
 
     def test_existing_one_session_approval_not_unknown_password(self):
         source = self.source
