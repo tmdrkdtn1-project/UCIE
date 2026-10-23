@@ -148,6 +148,85 @@ def _operator_gate_environment_metadata(fn, env):
     }
 
 
+def _gate_getter_binding_shape(fn):
+    """Show the origin *shape* of e and its key; never approval values.
+
+    This works even if e is NOT an os.environ alias and explicitly
+    distinguishes unresolved origin from an environment source.
+    """
+    if fn is None:
+        return {
+            "e_binding_found": False,
+            "e_binding_structure": [],
+            "e_get_key_kinds": [],
+            "e_get_ucie_keys_only": [],
+        }
+
+    def call_shape(expr):
+        name = _call_name(expr)
+        # Function names from this fixed UCIE-only guard are source structure,
+        # but never print unreviewed identifiers that might encode credentials.
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]{0,95}", name):
+            return "OTHER_CALL"
+        if re.search(r"(?i)(token|password|secret|credential|private|api.key)", name):
+            return "SENSITIVE_NAME_MASKED"
+        return name
+
+    bindings = []
+    for stmt in fn.body:
+        if not isinstance(stmt, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
+        if not any(isinstance(t, ast.Name) and t.id == "e" for t in targets):
+            continue
+        rhs = stmt.value
+        calls = sorted({
+            call_shape(node.func) for node in ast.walk(rhs)
+            if isinstance(node, ast.Call)
+        })[:10]
+        bindings.append({
+            "rhs_ast_type": type(rhs).__name__,
+            "rhs_calls": calls,
+            "references_os_environ": any(
+                _call_name(node) in ("os.environ", "environ")
+                for node in ast.walk(rhs)
+                if isinstance(node, (ast.Name, ast.Attribute))
+            ),
+            "has_conditional": isinstance(rhs, (ast.IfExp, ast.BoolOp)),
+        })
+
+    key_kinds = []
+    safe_ucie_keys = set()
+    for node in ast.walk(fn):
+        if not (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "e"
+                and node.func.attr == "get"):
+            continue
+        if not node.args:
+            key_kinds.append("NO_POSITIONAL_KEY")
+            continue
+        key = node.args[0]
+        if isinstance(key, ast.Constant) and type(key.value) is str:
+            if SAFE_ENV_NAME.fullmatch(key.value):
+                key_kinds.append("UCIE_LITERAL_KEY")
+                safe_ucie_keys.add(key.value)
+            else:
+                key_kinds.append("NON_UCIE_LITERAL_KEY_MASKED")
+        elif isinstance(key, ast.Name):
+            key_kinds.append("NAME_REFERENCE_KEY")
+        else:
+            key_kinds.append(type(key).__name__.upper() + "_KEY")
+
+    return {
+        "e_binding_found": bool(bindings),
+        "e_binding_structure": bindings[:4],
+        "e_get_key_kinds": sorted(set(key_kinds)),
+        "e_get_ucie_keys_only": sorted(safe_ucie_keys),
+    }
+
+
 def analyze(source: str, env=None, error_line: int = 21,
             caller_line: int = 25) -> dict:
     """Return AST structure and environment presence bits only."""
@@ -213,6 +292,7 @@ def analyze(source: str, env=None, error_line: int = 21,
     if env is None:
         env = os.environ
     operator_gate = _operator_gate_environment_metadata(gate, env)
+    getter_origin = _gate_getter_binding_shape(gate)
     return {
         "status": "UCIE_MCP_EARLY_PERMISSION_GATE_STATIC_OBSERVED",
         "guard_line": error_line,
@@ -237,6 +317,10 @@ def analyze(source: str, env=None, error_line: int = 21,
         "operator_gate_ucie_variable_presence_only": operator_gate["keys"],
         "operator_gate_comparison_operator_types": operator_gate["comparison"],
         "operator_gate_comparison_literal_hint": operator_gate["required_literal_hint"],
+        "operator_gate_e_binding_found": getter_origin["e_binding_found"],
+        "operator_gate_e_binding_structure": getter_origin["e_binding_structure"],
+        "operator_gate_e_get_key_kinds": getter_origin["e_get_key_kinds"],
+        "operator_gate_e_get_ucie_keys_only": getter_origin["e_get_ucie_keys_only"],
         "executed_make_server": False,
         "read_credentials_or_secret_values": False,
         "server_restarted": False,
