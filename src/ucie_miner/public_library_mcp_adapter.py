@@ -269,3 +269,46 @@ def extend_existing_ucie_mcp_wire_response(
         return json.dumps(extended, ensure_ascii=False, sort_keys=True,
                           separators=(",", ":"), allow_nan=False)
     return extended
+
+
+def extend_existing_ucie_mcp_wire_response_if_public(
+        root: Path, existing_response: dict | str, *,
+        query: str, category: str | None = None,
+        tag: str | None = None, top: int = 5) -> dict | str:
+    """Optional additive research on the *existing public-success* response.
+
+    The original UCIE handler may return early on invalid input, transient
+    failures, missing evidence, opt-outs, or unsupported queries. Those
+    returns must not be replaced, normalized, or thrown away. The new
+    Library research index is a best-effort extra field on the existing
+    UCIE public-success response only. Any read-only index failure leaves
+    the entire original value (and wire type) unchanged.
+    """
+    response = existing_response
+    if type(response) is str:
+        if len(response.encode("utf-8")) > 131072:
+            return existing_response
+        try:
+            def unique_fields(pairs):
+                checked = {}
+                for key, value in pairs:
+                    if key in checked:
+                        raise DiscoveryError("duplicate UCIE MCP response field")
+                    checked[key] = value
+                return checked
+
+            response = json.loads(response, object_pairs_hook=unique_fields)
+        except (UnicodeError, ValueError):
+            return existing_response
+    if (type(response) is not dict
+            or response.get("status") !=
+                "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY"):
+        return existing_response
+    try:
+        return extend_existing_ucie_mcp_wire_response(
+            root, existing_response, query=query, category=category,
+            tag=tag, top=top)
+    except Exception:
+        # Never disrupt existing public Library MCP search on failure to
+        # add optional research metadata. Do not log/retain query contents.
+        return existing_response
