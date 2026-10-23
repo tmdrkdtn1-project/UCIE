@@ -5,11 +5,15 @@
 #   .\scripts\ucie_owner_admin_mcp_launch.ps1 -Mode Probe
 # Operator explicitly types APPROVE; this is a one-process consent action.
 #   .\scripts\ucie_owner_admin_mcp_launch.ps1 -Mode Launch -OwnerOnlyConfirmed
+#   .\scripts\ucie_owner_admin_mcp_launch.ps1 -Mode Background -OwnerOnlyConfirmed
+# Background runs one independent hidden Windows child after operator approval.
+# It persists after closing the launching console, not after Windows reboot.
+# No scheduled task/service, new tunnel or global environment changes.
 # Launch mode requires the user to have independently confirmed that the
 # UCIE tunnel's ChatGPT app connection is restricted to the owner.
 [CmdletBinding()]
 param(
-    [ValidateSet('Probe', 'Launch')]
+    [ValidateSet('Probe', 'Launch', 'Background')]
     [string]$Mode = 'Probe',
     [switch]$OwnerOnlyConfirmed
 )
@@ -28,7 +32,7 @@ $expectedOwnerMarker = 'UCIE_PRIVATE_READONLY_APPROVED'
 $libraryAdapter = Join-Path $librarySource 'ucie_miner\public_library_mcp_adapter.py'
 $adminRegistration = Join-Path $adminSource 'ucie_admin\mcp_registration.py'
 
-if ($Mode -eq 'Launch' -and -not $OwnerOnlyConfirmed) {
+if ($Mode -in @('Launch', 'Background') -and -not $OwnerOnlyConfirmed) {
     throw 'UCIE_OWNER_ONLY_AUDIENCE_NOT_ATTESTED: do not publish admin tools to readonly users'
 }
 foreach ($path in @($serverFile, $profile, $python, $adminSource, $librarySource, $libraryApp)) {
@@ -63,7 +67,7 @@ if ($ids.Count -ne 1) {
 $tunnelId = $ids[0]
 $profileText = $null
 
-if ($Mode -eq 'Launch') {
+if ($Mode -in @('Launch', 'Background')) {
     # The previous UCIE client may run without a C40 filename argument.
     # Inspect only UCIE tunnel-client processes; do not scan unrelated projects.
     $active = @(
@@ -75,7 +79,7 @@ if ($Mode -eq 'Launch') {
     }
 }
 
-if ($Mode -eq 'Launch') {
+if ($Mode -in @('Launch', 'Background')) {
     if (-not (Test-Path -LiteralPath $clientExe -PathType Leaf)) {
         throw 'UCIE_C40_PINNED_TUNNEL_CLIENT_MISSING_STOP'
     }
@@ -204,6 +208,46 @@ except Exception as exc:
         throw 'UCIE_LOCAL_OPERATOR_GATE_OR_TOOL_REGISTRATION_FAILED_STOP'
     }
 
+
+    if ($Mode -eq 'Background') {
+        # One-session approval and actual local MCP search have passed.
+        # The hidden independent child inherits process-only authorization.
+        $activeBeforeStart = @(
+            Get-CimInstance Win32_Process -Filter "Name = 'tunnel-client.exe'" |
+            Where-Object { ([string]$_.CommandLine).Contains('UCIE') }
+        )
+        if ($activeBeforeStart.Count -ne 0) {
+            throw 'UCIE_TUNNEL_ALREADY_RUNNING_DO_NOT_DUPLICATE'
+        }
+        $args = @(
+            'run', '--profile-file', ('"' + $profile + '"'),
+            '--control-plane.tunnel-id', $tunnelId,
+            '--health.url-file', ('"' + $healthFile + '"')
+        )
+        $child = Start-Process -FilePath $clientExe -ArgumentList $args `
+            -WorkingDirectory $libraryApp -WindowStyle Hidden -PassThru -ErrorAction Stop
+        if ($null -eq $child -or $child.Id -le 0) {
+            throw 'UCIE_BACKGROUND_START_RETURNED_NO_PID'
+        }
+        Start-Sleep -Seconds 2
+        $observed = Get-CimInstance Win32_Process -Filter "ProcessId = $($child.Id)" -ErrorAction Stop
+        if ($null -eq $observed -or
+            -not [string]::Equals([string]$observed.ExecutablePath, $clientExe,
+                [StringComparison]::OrdinalIgnoreCase) -or
+            ([string]$observed.CommandLine).IndexOf(
+                'ucie-private-c40', [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            throw 'UCIE_BACKGROUND_TUNNEL_NOT_RUNNING_AS_EXPECTED'
+        }
+        [pscustomobject]@{
+            status = 'UCIE_OWNER_BACKGROUND_TUNNEL_PROCESS_OBSERVED'
+            pid = [int]$child.Id
+            window = 'HIDDEN'
+            startup_task_registered = $false
+            closes_with_launching_console = $false
+            survives_windows_logoff_or_reboot = $false
+            tool_calls_verified_in_chatgpt = $false
+        } | ConvertTo-Json -Compress
+    }
     if ($Mode -eq 'Launch') {
         Write-Output '{"status":"UCIE_OWNER_ONLY_TUNNEL_RUN_STARTED","live_chatgpt_tools_verified":false}'
         # Official Secure MCP Tunnel supported command. Blocks in this
