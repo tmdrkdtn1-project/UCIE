@@ -16,6 +16,7 @@ if ($Evidence) {
         Get-ScheduledTaskInfo -TaskPath '\' -TaskName 'UCIE-PublicMiner-Hourly'
     } else { $null }
     $actionOk = $false
+    $windowlessAction = $false
     $principalOk = $false
     $principalUserMatches = $false
     $principalIdentityResolution = 'UNOBSERVED_NO_GO'
@@ -30,10 +31,15 @@ if ($Evidence) {
         if ($actions.Count -eq 1) {
             $a = $actions[0]
             $expectedPython = Join-Path $root '.venv\Scripts\python.exe'
+            $expectedPythonw = Join-Path $root '.venv\Scripts\pythonw.exe'
             $expectedWorker = Join-Path $root 'scripts\public_miner_cycle.py'
             $expectedArgs = '"' + $expectedWorker + '"'
+            $windowlessAction = [string]::Equals(
+                [string]$a.Execute, $expectedPythonw, [StringComparison]::OrdinalIgnoreCase)
+            $knownLegacyAction = [string]::Equals(
+                [string]$a.Execute, $expectedPython, [StringComparison]::OrdinalIgnoreCase)
             $actionOk = (
-                [string]::Equals($a.Execute, $expectedPython, [StringComparison]::OrdinalIgnoreCase) -and
+                ($windowlessAction -or $knownLegacyAction) -and
                 [string]::Equals($a.Arguments, $expectedArgs, [StringComparison]::Ordinal) -and
                 [string]::Equals($a.WorkingDirectory.TrimEnd('\'), $root, [StringComparison]::OrdinalIgnoreCase)
             )
@@ -175,6 +181,7 @@ if ($Evidence) {
         scheduled_task_registered = ($null -ne $task)
         task_state = if ($null -eq $task) { 'ABSENT' } else { [string]$task.State }
         action_matches_ucie_only = $actionOk
+        task_uses_pythonw_without_main_console = $windowlessAction
         owner_least_privilege_verified = $principalOk
         principal_user_matches_current_process = $principalUserMatches
         principal_identity_resolution = $principalIdentityResolution
