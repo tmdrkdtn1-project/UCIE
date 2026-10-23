@@ -26,7 +26,7 @@ class UCIEOwnerMcpSessionContractTests(unittest.TestCase):
         self.assertEqual(source.count("'@"), 1)
         self.assertEqual(source.count("UCIE_TUNNEL_ALREADY_RUNNING_DO_NOT_DUPLICATE"), 1)
         self.assertEqual(source.count("\nfinally {"), 1)
-        self.assertLess(len(source.splitlines()), 270)
+        self.assertLess(len(source.splitlines()), 315)
         self.assertEqual(source.rstrip().splitlines()[-1], "}")
 
     def test_pr77_library_package_precedes_admin_source(self):
@@ -59,6 +59,24 @@ class UCIEOwnerMcpSessionContractTests(unittest.TestCase):
         embedded = source.split("$probe = @'\n", 1)[1].split("\n'@", 1)[0]
         compile(embedded, "UCIE_owner_MCP_embedded_probe.py", "exec")
 
+    def test_hidden_background_is_independent_and_remains_approval_gated(self):
+        source = self.source
+        self.assertIn("[ValidateSet('Probe', 'Launch', 'Background')]", source)
+        self.assertIn("if ($Mode -eq 'Background') {", source)
+        self.assertIn("Start-Process -FilePath $clientExe", source)
+        self.assertIn("-WindowStyle Hidden -PassThru", source)
+        self.assertIn("-WorkingDirectory $libraryApp", source)
+        self.assertIn("UCIE_OWNER_BACKGROUND_TUNNEL_PROCESS_OBSERVED", source)
+        self.assertIn("UCIE_TUNNEL_ALREADY_RUNNING_DO_NOT_DUPLICATE", source)
+        self.assertIn("survives_windows_logoff_or_reboot = $false", source)
+        self.assertIn("startup_task_registered = $false", source)
+        self.assertNotIn("Register-ScheduledTask", source)
+        self.assertNotIn("Stop-Process", source)
+        self.assertLess(
+            source.index('server.call_tool("search_ucie_evidence"'),
+            source.index("Start-Process -FilePath $clientExe"))
+        self.assertIn("$env:UCIE_MCP_OWNER_APPROVAL = $oldApproval", source)
+
     def test_existing_one_session_approval_not_unknown_password(self):
         source = self.source
         self.assertIn("Read-Host 'UCIE one-session authorization: type APPROVE'", source)
@@ -82,7 +100,7 @@ class UCIEOwnerMcpSessionContractTests(unittest.TestCase):
         self.assertIn("$env:UCIE_MCP_TUNNEL_ID = $oldTunnelId", source)
         self.assertIn("$env:UCIE_ADMIN_TOOLS_ENABLED = $oldAdminGate", source)
         self.assertIn("$env:PYTHONPATH = $oldPythonPath", source)
-        self.assertIn("if ($Mode -eq 'Launch' -and -not $OwnerOnlyConfirmed)", source)
+        self.assertIn("if ($Mode -in @('Launch', 'Background') -and -not $OwnerOnlyConfirmed)", source)
         self.assertIn("$env:UCIE_ADMIN_TOOLS_ENABLED = '1'", source)
         self.assertIn("if ($Mode -eq 'Launch') {", source)
         self.assertNotIn("Register-ScheduledTask", source)
