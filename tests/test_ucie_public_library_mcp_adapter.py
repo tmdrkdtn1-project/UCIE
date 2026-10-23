@@ -17,6 +17,7 @@ from ucie_miner.public_external_history import (
 from ucie_miner.public_library_mcp_adapter import (
     search_ucie_public_library_for_mcp, preview_public_skill_feed,
     extend_existing_ucie_mcp_evidence_response,
+    extend_existing_ucie_mcp_wire_response,
 )
 from test_ucie_stage9_batch import NOW, metadata, evidence
 from test_ucie_stage13_external_history import upstream_pr
@@ -166,6 +167,38 @@ class PublicLibraryMcpAdapterTests(unittest.TestCase):
             with self.subTest(response=response), self.assertRaises(DiscoveryError):
                 extend_existing_ucie_mcp_evidence_response(
                     self.root, response, query="Python")
+        self.assertEqual(list((self.root / "runtime").iterdir()), [])
+
+    def test_existing_json_string_wire_response_preserved(self):
+        self.fill()
+        old = {
+            "status": "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",
+            "results": [{"source_key": "modelcontextprotocol/python-sdk",
+                         "catalog_status": "METADATA_ONLY"}],
+            "limitations": "existing unverified public metadata",
+        }
+        wire = json.dumps(old)
+        out = extend_existing_ucie_mcp_wire_response(
+            self.root, wire, query="Python", category="Python", top=2)
+        self.assertIsInstance(out, str)
+        parsed = json.loads(out)
+        self.assertEqual({key: parsed[key] for key in old}, old)
+        self.assertEqual(parsed["ucie_public_research_index"]["selected_skill_id"],
+                         "python-runtime-safety")
+        self.assertFalse(parsed["ucie_public_research_index"]["production_approved"])
+        self.assertEqual(parsed["ucie_public_research_index"]["skill_installable_count"], 0)
+
+    def test_invalid_existing_wire_fails_closed(self):
+        for invalid in (
+            '{"status":"UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",'
+            '"status":"UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY","results":[]}',
+            '{"status":"OTHER_PROJECT","results":[]}',
+            "not JSON",
+            '[]',
+        ):
+            with self.subTest(wire=invalid), self.assertRaises(DiscoveryError):
+                extend_existing_ucie_mcp_wire_response(
+                    self.root, invalid, query="Python")
         self.assertEqual(list((self.root / "runtime").iterdir()), [])
 
     def test_absent_indexes_create_nothing(self):

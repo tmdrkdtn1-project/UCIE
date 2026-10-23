@@ -35,7 +35,7 @@ integration is appropriate:
 ```python
 from pathlib import Path
 from ucie_miner.public_library_mcp_adapter import (
-    extend_existing_ucie_mcp_evidence_response,
+    extend_existing_ucie_mcp_wire_response,
 )
 
 UCIE_ROOT = Path(r"D:\UCIE")
@@ -44,7 +44,7 @@ UCIE_ROOT = Path(r"D:\UCIE")
 # authorization/legacy search logic (not as a new top-level MCP handler):
 #
 # existing_response = <the current handler's normal response dict>
-# return extend_existing_ucie_mcp_evidence_response(
+# return extend_existing_ucie_mcp_wire_response(
 #     UCIE_ROOT, existing_response, query=query,
 #     category=category, tag=tag, top=top)
 ```
@@ -62,12 +62,46 @@ access to the reviewed UCIE source under `D:\UCIE\src` for the import, but
 only through the runtime's approved UCIE-only package/path setup. A GitHub
 commit by itself does not change this environment.
 
-One necessary, non-mutating operator import probe after an approved checkout:
+### Single-use local integration guard (never automatic)
+
+The repository includes an opt-in UCIE-only source patcher:
+`scripts/prepare_ucie_mcp_library_link.py`. It uses AST inspection to
+identify the existing `search_ucie_evidence` function in the exact file
+`D:\UCIE_DATA\library_app\private_lib\mcp_stdio_server.py`. It verifies
+the existing public-only response marker and rejects multiple return
+paths, unknown signatures, or repeat attempts. It never inspects another
+project, reads credentials, modifies plugin registration or restarts a tunnel.
+
+Run only on the authorized UCIE Windows host after the reviewed PR source
+is present at `D:\UCIE\src`. Missing adapter code fails closed.
+
+One non-mutating preflight:
 
 ```powershell
-$env:PYTHONPATH = 'D:\UCIE\src'
-& 'D:\UCIE_DATA\.venv_mcp\Scripts\python.exe' -B -c "from ucie_miner.public_library_mcp_adapter import extend_existing_ucie_mcp_evidence_response; print('UCIE_LIBRARY_ADAPTER_IMPORT_OK')"
+& 'D:\UCIE\.venv\Scripts\python.exe' -B 'D:\UCIE\scripts\prepare_ucie_mcp_library_link.py'
 ```
+
+A result of `READY_FOR_ONE_TIME_UCIE_MCP_HANDLER_LINK` confirms
+structure and import/syntax preflight only, not live deployment.
+
+After independent owner approval to change the running UCIE MCP file,
+an opt-in atomic patch is available:
+
+```powershell
+& 'D:\UCIE\.venv\Scripts\python.exe' -B 'D:\UCIE\scripts\prepare_ucie_mcp_library_link.py' --apply --approval APPROVE_UCIE_EXISTING_MCP_LIBRARY_HANDLER_ONCE
+```
+
+The script inserts a local import for the UCIE-only module and wraps
+the original handler return value via `extend_existing_ucie_mcp_wire_response`,
+which accepts existing JSON text or dict outputs while preserving legacy
+`status` and `results`. It writes a SHA-named backup of the old MCP server
+and atomically replaces only that one file after syntax checking. The
+host owner must inspect and approve any separate service restart; this
+script does not perform one.
+
+If the installed handler structure differs, the preflight reports a
+FAIL_CLOSED without modifying the server. Do not blindly retry, remove
+checks or scan unrelated source files; inspect only this UCIE handler.
 
 Do not restart the tunnel or change the MCP tool registry as part of this
 source-only PR. Once the authorized local handler modification is actually

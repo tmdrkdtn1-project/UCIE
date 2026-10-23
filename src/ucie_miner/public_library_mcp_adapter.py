@@ -231,3 +231,41 @@ def extend_existing_ucie_mcp_evidence_response(
             or additional.get("result_count", -1) > MAX_TOP):
         raise DiscoveryError("unsafe public Library MCP extension")
     return {**existing_response, "ucie_public_research_index": additional}
+
+
+def extend_existing_ucie_mcp_wire_response(
+        root: Path, existing_response: dict | str, *,
+        query: str, category: str | None = None,
+        tag: str | None = None, top: int = 5) -> dict | str:
+    """Keep existing MCP wire return type while adding public-only results.
+
+    A FastMCP tool may return a dict or an already JSON-serialized string.
+    Preserve the legacy response fields, validate the exact existing UCIE
+    public-metadata contract and attach only a segregated unverified index.
+    This never writes, records queries, executes code or contacts projects.
+    """
+    serialized = type(existing_response) is str
+    if serialized:
+        if len(existing_response.encode("utf-8")) > 131072:
+            raise DiscoveryError("oversized existing UCIE MCP wire response")
+
+        def _unique_pairs(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise DiscoveryError("duplicate existing UCIE MCP JSON property")
+                result[key] = value
+            return result
+
+        try:
+            parsed = json.loads(existing_response, object_pairs_hook=_unique_pairs)
+        except (UnicodeError, ValueError) as exc:
+            raise DiscoveryError("invalid existing UCIE MCP wire JSON") from exc
+    else:
+        parsed = existing_response
+    extended = extend_existing_ucie_mcp_evidence_response(
+        root, parsed, query=query, category=category, tag=tag, top=top)
+    if serialized:
+        return json.dumps(extended, ensure_ascii=False, sort_keys=True,
+                          separators=(",", ":"), allow_nan=False)
+    return extended
