@@ -135,7 +135,7 @@ except Exception as exc:
 '@
 
     # Use a tempfile-free stdin process; no Python files or approval logs.
-    $raw = $probe | & $python -B - 2>&1
+    $raw = $probe | & $python -B - 2>$null
     $exit = $LASTEXITCODE
     $lines = @($raw | ForEach-Object { [string]$_ })
     $resultLine = @($lines | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1)
