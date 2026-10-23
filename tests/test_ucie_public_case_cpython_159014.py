@@ -16,13 +16,13 @@ from ucie_miner.public_case_cpython_159014 import (
 
 PATCH_HOWTO = (
     "@@ -16,7 +16,7 @@\n"
-    "-* Use the :option:\`-X disable_remote_debug\` command-line option.\n"
-    "+* Use the :option:\`-X disable-remote-debug\` command-line option."
+    "-* Use the :option:`-X disable_remote_debug` command-line option.\n"
+    "+* Use the :option:`-X disable-remote-debug` command-line option."
 )
 PATCH_CLI = (
     "@@ -652,7 +652,7 @@ Miscellaneous options\n"
-    "-   * \`\`-X disable_remote_debug\`\` disables the remote debugging support\n"
-    "+   * \`\`-X disable-remote-debug\`\` disables the remote debugging support"
+    "-   * ``-X disable_remote_debug`` disables the remote debugging support\n"
+    "+   * ``-X disable-remote-debug`` disables the remote debugging support"
 )
 
 
