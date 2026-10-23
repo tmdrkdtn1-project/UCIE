@@ -3,7 +3,7 @@
 **Date:** 2026-10-23 KST
 **Project:** UCIE only
 **Branch:** feat/ucie-unattended-ops-foundation-20261023
-**State:** source-only, offline validation pending; **NOT INSTALLED**
+**State:** source-only, offline CI required; **NOT INSTALLED**
 **Deployment:** NO_GO
 **Owner / QA release:** NOT APPROVED
 **Auto rule promotion:** OFF
@@ -41,7 +41,7 @@ unapproved repositories is introduced.
 - Every result says **NO EXECUTION**. No git commands, subprocess, API calls,
   Windows tasks, service actions, key generation, DB writes or release action.
 
-Tests use **ephemeral synthetic signing keys**, never production owner keys;
+\`src/ucie_public/unattended_journal.py\` adds a one-use transaction claim using SQLite \`BEGIN IMMEDIATE\`, monotonically increasing serial, unique nonce/task/grant digest and a metadata-only receipt. It is **not** externally anti-rollback protected and writes only when a trusted owner-host adapter explicitly calls it.\n\nTests use **ephemeral synthetic signing keys**, never production owner keys;
 they exercise replay, forged signatures, foreign paths, source and branch
 overrides, protected files, duplicate JSON and false health observations.
 
@@ -51,12 +51,14 @@ overrides, protected files, duplicate JSON and false health observations.
    at the exact UCIE-only host. Keep the production private key owner-held
    (not in chat, repo, shared MCP server or unattended worker). Remote owner
    approval may deliver a short-lived signed request without opening PC.
-2. **OS-protected durable journal.** Store last consumed owner sequence and
-   nonce, with atomic claim under interprocess lock **before** execution.
-   Filesystem safety and anti-rollback storage must be independently tested.
-   Passing a \`last_consumed_sequence\` integer into this module is **not**
-   durable replay protection. A caller may not treat a returned preflight as
-   execution authorization.
+2. **OS-protected durable journal.** A new optional SQLite atomic serial/nonce
+   claim primitive now exists in this PR, but the owner's **exact UCIE root,
+   ACL, independent anti-rollback checkpoint and host integration** remain
+   unimplemented. Passing a \`last_consumed_sequence\` integer to the pure
+   verifier is not durable replay protection, and a DB-local transaction
+   cannot detect restoration of an older backup. Every real adapter must
+   reverify the signed request, claim the journal atomically and preserve an
+   externally authenticated monotonic checkpoint before any side effect.
 3. **Bounded OS adapter** for exact Git or C40 actions. Owner-approved,
    background Windows process only, least-privilege identities, no generic
    shell, no scanning other project paths. Recheck every grant and OS fact
@@ -109,10 +111,11 @@ hourly UCIE public-miner task observed; background windowless C40 one-shot
 owner launch observed; PR77 provenance and one isolated CPython 3.15.1
 public-case test observed.
 
-**New:** source-only constrained owner-operation authorization and pure dry-run
-preflights in this PR.
+**New:** source-only constrained owner-operation authorization, pure dry-run
+preflights and a separately optional local SQLite atomic replay-claim primitive
+with synthetic fixture tests. No operator OS integration has occurred.
 
-**Not done:** persistent owner grant provisioning, OS-held anti-replay, Git
+**Not done:** owner trust-key provisioning, verified Windows ACL/external rollback anchors and real host integration of the local atomic claim, Git
 automatic commit/push/PR runner, service supervisor installation, auto reboot
 startup, automated learning closure, independent reviewer sign-off, signed
 Rulepack promotion. No new owner secret, host service, tunnel, worker, task,
