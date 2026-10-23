@@ -167,6 +167,8 @@ def recheck_library_candidate_public_identity(
     rate_paused = remaining is not None and remaining < MIN_REMAINING
     verdict = ("PUBLIC_API_RATE_LIMIT_PAUSED_NO_GO" if rate_paused else
                "PUBLIC_PINNED_REVISION_SHA_MISMATCH_NO_GO" if not matches else
+               "SYNTHETIC_TRANSPORT_SHA_MATCH_NOT_LIVE_NO_GO"
+               if fetch is not None else
                "PUBLIC_UPSTREAM_PINNED_IDENTITY_OBSERVED_QA_PENDING_NO_GO")
     return {
         "schema": SCHEMA,
@@ -185,7 +187,8 @@ def recheck_library_candidate_public_identity(
         "public_metadata_api_response_observed":
             fetch is None and not rate_paused,
         "test_transport_injected": fetch is not None,
-        "http_get_attempts": 1,
+        "transport_invocations": 1,
+        "http_get_attempts": 0 if fetch is not None else 1,
         "raw_untrusted_source_retained": False,
         "raw_patch_executed": False,
         "release_inclusion_independently_verified": False,
