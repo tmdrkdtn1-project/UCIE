@@ -88,10 +88,12 @@ class LibraryUpstreamRecheckTests(unittest.TestCase):
             f"/pulls/{self.card['public_url'].rsplit('/', 1)[1]}"
         ])
         self.assertEqual(result["status"],
-                         "PUBLIC_UPSTREAM_PINNED_IDENTITY_OBSERVED_QA_PENDING_NO_GO")
+                         "SYNTHETIC_TRANSPORT_SHA_MATCH_NOT_LIVE_NO_GO")
         self.assertTrue(result["public_revision_matches"])
         self.assertTrue(result["test_transport_injected"])
         self.assertFalse(result["public_metadata_api_response_observed"])
+        self.assertEqual(result["http_get_attempts"], 0)
+        self.assertEqual(result["transport_invocations"], 1)
         self.assertFalse(result["release_inclusion_independently_verified"])
         self.assertFalse(result["candidate_specific_regression_qa_verified"])
         self.assertEqual(result["automatic_rule_promotions"], 0)
