@@ -121,3 +121,91 @@ $env:PYTHONPATH = 'D:\UCIE\src'
 ```
 
 **Current status:** SOURCE_ONLY / NOT_INSTALLED / NO_CHATGPT_LOCAL_WRITE.
+
+
+## 2026-10-23: Source patch completed, ChatGPT still shows one tool
+
+The owner reported the two source patches were actually applied with
+hash-named backups. The **current UCIE MCP server source SHA256** is
+`83b58b68ad0c15a32991e03e82b3c309a5e045da1d4c9a4c8ca3101d8b010d8e`.
+Previous READONLY query tool name: `search_ucie_evidence`.
+ChatGPT currently discovers just **one read-only UCIE tool**, not the nine
+UCIE admin tools. The admin environment flag is not proven active in the
+actual running UCIE MCP server. Previous ad hoc import tests did NOT establish
+a local 9/9 PASS and should not be repeated.
+
+### One fixed UCIE-only activation checkpoint
+
+To inspect the existing tunnel/profile and local source registration in one
+bounded, redacted, **read-only** pass:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$preview = 'D:\UCIE_PREVIEW\UCIE_ADMIN'
+if (-not (Test-Path "$preview\.git")) {
+    # Git worktrees commonly use a .git FILE, not a directory.
+    if (-not (Test-Path "$preview\scripts\prepare_ucie_admin_mcp_registration.py")) {
+        throw 'Existing UCIE Admin worktree is unavailable'
+    }
+}
+$changes = @(git -C $preview status --porcelain)
+if ($LASTEXITCODE -ne 0 -or $changes.Count -ne 0) {
+    throw 'UCIE Admin worktree has uncommitted changes; stop before updating'
+}
+git -C $preview fetch --no-tags origin pull/78/head
+if ($LASTEXITCODE -ne 0) { throw 'PR78 fetch failed' }
+git -C $preview switch --detach FETCH_HEAD
+if ($LASTEXITCODE -ne 0) { throw 'PR78 checkout failed' }
+& "$preview\scripts\inspect_ucie_mcp_activation.ps1"
+```
+
+This checkpoint checks the exact expected UCIE MCP SHA, the known UCIE
+tunnel profile without printing its contents, **UCIE-named** tasks and
+process command lines without printing arguments, and attempts a one-process
+read-only local tool-name discovery under a *temporary* admin environment
+flag. The environment change is restored in `finally`. No operation restarts
+the real tunnel, rewrites a profile, modifies the server, or calls write tools.
+
+The result distinguishes `LOCAL_MCP_TOOL_REGISTRATION_OBSERVED` from
+`CHATGPT_ADMIN_TOOLS_NOT_YET_DISCOVERED`. It deliberately reports neither
+as a live operational PASS.
+
+### Activation path — no new tunnel
+
+1. **Confirm app audience is owner-only.** The fixed registration flag exposes
+   nine write tools to **any** client authorized for that same UCIE MCP server.
+   If the existing READONLY plugin is shared to a Business workspace, do not
+   enable the admin flag on that shared endpoint. Owner-only admin access
+   must be separated first; do not claim plugin-level confirmation prompts
+   alone provide a server authorization boundary.
+2. Identify the UCIE-only task/service or interactive terminal launching
+   `tunnel-client run --profile ...` and its exact UCIE-only stdio command.
+   Secure MCP Tunnel `tunnel-client` remains the existing transport; do not
+   alter its ID or create additional tunnels.
+3. On **the authorized owner-only UCIE server launcher**, arrange the
+   process environment `UCIE_ADMIN_TOOLS_ENABLED=1` before the MCP process
+   launches. A variable set in an unrelated PowerShell window is NOT
+   inherited by the running tunnel client. Perform **one controlled UCIE-only
+   refresh** using the actual verified launcher. Do not kill unknown PIDs or
+   restart scheduled public-miner jobs.
+4. Business workspace owners/admins can **refresh the existing custom MCP app
+   tool list from workspace app settings**, retaining the existing app
+   identity. In the legacy Apps UI, after workspace selection open
+   `Workspace settings > Apps`, the existing UCIE app's `Action control`,
+   then `Refresh` and review the new tool definitions (UI wording can vary).
+   No plugin or tunnel deletion is required.
+5. Only after ChatGPT actually shows `ucie_admin_capabilities` and a harmless
+   invocation succeeds, report admin tool connection LIVE. If the existing
+   plugin was shared or a plugin-scoped owner-only connection cannot be
+   established, leave the gate OFF and record the blocking condition; do not
+   expand the general read-only plugin's privileges.
+
+Official references:
+- https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt
+  (the pre-approved tool list is a frozen snapshot until admin refresh)
+- https://developers.openai.com/api/docs/guides/secure-mcp-tunnels
+  (the running tunnel-client forwards to the configured local stdio
+  command; tunnel role and ChatGPT app access are separate)
+
+**Status:** host file patched; local registration and true runtime launch
+pending observation; ChatGPT still displays only the legacy tool.
