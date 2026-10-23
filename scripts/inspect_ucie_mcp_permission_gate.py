@@ -115,6 +115,23 @@ def analyze(source: str, env=None, error_line: int = 21,
                 entry["symbolic_error_code"] = literal
         raised.append(entry)
 
+    # Expose structure only, never literal arguments, file paths, secrets,
+    # auth tokens, or source expressions. This distinguishes an unconditional
+    # operator HOLD from a branch that an authorized launcher may satisfy.
+    gate_statements = ([type(stmt).__name__ for stmt in gate.body[:16]]
+                       if gate is not None else [])
+    guard_calls = sorted({
+        _call_name(node.func)
+        for node in ast.walk(gate) if isinstance(node, ast.Call)
+    })[:20] if gate is not None else []
+    has_branch = (any(isinstance(node, (ast.If, ast.IfExp, ast.Match,
+                    ast.Try, ast.For, ast.While, ast.With))
+                    for node in ast.walk(gate)) if gate else False)
+    has_early_return = (any(isinstance(node, ast.Return)
+                            for node in ast.walk(gate)) if gate else False)
+    direct_raise_only = (gate is not None and len(gate.body) == 1
+                         and isinstance(gate.body[0], ast.Raise))
+
     env_keys = set(_env_keys_in_function(gate))
     env_keys.update(_env_keys_in_function(factory))
     if env is None:
@@ -129,6 +146,11 @@ def analyze(source: str, env=None, error_line: int = 21,
         "caller_line": caller_line,
         "caller_function": caller.name if caller else None,
         "factory_initial_calls": initial_calls[:8],
+        "guard_top_level_statement_types": gate_statements,
+        "guard_callable_names_only": guard_calls,
+        "guard_has_condition_or_control_flow": has_branch,
+        "guard_has_return": has_early_return,
+        "guard_is_single_unconditional_raise": direct_raise_only,
         "permission_raise_sites": raised[:8],
         "ucie_env_key_presence_only": {
             name: name in env for name in sorted(env_keys)
