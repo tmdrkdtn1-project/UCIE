@@ -298,85 +298,94 @@ matches); host launcher and approved execution context still unverified.
 Current ChatGPT UCIE tools: one read-only search, admin tools 0/9.
 
 
-## Final activation design: UCIE operator approval + exact C40 tunnel identity
+## 2026-10-23: Restored the owner's ORIGINAL one-session approval contract
 
-The most recent owner-supplied static result **positively identifies both**
-`UCIE_MCP_OWNER_APPROVAL` and `UCIE_MCP_TUNNEL_ID` as literal lookups
-inside the original `require_runtime_approval()` guard. Its local mapping
-`e` uses an `IfExp` which conditionally references `os.environ`.
-The prior empty direct-environment probe was a static-analysis limitation,
-not evidence that no environment prerequisites exist. Actual expected
-operator approval content is **not** collected or published.
+**Confirmed prior UCIE-only owner workflow (2026-10-21/22):** the local
+PowerShell operator typed `APPROVE`, and the UCIE script applied
+`UCIE_MCP_OWNER_APPROVAL=UCIE_PRIVATE_READONLY_APPROVED` plus the
+already-verified C40 `UCIE_MCP_TUNNEL_ID` in that process environment.
+The approval was explicitly `ENVIRONMENT_SCOPE=PROCESS` with
+`OPERATOR_GATE=PASS`, `MCP_SERVER_FACTORY=PASS` and SDK `2.3.0`.
+It did NOT create a permanent approval secret or a new service.
 
-**Stop extending AST diagnostics.** Use
-`scripts/ucie_owner_admin_mcp_launch.ps1` as the single operator gate
-and local admin-tool discovery acceptance. It:
-1. verifies the exact previously owner-observed MCP source SHA, UCIE-only
-   stdio C40 profile and exactly one tunnel ID without printing secrets;
-2. asks the owner for their already-approved UCIE operator approval using
-   a masked PowerShell secure input, never reading source approval literals;
-3. supplies the original two guard inputs and admin-enabled flag as
-   **process-scoped environment only**, including PR77 and PR78 imports;
-4. invokes original `make_server()` without modifying the guard and
-   checks for **9 actual local admin tool names** and the original read-only
-   search tool; never calls a file-writing admin tool;
-5. in explicit owner-attested Launch mode ONLY, uses an installed
-   `tunnel-client run --profile D:\\UCIE_DATA\\mcp_tunnel_profiles\\ucie-private-c40.yaml`
-   client and the already-existing tunnel. No extra tunnel, new service,
-   task, profile editing, plugin creation or source patch occurs.
+**Correction to earlier PR instructions:** Asking the operator to
+type an unknown "existing UCIE approval value" was a false prerequisite.
+This is an explicit **consent phrase**, not a password or remotely
+issued token. The operator types `APPROVE`; the established UCIE
+read-only marker is supplied **only within the current process**.
+This keeps the existing `require_runtime_approval()` intact and does
+not manufacture a new approval scheme.
 
-**Prerequisites and safety:**
-- The operator MUST possess the original approved
-  `UCIE_MCP_OWNER_APPROVAL` value. Do not manufacture a new approval
-  phrase or extract an embedded expected value into a token.
-- Before enabling write-capable tools, the operator MUST verify the
-  ChatGPT UCIE tunnel/app audience is owner-only. The switch
-  `-OwnerOnlyConfirmed` means the owner has verified that; it is NOT a
-  technical server-authentication mechanism. A shared readonly app using
-  the same tunnel must NOT receive those admin tools.
-- A successful `Probe` is **local process registration only**, not proof
-  of an active tunnel or a ChatGPT tool snapshot refresh. Successful
-  `Launch` also does NOT by itself prove ChatGPT has discovered/approved
-  the new admin tools.
-- The `Launch` script runs the client in the operator's foreground
-  PowerShell session; stopping that process stops the tunnel client.
-  There is no permanent service or task installation.
-- This script cannot establish whether *another* non-C40 or protected
-  process already serves the tunnel; do not attempt a second instance
-  if platform/tunnel runtime status indicates the tunnel is active.
+The original C40 command used the exact UCIE executable and flags:
 
-**Single local gate-preserving acceptance:**
+```powershell
+& 'D:\UCIE_DATA\tools\tunnel-client-v0.0.16\tunnel-client.exe' run `
+    --profile-file 'D:\UCIE_DATA\mcp_tunnel_profiles\ucie-private-c40.yaml' `
+    --control-plane.tunnel-id '<existing ID from that profile>' `
+    --health.url-file 'D:\UCIE_DATA\mcp_tunnel_profiles\c40_health.url'
+```
+
+Do not use `--profile` or create another tunnel. The
+`scripts/ucie_owner_admin_mcp_launch.ps1` script assembles those
+exact arguments locally and checks the operator's previously observed
+MCP server file SHA. It never prints the tunnel ID or approval marker.
+
+### One owner-side local-only tool registration acceptance
+
+The 9 administrator tools require a **separate owner-only authorization
+boundary** to be exposed to ChatGPT. The original
+`UCIE_PRIVATE_READONLY_APPROVED` approval checks local operation; it is
+**not** proof of permission to share host filesystem write tools.
+Therefore start with `-Mode Probe` ONLY. It sets
+`UCIE_ADMIN_TOOLS_ENABLED=1` only in an ephemeral child process,
+runs the original (not patched-away) authorization gate and registers
+tools on the existing MCP instance, checks 9 admin tool names and the
+legacy search tool, restores environment, and does not start a tunnel.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
-$preview = 'D:\\UCIE_PREVIEW\\UCIE_ADMIN'
-if (@(git -C $preview status --porcelain).Count -ne 0) {
-    throw 'UCIE_ADMIN worktree dirty; do not overwrite'
+$preview = 'D:\UCIE_PREVIEW\UCIE_ADMIN'
+$changes = @(git -C $preview status --porcelain)
+if ($LASTEXITCODE -ne 0 -or $changes.Count -ne 0) {
+    throw 'UCIE preview has changes: inspect before switching'
 }
 git -C $preview fetch --no-tags origin pull/78/head
 if ($LASTEXITCODE -ne 0) { throw 'UCIE fetch failed' }
 git -C $preview switch --detach FETCH_HEAD
-if ($LASTEXITCODE -ne 0) { throw 'UCIE checkout failed' }
-& "$preview\\scripts\\ucie_owner_admin_mcp_launch.ps1" -Mode Probe
+if ($LASTEXITCODE -ne 0) { throw 'UCIE worktree update failed' }
+& "$preview\scripts\ucie_owner_admin_mcp_launch.ps1" -Mode Probe
 ```
 
-The owner enters the existing operator approval **locally**, not in ChatGPT.
-On `UCIE_OWNER_LOCAL_ADMIN_9_REGISTERED`, evaluate owner-only connection
-access. Then Launch separately with explicit attestation:
+When asked `UCIE one-session authorization: type APPROVE`, enter
+`APPROVE` exactly. You do not need to find, send, or persist a token.
+`UCIE_OWNER_LOCAL_ADMIN_9_REGISTERED` means local 9/9 registration
+only, NOT live ChatGPT activation. If it fails, preserve the actual
+failure status without repeating the prior approval/static probes.
 
-```powershell
-& 'D:\\UCIE_PREVIEW\\UCIE_ADMIN\\scripts\\ucie_owner_admin_mcp_launch.ps1' -Mode Launch -OwnerOnlyConfirmed
-```
+### Optional controlled tunnel operation — separate gate
 
-After the existing tunnel is healthy, refresh tools on the existing
-custom MCP app in ChatGPT workspace app settings, review each newly
-discovered write-capable action and confirm `ucie_admin_capabilities`
-is usable. Never claim live 9/9 PASS without that final tool discovery.
+`-Mode Launch -OwnerOnlyConfirmed` is allowed ONLY after
+the user independently verifies the existing UCIE app/tunnel
+connection **is restricted to the owner**. The switch records the
+operator's attestation, **not a server-side authentication proof**.
+If the READONLY app is shared, do not use it; owner-only admin access
+must be separated before startup.
 
-Official references:
-- https://developers.openai.com/api/docs/guides/secure-mcp-tunnels
-- https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt
+The launch option checks for an already-running UCIE C40 client
+and uses the existing fixed v0.0.16 client + exact C40 flags. It
+runs in the foreground and does not create, restart, kill or register
+Windows services/tasks or modify tunnel configuration. The operator
+must separately check whether a tunnel is already running if process
+inspection is incomplete; **do not launch a duplicate**.
 
-**Current operator status:** gate key names verified; runtime approval value,
-owner-only audience, local nine-tool PASS, tunnel uptime, and ChatGPT action
-snapshot are pending actual owner-side evidence.
+After the authenticated owner-only UCIE MCP endpoint is confirmed
+healthy, manually refresh and approve the existing ChatGPT custom
+MCP app's tool snapshot. Verify a harmless
+`ucie_admin_capabilities` invocation before a real file edit.
+No source CI PASS is a substitute for observed ChatGPT tool discovery.
+
+**Current checkpoint:** UCIE source registration applied and SHA
+matched; original operator consent flow restored in PR #78;
+local 9/9 run NOT YET OBSERVED; workspace audience UNKNOWN;
+operating tunnel NOT RESTARTED; ChatGPT UCIE Admin tools still
+0/9.
