@@ -240,6 +240,7 @@ def _scan(conn, *, owner_trust, qa_trust, now):
                        "pinned_revision_sha": claim["pinned_revision_sha"],
                        "evidence_sha256": claim["evidence_sha256"],
                        "version_claim": claim["version_claim"],
+                       "review_evidence_sha256": claim["review_evidence_sha256"],
                        "distribution_authorized": False}
     return {"count": len(rows), "highest_serial": high,
             "head_sha256": prev, "latest": latest}
