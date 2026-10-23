@@ -136,6 +136,75 @@ def make_server():
         self.assertNotIn("SOME_OTHER_PROJECT_SECRET", str(found))
         self.assertNotIn("never-emit-this", str(found))
 
+    def test_non_environment_e_get_binding_reports_shape_without_value(self):
+        source = """
+def require_runtime_approval():
+    e = load_runtime_operator_context("do-not-disclose-source-path")
+    if e.get("UCIE_OPERATOR_GATE") != "secret-approval-value":
+        raise PermissionError("UCIE_MCP_OPERATOR_GATE_HOLD")
+def make_server():
+    require_runtime_approval()
+    server = object()
+    return server
+"""
+        found = inspector.analyze(
+            source, env={}, error_line=5, caller_line=7)
+        self.assertFalse(found["operator_gate_environment_alias_detected"])
+        self.assertTrue(found["operator_gate_e_binding_found"])
+        self.assertEqual(
+            found["operator_gate_e_binding_structure"][0]["rhs_ast_type"],
+            "Call")
+        self.assertIn(
+            "load_runtime_operator_context",
+            found["operator_gate_e_binding_structure"][0]["rhs_calls"])
+        self.assertEqual(
+            found["operator_gate_e_get_ucie_keys_only"],
+            ["UCIE_OPERATOR_GATE"])
+        self.assertEqual(
+            found["operator_gate_e_get_key_kinds"], ["UCIE_LITERAL_KEY"])
+        self.assertNotIn("secret-approval-value", str(found))
+        self.assertNotIn("do-not-disclose-source-path", str(found))
+
+    def test_non_ucie_keys_hidden_even_with_e_get(self):
+        source = """
+def require_runtime_approval():
+    e = load_runtime_operator_context()
+    if e.get("SOME_OTHER_PROJECT_SECRET") != "secret-value":
+        raise PermissionError("UCIE_MCP_OPERATOR_GATE_HOLD")
+def make_server():
+    require_runtime_approval()
+    server = object()
+    return server
+"""
+        found = inspector.analyze(
+            source, env={}, error_line=5, caller_line=7)
+        self.assertEqual(found["operator_gate_e_get_ucie_keys_only"], [])
+        self.assertEqual(
+            found["operator_gate_e_get_key_kinds"],
+            ["NON_UCIE_LITERAL_KEY_MASKED"])
+        self.assertNotIn("SOME_OTHER_PROJECT_SECRET", str(found))
+        self.assertNotIn("secret-value", str(found))
+
+    def test_conditional_environment_expression_is_structural_only(self):
+        source = """
+import os
+def require_runtime_approval():
+    e = os.environ if True else {}
+    if e.get("UCIE_MCP_OPERATOR_APPROVAL") != "private":
+        raise PermissionError("UCIE_MCP_OPERATOR_GATE_HOLD")
+def make_server():
+    require_runtime_approval()
+    server = object()
+    return server
+"""
+        found = inspector.analyze(
+            source, env={}, error_line=6, caller_line=8)
+        binding = found["operator_gate_e_binding_structure"][0]
+        self.assertEqual(binding["rhs_ast_type"], "IfExp")
+        self.assertTrue(binding["references_os_environ"])
+        self.assertTrue(binding["has_conditional"])
+        self.assertNotIn("private", str(found))
+
     def test_missing_authorized_context_is_only_reported_not_bypassed(self):
         found = inspector.analyze(
             EXAMPLE, env={}, error_line=6, caller_line=9)
