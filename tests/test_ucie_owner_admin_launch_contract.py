@@ -24,7 +24,8 @@ class UCIEOwnerMcpSessionContractTests(unittest.TestCase):
             source.count("Read-Host 'UCIE one-session authorization: type APPROVE'"), 1)
         self.assertEqual(source.count("$probe = @'"), 1)
         self.assertEqual(source.count("'@"), 1)
-        self.assertEqual(source.count("UCIE_TUNNEL_ALREADY_RUNNING_DO_NOT_DUPLICATE"), 1)
+        # Initial process census plus just-in-time prelaunch duplicate guard.
+        self.assertEqual(source.count("UCIE_TUNNEL_ALREADY_RUNNING_DO_NOT_DUPLICATE"), 2)
         self.assertEqual(source.count("\nfinally {"), 1)
         self.assertLess(len(source.splitlines()), 315)
         self.assertEqual(source.rstrip().splitlines()[-1], "}")
