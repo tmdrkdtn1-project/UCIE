@@ -15,6 +15,20 @@ class UCIEOwnerMcpSessionContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.source = SCRIPT.read_text(encoding="utf-8")
 
+    def test_exact_one_script_body_approval_here_string_and_finally(self):
+        source = self.source
+        # Guard against previous accidental JS replacement expansion of
+        # dollar-apostrophe in regex, which duplicated a suffix into the
+        # middle of the PowerShell script and invalidated all following code.
+        self.assertEqual(
+            source.count("Read-Host 'UCIE one-session authorization: type APPROVE'"), 1)
+        self.assertEqual(source.count("$probe = @'"), 1)
+        self.assertEqual(source.count("'@"), 1)
+        self.assertEqual(source.count("UCIE_TUNNEL_ALREADY_RUNNING_DO_NOT_DUPLICATE"), 1)
+        self.assertEqual(source.count("\nfinally {"), 1)
+        self.assertLess(len(source.splitlines()), 200)
+        self.assertEqual(source.rstrip().splitlines()[-1], "}")
+
     def test_existing_one_session_approval_not_unknown_password(self):
         source = self.source
         self.assertIn("Read-Host 'UCIE one-session authorization: type APPROVE'", source)
