@@ -117,7 +117,7 @@ class UCIERestrictedHTTPTests(unittest.TestCase):
         fake.open = simulated_404
         http = UCIERestrictedGitHubHTTP(TOKEN, branch=BRANCH, base_sha=BASE, allow_live=True, opener=fake)
         self.assertEqual(http("GET", GH_API_REPO +
-                         "/git/ref/heads/automation/ucie-valid"), {"http_status":404})
+                         "/git/ref/heads/" + BRANCH), {"http_status":404})
         with self.assertRaises(PolicyError):
             http("GET", GH_API_REPO + "/git/ref/heads/main")
 
