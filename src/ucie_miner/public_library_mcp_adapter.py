@@ -204,3 +204,30 @@ def preview_public_skill_feed(root: Path, *, references_per_domain: int = 3) -> 
     payload["content_sha256"] = _digest(payload)
     payload["content_sha256_is_signature"] = False
     return payload
+
+
+def extend_existing_ucie_mcp_evidence_response(
+        root: Path, existing_response: dict, *,
+        query: str, category: str | None = None,
+        tag: str | None = None, top: int = 5) -> dict:
+    """Opt-in additive integration for the EXISTING UCIE MCP search handler.
+
+    Preserve its authoritative, old read-only search response as-is; attach
+    new indexed PUBLIC_ONLY research as a clearly separate UNVERIFIED field.
+    This must be called from the existing UCIE-only server handler after
+    that handler completes, never as a new plugin or a server replacement.
+    No fallback guessing of a foreign response schema is allowed.
+    """
+    if (type(existing_response) is not dict
+            or existing_response.get("status") !=
+                "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY"
+            or type(existing_response.get("results")) is not list
+            or "ucie_public_research_index" in existing_response):
+        raise DiscoveryError("unexpected existing UCIE MCP evidence response")
+    additional = search_ucie_public_library_for_mcp(
+        root, query=query, category=category, tag=tag, top=top)
+    if (additional.get("production_approved") is not False
+            or additional.get("auto_install") is not False
+            or additional.get("result_count", -1) > MAX_TOP):
+        raise DiscoveryError("unsafe public Library MCP extension")
+    return {**existing_response, "ucie_public_research_index": additional}
