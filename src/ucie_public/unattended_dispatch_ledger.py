@@ -183,6 +183,17 @@ def inspect_lifecycle(journal_dir: Path, *, expected_external_head: str) -> dict
     try:
         with closing(sqlite3.connect(str(db), timeout=2.0)) as conn:
             conn.execute("PRAGMA query_only=ON")
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='operation_events'"
+            ).fetchone()
+            if exists is None:
+                if expected_external_head != GENESIS:
+                    raise PolicyError("UCIE ledger missing against external checkpoint")
+                return {
+                    "status": "UCIE_LOCAL_LEDGER_GENESIS_ONLY",
+                    "head_sha256": GENESIS, "event_count": 0,
+                    "external_anchor_independent": False,
+                }
             rows = conn.execute(
                 "SELECT event_number,task_id,grant_sha256,operation,state,"
                 "detail_sha256,recorded_utc,previous_sha256,event_sha256 "
