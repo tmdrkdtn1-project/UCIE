@@ -265,3 +265,34 @@ grant the already-shared readonly consumer write access by accident.
 
 **Current evidence state:** HOST_SOURCE_PATCHED, MCP_RUNTIME_PERMISSION_GATE,
 LOCAL_ADMIN_9_NOT_OBSERVED, CHATGPT_ADMIN_0_OF_9, NO_LIVE_PASS.
+
+### 2026-10-23: Conditional operator HOLD — indirect environment getter
+
+Owner supplied a read-only, static UCIE host observation of
+`require_runtime_approval()`, which `make_server()` invokes **before**
+constructing its real `MCPServer` object. The guard body contains an assignment
+and conditional `If`, raises `PermissionError("UCIE_MCP_OPERATOR_GATE_HOLD")`
+on the failed branch, and calls `e.get`. The guard is **NOT** an unconditional
+HOLD. Existing static probe initially reported no directly referenced UCIE
+environment keys because it did not resolve indirect mapping aliases.
+
+To avoid blind changes or repeated runtime failures, the single static
+diagnostic `scripts/inspect_ucie_mcp_permission_gate.py` now recognizes
+local aliases of `os.environ` or its copy (for example `e = os.environ`,
+`e.get("UCIE_...")`). It reports **only** safe UCIE-prefixed key names with
+presence booleans, alias names, comparison operator types and a censored
+fixed-literal hint. It never prints approval values, environment values,
+credentials or source code, and does not execute the server.
+
+Use the existing detached UCIE_ADMIN worktree and re-run this **one static
+diagnostic** after fetching the current PR #78 head. On a discovered
+`operator_gate_ucie_variable_presence_only` mapping, the next operational
+step must honor the owner's approved launch procedure, not fake or disable
+the original gate. If no alias/key is identified, report the unknown gate
+source rather than guessing variables. Do not activate admin privileges on
+a shared read-only plugin.
+
+**Known state:** PR #77 Library patch and PR #78 gated admin registration
+are installed in the UCIE MCP source (the previously owner-observed hash
+matches); host launcher and approved execution context still unverified.
+Current ChatGPT UCIE tools: one read-only search, admin tools 0/9.
