@@ -38,7 +38,7 @@ class LocalWriteBridgeTests(unittest.TestCase):
         self.bridge = UCIEFileBridge(self.repo, self.server,
                                       python_exe=Path(sys.executable))
         self.src = self.repo / "src" / "sample.py"
-        self.src.write_text("VALUE = 1\n", encoding="utf-8")
+        self.src.write_bytes(b"VALUE = 1\n")
 
     def test_read_preview_edit_backup_and_sha_lease(self):
         before = self.bridge.read_text("repo", "src/sample.py")
