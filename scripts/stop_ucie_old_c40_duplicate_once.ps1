@@ -88,7 +88,10 @@ if ($Mode -eq 'Inspect') {
 }
 
 # Explicit one-time owner authorization + exact PID and start-time lease.
+# Recheck immediately before terminating; fail if the PID was reused.
 # Never touch the new instance or the child Python processes.
+$freshOld = Get-CimInstance Win32_Process -Filter "ProcessId = $oldPid" -ErrorAction Stop
+Confirm-ObservedClient $freshOld $oldPid $oldParent $oldStarted
 Stop-Process -Id $oldPid -ErrorAction Stop
 Start-Sleep -Seconds 2
 
