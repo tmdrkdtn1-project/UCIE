@@ -7,7 +7,15 @@ param([switch]$Install, [switch]$QuietExisting)
 $ErrorActionPreference = 'Stop'
 $taskName = 'UCIE-PublicMiner-Hourly'
 $taskPath = '\'
-$root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).ProviderPath.TrimEnd('\')
+$scriptRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).ProviderPath.TrimEnd('\')
+$root = $scriptRoot
+# Preview PR78 may manage ONLY the exact preexisting D:\UCIE task, never
+# install one in the preview tree or modify any other scheduled task.
+if ($QuietExisting -and [string]::Equals(
+        $scriptRoot, 'D:\UCIE_PREVIEW\UCIE_ADMIN',
+        [StringComparison]::OrdinalIgnoreCase)) {
+    $root = 'D:\UCIE'
+}
 if (-not [string]::Equals($root, 'D:\UCIE', [StringComparison]::OrdinalIgnoreCase)) {
     throw 'EXPECTED_UCIE_ROOT_D_DRIVE'
 }
