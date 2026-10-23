@@ -84,9 +84,10 @@ def propose_link(source: str) -> str:
         visitor.visit(statement)
     if not visitor.returns or not any(r.value is not None for r in visitor.returns):
         raise LinkError("existing MCP handler has no usable value return")
-    original_body = ast.get_source_segment(source, fn)
-    if EXPECTED_STATUS not in original_body and EXPECTED_STATUS not in source:
-        raise LinkError("UCIE public-only response status marker absent")
+    # The confirmed live MCP response identifies the public-success status,
+    # but an installed handler may obtain that status from an imported
+    # helper rather than a literal in this source file. The runtime bridge
+    # matches the exact status after evaluating each original return.
     # Install the helper once at the beginning of this exact handler.
     # Do not insert into any nested function, or before its docstring.
     first_stmt = fn.body[0]
