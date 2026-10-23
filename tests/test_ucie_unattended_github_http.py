@@ -11,6 +11,8 @@ from ucie_public.unattended_github_http import (
 )
 
 TOKEN = "ucie_fake_test_token_X" + "a" * 30
+BRANCH = "automation/ucie-valid-test"
+BASE = "a" * 40
 
 
 class FakeResponse:
@@ -43,15 +45,15 @@ class FakeOpen:
 class UCIERestrictedHTTPTests(unittest.TestCase):
     def test_denies_implicit_activation_and_invalid_owner_token(self):
         with self.assertRaises(PolicyError):
-            UCIERestrictedGitHubHTTP(TOKEN)
+            UCIERestrictedGitHubHTTP(TOKEN, branch=BRANCH, base_sha=BASE)
         for t in ("", "short", "a\n" + "b"*25, "한글"*30):
             with self.subTest(token_type=len(t)):
                 with self.assertRaises(PolicyError):
-                    UCIERestrictedGitHubHTTP(t, allow_live=True, opener=FakeOpen())
+                    UCIERestrictedGitHubHTTP(t, branch=BRANCH, base_sha=BASE, allow_live=True, opener=FakeOpen())
 
     def test_fixed_get_and_post_go_to_one_https_repository_only(self):
         fake = FakeOpen()
-        http = UCIERestrictedGitHubHTTP(TOKEN, allow_live=True, opener=fake)
+        http = UCIERestrictedGitHubHTTP(TOKEN, branch=BRANCH, base_sha=BASE, allow_live=True, opener=fake)
         result = http("GET", GH_API_REPO + "/git/ref/heads/main")
         self.assertEqual(result["sha"], "a"*40)
         result = http("POST", GH_API_REPO + "/git/blobs",
@@ -66,7 +68,7 @@ class UCIERestrictedHTTPTests(unittest.TestCase):
 
     def test_denies_other_project_endpoints_and_unsafe_methods(self):
         fake = FakeOpen()
-        http = UCIERestrictedGitHubHTTP(TOKEN, allow_live=True, opener=fake)
+        http = UCIERestrictedGitHubHTTP(TOKEN, branch=BRANCH, base_sha=BASE, allow_live=True, opener=fake)
         cases = (
             ("GET", "/repos/other/private/git/ref/heads/main", None),
             ("DELETE", GH_API_REPO + "/git/refs/heads/main", None),
@@ -83,13 +85,37 @@ class UCIERestrictedHTTPTests(unittest.TestCase):
                 http(method, path, body)
         self.assertEqual(fake.requests, [])
 
+    def test_protected_ref_and_wrong_parent_payload_are_denied(self):
+        fake = FakeOpen()
+        http = UCIERestrictedGitHubHTTP(
+            TOKEN, branch=BRANCH, base_sha=BASE, allow_live=True, opener=fake)
+        cases = (
+            (GH_API_REPO + "/git/refs",
+             {"ref": "refs/heads/main", "sha": "b"*40}),
+            (GH_API_REPO + "/git/refs",
+             {"ref": "refs/heads/automation/ucie-some-other", "sha": "b"*40}),
+            (GH_API_REPO + "/git/commits",
+             {"message": "ucie(automation): safe", "tree": "b"*40, "parents": ["c"*40]}),
+            (GH_API_REPO + "/pulls",
+             {"title": "UCIE automation: safe", "head": BRANCH, "base": "main",
+              "draft": False, "body": "review", "maintainer_can_modify": False}),
+            (GH_API_REPO + "/git/trees",
+             {"base_tree": "a"*40, "tree": [
+                 {"path": ".github/workflows/unsafe.yml",
+                  "mode": "100644", "type": "blob", "sha": "b"*40}]}),
+        )
+        for path, payload in cases:
+            with self.subTest(path=path), self.assertRaises(PolicyError):
+                http("POST", path, payload)
+        self.assertEqual(fake.requests, [])
+
     def test_accepts_only_404_branch_nonexistence(self):
         fake = FakeOpen()
         fake.response = None
         def simulated_404(request, timeout):
             raise urllib.error.HTTPError(request.full_url, 404, "not found", {}, None)
         fake.open = simulated_404
-        http = UCIERestrictedGitHubHTTP(TOKEN, allow_live=True, opener=fake)
+        http = UCIERestrictedGitHubHTTP(TOKEN, branch=BRANCH, base_sha=BASE, allow_live=True, opener=fake)
         self.assertEqual(http("GET", GH_API_REPO +
                          "/git/ref/heads/automation/ucie-valid"), {"http_status":404})
         with self.assertRaises(PolicyError):
@@ -105,11 +131,11 @@ class UCIERestrictedHTTPTests(unittest.TestCase):
             FakeResponse(payload=b"[]"),
         ):
             fake = FakeOpen(response)
-            http = UCIERestrictedGitHubHTTP(TOKEN, allow_live=True, opener=fake)
+            http = UCIERestrictedGitHubHTTP(TOKEN, branch=BRANCH, base_sha=BASE, allow_live=True, opener=fake)
             with self.subTest(status=response.status, body=response.content[:10]):
                 with self.assertRaises(PolicyError):
                     http("GET", GH_API_REPO + "/git/ref/heads/main")
-        http = UCIERestrictedGitHubHTTP(TOKEN, allow_live=True, opener=FakeOpen())
+        http = UCIERestrictedGitHubHTTP(TOKEN, branch=BRANCH, base_sha=BASE, allow_live=True, opener=FakeOpen())
         with self.assertRaises(PolicyError):
             http("POST", GH_API_REPO + "/git/blobs", {"content": "x"*400000})
 
