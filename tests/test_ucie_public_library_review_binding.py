@@ -147,6 +147,14 @@ class PublicLibrarySignedBindingTests(unittest.TestCase):
         self.assertEqual(entry["next_action"],
                          "KEEP_REVOKED_AND_REQUIRE_SEPARATE_RECOVERY_APPROVAL")
         self.assertFalse(entry["can_publish_or_install"])
+        # A persistent revocation must block every time without causing an
+        # infinite 'new' notification for an otherwise unchanged batch.
+        again = inspect_library_review_closure(
+            self.root, self.current, previous=self.current,
+            expected_head_sha256=revoked["head_sha256"], **self.trust)
+        self.assertEqual(again["next_manual_reviews"], [])
+        self.assertEqual(again["blocked_reference_count"], 1)
+        self.assertIn("OWNER_REVOKED_BLOCKED_NO_GO", again["states"])
 
     def test_updated_evidence_digest_invalidates_old_signed_claim(self):
         first = self.append([self.signed()])
