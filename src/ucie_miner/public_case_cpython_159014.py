@@ -48,10 +48,10 @@ def _checked_source_patch(record):
         raise DiscoveryError("missing bounded official document diff")
     patch = record["patch"]
     # Compare only exact documented option spelling on removed/added lines.
-    old = "-* Use the :option:\`" + WRONG + "\` command-line option."
-    new = "+* Use the :option:\`" + RIGHT + "\` command-line option."
-    old_cli = '-   * \`\`' + WRONG + '\`\` disables the remote debugging support'
-    new_cli = '+   * \`\`' + RIGHT + '\`\` disables the remote debugging support'
+    old = "-* Use the :option:`" + WRONG + "` command-line option."
+    new = "+* Use the :option:`" + RIGHT + "` command-line option."
+    old_cli = '-   * ``' + WRONG + '`` disables the remote debugging support'
+    new_cli = '+   * ``' + RIGHT + '`` disables the remote debugging support'
     if record["filename"] == FILES[0]:
         ok = old in patch and new in patch
     elif record["filename"] == FILES[1]:
@@ -68,7 +68,7 @@ def inspect_cpython_159014_observation(*, fetch=None, observe=None,
                                       platform=None) -> dict:
     """One fixed official PR, at most two bounded anonymous public GETs.
 
-    \`observe\` must be a locally authored, isolated runtime callback. Actual
+    `observe` must be a locally authored, isolated runtime callback. Actual
     CI evidence is the public workflow step/log that called this function,
     not a blind trust in any external or injected Python callback.
     """
