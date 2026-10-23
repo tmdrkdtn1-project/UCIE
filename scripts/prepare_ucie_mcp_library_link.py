@@ -18,7 +18,9 @@ import sys
 import tempfile
 
 TARGET = Path(r"D:\UCIE_DATA\library_app\private_lib\mcp_stdio_server.py")
-UCIE_SOURCE = Path(r"D:\UCIE\src")
+UCIE_SOURCE = Path(os.environ.get("UCIE_LIBRARY_SOURCE_DIR", r"D:\UCIE\src"))
+ALLOWED_SOURCE_DIRS = (Path(r"D:\UCIE\src"),
+                       Path(r"D:\UCIE_PREVIEW\UCIE\src"))
 MCP_PYTHON = Path(r"D:\UCIE_DATA\.venv_mcp\Scripts\python.exe")
 APPROVAL = "APPROVE_UCIE_EXISTING_MCP_LIBRARY_HANDLER_ONCE"
 MARKER = "# UCIE_LIBRARY_BRIDGE_V1"
@@ -90,7 +92,7 @@ def propose_link(source: str) -> str:
     # Import the reviewed UCIE-only code, never arbitrary runtime scripts.
     setup = (
         indent + "import sys as _ucie_library_sys  " + MARKER + "\n"
-        + indent + '_ucie_library_source = r"D:\\UCIE\\src"\n'
+        + indent + "_ucie_library_source = " + repr(str(UCIE_SOURCE)) + "\n"
         + indent + "if _ucie_library_source not in _ucie_library_sys.path:\n"
         + indent + "    _ucie_library_sys.path.insert(0, _ucie_library_source)\n"
         + indent + "from ucie_miner.public_library_mcp_adapter import (\n"
@@ -114,6 +116,8 @@ def propose_link(source: str) -> str:
 
 
 def _require_exact_path(path):
+    if UCIE_SOURCE not in ALLOWED_SOURCE_DIRS:
+        raise LinkError("only UCIE or isolated UCIE preview source allowed")
     if os.name != "nt":
         raise LinkError("the operator patch is Windows UCIE-only")
     if path != TARGET or not path.is_file():
