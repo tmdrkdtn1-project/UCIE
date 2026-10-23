@@ -67,9 +67,9 @@ commit by itself does not change this environment.
 The repository includes an opt-in UCIE-only source patcher:
 `scripts/prepare_ucie_mcp_library_link.py`. It uses AST inspection to
 identify the existing `search_ucie_evidence` function in the exact file
-`D:\UCIE_DATA\library_app\private_lib\mcp_stdio_server.py`. It verifies
-the existing public-only response marker and rejects multiple return
-paths, unknown signatures, or repeat attempts. It never inspects another
+`D:\UCIE_DATA\library_app\private_lib\mcp_stdio_server.py`. It preserves multiple early-return paths (including error results),
+rejects unknown signatures or repeated patches, and only augments the
+runtime response when its exact UCIE public-success status matches. It never inspects another
 project, reads credentials, modifies plugin registration or restarts a tunnel.
 
 Prefer an isolated UCIE Git worktree for this preview so the active
@@ -94,6 +94,28 @@ Stop on any Git error or existing worktree conflict; do not force, delete,
 reset or switch the operating UCIE checkout. The stage is read-only source
 until the operator separately authorizes a handler edit.
 
+**If this UCIE preview worktree ALREADY exists**, do not run
+`git worktree add` again. Update only the existing detached preview:
+
+```powershell
+$preview = 'D:\UCIE_PREVIEW\UCIE'
+if ((git -C $preview status --porcelain)) {
+    throw 'UCIE preview has uncommitted changes; no automatic overwrite'
+}
+git -C $preview fetch --no-tags origin pull/77/head
+if ($LASTEXITCODE -ne 0) { throw 'UCIE PR fetch failed' }
+git -C $preview switch --detach FETCH_HEAD
+if ($LASTEXITCODE -ne 0) { throw 'UCIE preview update failed' }
+$env:UCIE_LIBRARY_SOURCE_DIR = 'D:\UCIE_PREVIEW\UCIE\src'
+& 'D:\UCIE\.venv\Scripts\python.exe' -B "$preview\scripts\prepare_ucie_mcp_library_link.py"
+```
+
+This update resolves the observed `handler has multiple/unknown return paths`
+preflight without deleting original branches. The helper wraps each nonempty
+return expression once but leaves non-success and failed optional-index
+responses unchanged. It is still **a non-mutating preview** without `--apply`.
+
+
 One non-mutating preflight:
 
 ```powershell
@@ -111,7 +133,7 @@ an opt-in atomic patch is available:
 ```
 
 The patch pins the selected source path from UCIE_LIBRARY_SOURCE_DIR at file-edit time; ensure the reviewed staging directory remains present until a separately authorized deployment replaces it with a stable UCIE package. The script inserts a local import for the UCIE-only module and wraps
-the original handler return value via `extend_existing_ucie_mcp_wire_response`,
+the original handler return value via `extend_existing_ucie_mcp_wire_response_if_public`,
 which accepts existing JSON text or dict outputs while preserving legacy
 `status` and `results`. It writes a SHA-named backup of the old MCP server
 and atomically replaces only that one file after syntax checking. The
