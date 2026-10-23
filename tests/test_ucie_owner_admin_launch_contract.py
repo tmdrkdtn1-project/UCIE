@@ -53,6 +53,12 @@ class UCIEOwnerMcpSessionContractTests(unittest.TestCase):
             source.index('& $clientExe run --profile-file $profile'))
         self.assertIn('"live_chatgpt_tools_verified":False', source)
 
+    def test_inline_probe_python_grammar(self):
+        source = self.source
+        self.assertEqual(source.count("$probe = @'"), 1)
+        embedded = source.split("$probe = @'\\n", 1)[1].split("\\n'@", 1)[0]
+        compile(embedded, "UCIE_owner_MCP_embedded_probe.py", "exec")
+
     def test_existing_one_session_approval_not_unknown_password(self):
         source = self.source
         self.assertIn("Read-Host 'UCIE one-session authorization: type APPROVE'", source)
