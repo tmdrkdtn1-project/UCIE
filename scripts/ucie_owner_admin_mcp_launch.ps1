@@ -25,6 +25,8 @@ $libraryApp = 'D:\UCIE_DATA\library_app'
 $clientExe = 'D:\UCIE_DATA\tools\tunnel-client-v0.0.16\tunnel-client.exe'
 $healthFile = 'D:\UCIE_DATA\mcp_tunnel_profiles\c40_health.url'
 $expectedOwnerMarker = 'UCIE_PRIVATE_READONLY_APPROVED'
+$libraryAdapter = Join-Path $librarySource 'ucie_miner\public_library_mcp_adapter.py'
+$adminRegistration = Join-Path $adminSource 'ucie_admin\mcp_registration.py'
 
 if ($Mode -eq 'Launch' -and -not $OwnerOnlyConfirmed) {
     throw 'UCIE_OWNER_ONLY_AUDIENCE_NOT_ATTESTED: do not publish admin tools to readonly users'
@@ -32,6 +34,14 @@ if ($Mode -eq 'Launch' -and -not $OwnerOnlyConfirmed) {
 foreach ($path in @($serverFile, $profile, $python, $adminSource, $librarySource, $libraryApp)) {
     if (-not (Test-Path -LiteralPath $path)) {
         throw 'UCIE_ONLY_ACTIVATION_INPUT_MISSING'
+    }
+}
+# Both overlapping UCIE Python worktrees have a ucie_miner package.
+# Verify PR77's indexed Library adapter and PR78 admin registration coexist.
+foreach ($path in @($libraryAdapter, $adminRegistration)) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
+        ((Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'UCIE_MCP_REQUIRED_PACKAGE_SOURCE_MISSING_OR_LINKED'
     }
 }
 if ((Get-FileHash -LiteralPath $serverFile -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedHash) {
@@ -92,7 +102,9 @@ try {
     $env:UCIE_MCP_OWNER_APPROVAL = $expectedOwnerMarker
     $env:UCIE_MCP_TUNNEL_ID = $tunnelId
     $env:UCIE_ADMIN_TOOLS_ENABLED = '1'
-    $env:PYTHONPATH = @($adminSource, $librarySource, $libraryApp) -join ';'
+    # PR77 Library source MUST precede PR78's older ucie_miner package.
+    # PR78-only ucie_admin is still resolved from its own distinct package.
+    $env:PYTHONPATH = @($librarySource, $adminSource, $libraryApp) -join ';'
 
     # First prove actual existing gate and actual 9 tools in ONE ephemeral
     # child interpreter. The owner approval value never enters stdout.
@@ -102,9 +114,19 @@ import importlib
 import inspect
 import json
 import sys
+from pathlib import Path
 
 stage = "IMPORT_UCIE_MCP"
 try:
+    # Fail closed on UCIE package shadowing before make_server() inserts
+    # the admin worktree at sys.path[0]. Cache PR77's verified package first.
+    stage = "VERIFY_LIBRARY_ADAPTER_ORIGIN"
+    adapter = importlib.import_module("ucie_miner.public_library_mcp_adapter")
+    expected_adapter = (Path(r"D:\UCIE_PREVIEW\UCIE\src")
+                        / "ucie_miner" / "public_library_mcp_adapter.py").resolve()
+    if Path(adapter.__file__).resolve() != expected_adapter:
+        raise ImportError("UCIE_LIBRARY_ADAPTER_SHADOWED")
+    stage = "IMPORT_UCIE_MCP"
     m = importlib.import_module("private_lib.mcp_stdio_server")
     stage = "EXISTING_OPERATOR_GATE_AND_MAKE_SERVER"
     server = m.make_server()
@@ -122,11 +144,39 @@ try:
             "live_chatgpt_tools_verified":False
         }))
         sys.exit(3)
+    # Listing a tool is not evidence that its handler can execute.
+    # Actual legacy public-only lookup runs with the same process env and
+    # working directory as the impending foreground C40 tunnel launcher.
+    stage = "CALL_EXISTING_PUBLIC_SEARCH"
+    search_result = server.call_tool("search_ucie_evidence", {"query":"python","top":1})
+    if inspect.isawaitable(search_result):
+        search_result = asyncio.run(search_result)
+    def legacy_ok(value):
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except ValueError:
+                return False
+        if isinstance(value, dict):
+            return value.get("status") == "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY"
+        if isinstance(value, (list, tuple)):
+            return any(legacy_ok(item) for item in value)
+        if getattr(value, "isError", False):
+            return False
+        if hasattr(value, "text"):
+            return legacy_ok(value.text)
+        if hasattr(value, "content"):
+            return legacy_ok(value.content)
+        return False
+    if not legacy_ok(search_result):
+        raise ValueError("UCIE_LEGACY_PUBLIC_SEARCH_CONTRACT_NOT_MET")
     print(json.dumps({
-        "status":"UCIE_OWNER_LOCAL_ADMIN_9_REGISTERED",
+        "status":"UCIE_OWNER_LOCAL_ADMIN_AND_LEGACY_SEARCH_VERIFIED",
         "admin_count":9,
         "admin_tool_names":admin,
         "legacy_search_preserved":True,
+        "legacy_search_call_verified":True,
+        "library_adapter_origin_verified":True,
         "live_chatgpt_tools_verified":False
     }))
 except Exception as exc:
