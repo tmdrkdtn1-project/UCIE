@@ -7,6 +7,7 @@ before a real Git push or restart; DB integrity alone is not authority.
 """
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -65,7 +66,7 @@ def claim_owner_grant_once(
     db = _checked_db_path(directory)
     now = datetime.now(timezone.utc) if at_time is None else at_time
     try:
-        with sqlite3.connect(str(db), timeout=2.0, isolation_level=None) as conn:
+        with closing(sqlite3.connect(str(db), timeout=2.0, isolation_level=None)) as conn:
             conn.execute("PRAGMA busy_timeout=2000")
             conn.execute("PRAGMA synchronous=FULL")
             conn.execute("PRAGMA trusted_schema=OFF")
