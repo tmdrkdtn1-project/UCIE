@@ -41,7 +41,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          foreach ($path in @('scripts/install_hourly_task.ps1', 'scripts/task_status.ps1', 'scripts/remove_hourly_task.ps1', 'scripts/ucie_stage10_operator_readonly_trial.ps1', 'scripts/inspect_ucie_mcp_activation.ps1', 'scripts/ucie_owner_admin_mcp_launch.ps1', 'scripts/inspect_ucie_tunnel_runtime_instances.ps1')) {
+          foreach ($path in @('scripts/install_hourly_task.ps1', 'scripts/task_status.ps1', 'scripts/remove_hourly_task.ps1', 'scripts/ucie_stage10_operator_readonly_trial.ps1', 'scripts/inspect_ucie_mcp_activation.ps1', 'scripts/ucie_owner_admin_mcp_launch.ps1', 'scripts/inspect_ucie_tunnel_runtime_instances.ps1', 'scripts/stop_ucie_old_c40_duplicate_once.ps1')) {
             $tokens = $null
             $errors = $null
             $null = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path, [ref]$tokens, [ref]$errors)
@@ -81,6 +81,15 @@ jobs:
             throw 'UCIE_TUNNEL_INSTANCE_PROBE_POWERSHELL_51_PARSE_FAILED'
           }
           Write-Output 'UCIE_TUNNEL_INSTANCE_PROBE_POWERSHELL_51_PARSE_PASS'
+          $stopPath = (Resolve-Path 'scripts/stop_ucie_old_c40_duplicate_once.ps1').Path
+          $stopTokens = $null
+          $stopErrors = $null
+          $stopAst = [System.Management.Automation.Language.Parser]::ParseFile($stopPath, [ref]$stopTokens, [ref]$stopErrors)
+          if ($null -eq $stopAst -or $stopErrors.Count -gt 0) {
+            $stopErrors | ForEach-Object { Write-Error ("UCIE stop-once script error at line " + $_.Extent.StartLineNumber + ": " + $_.Message) }
+            throw 'UCIE_OLD_DUPLICATE_STOP_ONCE_POWERSHELL_51_PARSE_FAILED'
+          }
+          Write-Output 'UCIE_OLD_DUPLICATE_STOP_ONCE_POWERSHELL_51_PARSE_PASS'
 
       - name: Hourly task read-only evidence acceptance with synthetic Windows PowerShell 5.1 task
         if: runner.os == 'Windows'
