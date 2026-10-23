@@ -13,6 +13,9 @@ executing or trusting upstream patches.
 2. `public_library_qa_packet.inspect_library_candidate_qa_packet`:
    authenticated existing signed-claim hash versus actual, separately
    submitted bounded artifact **bytes** and exact public revision.
+3. `public_library_runner_ci.recheck_signed_packet_runner_ci`:
+   optional one-shot public UCIE GitHub Actions **generic workflow metadata**
+   comparison with the signed packet's runner ID and runner commit.
 
 The feature **does not** perform human independent QA, reproduce the
 upstream regression, inspect untrusted binary/test artifacts semantically,
@@ -88,6 +91,33 @@ an independent truth attestation. The expected signed-history head must be
 retained under a separately authenticated mechanism; the UCIE SQLite file
 cannot supply rollback protection for itself.
 
+## Evidence boundary C — actual UCIE runner identity
+
+The operator may separately call `recheck_signed_packet_runner_ci(...,
+live=True)` after the exact signed packet and all six evidence artifact
+bytes have passed the preexisting ledger and byte-integrity gate.
+
+- Makes **one** anonymous, no-redirect, bounded metadata GET to the exact
+  first-party UCIE endpoint
+  `https://api.github.com/repos/tmdrkdtn1-project/UCIE/actions/runs/<ID>`.
+  The run ID comes solely from the authenticated signed packet.
+- Checks exact run ID, `repository.full_name`, canonical public run URL,
+  UCIE's `.github/workflows/stage1-offline-tests.yml` workflow path,
+  recorded runner commit SHA, workflow completed/conclusion state,
+  and bounded UTC timestamp.
+- Rejects foreign CI repositories and workflow paths, future timestamps,
+  malformed JSON/duplicate fields, unexpected redirects, and wrong SHA.
+- Respects rate-limit pause. In tests, injected mock transports have their
+  own `SYNTHETIC_..._NOT_LIVE_NO_GO` state and **zero** actual HTTP GETs.
+
+Even an authentic **general UCIE workflow SUCCESS** reports
+`UCIE_GENERAL_CI_METADATA_OBSERVED_CANDIDATE_QA_PENDING_NO_GO`.
+It cannot establish that the specific upstream candidate revision was
+checked out in the runner, that the attached packet artifacts were actually
+produced by the workflow, or that negative regressions were independently
+reproduced. Individual jobs/steps, attested provenance, release inclusion,
+license and reviewer identity remain separate explicit evidence gates.
+
 ## Validation and safety tests
 
 - `tests/test_ucie_public_library_upstream_recheck.py`: the API transport is
@@ -97,7 +127,10 @@ cannot supply rollback protection for itself.
 - `tests/test_ucie_public_library_qa_packet.py`: ephemeral synthetic
   owner/QA keys and isolated test-only UCIE ledger. Tests exact artifact bytes,
   tampering, missing/invalid packet signature digest, owner revocation,
-  expiration, stale source SHA, wrong head and other project paths.
+  expiration, stale source SHA, wrong head and other project paths. Also tests
+  the one-shot UCIE runner metadata path with injected mock transport:
+  correct run ID / SHA and workflow path, non-success CI, bad workflow repo,
+  future time, foreign URL, revocation, and no unauthorised fetch.
 
 Offline CI Python 3.13/3.15 on Windows and Ubuntu exercises these boundaries;
 **CI synthetic PASS is not the same as independent upstream regression PASS**.
