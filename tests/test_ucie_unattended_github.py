@@ -47,6 +47,8 @@ def manifest(g, files=FILES):
 
 
 class FakeTransport:
+    ucie_synthetic_only = True
+
     def __init__(self):
         self.calls = []
         self.collision = False
@@ -180,6 +182,8 @@ class GitHubPublisherTests(unittest.TestCase):
         with self.assertRaises(PolicyError):
             simulate_github_publish(v, altered, fake)
         self.assertEqual(fake.calls, [])
+        with self.assertRaises(PolicyError):
+            simulate_github_publish(v, FILES, lambda m,p,b: {})
 
     def test_publisher_does_not_claim_live_ci_or_actual_git_push(self):
         v = self.bound()
