@@ -35,17 +35,51 @@ class OneTimeMcpLibraryLinkTests(unittest.TestCase):
         with self.assertRaises(patch.LinkError):
             patch.propose_link(result)
 
-    def test_existing_handler_with_ambiguous_returns_never_patched(self):
+    def test_multiple_early_returns_preserve_errors_and_public_success(self):
         original = '''
 def search_ucie_evidence(query, category=None, tag=None, top=5):
-    if query:
-        return {"status":"UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",
-                "results":[]}
-    return {"status":"UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",
-            "results":[]}
+    if query == "invalid":
+        return {"status": "INVALID_QUERY", "results": []}
+    if query == "missing":
+        return None
+    if query == "empty":
+        return {"status": "NO_EVIDENCE", "results": []}
+    return {"status": "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",
+            "results": [{"source_key": "python/cpython"}]}
 '''
-        with self.assertRaises(patch.LinkError):
-            patch.propose_link(original)
+        modified = patch.propose_link(original)
+        self.assertEqual(modified.count("UCIE_LIBRARY_BRIDGE_V1"), 1)
+        self.assertEqual(modified.count("_ucie_library_bridge(r\"D:"), 3)
+        compile(modified, "mcp_stdio_server.py", "exec")
+        namespace = {}
+        exec(modified, namespace)
+        search = namespace["search_ucie_evidence"]
+        self.assertEqual(search("invalid"),
+                         {"status": "INVALID_QUERY", "results": []})
+        self.assertIsNone(search("missing"))
+        self.assertEqual(search("empty"),
+                         {"status": "NO_EVIDENCE", "results": []})
+        # This synthetic environment has no Windows UCIE Stage10/13 index,
+        # so optional search returns the original public-success payload.
+        success = search("Python")
+        self.assertEqual(success["status"],
+                         "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY")
+        self.assertEqual(success["results"],
+                         [{"source_key": "python/cpython"}])
+
+    def test_nested_return_is_not_rewritten(self):
+        original = '''
+def search_ucie_evidence(query, category=None, tag=None, top=5):
+    def internal():
+        return "nested"
+    if query == "bad":
+        return {"status": "INVALID_QUERY", "results": []}
+    return {"status": "UCIE_PUBLIC_METADATA_EVIDENCE_REVIEW_ONLY",
+            "results": [], "note": internal()}
+'''
+        patched = patch.propose_link(original)
+        self.assertEqual(patched.count("_ucie_library_bridge(r\"D:"), 2)
+        compile(patched, "mcp_stdio_server.py", "exec")
 
     def test_missing_status_or_different_parameters_fails_closed(self):
         without_status = EXAMPLE.replace(
