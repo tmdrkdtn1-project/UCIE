@@ -54,7 +54,14 @@ def _offset(lines, line, byte_col):
 
 
 def propose_link(source: str) -> str:
-    """Prepare a patch without changing the provided source text."""
+    """Adapt every handler return without changing branch or error semantics.
+
+    A handler can have many early returns (e.g. malformed query, empty
+    evidence or unexpected upstream failure). Every nonempty return is
+    evaluated exactly once and sent through a compatibility helper, which
+    preserves ALL non-public-success results unchanged. No function rename,
+    new FastMCP registration or server restart occurs.
+    """
     if (type(source) is not str
             or len(source.encode("utf-8")) > MAX_SOURCE_BYTES
             or "\x00" in source):
@@ -75,42 +82,69 @@ def propose_link(source: str) -> str:
     visitor = _ReturnCollector()
     for statement in fn.body:
         visitor.visit(statement)
-    if len(visitor.returns) != 1 or visitor.returns[0].value is None:
-        raise LinkError("handler has multiple/unknown return paths")
-    ret = visitor.returns[0]
+    if not visitor.returns or not any(r.value is not None for r in visitor.returns):
+        raise LinkError("existing MCP handler has no usable value return")
     original_body = ast.get_source_segment(source, fn)
-    if EXPECTED_STATUS not in original_body:
-        raise LinkError("existing public-only response status not visible in handler")
-    expr = ast.get_source_segment(source, ret.value)
-    if not expr:
-        raise LinkError("could not locate existing handler return value")
+    if EXPECTED_STATUS not in original_body and EXPECTED_STATUS not in source:
+        raise LinkError("UCIE public-only response status marker absent")
+    # Install the helper once at the beginning of this exact handler.
+    # Do not insert into any nested function, or before its docstring.
+    first_stmt = fn.body[0]
+    if (isinstance(first_stmt, ast.Expr)
+            and isinstance(first_stmt.value, ast.Constant)
+            and isinstance(first_stmt.value.value, str)):
+        if len(fn.body) < 2:
+            raise LinkError("handler has a docstring but no statements")
+        first_stmt = fn.body[1]
     lines = source.splitlines(keepends=True)
-    return_line = lines[ret.lineno - 1]
-    indent = return_line[:ret.col_offset]
-    if indent.strip() or "\t" in indent:
-        raise LinkError("nonstandard or inline return indentation")
-    # Import the reviewed UCIE-only code, never arbitrary runtime scripts.
-    setup = (
+    if any("\r" in line and not line.endswith("\r\n")
+           for line in lines):
+        raise LinkError("unexpected source newline layout")
+    indent = " " * first_stmt.col_offset
+    if not indent or "\t" in lines[first_stmt.lineno - 1][
+            :first_stmt.col_offset]:
+        raise LinkError("unsupported handler indentation")
+    helper = (
         indent + "import sys as _ucie_library_sys  " + MARKER + "\n"
         + indent + "_ucie_library_source = " + repr(str(UCIE_SOURCE)) + "\n"
         + indent + "if _ucie_library_source not in _ucie_library_sys.path:\n"
         + indent + "    _ucie_library_sys.path.insert(0, _ucie_library_source)\n"
         + indent + "from ucie_miner.public_library_mcp_adapter import (\n"
-        + indent + "    extend_existing_ucie_mcp_wire_response as _ucie_library_bridge\n"
+        + indent + "    extend_existing_ucie_mcp_wire_response_if_public "
+        + "as _ucie_library_bridge\n"
         + indent + ")\n"
-    ).encode("utf-8")
-    call = (
-        '_ucie_library_bridge(r"D:\\UCIE", ('
-        + expr + '), query=query, category=category, tag=tag, top=top)'
-    ).encode("utf-8")
+    )
+    newline = "\r\n" if "\r\n" in source else "\n"
+    helper_bytes = helper.replace("\n", newline).encode("utf-8")
     data = source.encode("utf-8")
-    insert_at = _offset(lines, ret.lineno, 0)
-    start = _offset(lines, ret.value.lineno, ret.value.col_offset)
-    end = _offset(lines, ret.value.end_lineno, ret.value.end_col_offset)
-    if not (insert_at <= start < end <= len(data)):
-        raise LinkError("invalid AST source positions")
-    updated = data[:insert_at] + setup + data[insert_at:start] + call + data[end:]
-    result = updated.decode("utf-8")
+    inserts = [
+        (_offset(lines, first_stmt.lineno, 0),
+         _offset(lines, first_stmt.lineno, 0), helper_bytes)
+    ]
+    for returned in visitor.returns:
+        if returned.value is None:
+            # Preserve bare returns and their original status/meaning.
+            continue
+        expr = ast.get_source_segment(source, returned.value)
+        if not expr:
+            raise LinkError("cannot identify handler return expression")
+        start = _offset(lines, returned.value.lineno,
+                        returned.value.col_offset)
+        end = _offset(lines, returned.value.end_lineno,
+                      returned.value.end_col_offset)
+        if not (0 <= start < end <= len(data)):
+            raise LinkError("invalid AST handler return source offsets")
+        replacement = (
+            '_ucie_library_bridge(r"D:\\UCIE", ('
+            + expr + '), query=query, category=category, '
+            'tag=tag, top=top)'
+        )
+        inserts.append((start, end, replacement.encode("utf-8")))
+    # Reverse byte order, so every AST span remains anchored to the
+    # original bytes, including mixed inline and early return branches.
+    for start, end, replacement in sorted(inserts, reverse=True):
+        data = data[:start] + replacement + data[end:]
+    result = data.decode("utf-8")
     compile(result, "mcp_stdio_server.py", "exec")
     return result
 
