@@ -136,7 +136,7 @@ class GitHubPublisherTests(unittest.TestCase):
 
     def test_content_hash_and_filename_restrictions(self):
         with self.assertRaises(PolicyError):
-            self.bound(files={"src/ucie_public/safe_module.py": b"modified"})
+            self.bound(m=manifest(grant()), files={**FILES, "src/ucie_public/safe_module.py": b"modified"})
         for path in ("../secret.py", ".github/workflows/ci.yml",
                      "src/ucie_public/.env", "src/ucie_public/x.exe",
                      "src/ucie_public/private_token.py",
