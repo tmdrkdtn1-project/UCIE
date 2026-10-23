@@ -136,6 +136,9 @@ def inspect_library_review_closure(
             "signed_keyholder_claim_version": (
                 item["version_claim"] if item and exact_revision
                 and not item["revoked"] else None),
+            "signed_review_evidence_sha256": (
+                item["review_evidence_sha256"] if item and exact_revision
+                and not item["revoked"] else None),
             "review_state": verdict,
             "source_version_independently_verified": False,
             "source_license_independently_verified": False,
