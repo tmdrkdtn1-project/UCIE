@@ -63,14 +63,14 @@ class KnownCPythonCandidateTests(unittest.TestCase):
                 ("-X", "disable_remote_debug"): True,
                 ("-X", "disable-remote-debug"): False}[tuple(args)]
 
-    def run(self):
+    def run_candidate(self):
         return inspect_cpython_159014_observation(
             fetch=self.fetch, observe=self.observe,
             runtime_name="CPython", runtime_version="3.15.1",
             platform="linux")
 
     def test_complete_synthetic_candidate_binding_never_claims_independent_qa(self):
-        report = self.run()
+        report = self.run_candidate()
         self.assertEqual(self.calls, [API_REQUEST, FILE_REQUEST])
         self.assertEqual(self.runtime_calls, [
             [], ["-X", "disable_remote_debug"], ["-X", "disable-remote-debug"]])
@@ -104,7 +104,7 @@ class KnownCPythonCandidateTests(unittest.TestCase):
                 self.calls = []
                 self.meta = {**pr(), **changes}
                 with self.assertRaises(DiscoveryError):
-                    self.run()
+                    self.run_candidate()
                 self.assertEqual(self.calls, [API_REQUEST])
 
     def test_wrong_document_paths_and_missing_patch_fail_closed(self):
@@ -119,7 +119,7 @@ class KnownCPythonCandidateTests(unittest.TestCase):
                 self.changed = files()
                 edits(self.changed)
                 with self.assertRaises(DiscoveryError):
-                    self.run()
+                    self.run_candidate()
 
     def test_wrong_runtime_or_invariant_fails_closed(self):
         for name, version, platform in (
