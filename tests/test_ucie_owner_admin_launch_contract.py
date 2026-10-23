@@ -66,7 +66,7 @@ class UCIEOwnerMcpSessionContractTests(unittest.TestCase):
         self.assertIn("if ($Mode -eq 'Background') {", source)
         self.assertIn("Start-Process -FilePath $clientExe", source)
         self.assertIn("-WindowStyle Hidden -PassThru", source)
-        self.assertIn("-WorkingDirectory $libraryApp", source)
+        self.assertIn("-WorkingDirectory (Get-Location).ProviderPath", source)
         self.assertIn("UCIE_OWNER_BACKGROUND_TUNNEL_PROCESS_OBSERVED", source)
         self.assertIn("UCIE_TUNNEL_ALREADY_RUNNING_DO_NOT_DUPLICATE", source)
         self.assertIn("survives_windows_logoff_or_reboot = $false", source)
