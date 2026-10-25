@@ -47,6 +47,40 @@ class DiscoveryError(ValueError):
     pass
 
 
+def classify_stage10_discovery_error(exc: BaseException) -> str:
+    """Closed vocabulary only; never persist source text or exception messages.
+
+    A bare DiscoveryError spans validation, route policy and response defects,
+    so it MUST NOT be guessed to be HTTP 429 or a network failure.
+    Follow only a bounded explicit cause chain, never implicit context.
+    """
+    seen = set()
+    cause = exc
+    for _ in range(6):
+        if id(cause) in seen:
+            break
+        seen.add(id(cause))
+        if isinstance(cause, urllib.error.HTTPError):
+            if cause.code == 429:
+                return "UPSTREAM_HTTP_429"
+            if cause.code == 403:
+                return "UPSTREAM_HTTP_403"
+            return "UPSTREAM_HTTP_OTHER"
+        if isinstance(cause, (json.JSONDecodeError, UnicodeError)):
+            return "PUBLIC_JSON_INVALID"
+        if isinstance(cause, urllib.error.URLError):
+            return "UPSTREAM_NETWORK_FAILURE"
+        if isinstance(cause, (OSError, TimeoutError)):
+            return "UPSTREAM_IO_OR_TIMEOUT"
+        parent = getattr(cause, "__cause__", None)
+        if not isinstance(parent, BaseException):
+            break
+        cause = parent
+    if isinstance(exc, DiscoveryError):
+        return "DISCOVERY_VALIDATION_OR_RESPONSE_REJECTED"
+    return "OTHER_FAILURE"
+
+
 MAX_BACKFILL_PAGES = 3
 
 def public_feed_url(source: str, page: int = 1) -> str:
