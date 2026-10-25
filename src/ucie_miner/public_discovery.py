@@ -47,6 +47,20 @@ class DiscoveryError(ValueError):
     pass
 
 
+# Exact, untrusted-input-independent failure locations. Never store exception
+# text, URLs, response bodies, or any values from outside the UCIE source.
+STAGE10_FAILURE_PHASES = frozenset((
+    "STAGE10_SETUP",
+    "STAGE10_BATCH",
+    "STAGE10_STAGING",
+    "STAGE13_HISTORY",
+    "STAGE14_OFFICIAL",
+    "STAGE15_FIX_EVIDENCE",
+    "STAGE12_REVIEW",
+    "STAGE16_SAFE_QA",
+))
+
+
 def classify_stage10_discovery_error(exc: BaseException) -> str:
     """Closed vocabulary only; never persist source text or exception messages.
 
