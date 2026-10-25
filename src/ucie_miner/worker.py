@@ -254,6 +254,21 @@ def run_cycle(
                             or not error_name.isidentifier()):
                         raise ValueError("invalid optional public stage error type")
                     receipt["stage10_error_type"] = error_name
+                    # Older synthetic producers may omit the new category.
+                    # If present it must be one of our literal safe codes.
+                    category = optional_stage.get("error_category")
+                    if category is not None:
+                        if type(category) is not str or category not in {
+                                "UPSTREAM_HTTP_429",
+                                "UPSTREAM_HTTP_403",
+                                "UPSTREAM_HTTP_OTHER",
+                                "UPSTREAM_NETWORK_FAILURE",
+                                "UPSTREAM_IO_OR_TIMEOUT",
+                                "PUBLIC_JSON_INVALID",
+                                "DISCOVERY_VALIDATION_OR_RESPONSE_REJECTED",
+                                "OTHER_FAILURE"}:
+                            raise ValueError("invalid optional public stage error category")
+                        receipt["stage10_error_category"] = category
             report_clock_ns = perf_counter_ns()
             try:
                 path = write_report(repo_root)
