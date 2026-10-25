@@ -77,11 +77,17 @@ class MinerWorkerTests(unittest.TestCase):
              "PUBLIC_JSON_INVALID"),
         )
         for upstream, expected in cases:
-            with self.subTest(category=expected):
-                try:
-                    raise DiscoveryError("approved public feed unavailable") from upstream
-                except DiscoveryError as exc:
-                    self.assertEqual(classify_stage10_discovery_error(exc), expected)
+            try:
+                with self.subTest(category=expected):
+                    try:
+                        raise DiscoveryError("approved public feed unavailable") from upstream
+                    except DiscoveryError as exc:
+                        self.assertEqual(classify_stage10_discovery_error(exc), expected)
+            finally:
+                # HTTPError is a response-like object in Python 3.15;
+                # close even synthetic objects to avoid ResourceWarning.
+                if isinstance(upstream, urllib.error.HTTPError):
+                    upstream.close()
         self.assertEqual(classify_stage10_discovery_error(
             DiscoveryError("a hostile payload: do not store")),
             "DISCOVERY_VALIDATION_OR_RESPONSE_REJECTED")
