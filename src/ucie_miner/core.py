@@ -6,6 +6,7 @@ Knowledge entries generated here are UNVERIFIED_CANDIDATE_ONLY.
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import re
@@ -149,6 +150,7 @@ def mine_once(
     sources: tuple[str, ...] = PUBLIC_SOURCES,
     max_new_per_source: int = 2,
     crosscheck_origin: bool = False,
+    read_workers: int = 1,
 ) -> dict:
     if type(crosscheck_origin) is not bool:
         raise MiningError("invalid provenance crosscheck flag")
@@ -156,6 +158,13 @@ def mine_once(
         raise MiningError("unapproved source")
     if type(max_new_per_source) is not int or not 1 <= max_new_per_source <= 5:
         raise MiningError("candidate cap outside 1..5")
+    # SPEED V1.2 L1: operating/scheduled callers retain read_workers=1.
+    # Only explicit, synthetic/offline approval may enable the two-source
+    # list-GET overlap; independent GETs ONLY, never SQLite/ACK/PR files.
+    if type(read_workers) is not int or read_workers not in (1, 2):
+        raise MiningError("unapproved read worker count")
+    if read_workers == 2 and sources != PUBLIC_SOURCES:
+        raise MiningError("parallel list reads require exact two public sources")
     conn = _db(repo_root)
     observed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     added = 0
@@ -163,9 +172,23 @@ def mine_once(
     public_pr_crosschecked = 0
     try:
         with conn:
+            # Lists can be fetched independently; every DB read/write,
+            # provenance check and dependent PR-files GET remains serial.
+            # No 429 retries, extra endpoints or automatic mode switches.
+            # The scheduled miner invokes the default single-worker path.
+            prefetched_lists = {}
+            endpoint = "pulls?state=closed&sort=updated&direction=desc&per_page=20"
+            if read_workers == 2:
+                with ThreadPoolExecutor(max_workers=2, thread_name_prefix="ucie-public-list") as pool:
+                    pending = {
+                        source: pool.submit(fetch, _api_url(source, endpoint))
+                        for source in sources
+                    }
+                    for source in sources:
+                        prefetched_lists[source] = pending[source].result()
             for source in sources:
-                endpoint = "pulls?state=closed&sort=updated&direction=desc&per_page=20"
-                results = fetch(_api_url(source, endpoint))
+                results = (prefetched_lists[source] if read_workers == 2
+                           else fetch(_api_url(source, endpoint)))
                 if not isinstance(results, list) or len(results) > 20:
                     raise MiningError("malformed pull list")
                 per_source = 0
