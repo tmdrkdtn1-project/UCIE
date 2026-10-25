@@ -62,9 +62,13 @@ function Get-UcieAclSummary([string]$Path, [string]$CurrentSid) {
         $out.owner_is_local_system = $owner -eq 'S-1-5-18'
         $out.inheritance_disabled = [bool]$acl.AreAccessRulesProtected
         $publicSids = @('S-1-1-0', 'S-1-5-11', 'S-1-5-32-545')
+        # Only write/delete/DACL-changing bits; combining FullControl would
+        # match Read-only ACEs and overreport broad write access.
         $danger = [System.Security.AccessControl.FileSystemRights]::Write -bor
-            [System.Security.AccessControl.FileSystemRights]::Modify -bor
-            [System.Security.AccessControl.FileSystemRights]::FullControl
+            [System.Security.AccessControl.FileSystemRights]::Delete -bor
+            [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor
+            [System.Security.AccessControl.FileSystemRights]::ChangePermissions -bor
+            [System.Security.AccessControl.FileSystemRights]::TakeOwnership
         foreach ($ace in $acl.Access) {
             if ($ace.AccessControlType -ne
                 [System.Security.AccessControl.AccessControlType]::Allow) {
