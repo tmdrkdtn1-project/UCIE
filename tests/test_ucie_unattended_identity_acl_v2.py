@@ -23,6 +23,8 @@ class ReadonlyIdentityDiagnosticV2Tests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIn(name, text)
         self.assertIn("DIAGNOSTIC_OBSERVATION_ONLY_NOT_HOST_APPROVAL", text)
+        self.assertIn("[System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles", text)
+        self.assertNotIn("[System.Security.AccessControl.FileSystemRights]::Modify -bor", text)
         self.assertNotIn("Get-ChildItem -Recurse", text)
         self.assertNotIn("D:\\OFFICE", text)
 
