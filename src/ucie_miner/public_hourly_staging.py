@@ -121,8 +121,19 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
     fix_review = _phase_call("STAGE15_FIX_EVIDENCE", optional_fix_evidence_enrichment, root)
     if fix_review.get("status") not in (
             "STAGE15_FIX_EVIDENCE_DISABLED",
-            "STAGE15_STRUCTURED_FIX_EVIDENCE_STAGED_NO_GO"):
+            "STAGE15_STRUCTURED_FIX_EVIDENCE_STAGED_NO_GO",
+            "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO"):
         _reject_phase("STAGE15_FIX_EVIDENCE", "invalid external structured fix evidence status")
+    fix_failed = (
+        fix_review["status"] == "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO"
+    )
+    if fix_failed and (
+            fix_review.get("failure_source") not in SOURCES
+            or fix_review.get("failure_category")
+            != "PUBLIC_PATCH_OR_RELEASE_REJECTED"):
+        _reject_phase("STAGE15_FIX_EVIDENCE", "invalid Stage15 failure provenance")
+    # The next review pass reads only pre-existing, linked public candidate
+    # revisions. A rejected new Stage15 receipt must not starve that pass.
     # Final stage of the *existing* hourly cycle: Stage12 now reviews both
     # Stage10 metadata and already-committed Stage15 fix hints, if and only
     # if their independent owner markers exist. Reuse the same unverified
@@ -141,6 +152,7 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
         root, rate_paused=(
             history["status"] == "EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO"
             or official["status"] == "STAGE14_OFFICIAL_RATE_PAUSED_NO_GO"
+            or fix_failed
         ))
     if (safe_qa.get("approved_rules_added") != 0
             or safe_qa.get("production_approved") is not False
@@ -155,9 +167,13 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
             }):
         _reject_phase("STAGE16_SAFE_QA", "invalid Stage16 unverified QA outcome")
     return {
-        "status": STATUS_PARTIAL if history_failed else STATUS_STAGED,
+        "status": STATUS_PARTIAL if (history_failed or fix_failed) else STATUS_STAGED,
         "operator_opted_in": True,
         "stage15_fix_evidence_status": fix_review["status"],
+        "stage15_failure_source": (
+            fix_review.get("failure_source") if fix_failed else None),
+        "stage15_failure_category": (
+            fix_review.get("failure_category") if fix_failed else None),
         "stage15_fix_evidence_new_records": fix_review.get(
             "new_unverified_evidence_records", 0),
         "stage15_fix_evidence_gets_upper_bound": fix_review.get(
