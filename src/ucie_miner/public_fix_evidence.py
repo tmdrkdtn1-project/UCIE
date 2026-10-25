@@ -276,14 +276,24 @@ def optional_fix_evidence_enrichment(root, *, fetch=None, max_candidates=2):
     to_process = [lead for lead in leads
                   if (lead[0], lead[1], lead[3]) not in prior][:max_candidates]
     added = 0
+    attempted = 0
+    rejected_source = None
     for candidate in to_process:
+        attempted += 1
         source, number, merge, _ = candidate
         receipt = collect_public_knowledge_candidate(
             source, number, merge_sha=merge, fetch=fetch,
             include_doc=False, include_advisory=False,
         )
-        # Never mark an unavailable patch or release as successfully enriched.
-        record = _record(receipt, candidate)
+        # Missing or rejected upstream patch/release metadata is NOT a local
+        # corruption. Do not insert, advance, approve, or silently retry the
+        # rejected candidate; preserve the safe failed-source provenance and
+        # let the independent Stage12 review of existing records continue.
+        try:
+            record = _record(receipt, candidate)
+        except DiscoveryError:
+            rejected_source = source
+            break
         path = _path(root)
         exists = path.exists()
         try:
@@ -304,10 +314,16 @@ def optional_fix_evidence_enrichment(root, *, fetch=None, max_candidates=2):
         except sqlite3.DatabaseError as exc:
             raise DiscoveryError("Stage 15 candidate evidence index failed") from exc
     return {
-        "status": "STAGE15_STRUCTURED_FIX_EVIDENCE_STAGED_NO_GO",
+        "status": ("STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO"
+                   if rejected_source is not None
+                   else "STAGE15_STRUCTURED_FIX_EVIDENCE_STAGED_NO_GO"),
         "history_leads_available": len(leads),
-        "public_prs_enriched": len(to_process),
-        "external_gets_upper_bound": len(to_process) * 2,
+        "public_prs_enriched": attempted - int(rejected_source is not None),
+        "public_prs_attempted": attempted,
+        "external_gets_upper_bound": attempted * 2,
+        "failure_source": rejected_source,
+        "failure_category": ("PUBLIC_PATCH_OR_RELEASE_REJECTED"
+                             if rejected_source is not None else None),
         "new_unverified_evidence_records": added,
         "approved_rules": 0,
         "model_weights_updated": False,
