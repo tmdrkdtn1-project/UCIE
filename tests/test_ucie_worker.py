@@ -101,6 +101,7 @@ class MinerWorkerTests(unittest.TestCase):
                 "status": "STAGE10_HOURLY_FAILED_NO_GO",
                 "error_type": "DiscoveryError",
                 "error_category": "UPSTREAM_HTTP_429",
+                "error_phase": "STAGE14_OFFICIAL",
             }
             return result
         result = run_cycle(
@@ -109,6 +110,7 @@ class MinerWorkerTests(unittest.TestCase):
         self.assertEqual(result["stage10_status"], "STAGE10_HOURLY_FAILED_NO_GO")
         self.assertEqual(result["stage10_error_type"], "DiscoveryError")
         self.assertEqual(result["stage10_error_category"], "UPSTREAM_HTTP_429")
+        self.assertEqual(result["stage10_error_phase"], "STAGE14_OFFICIAL")
         receipt = (self.repo / "runtime" / "last_run.json").read_text("utf-8")
         self.assertNotIn("secret", receipt)
         self.assertEqual(
@@ -131,6 +133,23 @@ class MinerWorkerTests(unittest.TestCase):
         receipt = (self.repo / "runtime" / "last_run.json").read_text("utf-8")
         self.assertNotIn("secret_token", receipt)
         self.assertNotIn("stage10_error_category", receipt)
+
+    def test_stage10_phase_code_must_be_static_allowlisted(self):
+        def forged_phase(root):
+            result = valid_collection(root)
+            result["stage10"] = {
+                "status": "STAGE10_HOURLY_FAILED_NO_GO",
+                "error_type": "DiscoveryError",
+                "error_category": "DISCOVERY_VALIDATION_OR_RESPONSE_REJECTED",
+                "error_phase": "STAGE15_FIX_EVIDENCE:SECRET_PATH",
+            }
+            return result
+        result = run_cycle(
+            self.repo, collect=forged_phase, write_report=local_report)
+        self.assertEqual(result["status"], "COLLECTION_FAILED")
+        receipt = (self.repo / "runtime" / "last_run.json").read_text("utf-8")
+        self.assertNotIn("SECRET_PATH", receipt)
+        self.assertNotIn("stage10_error_phase", receipt)
 
     def test_reject_verification_claim(self):
         def fake_verified(root):
