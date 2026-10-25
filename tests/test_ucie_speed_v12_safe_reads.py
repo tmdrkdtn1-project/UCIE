@@ -30,7 +30,10 @@ def synthetic_fetch(url):
 
 
 def db_snapshot(root):
-    with sqlite3.connect(root / "runtime" / "public_miner.sqlite3") as conn:
+    # sqlite3.Connection's context manager DOES NOT CLOSE the handle.
+    # Explicit close is essential for Windows Python 3.15 tempdir cleanup.
+    conn = sqlite3.connect(root / "runtime" / "public_miner.sqlite3")
+    try:
         candidates = conn.execute(
             "SELECT source,pr_number,public_url,merged_at,evidence_sha256,"
             "tags_json,status FROM candidates ORDER BY source,pr_number"
@@ -38,7 +41,9 @@ def db_snapshot(root):
         runs = conn.execute(
             "SELECT sources_count,added_candidates,status FROM runs ORDER BY run_id"
         ).fetchall()
-    return candidates, runs
+        return candidates, runs
+    finally:
+        conn.close()
 
 
 class UCIESpeedSafeReadLanes(unittest.TestCase):
@@ -117,9 +122,12 @@ class UCIESpeedSafeReadLanes(unittest.TestCase):
                 mine_once(Path(root), fetch=fail_429, read_workers=2)
             self.assertEqual(sum(calls.values()), 2)
             self.assertEqual(max(calls.values()), 1)
-            with sqlite3.connect(Path(root) / "runtime" / "public_miner.sqlite3") as conn:
+            conn = sqlite3.connect(Path(root) / "runtime" / "public_miner.sqlite3")
+            try:
                 self.assertEqual(conn.execute("SELECT COUNT(*) FROM candidates").fetchone()[0], 0)
                 self.assertEqual(conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0], 0)
+            finally:
+                conn.close()
 
     def test_late_failure_rolls_back_single_writer(self):
         def fail_second(url):
