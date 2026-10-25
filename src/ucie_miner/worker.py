@@ -194,10 +194,26 @@ def run_cycle(
                             "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO"):
                         raise ValueError("unrecognized public history status")
                     receipt["stage13_history_status"] = history_status
-                if optional_stage["status"] == "STAGE10_HOURLY_PARTIAL_NO_GO":
-                    if history_status != "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO":
-                        raise ValueError("partial status must identify Stage 13 failure")
+                stage15_status = optional_stage.get("stage15_fix_evidence_status")
+                if stage15_status is not None:
+                    if stage15_status not in (
+                            "STAGE15_FIX_EVIDENCE_DISABLED",
+                            "STAGE15_STRUCTURED_FIX_EVIDENCE_STAGED_NO_GO",
+                            "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO"):
+                        raise ValueError("invalid Stage15 public evidence status")
+                    receipt["stage15_fix_evidence_status"] = stage15_status
+                history_failed = (
+                    history_status == "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO"
+                )
+                stage15_failed = (
+                    stage15_status == "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO"
+                )
+                partial = optional_stage["status"] == "STAGE10_HOURLY_PARTIAL_NO_GO"
+                if partial != (history_failed or stage15_failed):
+                    raise ValueError("Stage10 partial failure provenance mismatch")
+                if history_failed or stage15_failed:
                     from .public_discovery import SOURCES
+                if history_failed:
                     failure_source = optional_stage.get("stage13_failure_source")
                     failure_category = optional_stage.get("stage13_failure_category")
                     if (failure_source not in SOURCES or failure_category not in (
@@ -206,6 +222,17 @@ def run_cycle(
                         raise ValueError("invalid Stage 13 failure identity")
                     receipt["stage13_failure_source"] = failure_source
                     receipt["stage13_failure_category"] = failure_category
+                if stage15_failed:
+                    failure_source = optional_stage.get("stage15_failure_source")
+                    failure_category = optional_stage.get("stage15_failure_category")
+                    if (failure_source not in SOURCES
+                            or failure_category != "PUBLIC_PATCH_OR_RELEASE_REJECTED"):
+                        raise ValueError("invalid Stage 15 failure identity")
+                    receipt["stage15_failure_source"] = failure_source
+                    receipt["stage15_failure_category"] = failure_category
+                elif (optional_stage.get("stage15_failure_source") is not None
+                      or optional_stage.get("stage15_failure_category") is not None):
+                    raise ValueError("unpaired Stage15 failure provenance")
                 review_status = optional_stage.get("stage12_review_status")
                 if review_status is not None:
                     if review_status not in (
