@@ -19,6 +19,7 @@ if os.name == "nt":
 sys.path.insert(0, str(ROOT / "src"))
 from ucie_miner.worker import run_cycle
 from ucie_miner.core import mine_once
+from ucie_miner.public_discovery import classify_stage10_discovery_error
 
 
 def main() -> int:
@@ -39,6 +40,7 @@ def main() -> int:
             stage10 = {
                 "status": "STAGE10_HOURLY_FAILED_NO_GO",
                 "error_type": type(exc).__name__,
+                "error_category": classify_stage10_discovery_error(exc),
                 "approved_rules_added": 0,
                 "production_approved": False,
             }
@@ -47,7 +49,7 @@ def main() -> int:
         # The worker stores only its pinned status and sanitized error TYPE.
         legacy["stage10"] = {
             "status": stage10["status"],
-            **({"error_type": stage10["error_type"]}
+            **({k: stage10[k] for k in ("error_type", "error_category")}
                if stage10["status"] == "STAGE10_HOURLY_FAILED_NO_GO" else {}),
             **({k: stage10[k] for k in (
                 "stage13_history_status", "stage13_failure_source",
