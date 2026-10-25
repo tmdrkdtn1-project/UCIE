@@ -19,6 +19,7 @@ from .public_review_triage import (
     ALLOWED_HINTS,
 )
 from .skill_profiles import PROFILE
+from .public_discovery import SOURCE_SKILL
 from .stage17_review_docket import (
     attest_stage16_aggregate, build_review_docket,
 )
@@ -163,7 +164,7 @@ def build_ranked_stage17_handoff(handoff: dict, docket: dict,
         chosen.add(ref)
         source = by_revision[ref]
         if (choice.get("human_review_action")
-                != PROFILE[source["skill_id"]]["recommended_action"]):
+                != PROFILE[SOURCE_SKILL[ref[0]]]["recommended_action"]):
             raise ValueError("Stage12 review action mismatch")
         docket_item = by_id[source["candidate_id_sha256"]]
         ranked.append({
