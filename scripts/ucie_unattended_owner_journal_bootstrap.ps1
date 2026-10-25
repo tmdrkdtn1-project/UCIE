@@ -73,7 +73,11 @@ function Get-UcieAclRisk([string]$Path, [string]$CurrentSid) {
                 $unsafe = $true
                 continue
             }
-            if ($broad -contains $aceSid -and ($ace.FileSystemRights -band $allowWrite)) {
+            # Any writable ACE outside current owner/SYSTEM/Administrators
+            # can replace the new operations directory beneath this parent.
+            $trustedSids = @($CurrentSid, 'S-1-5-18', 'S-1-5-32-544')
+            if (($ace.FileSystemRights -band $allowWrite) -and
+                (($broad -contains $aceSid) -or ($trustedSids -notcontains $aceSid))) {
                 $unsafe = $true
             }
         }
@@ -151,8 +155,9 @@ if ((Test-Path -LiteralPath $target -PathType Container) -and
         }
         if ($sid -notin $allowed -or
             $ace.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or
-            (-not [bool]($ace.FileSystemRights -band
-                [Security.AccessControl.FileSystemRights]::FullControl))) {
+            (($ace.FileSystemRights -band
+                [Security.AccessControl.FileSystemRights]::FullControl) -ne
+                [Security.AccessControl.FileSystemRights]::FullControl)) {
             $exact = $false
         }
     }
