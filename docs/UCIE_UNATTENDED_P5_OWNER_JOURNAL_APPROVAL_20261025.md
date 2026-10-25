@@ -20,8 +20,15 @@ credential values, private key material or unrelated host records.
 - Reserved \`UCIE-C40-Supervisor\` task name is unoccupied.
 - Existing \`D:\UCIE\.ucie_bridge_state\`: directory exists, ACL was read,
   its owner is the built-in Administrators group, not the current user SID;
-  inherited ACL is enabled and a broad write-allow ACE was detected.
-  This is a **legitimate security REVIEW issue**, not proof of compromise.
+  inherited ACL is enabled. The originally reported
+  `broad_allow_write_ace_found=true` is **NOT reliable evidence of write
+  permission**: the first V2 script incorrectly ORed `FullControl` into
+  the test mask, inadvertently matching read-only rights. A later source
+  patch changes the mask to Write/Delete/DeleteSubdirectoriesAndFiles/
+  ChangePermissions/TakeOwnership only. Owner must rerun that exact
+  SHA-pinned corrected read-only V2 script before declaring any broad-write
+  ACL finding. The Administrators owner + inherited ACL remains a security
+  **REVIEW item**, not proof of compromise.
   The directory is existing UCIE admin backup/audit state. DO NOT reuse as
   an unattended operation authorization journal; do not change its owner
   or ACL automatically because that could break the existing admin bridge.
@@ -79,3 +86,14 @@ require exact structured result and independent ACL verification before
 considering separate OS anti-rollback/signing/token bootstrap.
 
 **Source CI PASS != owner Windows host install PASS.** PR remains Draft.
+
+## Correction to original V2 ACL test (2026-10-25)
+
+The old diagnostic combined `Write | Modify | FullControl` and then used
+`mask -band ACE_rights`. `FullControl` includes read bits, so the old
+`broad_allow_write_ace_found=true` may be a **false positive**. The new
+V2 and V1 read-only diagnostic and the P5 bootstrap parent safety test use
+the narrower actual mutation mask `Write | Delete |
+DeleteSubdirectoriesAndFiles | ChangePermissions | TakeOwnership`.
+Do not treat any reported broad-write state from the old executable hash as
+verified. Actual host ACL changes remain **NOT AUTHORIZED**.
