@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 $root = 'D:\UCIE'
 $existingBridge = 'D:\UCIE\.ucie_bridge_state'
-$proposedOps = 'D:\UCIE\.ucie_unattended_state'
+$proposedOps = 'D:\UCIE_DATA\ucie_unattended_state'
 $minerTask = 'UCIE-PublicMiner-Hourly'
 $supervisorTask = 'UCIE-C40-Supervisor'
 
