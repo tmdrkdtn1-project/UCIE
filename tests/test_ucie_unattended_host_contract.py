@@ -42,6 +42,8 @@ class UCIEHostInspectorContracts(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, text)
         self.assertIn("Get-Acl -LiteralPath $journalDir", text)
+        self.assertIn("[System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles", text)
+        self.assertNotIn("[System.Security.AccessControl.FileSystemRights]::Modify -bor", text)
         self.assertIn(".ucie_bridge_state", text)
         self.assertIn("ucie_journal_acl_inheritance_disabled", text)
         self.assertIn("ucie_journal_broad_write_ace_denied", text)
