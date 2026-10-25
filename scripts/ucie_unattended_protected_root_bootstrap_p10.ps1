@@ -71,12 +71,16 @@ function Test-UcieExactNewDacl([string]$Path) {
         if ($owner -cne $adminSid -or -not [bool]$acl.AreAccessRulesProtected) {
             return $false
         }
-        $aces = @($acl.Access)
+        # A requested SecurityIdentifier avoids NTAccount name lookups.
+        # Unknown but valid SID strings remain fully subject to ACL checks.
+        $aces = @($acl.GetAccessRules(
+            $true, $true, [Security.Principal.SecurityIdentifier]))
         if ($aces.Count -ne 2) { return $false }
         $seen = @{}
         foreach ($ace in $aces) {
-            $sid = $ace.IdentityReference.Translate(
-                [Security.Principal.SecurityIdentifier]).Value
+            if ($ace.IdentityReference -isnot
+                [Security.Principal.SecurityIdentifier]) { return $false }
+            $sid = $ace.IdentityReference.Value
             if ($sid -notin @($adminSid, $systemSid) -or
                 $ace.AccessControlType -ne
                 [Security.AccessControl.AccessControlType]::Allow -or
@@ -107,14 +111,22 @@ if ($parentUnlinked) {
         $parentDaclCanonical = [bool]$acl.AreAccessRulesCanonical
         $foreignWriterPresent = $false
         $unknownAllowSidPresent = $false
-        foreach ($ace in $acl.Access) {
+        # PowerShell Get-Acl.Access may return NTAccount identities and
+        # translate an unknown/stale account name. Always request raw SID
+        # identities instead; never whitelist an unrecognized SID.
+        # Unknown SID with modifying Allow rights remains FOREIGN -> NO_GO.
+        $rules = @($acl.GetAccessRules(
+            $true, $true, [Security.Principal.SecurityIdentifier]))
+        foreach ($ace in $rules) {
             if ($ace.AccessControlType -ne
                 [Security.AccessControl.AccessControlType]::Allow) { continue }
-            $sid = $null
-            try {
-                $sid = $ace.IdentityReference.Translate(
-                    [Security.Principal.SecurityIdentifier]).Value
-            } catch {
+            if ($ace.IdentityReference -isnot
+                [Security.Principal.SecurityIdentifier]) {
+                $unknownAllowSidPresent = $true
+                continue
+            }
+            $sid = $ace.IdentityReference.Value
+            if ([string]::IsNullOrWhiteSpace($sid)) {
                 $unknownAllowSidPresent = $true
                 continue
             }
@@ -196,6 +208,7 @@ if ($parentGate -and $targetExists) {
     parent_foreign_mutating_allow_ace_present = [bool]$foreignWriterPresent
     parent_foreign_inherit_only_allow_ace_present = [bool]$parentForeignInheritOnlyAcePresent
     parent_unresolved_allow_identity = [bool]$unknownAllowSidPresent
+    parent_ace_identity_read_directly_as_sid = [bool]$parentAclReadable
     protected_parent_preflight_passed = [bool]$parentGate
     caller_elevated_administrator = [bool]$adminToken
     target_preexisted = [bool]$targetExists
