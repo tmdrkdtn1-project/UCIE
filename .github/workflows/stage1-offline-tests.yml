@@ -51,6 +51,15 @@ jobs:
             }
           }
 
+      - name: UCIE P10 SID-direct ACL classification on Windows PS5.1 and pwsh7
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -NonInteractive -File ./tests/test_ucie_p10_sid_acl_scope.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pwsh -NoProfile -NonInteractive -File ./tests/test_ucie_p10_sid_acl_scope.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: UCIE P10 protected ACL-at-creation disposable Windows fixture (PS 5.1 and 7)
         if: runner.os == 'Windows'
         shell: pwsh
