@@ -14,7 +14,11 @@ from pathlib import Path
 
 from .automated_candidate_qa import _checked_handoff
 from .public_candidate_learning import _rows_from_stage10, _rows_from_stage15
-from .public_review_triage import triage_unverified_review_rows
+from .public_review_triage import (
+    triage_unverified_review_rows, REVIEW_WEIGHTS, EVIDENCE_LEVELS,
+    ALLOWED_HINTS,
+)
+from .skill_profiles import PROFILE
 from .stage17_review_docket import (
     attest_stage16_aggregate, build_review_docket,
 )
@@ -134,14 +138,33 @@ def build_ranked_stage17_handoff(handoff: dict, docket: dict,
                     "REVIEW_FIRST", "NORMAL_REVIEW", "LOW_SIGNAL_REVIEW"
                 }
                 or type(choice.get("error_pattern_tags")) is not list
-                or len(choice["error_pattern_tags"]) > 10):
+                or len(choice["error_pattern_tags"]) > len(REVIEW_WEIGHTS)
+                or any(type(tag) is not str or tag not in REVIEW_WEIGHTS
+                       for tag in choice["error_pattern_tags"])
+                or choice["error_pattern_tags"] != sorted(
+                    set(choice["error_pattern_tags"]))
+                or choice.get("evidence_level") not in EVIDENCE_LEVELS
+                or (choice.get("patch_transition_hint") is not None
+                    and choice["patch_transition_hint"] not in ALLOWED_HINTS)):
             raise ValueError("untrusted Stage12 selected review metadata")
+        expected_weight = max(
+            (REVIEW_WEIGHTS[tag] for tag in choice["error_pattern_tags"]),
+            default=0)
+        expected_band = ("REVIEW_FIRST" if expected_weight >= 4 else
+                         "NORMAL_REVIEW" if expected_weight >= 2 else
+                         "LOW_SIGNAL_REVIEW")
+        if (choice["review_priority_score"] != expected_weight
+                or choice["review_priority_band"] != expected_band):
+            raise ValueError("forged Stage12 review priority")
         ref = (choice.get("source"), choice.get("reference"),
                choice.get("evidence_sha256"))
         if ref in chosen or ref not in by_revision:
             raise ValueError("Stage12 ranked revision not linked to Stage17")
         chosen.add(ref)
         source = by_revision[ref]
+        if (choice.get("human_review_action")
+                != PROFILE[source["skill_id"]]["recommended_action"]):
+            raise ValueError("Stage12 review action mismatch")
         docket_item = by_id[source["candidate_id_sha256"]]
         ranked.append({
             "candidate_id_sha256": source["candidate_id_sha256"],
