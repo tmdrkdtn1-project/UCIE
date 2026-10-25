@@ -15,6 +15,10 @@ $leafName = 'UCIE_UnattendedHost'
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw 'UCIE_P10_WINDOWS_REQUIRED'
 }
+if (-not [Environment]::Is64BitOperatingSystem -or
+    -not [Environment]::Is64BitProcess) {
+    throw 'UCIE_P10_64BIT_WINDOWS_SHELL_REQUIRED'
+}
 if ($Apply -and $Approval -cne $approvalPhrase) {
     throw 'UCIE_P10_EXACT_OWNER_APPROVAL_REQUIRED'
 }
@@ -94,6 +98,7 @@ $parentOwnerTrusted = $false
 $foreignWriterPresent = $true
 $unknownAllowSidPresent = $true
 $parentDaclCanonical = $false
+$parentForeignInheritOnlyAcePresent = $false
 if ($parentUnlinked) {
     try {
         $acl = Get-Acl -LiteralPath $parent
@@ -115,7 +120,15 @@ if ($parentUnlinked) {
             }
             if (($ace.FileSystemRights -band $mutatingMask) -ne 0 -and
                 $trustedWriters -notcontains $sid) {
-                $foreignWriterPresent = $true
+                $inheritOnly = (($ace.PropagationFlags -band
+                    [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)
+                if ($inheritOnly) {
+                    # Not effective on the parent. New child gets a protected
+                    # DACL at creation, so its inherited ACEs are discarded.
+                    $parentForeignInheritOnlyAcePresent = $true
+                } else {
+                    $foreignWriterPresent = $true
+                }
             }
         }
         $parentAclReadable = $true
@@ -181,6 +194,7 @@ if ($parentGate -and $targetExists) {
     parent_owner_well_known_system_or_administrators = [bool]$parentOwnerTrusted
     parent_dacl_canonical = [bool]$parentDaclCanonical
     parent_foreign_mutating_allow_ace_present = [bool]$foreignWriterPresent
+    parent_foreign_inherit_only_allow_ace_present = [bool]$parentForeignInheritOnlyAcePresent
     parent_unresolved_allow_identity = [bool]$unknownAllowSidPresent
     protected_parent_preflight_passed = [bool]$parentGate
     caller_elevated_administrator = [bool]$adminToken
