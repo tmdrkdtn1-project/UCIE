@@ -116,6 +116,7 @@ def triage_unverified_review_rows(rows, *, limit=12):
         classified.append({
             "source": source,
             "reference": reference,
+            "evidence_sha256": evidence,
             "skill_id": skill,
             "evidence_level": level,
             "error_pattern_tags": sorted(tags),
@@ -139,6 +140,7 @@ def triage_unverified_review_rows(rows, *, limit=12):
         # probability that the purported fix actually works.
         -(item["evidence_level"] == EVIDENCE_LEVELS[2]),
         SOURCES.index(item["source"]), item["reference"],
+        item["evidence_sha256"],
     ))
     return {
         "schema": "UCIE_PUBLIC_MULTIAXIS_REVIEW_TRIAGE_V1",
