@@ -122,9 +122,13 @@ if ($journalDirPresent) {
         $journalAclProtected = [bool]$journalAcl.AreAccessRulesProtected
         $unsafeAce = $false
         $broadSids = @('S-1-1-0', 'S-1-5-11', 'S-1-5-32-545')
+        # Explicit mutating bits only: FullControl includes Read and must NOT
+        # be ORed into the lookup mask (false-positive read-only ACEs).
         $rights = ([System.Security.AccessControl.FileSystemRights]::Write -bor
-            [System.Security.AccessControl.FileSystemRights]::Modify -bor
-            [System.Security.AccessControl.FileSystemRights]::FullControl)
+            [System.Security.AccessControl.FileSystemRights]::Delete -bor
+            [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor
+            [System.Security.AccessControl.FileSystemRights]::ChangePermissions -bor
+            [System.Security.AccessControl.FileSystemRights]::TakeOwnership)
         foreach ($ace in $journalAcl.Access) {
             if ($ace.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {
                 continue
