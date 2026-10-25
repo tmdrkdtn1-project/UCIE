@@ -25,6 +25,18 @@ class ProtectedRootBootstrapContract(unittest.TestCase):
         self.assertIn("unattended_worker_activated = $false", text)
         self.assertIn("rule_auto_promotion_enabled = $false", text)
 
+    def test_unmapped_windows_accounts_use_sid_direct_lookup(self):
+        text = SCRIPT.read_text(encoding="utf-8")
+        self.assertGreaterEqual(text.count("GetAccessRules("), 2)
+        self.assertIn("$acl.GetAccessRules(", text)
+        self.assertIn("[Security.Principal.SecurityIdentifier]", text)
+        self.assertNotIn("IdentityReference.Translate(", text)
+        self.assertIn("parent_ace_identity_read_directly_as_sid", text)
+        workflow = (ROOT / ".github" / "workflows" / "stage1-offline-tests.yml").read_text(encoding="utf-8")
+        self.assertIn("test_ucie_p10_sid_acl_scope.ps1", workflow)
+        self.assertIn("powershell.exe -NoProfile -NonInteractive", workflow)
+        self.assertIn("UCIE P10 SID-direct ACL classification", workflow)
+
     def test_windows_ci_ast_only(self):
         workflow = (ROOT / ".github" / "workflows" / "stage1-offline-tests.yml").read_text(encoding="utf-8")
         self.assertIn("ucie_unattended_protected_root_bootstrap_p10.ps1", workflow)
