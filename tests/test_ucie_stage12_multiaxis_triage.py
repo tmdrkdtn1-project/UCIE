@@ -77,6 +77,22 @@ class PublicMultiAxisTriageTests(unittest.TestCase):
         self.assertEqual(a["selected_for_review"][0]["review_priority_band"],
                          "REVIEW_FIRST")
 
+    def test_two_versions_of_same_public_reference_are_distinct_and_stable(self):
+        first = sample_rows()[0]
+        revised = (
+            first[0], first[1], first[2], DIGEST_B, first[4], None,
+        )
+        expected = triage_unverified_review_rows([revised, first])
+        flipped = triage_unverified_review_rows([first, revised])
+        self.assertEqual(expected, flipped)
+        self.assertEqual(expected["triaged_revisions"], 2)
+        self.assertEqual(
+            [x["evidence_sha256"] for x in expected["selected_for_review"]],
+            [DIGEST_A, DIGEST_B],
+        )
+        self.assertTrue(all(not x["independent_fix_verified"]
+                            for x in expected["selected_for_review"]))
+
     def test_reject_forged_sources_ids_tags_and_transition_hints(self):
         for changed in (
             ("OTHER/private", sample_rows()[0][1],
