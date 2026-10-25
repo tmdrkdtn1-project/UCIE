@@ -1,9 +1,12 @@
 """Stage 11: connect to existing hourly worker without modifying the task."""
-from contextlib import closing
+from contextlib import closing, ExitStack
 from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
+
+from ucie_miner.public_discovery import DiscoveryError, SOURCES
 
 from ucie_miner.public_hourly_staging import (
     OPT_IN_FILENAME, OPT_IN_TOKEN, STATUS_DISABLED, STATUS_STAGED,
@@ -118,6 +121,97 @@ class Stage11ExistingTaskTests(unittest.TestCase):
         self.assertEqual(again["candidate_pr_revisions_added"], 0)
         self.assertEqual(again["candidate_git_rows_added"], 0)
         self.assertFalse(again["production_approved"])
+
+    def test_each_failed_stage_reports_exact_safe_phase_without_network(self):
+        self.optin()
+        batch = {
+            "sources_fetched": list(SOURCES),
+            "overall_gets_upper_bound": 8,
+            "enriched_count": 0,
+            "production_approved": False,
+        }
+        staged = {
+            "status": "UNVERIFIED_CANDIDATES_STAGED_NO_GO",
+            "mode": "OPT_IN_SEPARATE_DISK",
+            "approved_rules_added": 0,
+            "production_approved": False,
+        }
+        external = {
+            "STAGE13_HISTORY": (
+                "ucie_miner.public_external_history.optional_external_history_backfill",
+                {"status": "STAGE13_EXTERNAL_HISTORY_DISABLED"},
+            ),
+            "STAGE14_OFFICIAL": (
+                "ucie_miner.public_official_evidence.optional_official_evidence_cycle",
+                {"status": "STAGE14_OFFICIAL_DISABLED"},
+            ),
+            "STAGE15_FIX_EVIDENCE": (
+                "ucie_miner.public_fix_evidence.optional_fix_evidence_enrichment",
+                {"status": "STAGE15_FIX_EVIDENCE_DISABLED"},
+            ),
+            "STAGE12_REVIEW": (
+                "ucie_miner.public_candidate_learning.optional_hourly_review_learning",
+                {"status": "STAGE12_REVIEW_DISABLED"},
+            ),
+            "STAGE16_SAFE_QA": (
+                "ucie_miner.public_safe_qa_cycle.optional_pinned_public_qa",
+                {"status": "STAGE16_SAFE_QA_DISABLED",
+                 "approved_rules_added": 0,
+                 "production_approved": False,
+                 "public_gets_upper_bound": 0},
+            ),
+        }
+        failures = (
+            "STAGE10_BATCH",
+            "STAGE10_STAGING",
+            *external,
+        )
+        for failed_phase in failures:
+            with self.subTest(phase=failed_phase), ExitStack() as stack:
+                for phase, (target, healthy) in external.items():
+                    if phase == failed_phase:
+                        stack.enter_context(patch(
+                            target, side_effect=DiscoveryError(
+                                "SYNTHETIC_SECRET_NEVER_STORE")))
+                    else:
+                        stack.enter_context(patch(
+                            target, return_value=healthy))
+
+                def fake_batch(**kwargs):
+                    if failed_phase == "STAGE10_BATCH":
+                        raise DiscoveryError("SYNTHETIC_SECRET_NEVER_STORE")
+                    return batch
+
+                def fake_stager(*args, **kwargs):
+                    if failed_phase == "STAGE10_STAGING":
+                        raise DiscoveryError("SYNTHETIC_SECRET_NEVER_STORE")
+                    return staged
+
+                with self.assertRaises(DiscoveryError) as caught:
+                    optional_public_skill_staging(
+                        self.root, batch_builder=fake_batch,
+                        stage_candidate_batch=fake_stager)
+                self.assertEqual(type(caught.exception).__name__, "DiscoveryError")
+                self.assertEqual(
+                    getattr(caught.exception, "ucie_stage10_phase", None),
+                    failed_phase)
+        self.assertFalse((self.runtime / DB_NAME).exists())
+
+    def test_invalid_batch_is_attributed_without_weakening_fail_closed(self):
+        self.optin()
+        with self.assertRaises(ValueError) as caught:
+            optional_public_skill_staging(
+                self.root,
+                batch_builder=lambda **kwargs: {
+                    "sources_fetched": ["UNAPPROVED_PRIVATE_SOURCE"],
+                    "overall_gets_upper_bound": 8,
+                    "enriched_count": 0,
+                    "production_approved": False,
+                })
+        self.assertEqual(
+            getattr(caught.exception, "ucie_stage10_phase", None),
+            "STAGE10_BATCH")
+        self.assertFalse((self.runtime / DB_NAME).exists())
 
     def test_disabling_after_opt_in_does_not_delete_staged_data(self):
         self.optin()
