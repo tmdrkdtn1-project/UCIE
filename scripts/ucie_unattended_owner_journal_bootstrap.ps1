@@ -56,9 +56,13 @@ function Get-UcieAclRisk([string]$Path, [string]$CurrentSid) {
             $owner -eq $CurrentSid -or
             $owner -eq 'S-1-5-18' -or $owner -eq 'S-1-5-32-544')
         $broad = @('S-1-1-0', 'S-1-5-11', 'S-1-5-32-545')
+        # Mutating access bits ONLY. FullControl includes read rights;
+        # using it as a membership mask would reject read-only ACEs.
         $allowWrite = ([Security.AccessControl.FileSystemRights]::Write -bor
-            [Security.AccessControl.FileSystemRights]::Modify -bor
-            [Security.AccessControl.FileSystemRights]::FullControl)
+            [Security.AccessControl.FileSystemRights]::Delete -bor
+            [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor
+            [Security.AccessControl.FileSystemRights]::ChangePermissions -bor
+            [Security.AccessControl.FileSystemRights]::TakeOwnership)
         $unsafe = $false
         foreach ($ace in $acl.Access) {
             if ($ace.AccessControlType -ne
