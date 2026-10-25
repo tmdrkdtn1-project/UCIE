@@ -51,6 +51,15 @@ jobs:
             }
           }
 
+      - name: UCIE P10 protected ACL-at-creation disposable Windows fixture (PS 5.1 and 7)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -NonInteractive -File ./tests/test_ucie_p10_ephemeral_windows_acl_create.ps1 -Runtime WindowsPowerShell51
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pwsh -NoProfile -NonInteractive -File ./tests/test_ucie_p10_ephemeral_windows_acl_create.ps1 -Runtime PowerShell7
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Hourly task read-only evidence acceptance with synthetic Windows PowerShell 5.1 task
         if: runner.os == 'Windows'
         shell: pwsh
