@@ -269,6 +269,12 @@ def run_cycle(
                                 "OTHER_FAILURE"}:
                             raise ValueError("invalid optional public stage error category")
                         receipt["stage10_error_category"] = category
+                    phase = optional_stage.get("error_phase")
+                    if phase is not None:
+                        from .public_discovery import STAGE10_FAILURE_PHASES
+                        if type(phase) is not str or phase not in STAGE10_FAILURE_PHASES:
+                            raise ValueError("invalid optional public stage failure phase")
+                        receipt["stage10_error_phase"] = phase
             report_clock_ns = perf_counter_ns()
             try:
                 path = write_report(repo_root)
