@@ -12,7 +12,7 @@ class ReadonlyIdentityDiagnosticV2Tests(unittest.TestCase):
         text = PATH.read_text(encoding="utf-8")
         for name in (
             "D:\\UCIE", "D:\\UCIE\\.ucie_bridge_state",
-            "D:\\UCIE\\.ucie_unattended_state",
+            "D:\\UCIE_DATA\\ucie_unattended_state",
             "UCIE-PublicMiner-Hourly", "UCIE-C40-Supervisor",
             "Translate(", "SecurityIdentifier", "Get-Acl -LiteralPath",
             "existing_bridge_directory",
