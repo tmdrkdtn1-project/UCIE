@@ -33,6 +33,9 @@ class UCIEOwnerJournalBootstrapTests(unittest.TestCase):
         self.assertIn("$targetOwner -eq $currentSid", src)
         self.assertIn("trustedSids", src)
         self.assertIn("target_acl_exact_owner_and_system_only", src)
+        self.assertIn("[Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles", src)
+        self.assertNotIn("[Security.AccessControl.FileSystemRights]::Modify -bor", src)
+        self.assertNotIn("[Security.AccessControl.FileSystemRights]::FullControl)", src)
         for forbidden in (
             "Set-Acl ", "icacls ", "takeown ", "Remove-Item ",
             "Register-ScheduledTask", "New-ScheduledTask",
