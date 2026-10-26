@@ -19,9 +19,10 @@
 - Daily and weekly evidence-based reports. Separate observed / inferred / tested / approved.
 - Publish only safe code, independently verified knowledge and public reports to GitHub.
 
-## Stage 4 — independently gated distribution
-- Isolated security and VM acceptance tests.
-- Signed public Rulepack production distribution and recipient-side checks.
-- Independently approved project-specific private adapters; never send their data upstream.
+## Stage 4 — two explicitly separated, evidence-gated QA lanes
+- **Default PUBLIC_ONLY manual scan: AUTOMATED_QA_OWNER_RISK_ACCEPTED.** Requires the existing owner-release contract: clean UCIE `main` checkout; current passing Windows/Linux GitHub CI for the exact commit, including pinned runtime and PowerShell tests; explicit master risk acceptance; distinct manual owner signature; recipient verification of signature, serial, expiry and scope. This first-party QA is *not* an independent human audit or legal license signoff.
+- **Optional stronger assurance: INDEPENDENT_QA_AND_OWNER_SIGNED.** A genuine external reviewer independently verifies evidence and signs an attestation. The existing separate QA/owner trust-anchor verifier is unchanged and must not be bypassed or represented as first-party QA.
+- Neither route allows automatic rule promotion, unattended signing, auto-fix, private-project inspection or cross-project information sharing. Source-version applicability and license obligations remain explicit evidence conditions; unknowns remain NO_GO for unsupported uses.
+- Source of approved policy: `docs/STAGE4_AUTOMATED_QA_OWNER_APPROVAL.md` (2026-10-18).
 
 **NO-GO:** No project integration, operations-code mutation or unattended mining until the applicable acceptance criteria are satisfied.
