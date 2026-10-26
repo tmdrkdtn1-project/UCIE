@@ -54,22 +54,24 @@ class BaseEventLoop:
 # Official post-fix: ba4a0790aa8438ccd847e86910f71c9823849d05.
 # Each call is protected by a broad except with resource.close/re-raise.
 POST = PRE.replace(
-    "protocol = protocol_factory()",
-    "try:\n            protocol = protocol_factory()\n"
+    "sock = object()\n        protocol = protocol_factory()",
+    "sock = object()\n        try:\n"
+    "            protocol = protocol_factory()\n"
     "        except:\n            sock.close()\n            raise",
-    1,
 )
 POST = POST.replace(
-    "protocol = protocol_factory()",
-    "try:\n            protocol = protocol_factory()\n"
+    "async def connect_read_pipe(self, protocol_factory, pipe):\n"
+    "        protocol = protocol_factory()",
+    "async def connect_read_pipe(self, protocol_factory, pipe):\n"
+    "        try:\n            protocol = protocol_factory()\n"
     "        except:\n            pipe.close()\n            raise",
-    1,
 )
 POST = POST.replace(
-    "protocol = protocol_factory()",
-    "try:\n            protocol = protocol_factory()\n"
+    "async def connect_write_pipe(self, protocol_factory, pipe):\n"
+    "        protocol = protocol_factory()",
+    "async def connect_write_pipe(self, protocol_factory, pipe):\n"
+    "        try:\n            protocol = protocol_factory()\n"
     "        except:\n            pipe.close()\n            raise",
-    1,
 )
 
 
