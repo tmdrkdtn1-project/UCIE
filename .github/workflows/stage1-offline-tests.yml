@@ -33,6 +33,12 @@ jobs:
         run: python -m unittest discover -s tests -v
         env:
           PYTHONPATH: src
+      - name: UCIE SPEED V1.2 disposable synthetic read-only performance pilot
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/ucie-speed-v12-safe-read-lanes-20261025' && matrix.python-version == '3.15'
+        run: python -B tests/runtime_ucie_speed_v12_offline_pilot.py
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
       - name: CLI is importable
         run: python -m ucie_public.cli --help
         env:

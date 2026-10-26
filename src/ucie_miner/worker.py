@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from time import perf_counter_ns
 from typing import Callable, Iterator
 
 from .core import mine_once, report
@@ -21,6 +22,12 @@ from .schedule_policy import next_cycle
 
 def _utc() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _bounded_elapsed_ms(start_ns: int) -> int:
+    # Local monotonic measurements only; no external text or identifiers.
+    # Saturate to a bounded receipt field, never create another telemetry DB.
+    return min(3_600_000, max(0, (perf_counter_ns() - start_ns) // 1_000_000))
 
 
 def _runtime(repo_root: Path) -> Path:
@@ -143,6 +150,7 @@ def run_cycle(
                 return {"schema": "UCIE_MINER_CYCLE_V1", "status": "SKIPPED_NOT_DUE",
                         "retry_after_seconds": decision["retry_after_seconds"],
                         "verification_pass": 0, "production_approved": False}
+        cycle_clock_ns = perf_counter_ns()
         receipt = {
             "schema": "UCIE_MINER_CYCLE_V1",
             "started_utc": start,
@@ -154,7 +162,11 @@ def run_cycle(
             "consecutive_failures": 0,
         }
         try:
-            result = collect(repo_root)
+            collect_clock_ns = perf_counter_ns()
+            try:
+                result = collect(repo_root)
+            finally:
+                receipt["collection_elapsed_ms"] = _bounded_elapsed_ms(collect_clock_ns)
             if not isinstance(result, dict) or result.get("status") != "COLLECTED_UNVERIFIED":
                 raise ValueError("invalid collector completion status")
             new_count = result.get("new_candidates")
@@ -242,7 +254,32 @@ def run_cycle(
                             or not error_name.isidentifier()):
                         raise ValueError("invalid optional public stage error type")
                     receipt["stage10_error_type"] = error_name
-            path = write_report(repo_root)
+                    # Older synthetic producers may omit the new category.
+                    # If present it must be one of our literal safe codes.
+                    category = optional_stage.get("error_category")
+                    if category is not None:
+                        if type(category) is not str or category not in {
+                                "UPSTREAM_HTTP_429",
+                                "UPSTREAM_HTTP_403",
+                                "UPSTREAM_HTTP_OTHER",
+                                "UPSTREAM_NETWORK_FAILURE",
+                                "UPSTREAM_IO_OR_TIMEOUT",
+                                "PUBLIC_JSON_INVALID",
+                                "DISCOVERY_VALIDATION_OR_RESPONSE_REJECTED",
+                                "OTHER_FAILURE"}:
+                            raise ValueError("invalid optional public stage error category")
+                        receipt["stage10_error_category"] = category
+                    phase = optional_stage.get("error_phase")
+                    if phase is not None:
+                        from .public_discovery import STAGE10_FAILURE_PHASES
+                        if type(phase) is not str or phase not in STAGE10_FAILURE_PHASES:
+                            raise ValueError("invalid optional public stage failure phase")
+                        receipt["stage10_error_phase"] = phase
+            report_clock_ns = perf_counter_ns()
+            try:
+                path = write_report(repo_root)
+            finally:
+                receipt["report_elapsed_ms"] = _bounded_elapsed_ms(report_clock_ns)
             report_path = path.resolve(strict=True)
             report_root = (runtime / "reports").resolve(strict=True)
             if not report_path.is_relative_to(report_root):
@@ -260,6 +297,7 @@ def run_cycle(
             if enforce_schedule:
                 receipt["consecutive_failures"] = min(6, failures + 1)
         finally:
+            receipt["cycle_elapsed_ms"] = _bounded_elapsed_ms(cycle_clock_ns)
             receipt["finished_utc"] = _utc()
             _write_receipt(runtime, receipt)
         return receipt

@@ -15,6 +15,25 @@ STATUS_STAGED = "STAGE10_UNVERIFIED_STAGED_NO_GO"
 STATUS_PARTIAL = "STAGE10_HOURLY_PARTIAL_NO_GO"
 
 
+def _phase_call(phase: str, callback, *args, **kwargs):
+    """Annotate only the exception object; never persist untrusted messages."""
+    try:
+        return callback(*args, **kwargs)
+    except Exception as exc:
+        # Preserve the original class and __cause__ for the classifier.
+        try:
+            exc.ucie_stage10_phase = phase
+        except (AttributeError, TypeError):
+            pass
+        raise
+
+
+def _reject_phase(phase: str, message: str) -> None:
+    error = ValueError(message)
+    error.ucie_stage10_phase = phase
+    raise error
+
+
 def optional_public_skill_staging(root: Path, *, batch_builder=None,
                                   stage_candidate_batch=None) -> dict:
     """Run one bounded public five-source batch only on explicit local opt-in.
@@ -53,7 +72,7 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
     if stage_candidate_batch is None:
         from .public_candidate_staging import stage_public_candidates
         stage_candidate_batch = stage_public_candidates
-    batch = batch_builder(
+    batch = _phase_call("STAGE10_BATCH", batch_builder,
         root=root, sources=SOURCES, max_enrich=1,
         include_git_commits=True, include_docs=False,
         include_advisories=False, backfill_pages=1,
@@ -63,22 +82,22 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
             or type(batch.get("enriched_count")) is not int
             or batch["enriched_count"] > 1
             or batch.get("production_approved") is not False):
-        raise ValueError("unsafe or excessive hourly public batch")
-    staged = stage_candidate_batch(
+        _reject_phase("STAGE10_BATCH", "unsafe or excessive hourly public batch")
+    staged = _phase_call("STAGE10_STAGING", stage_candidate_batch,
         batch, root=root, allow_disk_write=True)
     if (staged.get("status") != "UNVERIFIED_CANDIDATES_STAGED_NO_GO"
             or staged.get("mode") != "OPT_IN_SEPARATE_DISK"
             or staged.get("approved_rules_added") != 0
             or staged.get("production_approved") is not False):
-        raise ValueError("invalid Stage 10 unverified-only staging result")
+        _reject_phase("STAGE10_STAGING", "invalid Stage 10 unverified-only staging result")
     from .public_external_history import optional_external_history_backfill
-    history = optional_external_history_backfill(root)
+    history = _phase_call("STAGE13_HISTORY", optional_external_history_backfill, root)
     if history.get("status") not in (
             "STAGE13_EXTERNAL_HISTORY_DISABLED",
             "EXTERNAL_HISTORY_BACKFILL_OK_NO_GO",
             "EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO",
             "EXTERNAL_HISTORY_UPSTREAM_OR_METADATA_FAILED_NO_GO"):
-        raise ValueError("unexpected external history collection result")
+        _reject_phase("STAGE13_HISTORY", "unexpected external history collection result")
     # Stage13 may reject one upstream page or encounter a temporary
     # public API failure. It already preserves the rejected source cursor.
     # Do not block independent Stage14/15 reads or Stage12 review learning;
@@ -90,35 +109,35 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
             history.get("failure_source") not in SOURCES
             or history.get("failure_category") not in (
                 "FETCH_OR_RESPONSE_REJECTED", "PUBLIC_METADATA_REJECTED")):
-        raise ValueError("invalid Stage 13 failure provenance")
+        _reject_phase("STAGE13_HISTORY", "invalid Stage 13 failure provenance")
     from .public_official_evidence import optional_official_evidence_cycle
-    official = optional_official_evidence_cycle(root)
+    official = _phase_call("STAGE14_OFFICIAL", optional_official_evidence_cycle, root)
     if official.get("status") not in (
             "STAGE14_OFFICIAL_DISABLED", "STAGE14_OFFICIAL_OBSERVED_NO_GO",
             "STAGE14_OFFICIAL_RATE_PAUSED_NO_GO",
             "STAGE14_OFFICIAL_PARTIAL_NO_GO"):
-        raise ValueError("invalid official public metadata status")
+        _reject_phase("STAGE14_OFFICIAL", "invalid official public metadata status")
     from .public_fix_evidence import optional_fix_evidence_enrichment
-    fix_review = optional_fix_evidence_enrichment(root)
+    fix_review = _phase_call("STAGE15_FIX_EVIDENCE", optional_fix_evidence_enrichment, root)
     if fix_review.get("status") not in (
             "STAGE15_FIX_EVIDENCE_DISABLED",
             "STAGE15_STRUCTURED_FIX_EVIDENCE_STAGED_NO_GO"):
-        raise ValueError("invalid external structured fix evidence status")
+        _reject_phase("STAGE15_FIX_EVIDENCE", "invalid external structured fix evidence status")
     # Final stage of the *existing* hourly cycle: Stage12 now reviews both
     # Stage10 metadata and already-committed Stage15 fix hints, if and only
     # if their independent owner markers exist. Reuse the same unverified
     # append-only review ledger; never schedule a separate learner.
     from .public_candidate_learning import optional_hourly_review_learning
-    learning = optional_hourly_review_learning(root)
+    learning = _phase_call("STAGE12_REVIEW", optional_hourly_review_learning, root)
     if learning.get("status") not in (
             "STAGE12_REVIEW_DISABLED",
             "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO"):
-        raise ValueError("invalid candidate-only learning result")
+        _reject_phase("STAGE12_REVIEW", "invalid candidate-only learning result")
     # Stage16 shares this hourly invocation and its existing OS-held lock.
     # Explicit pinned-run marker required; otherwise ZERO extra public GETs.
     # If upstream API quota is already limited, defer Stage16 entirely.
     from .public_safe_qa_cycle import optional_pinned_public_qa
-    safe_qa = optional_pinned_public_qa(
+    safe_qa = _phase_call("STAGE16_SAFE_QA", optional_pinned_public_qa,
         root, rate_paused=(
             history["status"] == "EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO"
             or official["status"] == "STAGE14_OFFICIAL_RATE_PAUSED_NO_GO"
@@ -134,7 +153,7 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
                 "STAGE16_SAFE_QA_LEDGER_INCOMPLETE_NO_GO",
                 "STAGE16_SAFE_QA_FAILED_NO_GO",
             }):
-        raise ValueError("invalid Stage16 unverified QA outcome")
+        _reject_phase("STAGE16_SAFE_QA", "invalid Stage16 unverified QA outcome")
     return {
         "status": STATUS_PARTIAL if history_failed else STATUS_STAGED,
         "operator_opted_in": True,
