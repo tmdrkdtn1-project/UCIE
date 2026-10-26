@@ -151,6 +151,57 @@ class MinerWorkerTests(unittest.TestCase):
         self.assertNotIn("SECRET_PATH", receipt)
         self.assertNotIn("stage10_error_phase", receipt)
 
+    def test_stage15_partial_records_failure_and_completed_stage12_review(self):
+        def partial_review(root):
+            result = valid_collection(root)
+            result["stage10"] = {
+                "status": "STAGE10_HOURLY_PARTIAL_NO_GO",
+                "stage13_history_status": "STAGE13_EXTERNAL_HISTORY_DISABLED",
+                "stage15_fix_evidence_status":
+                    "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO",
+                "stage15_failure_source": "python/cpython",
+                "stage15_failure_category": "PUBLIC_PATCH_OR_RELEASE_REJECTED",
+                "stage12_review_status": "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO",
+                "stage12_review_proposals_added": 3,
+            }
+            return result
+        result = run_cycle(self.repo, collect=partial_review, write_report=local_report)
+        self.assertEqual(result["status"], "COLLECTED_UNVERIFIED")
+        self.assertEqual(result["stage10_status"], "STAGE10_HOURLY_PARTIAL_NO_GO")
+        self.assertEqual(result["stage15_failure_source"], "python/cpython")
+        self.assertEqual(result["stage15_failure_category"],
+                         "PUBLIC_PATCH_OR_RELEASE_REJECTED")
+        self.assertEqual(result["stage12_review_status"],
+                         "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO")
+        self.assertEqual(result["stage12_review_proposals_added"], 3)
+        self.assertFalse(result["production_approved"])
+        receipt = (self.repo / "runtime" / "last_run.json").read_text("utf-8")
+        self.assertNotIn("SECRET", receipt)
+
+    def test_stage15_partial_cannot_forge_source_or_hide_failure(self):
+        for source, status in (
+            ("unapproved/private", "STAGE10_HOURLY_PARTIAL_NO_GO"),
+            ("python/cpython", "STAGE10_UNVERIFIED_STAGED_NO_GO"),
+        ):
+            with self.subTest(source=source, status=status):
+                def forged(root):
+                    result = valid_collection(root)
+                    result["stage10"] = {
+                        "status": status,
+                        "stage13_history_status": "STAGE13_EXTERNAL_HISTORY_DISABLED",
+                        "stage15_fix_evidence_status":
+                            "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO",
+                        "stage15_failure_source": source,
+                        "stage15_failure_category": "PUBLIC_PATCH_OR_RELEASE_REJECTED",
+                    }
+                    return result
+                result = run_cycle(
+                    self.repo, collect=forged, write_report=local_report)
+                self.assertEqual(result["status"], "COLLECTION_FAILED")
+                saved = (self.repo / "runtime" / "last_run.json").read_text("utf-8")
+                self.assertNotIn("unapproved/private", saved)
+                self.assertNotIn("stage15_failure_source", saved)
+
     def test_reject_verification_claim(self):
         def fake_verified(root):
             result = valid_collection(root)

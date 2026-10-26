@@ -197,6 +197,103 @@ class Stage11ExistingTaskTests(unittest.TestCase):
                     failed_phase)
         self.assertFalse((self.runtime / DB_NAME).exists())
 
+    def test_stage15_rejection_still_runs_review_and_marks_hourly_partial(self):
+        self.optin()
+        batch = {
+            "sources_fetched": list(SOURCES),
+            "overall_gets_upper_bound": 8,
+            "enriched_count": 0,
+            "production_approved": False,
+        }
+        staged = {
+            "status": "UNVERIFIED_CANDIDATES_STAGED_NO_GO",
+            "mode": "OPT_IN_SEPARATE_DISK",
+            "approved_rules_added": 0,
+            "production_approved": False,
+            "new_identities": 0, "evidence_revisions": 0,
+            "git_commit_new_identities": 0,
+            "git_commit_evidence_revisions": 0,
+        }
+        stage15 = {
+            "status": "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO",
+            "failure_source": "python/cpython",
+            "failure_category": "PUBLIC_PATCH_OR_RELEASE_REJECTED",
+            "new_unverified_evidence_records": 0,
+            "external_gets_upper_bound": 2,
+            "production_approved": False,
+        }
+        with (
+            patch("ucie_miner.public_external_history.optional_external_history_backfill",
+                  return_value={"status": "STAGE13_EXTERNAL_HISTORY_DISABLED"}),
+            patch("ucie_miner.public_official_evidence.optional_official_evidence_cycle",
+                  return_value={"status": "STAGE14_OFFICIAL_DISABLED"}),
+            patch("ucie_miner.public_fix_evidence.optional_fix_evidence_enrichment",
+                  return_value=stage15),
+            patch("ucie_miner.public_candidate_learning.optional_hourly_review_learning",
+                  return_value={
+                      "status": "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO",
+                      "new_review_proposals": 2,
+                  }) as reviewed,
+            patch("ucie_miner.public_safe_qa_cycle.optional_pinned_public_qa",
+                  return_value={
+                      "status": "STAGE16_SAFE_QA_RATE_PAUSED_NO_GO",
+                      "approved_rules_added": 0,
+                      "production_approved": False,
+                      "public_gets_upper_bound": 0,
+                  }) as safe_qa,
+        ):
+            result = optional_public_skill_staging(
+                self.root, batch_builder=lambda **k: batch,
+                stage_candidate_batch=lambda *a, **k: staged)
+        self.assertEqual(result["status"], "STAGE10_HOURLY_PARTIAL_NO_GO")
+        self.assertEqual(result["stage15_fix_evidence_status"],
+                         "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO")
+        self.assertEqual(result["stage15_failure_source"], "python/cpython")
+        self.assertEqual(result["stage12_review_status"],
+                         "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO")
+        self.assertEqual(result["stage12_review_proposals_added"], 2)
+        self.assertFalse(result["production_approved"])
+        reviewed.assert_called_once_with(self.root)
+        safe_qa.assert_called_once_with(self.root, rate_paused=True)
+        self.assertFalse((self.runtime / DB_NAME).exists())
+
+    def test_stage15_invalid_partial_provenance_fails_closed_before_stage12(self):
+        self.optin()
+        batch = {
+            "sources_fetched": list(SOURCES),
+            "overall_gets_upper_bound": 8,
+            "enriched_count": 0,
+            "production_approved": False,
+        }
+        staged = {
+            "status": "UNVERIFIED_CANDIDATES_STAGED_NO_GO",
+            "mode": "OPT_IN_SEPARATE_DISK",
+            "approved_rules_added": 0,
+            "production_approved": False,
+        }
+        with (
+            patch("ucie_miner.public_external_history.optional_external_history_backfill",
+                  return_value={"status": "STAGE13_EXTERNAL_HISTORY_DISABLED"}),
+            patch("ucie_miner.public_official_evidence.optional_official_evidence_cycle",
+                  return_value={"status": "STAGE14_OFFICIAL_DISABLED"}),
+            patch("ucie_miner.public_fix_evidence.optional_fix_evidence_enrichment",
+                  return_value={
+                      "status": "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO",
+                      "failure_source": "unapproved/private",
+                      "failure_category": "UNSAFE_SOURCE_INJECTION",
+                  }),
+            patch("ucie_miner.public_candidate_learning.optional_hourly_review_learning")
+            as reviewed,
+        ):
+            with self.assertRaises(ValueError) as caught:
+                optional_public_skill_staging(
+                    self.root, batch_builder=lambda **k: batch,
+                    stage_candidate_batch=lambda *a, **k: staged)
+        self.assertEqual(
+            getattr(caught.exception, "ucie_stage10_phase", None),
+            "STAGE15_FIX_EVIDENCE")
+        reviewed.assert_not_called()
+
     def test_invalid_batch_is_attributed_without_weakening_fail_closed(self):
         self.optin()
         with self.assertRaises(ValueError) as caught:

@@ -155,9 +155,17 @@ class FixEvidenceTests(unittest.TestCase):
             if "/files?" in url:
                 raise PublicEvidenceError("remote error details must stay inert")
             return release_fixture()
-        with self.assertRaises(DiscoveryError):
-            optional_fix_evidence_enrichment(self.root, fetch=no_patch,
-                                             max_candidates=1)
+        result = optional_fix_evidence_enrichment(
+            self.root, fetch=no_patch, max_candidates=1)
+        self.assertEqual(
+            result["status"], "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO")
+        self.assertEqual(result["failure_source"], SOURCE)
+        self.assertEqual(result["failure_category"],
+                         "PUBLIC_PATCH_OR_RELEASE_REJECTED")
+        self.assertEqual(result["new_unverified_evidence_records"], 0)
+        self.assertEqual(result["public_prs_attempted"], 1)
+        self.assertEqual(result["external_gets_upper_bound"], 2)
+        self.assertNotIn("remote error details", str(result))
         self.assertFalse((self.runtime / DB_NAME).exists())
 
     def test_invalid_remote_path_fails_closed(self):
@@ -169,10 +177,38 @@ class FixEvidenceTests(unittest.TestCase):
                     "status": "modified", "patch": "+exec('UPSTREAM')",
                 }]
             return release_fixture()
-        with self.assertRaises(DiscoveryError):
-            optional_fix_evidence_enrichment(self.root, fetch=bad_path,
-                                             max_candidates=1)
+        result = optional_fix_evidence_enrichment(
+            self.root, fetch=bad_path, max_candidates=1)
+        self.assertEqual(
+            result["status"], "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO")
+        self.assertEqual(result["failure_source"], SOURCE)
+        self.assertEqual(result["new_unverified_evidence_records"], 0)
         self.assertFalse((self.runtime / DB_NAME).exists())
+
+    def test_stage15_missing_release_rejects_without_writing_or_extra_gets(self):
+        self.activate()
+        before = self.miner.read_bytes(), self.knowledge.read_bytes()
+        requested = []
+        def missing_release(url):
+            requested.append(url)
+            if "/files?" in url:
+                return patch_fixture(SOURCE, 12345)
+            raise PublicEvidenceError("INERT_UNTRUSTED_UPSTREAM_TOKEN")
+        result = optional_fix_evidence_enrichment(
+            self.root, fetch=missing_release)
+        self.assertEqual(result["status"],
+                         "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO")
+        self.assertEqual(result["public_prs_attempted"], 1)
+        self.assertEqual(result["public_prs_enriched"], 0)
+        self.assertEqual(len(requested), 2)
+        self.assertEqual(result["failure_source"], SOURCE)
+        self.assertEqual(result["failure_category"],
+                         "PUBLIC_PATCH_OR_RELEASE_REJECTED")
+        self.assertNotIn("INERT_UNTRUSTED_UPSTREAM_TOKEN", str(result))
+        self.assertFalse((self.runtime / DB_NAME).exists())
+        self.assertEqual((self.miner.read_bytes(), self.knowledge.read_bytes()),
+                         before)
+        self.assertFalse(result["production_approved"])
 
     def test_no_license_version_or_independent_regression_promotion(self):
         self.activate()
