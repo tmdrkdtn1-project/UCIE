@@ -185,7 +185,7 @@ class FixEvidenceTests(unittest.TestCase):
         self.assertEqual(result["new_unverified_evidence_records"], 0)
         self.assertFalse((self.runtime / DB_NAME).exists())
 
-    def test_stage15_missing_release_rejects_without_writing_or_extra_gets(self):
+    def test_stage15_missing_release_rejects_two_bounded_leads_without_writing(self):
         self.activate()
         before = self.miner.read_bytes(), self.knowledge.read_bytes()
         requested = []
@@ -198,9 +198,10 @@ class FixEvidenceTests(unittest.TestCase):
             self.root, fetch=missing_release)
         self.assertEqual(result["status"],
                          "STAGE15_PUBLIC_EVIDENCE_REJECTED_PARTIAL_NO_GO")
-        self.assertEqual(result["public_prs_attempted"], 1)
+        self.assertEqual(result["public_prs_attempted"], 2)
         self.assertEqual(result["public_prs_enriched"], 0)
-        self.assertEqual(len(requested), 2)
+        self.assertEqual(len(requested), 4)
+        self.assertEqual(result["external_gets_upper_bound"], 4)
         self.assertEqual(result["failure_source"], SOURCE)
         self.assertEqual(result["failure_category"],
                          "PUBLIC_PATCH_OR_RELEASE_REJECTED")
