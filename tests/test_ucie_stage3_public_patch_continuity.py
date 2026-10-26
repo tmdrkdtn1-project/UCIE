@@ -1,5 +1,6 @@
 """Stage3 bounded public PR rejection continuity, all synthetic and offline."""
 import json
+from contextlib import closing
 import sqlite3
 import sys
 import tempfile
@@ -61,7 +62,7 @@ class BoundedPublicPatchContinuity(unittest.TestCase):
         self.assertEqual(result["rejected_public_source"],SOURCE)
         self.assertFalse(result["production_approved"])
         self.assertEqual(len(calls),3)
-        with sqlite3.connect(self.root/"runtime"/"public_miner.sqlite3") as db:
+        with closing(sqlite3.connect(self.root/"runtime"/"public_miner.sqlite3")) as db:
             actual=db.execute("SELECT pr_number,status FROM candidates").fetchall()
         self.assertEqual(actual,[(102,"UNVERIFIED_CANDIDATE_ONLY")])
 
