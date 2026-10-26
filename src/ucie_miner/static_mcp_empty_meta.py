@@ -131,8 +131,9 @@ def inspect_mcp_empty_meta_source(source: str) -> dict:
                 continue
             params_name, meta_name = written
             possible_empty = any(
-                item.lineno < node.lineno and
-                _possibly_empty_meta_init(item, meta_name)
+                isinstance(item, ast.Assign)
+                and item.lineno < node.lineno
+                and _possibly_empty_meta_init(item, meta_name)
                 for item in local
             )
             uses = any(
