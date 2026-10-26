@@ -29,8 +29,20 @@ $options = @(
 if ($LASTEXITCODE -ne 0) { throw 'UCIE_PUBLIC_SCAN_FAIL_CLOSED' }
 ~~~
 
-The upstream PowerShell file is a regression TEST. Its matching syntax
-is a manual review candidate, not a newly confirmed upstream bug.
+The upstream PowerShell file is a regression TEST. With the exact
+commit, Git blob, finding rule and line/column pinned to the observed case
+(49:25), the V2 JSON now reports
+`status=PINNED_UPSTREAM_TEST_EVIDENCE`, `candidate_count=1`,
+`pending_manual_review_count=0`,
+`pinned_upstream_test_evidence_count=1` and
+`confirmed_new_bug_count=0`.
+
+This is **classification of one already reviewed, exact upstream test**,
+not a generic test-folder suppression. Any changed blob, changed position,
+other rule or different test file remains
+`UNVERIFIED_MANUAL_REVIEW_REQUIRED` pending human review.
+The original candidate and provenance remain in the output. This is
+neither an upstream bug claim nor evidence of broad scanner accuracy.
 
 ## Safety and evidence boundaries
 
@@ -47,7 +59,9 @@ is a manual review candidate, not a newly confirmed upstream bug.
   a separate newer script, not part of the original signed code tree.
 - Output contains source provenance, candidate positions and flags,
   not source bytes or claims of confirmed runtime defects. Test file
-  paths are explicitly marked TEST_PATH.
+  paths are explicitly marked TEST_PATH. Exact upstream regression
+  test evidence is labeled separately; generic test paths are NOT
+  silently assumed safe. The additive V2 counts retain the raw finding count.
 - Human/legal signoff, real-world accuracy estimates, fixed-release
   applicability, automatic approval, and external distribution remain
   unproven or disabled.
