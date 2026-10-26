@@ -167,7 +167,8 @@ def run_cycle(
                 result = collect(repo_root)
             finally:
                 receipt["collection_elapsed_ms"] = _bounded_elapsed_ms(collect_clock_ns)
-            if not isinstance(result, dict) or result.get("status") != "COLLECTED_UNVERIFIED":
+            if (not isinstance(result, dict) or result.get("status") not in
+                    ("COLLECTED_UNVERIFIED", "COLLECTED_UNVERIFIED_PARTIAL_NO_GO")):
                 raise ValueError("invalid collector completion status")
             new_count = result.get("new_candidates")
             source_count = result.get("sources_checked")
@@ -176,6 +177,24 @@ def run_cycle(
                     or result.get("verification_pass") != 0
                     or result.get("production_approved") is not False):
                 raise ValueError("invalid source statistics")
+            if result["status"] == "COLLECTED_UNVERIFIED_PARTIAL_NO_GO":
+                from .core import PUBLIC_SOURCES
+                count = result.get("rejected_public_pr_count")
+                rejected_source = result.get("rejected_public_source")
+                reason = result.get("rejected_public_reason_code")
+                # The base collector permits at most five PR-files attempts
+                # per approved source; the normal hourly caller uses two.
+                if (type(count) is not int or not 1 <= count <= source_count * 5
+                        or rejected_source not in PUBLIC_SOURCES
+                        or reason != "PUBLIC_PATCH_METADATA_REJECTED"):
+                    raise ValueError("invalid partial collector evidence")
+                receipt["collector_partial_status"] = "BASE_PUBLIC_PATCH_REJECTED_PARTIAL_NO_GO"
+                receipt["collector_rejected_count"] = count
+                receipt["collector_rejected_source"] = rejected_source
+            elif any(k in result for k in (
+                    "rejected_public_pr_count", "rejected_public_source",
+                    "rejected_public_reason_code")):
+                raise ValueError("unexpected rejected evidence on complete collector status")
             optional_stage = result.get("stage10")
             if optional_stage is not None:
                 if type(optional_stage) is not dict or optional_stage.get("status") not in (
@@ -312,7 +331,7 @@ def run_cycle(
             if not report_path.is_relative_to(report_root):
                 raise ValueError("report outside UCIE runtime area")
             receipt.update(
-                status="COLLECTED_UNVERIFIED",
+                status=result["status"],
                 new_candidates=new_count,
                 sources_checked=source_count,
                 report_path=report_path.relative_to(repo_root.resolve()).as_posix(),
