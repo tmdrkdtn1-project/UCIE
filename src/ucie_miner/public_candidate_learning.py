@@ -21,6 +21,7 @@ from .public_candidate_staging import (
 from .public_discovery import CATEGORIES, SOURCES, SOURCE_SKILL, DiscoveryError
 from .public_evidence_routes import TAGS as PR_TAGS
 from .skill_profiles import PROFILE
+from .public_review_triage import triage_unverified_review_rows
 
 REVIEW_FILE = "stage12_unverified_review.sqlite3"
 OPT_IN_FILENAME = "stage12_review_opt_in.txt"
@@ -243,12 +244,16 @@ def update_unverified_review_queue(root: Path, *, allow_write=False):
     fix_rows = _rows_from_stage15(root)
     rows = stage10_rows + fix_rows
     entries = _review_records(rows)
+    # Existing unsigned Stage12 queue remains unchanged; the new multiaxis
+    # view is a bounded, no-write and non-authoritative review companion.
+    triage = triage_unverified_review_rows(rows)
     path = _review_path(root)
     if not allow_write:
         return {
             "status": "STAGE12_REVIEW_PREVIEW_ONLY",
             "source_revisions": len(rows),
             "candidate_proposals": len(entries),
+            "triage_preview": triage,
             "stage10_input_revisions": len(stage10_rows),
             "stage15_unverified_fix_input_revisions": len(fix_rows),
             "persistent_writes": 0,
@@ -278,6 +283,7 @@ def update_unverified_review_queue(root: Path, *, allow_write=False):
     return {
         "status": "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO",
         "source_revisions": len(rows),
+        "triage_preview": triage,
         "stage10_input_revisions": len(stage10_rows),
         "stage15_unverified_fix_input_revisions": len(fix_rows),
         "new_review_proposals": added,
