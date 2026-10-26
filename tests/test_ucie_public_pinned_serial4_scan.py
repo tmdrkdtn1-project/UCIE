@@ -76,6 +76,9 @@ class PublicPinnedSerial4Tests(unittest.TestCase):
 
         self.assertEqual(result["status"], "MANUAL_REVIEW_CANDIDATES")
         self.assertEqual(result["candidate_count"], 1)
+        self.assertEqual(result["pending_manual_review_count"], 1)
+        self.assertEqual(result["pinned_upstream_test_evidence_count"], 0)
+        self.assertIs(result["candidates"][0]["manual_review_required"], True)
         self.assertIs(result["candidates"][0]["runtime_bug_confirmed"], False)
         self.assertEqual(result["source"]["role"], "TEST_PATH")
         self.assertEqual(result["source"]["git_blob_sha1"], blob)
@@ -83,6 +86,75 @@ class PublicPinnedSerial4Tests(unittest.TestCase):
         self.assertFalse(result["auto_fix"])
         self.assertEqual(len(seen), 1)
         self.assertEqual(seen[0][1], raw.decode("utf-8"))
+
+    def test_exact_upstream_regression_evidence_is_not_new_bug(self):
+        identity = (
+            "PowerShell/PowerShell",
+            "dad69345f3fae3d0530f87ec73c8441649760483",
+            "test/powershell/Modules/Microsoft.PowerShell.Utility/Get-Command.Tests.ps1",
+            "766848c7a721c8724b39643d0e17ba5daa11c4c3",
+        )
+        finding = {"rule_id": "PS_FUZZY_GET_COMMAND_DUPLICATES",
+                   "line": 49, "column": 25}
+        triaged, pending = scanner._triage_pinned_findings(
+            *identity, [finding])
+        self.assertEqual(pending, 0)
+        self.assertEqual(
+            triaged[0]["triage_status"],
+            "PINNED_UPSTREAM_REGRESSION_TEST_EVIDENCE")
+        self.assertIs(triaged[0]["manual_review_required"], False)
+        self.assertIs(triaged[0]["runtime_bug_confirmed"], False)
+
+        # A moved line, changed Git blob, or unrelated rule must remain
+        # pending for manual review: no generic test-folder exemptions.
+        changes = [
+            (*identity[:3], "a" * 40, finding),
+            (*identity, {**finding, "line": 50}),
+            (*identity, {**finding, "rule_id": "PS_RESOLVE_PATH_DOT_PREFIX"}),
+        ]
+        for repo, commit, path, blob, other in changes:
+            with self.subTest(blob=blob, finding=other):
+                found, pending = scanner._triage_pinned_findings(
+                    repo, commit, path, blob, [other])
+                self.assertEqual(pending, 1)
+                self.assertEqual(found[0]["triage_status"],
+                                 "UNVERIFIED_MANUAL_REVIEW_REQUIRED")
+                self.assertIs(found[0]["manual_review_required"], True)
+
+    def test_pinned_upstream_test_pipeline_separates_raw_vs_pending(self):
+        raw = b"Get-Command Get-FuzzyDuplicat -UseFuzzyMatching\n"
+        blob = "766848c7a721c8724b39643d0e17ba5daa11c4c3"
+        source_hash = hashlib.sha256(raw).hexdigest()
+        finding = {"rule_id": "PS_FUZZY_GET_COMMAND_DUPLICATES",
+                   "line": 49, "column": 25}
+        # This test isolates classification; Git-blob mismatches are tested
+        # separately with the genuine _git_blob function.
+        with (
+            patch.object(scanner, "_git_blob", return_value=blob),
+            patch.object(scanner, "verify_mixed_owner_release",
+                         return_value=_signed()),
+            patch.object(scanner, "scan_mixed_owner_receipt",
+                         side_effect=lambda p, t, receipt, **kw:
+                         _scan(receipt, [finding])),
+        ):
+            result = scanner.scan_pinned_source(
+                repo="PowerShell/PowerShell",
+                commit="dad69345f3fae3d0530f87ec73c8441649760483",
+                path="test/powershell/Modules/Microsoft.PowerShell.Utility/Get-Command.Tests.ps1",
+                blob=blob,
+                pack=Path("pack.zip"), trust=Path("public.pem"),
+                fetch_source=lambda url: raw,
+                ps_parse=lambda p, text, root: {
+                    "source_sha256": source_hash},
+            )
+        self.assertEqual(result["schema"],
+                         "UCIE_SERIAL4_PINNED_PUBLIC_SOURCE_SCAN_V2")
+        self.assertEqual(result["status"], "PINNED_UPSTREAM_TEST_EVIDENCE")
+        self.assertEqual(result["candidate_count"], 1)
+        self.assertEqual(result["pending_manual_review_count"], 0)
+        self.assertEqual(result["pinned_upstream_test_evidence_count"], 1)
+        self.assertEqual(result["confirmed_new_bug_count"], 0)
+        self.assertIs(result["candidates"][0]["runtime_bug_confirmed"], False)
 
     def test_real_first_party_python_parser_no_thread_boundary(self):
         raw = (
