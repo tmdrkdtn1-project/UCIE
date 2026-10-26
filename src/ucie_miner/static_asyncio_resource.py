@@ -56,28 +56,58 @@ def _constructs_transport(call: object, factory: str,
     )
 
 
-def _catches_general_errors(exc: ast.ExceptHandler) -> bool:
-    t = exc.type
-    if t is None:
-        return True
-    if isinstance(t, ast.Name):
-        return t.id in ("Exception", "BaseException")
-    return (isinstance(t, ast.Tuple) and
-            any(isinstance(x, ast.Name)
-                and x.id in ("Exception", "BaseException") for x in t.elts))
-
-
-def _calls_close(node: ast.AST, resource: str) -> bool:
-    # For a narrow static heuristic, accept an explicit resource.close()
-    # somewhere in the handler; the scanner does not prove all branches run.
-    return any(
-        isinstance(c, ast.Call)
-        and isinstance(c.func, ast.Attribute)
-        and c.func.attr == "close"
-        and isinstance(c.func.value, ast.Name)
-        and c.func.value.id == resource
-        for c in ast.walk(node)
+def _catches_all_errors(exc: ast.ExceptHandler) -> bool:
+    # 'except Exception' misses BaseException subclasses (including
+    # KeyboardInterrupt/SystemExit). Conservative: never label them safe.
+    return exc.type is None or (
+        isinstance(exc.type, ast.Name) and exc.type.id == "BaseException"
     )
+
+
+def _first_action_closes(statements: list[ast.stmt], resource: str) -> bool:
+    """Require an unconditional top-level close before any other action.
+
+    A close inside 'if False', another function, or after a return/raise is
+    not evidence of guaranteed cleanup on the factory-exception path.
+    """
+    for statement in statements:
+        if isinstance(statement, ast.Pass):
+            continue
+        if (isinstance(statement, ast.Expr)
+                and isinstance(statement.value, ast.Constant)
+                and isinstance(statement.value.value, str)):
+            continue  # docstring, if present
+        if not isinstance(statement, ast.Expr):
+            return False
+        call = statement.value
+        return (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Attribute)
+            and call.func.attr == "close"
+            and isinstance(call.func.value, ast.Name)
+            and call.func.value.id == resource
+            and not call.args and not call.keywords
+        )
+    return False
+
+
+def _try_branch(node: ast.AST, block: ast.Try | ast.TryStar,
+                parents: dict) -> str | None:
+    """Determine which part of a try owns this call, without executing code."""
+    child = node
+    while (parent := parents.get(child)) is not None:
+        if parent is block:
+            if child in block.body:
+                return "body"
+            if child in block.handlers:
+                return "handler"
+            if child in block.orelse:
+                return "else"
+            if child in block.finalbody:
+                return "finally"
+            return None
+        child = parent
+    return None
 
 
 def _protected_by_cleanup(assign: ast.Assign, ancestors: dict,
@@ -85,18 +115,20 @@ def _protected_by_cleanup(assign: ast.Assign, ancestors: dict,
     current = ancestors.get(assign)
     while current is not None:
         if isinstance(current, (ast.Try, ast.TryStar)):
-            if any(
-                _catches_general_errors(handler)
-                and _calls_close(handler, resource)
-                for handler in current.handlers
-            ):
+            branch = _try_branch(assign, current, ancestors)
+            if branch != "finally" and _first_action_closes(
+                    current.finalbody, resource):
                 return True
-            if any(_calls_close(x, resource) for x in current.finalbody):
+            # A try does NOT catch errors raised inside its own except/else
+            # handlers. In Python 3.11+ except* does not cover every plain
+            # BaseException, so use only ordinary try handlers.
+            if branch == "body" and isinstance(current, ast.Try) and any(
+                    _catches_all_errors(handler)
+                    and _first_action_closes(handler.body, resource)
+                    for handler in current.handlers):
                 return True
         if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef,
                                 ast.Lambda)):
-            # Do not mistake a cleanup handler in an outer function for
-            # reliable protection of this local protocol_factory call.
             return False
         current = ancestors.get(current)
     return False
