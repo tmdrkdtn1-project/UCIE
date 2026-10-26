@@ -13,19 +13,22 @@ INTERVAL = timedelta(hours=1)
 # collector may start seconds later. Permit bounded trigger jitter without
 # skipping the alternate hour. The OS single-instance lock still applies.
 SUCCESS_TRIGGER_JITTER = timedelta(seconds=30)
+# A failed cycle can finish seconds after a fixed Windows hourly trigger.
+# Permit 15 seconds of skew only for the capped 60-minute failure backoff.
+FAILURE_TRIGGER_JITTER = timedelta(seconds=15)
 MAX_FAILURES = 6
 
 
 def next_cycle(last_finished: datetime | None, *, now: datetime,
                consecutive_failures: int = 0,
                last_started: datetime | None = None) -> dict:
-    """Hourly *start-to-start* cadence; failures still back off from finish.
+    """Hourly start-to-start cadence with bounded failed-trigger tolerance.
 
     Windows Task Scheduler fires at the previous scheduled START + 1 hour.
     Gating from FINISH + 1 hour skips alternate tasks after even an 8-second
     successful run. Bound normal trigger/start skew to 30 seconds, while
-    keeping failed-run backoff unchanged. Never permit overlapping runs: the
-    OS worker lock still applies; no run may be due before last finish.
+    permitting only 15 seconds of skew at the capped 60-minute failed retry.
+    The OS lock prevents overlaps; no retry may be due before last finish.
     Older receipts lacking a start timestamp preserve their old policy.
     """
     if now.tzinfo is None or now.utcoffset() != timedelta(0):
@@ -52,6 +55,11 @@ def next_cycle(last_finished: datetime | None, *, now: datetime,
         delay = INTERVAL if consecutive_failures == 0 else timedelta(
             minutes=min(60, 2 ** consecutive_failures))
         due_at = last_finished + delay
+        if (consecutive_failures > 0 and last_started is not None
+                and delay == INTERVAL):
+            # Do not grant grace for shorter retries, legacy receipts,
+            # or any moment before the previous cycle finished.
+            due_at = max(last_finished, due_at - FAILURE_TRIGGER_JITTER)
     seconds = max(0, int((due_at - now).total_seconds()))
     return {"decision": "DUE" if seconds == 0 else "WAIT",
             "retry_after_seconds": seconds}
