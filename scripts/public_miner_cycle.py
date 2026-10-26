@@ -75,7 +75,9 @@ def main() -> int:
 
     try:
         result = run_cycle(ROOT, collect=collect, enforce_schedule=True)
-        if result.get("status") == "COLLECTED_UNVERIFIED" and stage10 is not None:
+        if (result.get("status") in ("COLLECTED_UNVERIFIED",
+                                     "COLLECTED_UNVERIFIED_PARTIAL_NO_GO")
+                and stage10 is not None):
             result["stage10"] = stage10
     except Exception as exc:
         result = {"status": "FAIL_CLOSED", "error_type": type(exc).__name__}
