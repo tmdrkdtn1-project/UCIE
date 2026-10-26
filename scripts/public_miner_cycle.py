@@ -61,6 +61,8 @@ def main() -> int:
                 "stage13_history_status", "stage13_failure_source",
                 "stage13_failure_category", "stage12_review_status",
                 "stage12_review_proposals_added",
+                "stage15_fix_evidence_status", "stage15_failure_source",
+                "stage15_failure_category",
                 "stage16_safe_qa_status",
                 "stage16_safe_qa_templates",
                 "stage16_safe_qa_gets_upper_bound",
