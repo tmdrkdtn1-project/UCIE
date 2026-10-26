@@ -106,26 +106,24 @@ class FifthAsyncioCandidateTests(unittest.TestCase):
             only_oserror)["candidate_count"], 1)
 
     def test_cleanup_must_run_unconditionally_for_factory_failure(self):
-        # The previous detector incorrectly suppressed all of these risks
-        # merely because an AST node named sock.close appeared somewhere.
+        # The previous detector would suppress these because sock.close()
+        # merely appeared somewhere inside a handler.
         close = "            sock.close()"
         unsafe = (
-            POST.replace(close, "            if False:\\n                sock.close()", 1),
-            POST.replace(close, "            def deferred():\\n                sock.close()", 1),
-            POST.replace("        except:\\n" + close,
-                         "        except Exception:\\n" + close, 1),
-            POST.replace(close, "            raise RuntimeError()\\n" + close, 1),
+            POST.replace(close, "            if False:\n                sock.close()", 1),
+            POST.replace(close, "            def deferred():\n                sock.close()", 1),
+            POST.replace("        except:\n" + close,
+                         "        except Exception:\n" + close, 1),
+            POST.replace(close, "            raise RuntimeError()\n" + close, 1),
         )
         for n, source in enumerate(unsafe):
-            # Keep the actual text as code: the test must not execute it.
-            source = source.replace("\\n", "\n")
             with self.subTest(case=n):
                 result = inspect_asyncio_protocol_factory_source(source)
                 self.assertEqual(result["candidate_count"], 1)
                 self.assertEqual(result["candidates"][0]["resource"], "sock")
 
     def test_cleanup_in_try_own_except_does_not_cover_its_factory(self):
-        source = """\\
+        source = """
 class Loop:
     async def connect_read_pipe(self, protocol_factory, pipe):
         try:
