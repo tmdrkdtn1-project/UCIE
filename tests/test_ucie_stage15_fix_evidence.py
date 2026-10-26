@@ -1,5 +1,7 @@
 """Stage 15: synthetic public patch/release evidence, no remote execution."""
 from contextlib import closing
+from datetime import datetime, timezone
+from unittest.mock import patch
 from pathlib import Path
 import json
 import sqlite3
@@ -38,8 +40,18 @@ def release_fixture():
     }]
 
 
+class _FixedStage15UTC(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return datetime(2026, 10, 26, tzinfo=timezone.utc).astimezone(tz or timezone.utc)
+
+
 class FixEvidenceTests(unittest.TestCase):
     def setUp(self):
+        # The real collector rotates by UTC hour. Pin synthetic fixture
+        # selection to a reproducible even hour; never depend on CI wall time.
+        self.enterContext(patch("ucie_miner.public_fix_evidence.datetime",
+                                _FixedStage15UTC))
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "UCIE"
