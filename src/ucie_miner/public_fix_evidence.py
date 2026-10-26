@@ -273,18 +273,27 @@ def optional_fix_evidence_enrichment(root, *, fetch=None, max_candidates=2):
         fetch = fetch_public_evidence
     leads = _historical_leads(root)
     prior = _existing(root)
-    to_process = [lead for lead in leads
-                  if (lead[0], lead[1], lead[3]) not in prior][:max_candidates]
+    from .stage15_review_window import select_pending_public_revisions
+    hour_index = int(datetime.now(timezone.utc).timestamp() // 3600)
+    to_process = select_pending_public_revisions(
+        leads, prior, limit=max_candidates, hour_index=hour_index)
     added = 0
     attempted = 0
     rejected_source = None
+    rejected_count = 0
     for candidate in to_process:
         attempted += 1
         source, number, merge, _ = candidate
-        receipt = collect_public_knowledge_candidate(
-            source, number, merge_sha=merge, fetch=fetch,
-            include_doc=False, include_advisory=False,
-        )
+        try:
+            receipt = collect_public_knowledge_candidate(
+                source, number, merge_sha=merge, fetch=fetch,
+                include_doc=False, include_advisory=False,
+            )
+        except DiscoveryError:
+            # Public candidate could not be proved; do not persist it.
+            rejected_source = rejected_source or source
+            rejected_count += 1
+            continue
         # Missing or rejected upstream patch/release metadata is NOT a local
         # corruption. Do not insert, advance, approve, or silently retry the
         # rejected candidate; preserve the safe failed-source provenance and
@@ -292,8 +301,9 @@ def optional_fix_evidence_enrichment(root, *, fetch=None, max_candidates=2):
         try:
             record = _record(receipt, candidate)
         except DiscoveryError:
-            rejected_source = source
-            break
+            rejected_source = rejected_source or source
+            rejected_count += 1
+            continue
         path = _path(root)
         exists = path.exists()
         try:
@@ -318,7 +328,7 @@ def optional_fix_evidence_enrichment(root, *, fetch=None, max_candidates=2):
                    if rejected_source is not None
                    else "STAGE15_STRUCTURED_FIX_EVIDENCE_STAGED_NO_GO"),
         "history_leads_available": len(leads),
-        "public_prs_enriched": attempted - int(rejected_source is not None),
+        "public_prs_enriched": attempted - rejected_count,
         "public_prs_attempted": attempted,
         "external_gets_upper_bound": attempted * 2,
         "failure_source": rejected_source,
