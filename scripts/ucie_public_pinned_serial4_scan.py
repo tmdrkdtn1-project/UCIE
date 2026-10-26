@@ -31,6 +31,19 @@ APPROVED = frozenset({
 HEX40 = re.compile(r"[0-9a-f]{40}\Z")
 SEGMENT = re.compile(r"[A-Za-z0-9_.-]+\Z")
 MAX_SOURCE_BYTES = 131072
+# Source-pinned upstream regression test: this exact match is evidence of
+# coverage, not a newly discovered bug. No generic TEST_PATH suppression.
+KNOWN_TEST_EVIDENCE = frozenset({
+    (
+        "PowerShell/PowerShell",
+        "dad69345f3fae3d0530f87ec73c8441649760483",
+        "test/powershell/Modules/Microsoft.PowerShell.Utility/Get-Command.Tests.ps1",
+        "766848c7a721c8724b39643d0e17ba5daa11c4c3",
+        "PS_FUZZY_GET_COMMAND_DUPLICATES",
+        49,
+        25,
+    ),
+})
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -72,6 +85,30 @@ def _git_blob(raw: bytes) -> str:
     return hashlib.sha1(
         b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw
     ).hexdigest()
+
+
+def _triage_pinned_findings(repo: str, commit: str, path: str,
+                            blob: str, findings: list[dict]) -> tuple[list[dict], int]:
+    """Label exact previously reviewed upstream tests; never invent a bug PASS."""
+    triaged = []
+    pending = 0
+    for item in findings:
+        is_upstream_test = (
+            repo, commit, path, blob, item["rule_id"],
+            item["line"], item["column"]
+        ) in KNOWN_TEST_EVIDENCE
+        if not is_upstream_test:
+            pending += 1
+        triaged.append({
+            "rule_id": item["rule_id"],
+            "line": item["line"], "column": item["column"],
+            "triage_status": (
+                "PINNED_UPSTREAM_REGRESSION_TEST_EVIDENCE" if is_upstream_test
+                else "UNVERIFIED_MANUAL_REVIEW_REQUIRED"),
+            "manual_review_required": not is_upstream_test,
+            "runtime_bug_confirmed": False,
+        })
+    return triaged, pending
 
 
 def scan_pinned_source(*, repo: str, commit: str, path: str,
@@ -123,10 +160,14 @@ def scan_pinned_source(*, repo: str, commit: str, path: str,
             or matched.get("finding_count") != len(matched.get("findings", []))):
         raise PolicyError("signed public scan receipt outside safe scope")
     findings = matched["findings"]
+    triaged, pending = _triage_pinned_findings(
+        repo, commit, path, blob, findings)
     return {
-        "schema": "UCIE_SERIAL4_PINNED_PUBLIC_SOURCE_SCAN_V1",
-        "status": ("MANUAL_REVIEW_CANDIDATES" if findings
-                   else "NO_SIGNED_RULE_MATCH"),
+        "schema": "UCIE_SERIAL4_PINNED_PUBLIC_SOURCE_SCAN_V2",
+        "status": (
+            "MANUAL_REVIEW_CANDIDATES" if pending
+            else "PINNED_UPSTREAM_TEST_EVIDENCE" if findings
+            else "NO_SIGNED_RULE_MATCH"),
         "source": {"repository": repo, "commit": commit, "path": path,
                    "git_blob_sha1": blob, "source_sha256": receipt["source_sha256"],
                    "role": ("TEST_PATH" if
@@ -138,12 +179,10 @@ def scan_pinned_source(*, repo: str, commit: str, path: str,
         "owner_signature": "VALID",
         "rule_count": 4,
         "candidate_count": len(findings),
-        "candidates": [
-            {"rule_id": x["rule_id"], "line": x["line"],
-             "column": x["column"], "manual_review_required": True,
-             "runtime_bug_confirmed": False}
-            for x in findings
-        ],
+        "pending_manual_review_count": pending,
+        "pinned_upstream_test_evidence_count": len(findings) - pending,
+        "confirmed_new_bug_count": 0,
+        "candidates": triaged,
         "source_executed": False,
         "auto_fix": False,
         "private_project_access": False,
