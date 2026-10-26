@@ -25,6 +25,9 @@ from .mixed_release import (
     scan_mixed_owner_receipt,
 )
 from .rule_admission import reconcile_mixed_signed_candidates
+from .fifth_owner_addendum import (
+    publish_fifth_addendum, verify_fifth_addendum, scan_fifth_addendum,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -186,6 +189,31 @@ def main(argv=None) -> int:
     reconcile.add_argument("--pack", type=Path, required=True)
     reconcile.add_argument("--owner-trust", type=Path, required=True)
     reconcile.add_argument("--min-serial", type=int, default=4)
+    fifth_pub = sub.add_parser(
+        "publish-fifth-owner-addendum",
+        help="Owner-consented fifth-rule signed addendum; Serial4 remains immutable")
+    fifth_pub.add_argument("--owner-private", type=Path, required=True)
+    fifth_pub.add_argument("--base-pack", type=Path, required=True)
+    fifth_pub.add_argument("--owner-trust", type=Path, required=True)
+    fifth_pub.add_argument("--output", type=Path, required=True)
+    fifth_pub.add_argument("--run-id", type=int, required=True)
+    fifth_pub.add_argument("--serial", type=int, required=True)
+    fifth_pub.add_argument("--confirm", required=True)
+    fifth_pub.add_argument("--accept-risk", required=True)
+    fifth_ver = sub.add_parser(
+        "verify-fifth-owner-addendum",
+        help="Verify owner signature, parent Serial4 hash and signed expiry")
+    fifth_ver.add_argument("--pack", type=Path, required=True)
+    fifth_ver.add_argument("--base-pack", type=Path, required=True)
+    fifth_ver.add_argument("--owner-trust", type=Path, required=True)
+    fifth_ver.add_argument("--min-serial", type=int, default=5)
+    fifth_scan = sub.add_parser(
+        "scan-fifth-owner-addendum-stdin",
+        help="Inert fifth-rule Python source via bounded stdin; no source execution")
+    fifth_scan.add_argument("--pack", type=Path, required=True)
+    fifth_scan.add_argument("--base-pack", type=Path, required=True)
+    fifth_scan.add_argument("--owner-trust", type=Path, required=True)
+    fifth_scan.add_argument("--min-serial", type=int, default=5)
     args = p.parse_args(argv)
     try:
         if args.command == "keygen-demo":
@@ -363,6 +391,38 @@ def main(argv=None) -> int:
             receipt = json.loads(raw, object_pairs_hook=_strict_pairs)
             result = scan_mixed_owner_receipt(
                 args.pack, args.owner_trust, receipt,
+                min_serial=args.min_serial)
+        elif args.command == "publish-fifth-owner-addendum":
+            allowed = ROOT / ".build_keys" / "production" / "private_production.pem"
+            if args.owner_private.absolute() != allowed.absolute():
+                raise PolicyError("fifth signer key must stay in dedicated UCIE key directory")
+            output = publish_fifth_addendum(
+                ROOT, args.owner_private, args.base_pack,
+                args.owner_trust, args.output,
+                run_id=args.run_id, serial=args.serial,
+                confirmation=args.confirm, risk_acceptance=args.accept_risk)
+            result = {
+                "result": "FIFTH_OWNER_RISK_ADDENDUM_SIGNED",
+                "path": str(output), "parent_serial": 4,
+                "additional_signed_rules": 1, "scope": "PUBLIC_ONLY_MANUAL_STATIC_SCAN",
+                "auto_apply": False, "external_deployment": False,
+                "independent_human_qa_approved": False,
+            }
+        elif args.command == "verify-fifth-owner-addendum":
+            result = verify_fifth_addendum(
+                args.pack, args.base_pack, args.owner_trust,
+                min_serial=args.min_serial)
+        elif args.command == "scan-fifth-owner-addendum-stdin":
+            # Strict input size, including multibyte text. Read only caller stdin.
+            raw = sys.stdin.buffer.read(131073)
+            if not raw or len(raw) > 131072:
+                raise PolicyError("empty or oversized inert Python source")
+            try:
+                source = raw.decode("utf-8-sig", errors="strict")
+            except UnicodeError as exc:
+                raise PolicyError("fifth scanner input must be UTF-8") from exc
+            result = scan_fifth_addendum(
+                args.pack, args.base_pack, args.owner_trust, source,
                 min_serial=args.min_serial)
         elif args.command == "reconcile-signed-public-candidates":
             result = reconcile_mixed_signed_candidates(
