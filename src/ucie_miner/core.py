@@ -170,6 +170,10 @@ def mine_once(
     added = 0
     incomplete_provenance = 0
     public_pr_crosschecked = 0
+    rejected_count = 0
+    rejected_source = None
+    active_source = None
+    operation = None
     try:
         with conn:
             # Lists can be fetched independently; every DB read/write,
@@ -187,12 +191,23 @@ def mine_once(
                     for source in sources:
                         prefetched_lists[source] = pending[source].result()
             for source in sources:
+                active_source = source
+                operation = "FETCH_PR_LIST"
                 results = (prefetched_lists[source] if read_workers == 2
                            else fetch(_api_url(source, endpoint)))
+                operation = "VALIDATE_PR_LIST"
                 if not isinstance(results, list) or len(results) > 20:
                     raise MiningError("malformed pull list")
-                per_source = 0
+                # Review bounded PR-list windows fairly over successive UTC hours.
+                # No permanent suppression, extra GETs or added source scope.
+                from .stage3_public_window import rotating_public_pr_rows
+                results = rotating_public_pr_rows(
+                    results,
+                    hour_index=int(datetime.fromisoformat(observed_at).timestamp() // 3600),
+                    limit=max_new_per_source)
+                attempted_source = 0
                 for item in results:
+                    operation = "VALIDATE_PR_ROW"
                     if not isinstance(item, dict):
                         raise MiningError("invalid pull record")
                     number = item.get("number")
@@ -205,7 +220,10 @@ def mine_once(
                     if conn.execute("SELECT 1 FROM candidates WHERE source=? AND pr_number=?",
                                     (source, number)).fetchone():
                         continue
+                    attempted_source += 1
+                    operation = "FETCH_PR_FILES"
                     files = fetch(_api_url(source, "pulls/" + str(number) + "/files?per_page=30"))
+                    operation = "VALIDATE_PR_FILES"
                     # Local-only metadata gate. Never treats missing upstream facts as PASS.
                     from .adapter import inspect_collected_pr
                     evidence = inspect_collected_pr(source, item, files)
@@ -215,24 +233,57 @@ def mine_once(
                         from .public_provenance import crosscheck_pr_metadata
                         crosscheck_pr_metadata(source, item, fetch=fetch)
                         public_pr_crosschecked += 1
-                    digest, tags = _classify_changes(files)
+                    try:
+                        digest, tags = _classify_changes(files)
+                    except MiningError as exc:
+                        # Oversized/missing patch metadata is rejected without
+                        # approving, saving or retrying the untrusted PR.
+                        if str(exc) != "oversized or malformed patch":
+                            raise
+                        rejected_count += 1
+                        if rejected_source is None:
+                            rejected_source = source
+                        if attempted_source >= max_new_per_source:
+                            break
+                        continue
+                    operation = "RECORD_PR"
                     conn.execute(
                         "INSERT INTO candidates VALUES (?,?,?,?,?,?,?,?)",
                         (source, number, "https://github.com/" + source + "/pull/" + str(number),
                          merged_at, digest, json.dumps(tags), observed_at, "UNVERIFIED_CANDIDATE_ONLY"))
                     added += 1
-                    per_source += 1
-                    if per_source >= max_new_per_source:
+                    if attempted_source >= max_new_per_source:
                         break
+            active_source = None
+            operation = "RECORD_RUN"
+            status = ("COLLECTED_UNVERIFIED_PARTIAL_NO_GO"
+                      if rejected_count else "COLLECTED_UNVERIFIED")
             conn.execute(
                 "INSERT INTO runs (at_utc, sources_count, added_candidates, status) VALUES (?,?,?,?)",
-                (observed_at, len(sources), added, "COLLECTED_UNVERIFIED"))
+                (observed_at, len(sources), added, status))
+    except MiningError as exc:
+        # Only UCIE-owned operation codes and approved public source identity.
+        # Never attach untrusted response bodies, raw exception text or secrets.
+        if active_source in PUBLIC_SOURCES:
+            exc.ucie_public_source = active_source
+        if operation in ("FETCH_PR_LIST", "VALIDATE_PR_LIST",
+                         "VALIDATE_PR_ROW", "FETCH_PR_FILES",
+                         "VALIDATE_PR_FILES", "RECORD_PR", "RECORD_RUN"):
+            exc.ucie_public_operation = operation
+        raise
     finally:
         conn.close()
-    return {"status": "COLLECTED_UNVERIFIED", "sources_checked": len(sources),
-            "new_candidates": added, "incomplete_provenance": incomplete_provenance,
-            "public_pr_crosschecked": public_pr_crosschecked,
-            "verification_pass": 0, "production_approved": False}
+    response = {"status": status, "sources_checked": len(sources),
+                "new_candidates": added,
+                "incomplete_provenance": incomplete_provenance,
+                "public_pr_crosschecked": public_pr_crosschecked,
+                "verification_pass": 0, "production_approved": False}
+    if rejected_count:
+        response.update(
+            rejected_public_pr_count=rejected_count,
+            rejected_public_source=rejected_source,
+            rejected_public_reason_code="PUBLIC_PATCH_METADATA_REJECTED")
+    return response
 
 
 def report(repo_root: Path) -> Path:
