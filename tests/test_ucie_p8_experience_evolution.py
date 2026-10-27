@@ -158,8 +158,7 @@ class P8EvolutionTests(unittest.TestCase):
         response = json.loads(rendered.call_args.args[0])
         self.assertFalse(response["new_event_written"])
         self.assertFalse(self.ledger.exists())
-        with patch("sys.argv", argv + ["--record"]), (
-                patch("builtins.print") as rendered):
+        with patch("sys.argv", argv + ["--record"]), patch("builtins.print") as rendered:
             self.assertEqual(evo.main(), 0)
         response = json.loads(rendered.call_args.args[0])
         self.assertTrue(response["new_event_written"])
