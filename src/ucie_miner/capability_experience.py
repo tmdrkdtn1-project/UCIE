@@ -331,6 +331,7 @@ def main() -> int:
                 raise CapabilityExperienceError("read-only history mode only")
             output = read_capability_history(args.ucie_root)
         elif args.live and args.source_id:
+            _file(args.ucie_root)  # reject unsupported roots before any public GET
             source = get_source(args.source_id)
             if source["source_kind"] != "INDEPENDENT_PUBLIC_REPOSITORY":
                 raise CapabilityExperienceError("unapproved positive source")
@@ -340,6 +341,7 @@ def main() -> int:
                 args.ucie_root, source_rows=rows, source_id=args.source_id,
                 record=args.record)
             output["explicit_public_gets"] = 1
+            output["network_requests"] = 1
         elif args.record or args.live:
             raise CapabilityExperienceError(
                 "record requires explicit --live and exact --source-id")
