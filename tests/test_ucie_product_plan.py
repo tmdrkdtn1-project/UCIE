@@ -30,6 +30,7 @@ class UcieFinalProductPlanTests(unittest.TestCase):
              "MODULAR_AUTOMATIC_PUBLIC_ACQUISITION"])
         self.assertEqual(result["immediate_parallel_work"], ["W01", "W02"])
         self.assertEqual(result["next_contract_work"], ["W05"])
+        self.assertEqual(result["foundation_code_available"], ["W01", "W02"])
 
     def test_p0_p9_exact_and_not_falsely_completed(self):
         out = plan.preview_next_work()
@@ -50,7 +51,10 @@ class UcieFinalProductPlanTests(unittest.TestCase):
                          [f"W{i:02d}" for i in range(1, 11)])
         seen = set()
         for work in order:
-            self.assertEqual(work["execution_state"], "PLANNED_NOT_EXECUTED")
+            self.assertEqual(work["execution_state"],
+                             ("FOUNDATION_CODE_IMPLEMENTED_NOT_HOST_VERIFIED"
+                              if work["id"] in {"W01", "W02"}
+                              else "PLANNED_NOT_EXECUTED"))
             self.assertTrue(set(work["depends_on"]) <= seen)
             self.assertTrue(work["acceptance"])
             seen.add(work["id"])
