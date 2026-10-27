@@ -206,14 +206,30 @@ def main() -> int:
     parser.add_argument("--domain", choices=sorted(ALLOWED_DOMAINS))
     parser.add_argument("--group-revisions", action="store_true")
     parser.add_argument("--source-id")
+    parser.add_argument("--exact-purpose", action="append", default=None,
+                        help="Opt-in exact source/domain/kind/purpose batch lookup")
     parser.add_argument("--limit", type=int, default=10)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     try:
-        result = search_existing_public_library(
-            root, query=args.query, kind=args.kind, domain=args.domain,
-            source_id=args.source_id, limit=args.limit,
-            group_revisions=args.group_revisions)
+        if args.exact_purpose is not None:
+            if (not args.source_id or not args.domain or not args.kind
+                    or args.query or args.group_revisions):
+                raise LibrarySearchError(
+                    "exact mode requires source, domain, kind; no substring/grouping")
+            from .library_exact_index import search_exact_existing_public_library
+            source = (args.source_id if args.source_id.startswith("repo:")
+                      else "repo:" + args.source_id)
+            result = search_exact_existing_public_library(
+                root,
+                queries=tuple((source, args.domain, args.kind, p)
+                              for p in args.exact_purpose),
+                limit=args.limit)
+        else:
+            result = search_existing_public_library(
+                root, query=args.query, kind=args.kind, domain=args.domain,
+                source_id=args.source_id, limit=args.limit,
+                group_revisions=args.group_revisions)
     except (ValueError, DiscoveryError) as exc:
         print(json.dumps({"schema": SCHEMA, "status": "FAIL_CLOSED",
                           "error_type": type(exc).__name__,
