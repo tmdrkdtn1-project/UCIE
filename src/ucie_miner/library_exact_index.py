@@ -1,9 +1,14 @@
-"""W04 exact-match batch search using the P8-tested in-memory composite index.
+"""W04 exact-match batch search with a P8 evidence-informed cost policy.
 
-Opt-in only. Default W04 substring search is unchanged. The existing Stage10-
-12/15 source-linked verification handoff, W02 LibraryEntry provenance and the
-approved five-public-repo allowlist are reused. An index is constructed only
-for this call, never persisted or installed in the hourly collector.
+Opt-in only. Default W04 substring search is unchanged. The original
+Stage10-12/15 linked handoff and W02 source provenance are reused. A bounded
+linear exact scan is selected for one/few queries when building an index
+cannot reduce the simple modeled operation count. Otherwise an ephemeral
+composite hash index is built once for the batch.
+
+Operation estimates are NOT timing guarantees; input normalization, sorting,
+memory and source validation are additional costs common to both options.
+No persistent index, runtime collector changes, or new source permissions.
 """
 from __future__ import annotations
 
@@ -67,7 +72,9 @@ def exact_search_linked_public_candidates(handoff: dict, *,
         }
     if len(tasks) > MAX_CATALOG_ROWS:
         raise ExactLibraryError("unbounded source-linked catalog")
-    index: dict[tuple[str, str, str, str], list[dict]] = {}
+    # Normalize all untrusted input through original W02 provenance first.
+    # Keeping this pass common to both algorithms avoids trusting a fast path.
+    records: list[tuple[tuple[str, str, str, str], dict]] = []
     for task in tasks:
         if (type(task) is not dict or type(task.get("source")) is not str
                 or type(task.get("reference")) is not str
@@ -88,7 +95,7 @@ def exact_search_linked_public_candidates(handoff: dict, *,
             raise ExactLibraryError("provenance/skill classifier disagree")
         key = (entry["source_id"], entry["domain"],
                entry["kind"], entry["purpose_code"])
-        index.setdefault(key, []).append({
+        records.append((key, {
             "library_item_id": entry["library_item_id"],
             "public_url": entry["public_url"],
             "evidence_sha256": entry["evidence_sha256"],
@@ -96,12 +103,28 @@ def exact_search_linked_public_candidates(handoff: dict, *,
             "lifecycle": "UNVERIFIED_CANDIDATE_ONLY",
             "human_approved": False,
             "export_allowed": False,
-        })
-    for items in index.values():
-        items.sort(key=lambda row: row["library_item_id"])
+        }))
+
+    linear_cost = len(records) * len(keys)
+    index_cost = len(records) + len(keys)
+    use_index = index_cost < linear_cost  # tie goes to simpler linear search
+    choice = "BUILD_ONCE_COMPOSITE_INDEX" if use_index else "LINEAR_EXACT_SCAN"
+    index: dict[tuple[str, str, str, str], list[dict]] | None = None
+    if use_index:
+        index = {}
+        for key, item in records:
+            index.setdefault(key, []).append(item)
+        for items in index.values():
+            items.sort(key=lambda row: row["library_item_id"])
+
     returned = []
     for key in keys:
-        found = index.get(key, ())
+        if index is not None:
+            found = index.get(key, ())
+        else:
+            found = sorted(
+                (item for row_key, item in records if row_key == key),
+                key=lambda row: row["library_item_id"])
         returned.append({
             "query": {
                 "source_id": key[0], "domain": key[1],
@@ -118,9 +141,16 @@ def exact_search_linked_public_candidates(handoff: dict, *,
         "query_mode": "EXACT_SOURCE_DOMAIN_KIND_PURPOSE_ONLY",
         "query_count": len(keys),
         "catalog_items": len(tasks),
-        "unique_index_keys": len(index),
-        "index_build_plus_lookup_operations": len(tasks) + len(keys),
-        "linear_scan_comparisons_for_same_queries": len(tasks) * len(keys),
+        "unique_index_keys": len(index) if index is not None else None,
+        "index_built": index is not None,
+        "selected_strategy": choice,
+        "strategy_reason": ("LOWER_ESTIMATED_COMPARISONS_INCLUDING_INDEX_BUILD"
+                            if use_index else "INDEX_BUILD_NOT_ESTIMATED_BENEFICIAL"),
+        "index_build_plus_lookup_operations": index_cost,
+        "linear_scan_comparisons_for_same_queries": linear_cost,
+        "executed_strategy_estimated_operations": index_cost if use_index else linear_cost,
+        "alternative_strategy_estimated_operations": linear_cost if use_index else index_cost,
+        "cost_metric": "SIMPLE_KEY_COMPARE_OR_BUILD_PLUS_LOOKUP_ESTIMATE_NOT_ELAPSED_TIME",
         "items": returned,
         "substring_search_modified": False,
         "index_persisted": False,
