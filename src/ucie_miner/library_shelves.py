@@ -7,14 +7,16 @@ its original identity and schema. Neither shelf creates a knowledge database.
 """
 from __future__ import annotations
 
+import argparse
 from contextlib import closing
 from datetime import datetime
+import json
 from pathlib import Path
 import re
 import sqlite3
 
 from .positive_capability_discovery import classify_public_capability_metadata
-from .public_discovery import DiscoveryError, SOURCES
+from .public_discovery import DiscoveryError, SOURCES, public_feed_get, public_feed_url
 from .public_official_evidence import (
     _path, _schema, _utc, RECORD_CAP, GHSA,
 )
@@ -206,3 +208,61 @@ def search_official_metadata_shelf(root: Path, *,
         "network_requests": 0, "database_writes": 0,
         "auto_promoted": False, "full_library_implemented": False,
     }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Read-only UCIE W05 positive / W06 official metadata Library")
+    parser.add_argument("--shelf", choices=("positive", "official"), required=True)
+    parser.add_argument("--source-id")
+    parser.add_argument("--kind")
+    parser.add_argument("--limit", type=int, default=10)
+    parser.add_argument("--live", action="store_true")
+    args = parser.parse_args()
+    try:
+        if args.shelf == "official":
+            if args.live:
+                raise LibraryShelfError("official shelf never runs an API GET")
+            result = search_official_metadata_shelf(
+                Path(__file__).resolve().parents[2],
+                source_id=args.source_id, kind=args.kind, limit=args.limit)
+        else:
+            if args.source_id is None:
+                raise LibraryShelfError("positive shelf requires an exact approved source ID")
+            if not args.live:
+                result = {
+                    "schema": SCHEMA, "shelf": "POSITIVE_CAPABILITY_HYPOTHESES",
+                    "status": "W05_LIVE_PUBLIC_FETCH_NOT_REQUESTED",
+                    "source_id": args.source_id, "candidate_count": 0,
+                    "items": [], "network_requests": 0, "database_writes": 0,
+                    "auto_promoted": False, "full_library_implemented": False,
+                }
+            else:
+                # Existing route/transport ONLY; no additional endpoint.
+                try:
+                    source = get_source(args.source_id)
+                except SourceRegistryError as exc:
+                    raise LibraryShelfError("public source not approved") from exc
+                if source["source_kind"] != "INDEPENDENT_PUBLIC_REPOSITORY":
+                    raise LibraryShelfError("positive shelf only accepts existing GitHub PR")
+                url = public_feed_url(args.source_id.removeprefix("repo:"))
+                result = search_positive_capability_shelf(
+                    public_feed_get(url), source_id=args.source_id,
+                    kind=args.kind, limit=args.limit)
+                result["network_requests"] = 1
+                result["transport"] = "ONE_EXISTING_APPROVED_PUBLIC_GITHUB_GET"
+    except (LibraryShelfError, DiscoveryError, OSError, ValueError) as exc:
+        result = {
+            "schema": SCHEMA, "status": "FAIL_CLOSED",
+            "error_type": type(exc).__name__,
+            "database_writes": 0, "auto_promoted": False,
+            "full_library_implemented": False,
+        }
+        print(json.dumps(result, sort_keys=True))
+        return 2
+    print(json.dumps(result, sort_keys=True, ensure_ascii=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
