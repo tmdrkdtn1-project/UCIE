@@ -173,6 +173,7 @@ def _list_verified(root: Path) -> list[dict]:
                 or prior["dataset_sha256"] != row["dataset_sha256"]
                 or prior["query_count"] != row["query_count"]
                 or prior["synthetic_item_count"] != row["synthetic_item_count"]
+                or prior["measurement_repetitions"] != row["measurement_repetitions"]
                 or prior["created_utc"] > row["created_utc"]):
             raise ExperienceLibraryError("broken same-workload experience lineage")
     # Multiple leaves/branches may be present; disclose them, do not silently
@@ -197,7 +198,8 @@ def _no_duplicate_fields(pairs: list[tuple[str, object]]) -> dict:
 def _comparison(previous: dict, current: dict) -> dict:
     same = (previous["dataset_sha256"] == current["dataset_sha256"]
             and previous["query_count"] == current["query_count"]
-            and previous["synthetic_item_count"] == current["synthetic_item_count"])
+            and previous["synthetic_item_count"] == current["synthetic_item_count"]
+            and previous["measurement_repetitions"] == current["measurement_repetitions"])
     if not same:
         raise ExperienceLibraryError("cannot compare different synthetic workloads")
     safe = (previous["outcome"] == STATUS_GOOD
@@ -316,7 +318,8 @@ def record_owned_experiment(root: Path, *, rows: int = 1536,
     parents = [x for x in catalog
                if x["dataset_sha256"] == result["dataset_sha256"]
                and x["query_count"] == queries
-               and x["synthetic_item_count"] == rows]
+               and x["synthetic_item_count"] == rows
+               and x["measurement_repetitions"] == repeats]
     # Highest numbered ancestor is selected, not the latest fastest wall time.
     previous = max(parents, key=lambda x: (
         x["revision_number"], x["created_utc"], x["record_id"]
