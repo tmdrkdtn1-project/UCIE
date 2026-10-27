@@ -35,7 +35,7 @@ class SignedLibraryError(ValueError):
 
 def _ucie_file(root: Path, path: Path, *, max_size: int) -> Path:
     """Caller has to explicitly supply paths inside the dedicated UCIE root."""
-    if type(path) is not Path or type(root) is not Path:
+    if not isinstance(path, Path) or not isinstance(root, Path):
         raise SignedLibraryError("UCIE file paths must be explicit Path values")
     if root.is_symlink() or not root.is_dir() or root.name.casefold() != "ucie":
         raise SignedLibraryError("dedicated UCIE checkout required")
