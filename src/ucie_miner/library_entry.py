@@ -6,6 +6,7 @@ contain no source code, raw snippets, runnable instructions or private data.
 """
 from __future__ import annotations
 
+import json
 import hashlib
 import re
 
@@ -66,7 +67,7 @@ def build_library_entry(record: dict) -> dict:
     if (type(record) is not dict or set(record) != ALLOWED_INPUT_FIELDS):
         raise LibraryEntryError("invalid library candidate fields")
     kind = record["kind"]
-    if kind not in EXTERNAL_CANDIDATE_KINDS or type(kind) is not str:
+    if type(kind) is not str or kind not in EXTERNAL_CANDIDATE_KINDS:
         raise LibraryEntryError("external-source entries cannot assert UCIE experience")
     try:
         source = get_source(record["source_id"])
@@ -140,3 +141,12 @@ def preview_library_contract() -> dict:
         "project_code_access": False,
         "unsigned_candidate_auto_export": False,
     }
+
+
+def main() -> int:
+    print(json.dumps(preview_library_contract(), ensure_ascii=True, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
