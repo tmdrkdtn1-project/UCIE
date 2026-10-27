@@ -39,6 +39,13 @@ def receipt(count=2):
 class LatestHourlyReviewTests(unittest.TestCase):
     def setUp(self):
         self.handoff = handoff()
+        # The lightweight shared fixture omits display fields that the real
+        # Stage12 ledger includes. Populate them before testing the operator view.
+        for task in self.handoff["tasks"]:
+            task["pattern_code"] = "API_CONTRACT"
+            task["skill_id"] = "synthetic-public-review"
+            task["safe_guidance_for_review"] = "Manual source review only"
+            task["regression_plan_for_review"] = "Review in isolated owned fixture"
         self.docket = build_review_docket(self.handoff, evidence())
         self.ids = [x["candidate_id_sha256"] for x in self.handoff["tasks"]]
         self.first_seen = {
