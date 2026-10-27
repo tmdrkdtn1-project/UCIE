@@ -98,6 +98,16 @@ class P8OwnedExperienceTests(unittest.TestCase):
         self.assertEqual(out["total_records"], 2)
         self.assertEqual(out["comparisons"], [])
 
+    def test_same_dataset_but_different_repetition_count_has_separate_history(self):
+        first = self._record(minute=0)
+        second = lib.record_owned_experiment(
+            self.root, rows=256, queries=16, repeats=2,
+            allow_write=True, at_time=self.start + timedelta(minutes=1))
+        self.assertIsNone(first["record"]["parent_record_id"])
+        self.assertIsNone(second["record"]["parent_record_id"])
+        self.assertEqual(second["record"]["revision_number"], 1)
+        self.assertEqual(lib.inspect_experience_library(self.root)["comparisons"], [])
+
     def test_modify_record_or_rename_hash_is_detected_before_another_write(self):
         self._record()
         filename = next((self.root / "runtime" / lib.FOLDER).glob("r_*.json"))
