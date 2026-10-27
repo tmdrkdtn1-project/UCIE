@@ -174,6 +174,7 @@ class P8W05LinkedExperienceTests(unittest.TestCase):
             self.assertEqual(e.main(), 0)
         self.assertEqual(fetch.call_count, 1)
         self.assertEqual(json.loads(rendered.call_args.args[0])["explicit_public_gets"], 1)
+        self.assertEqual(json.loads(rendered.call_args.args[0])["network_requests"], 1)
         self.assertFalse(self.file.exists())
 
 
