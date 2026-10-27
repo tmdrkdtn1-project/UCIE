@@ -8,6 +8,7 @@ GitHub feed route/source and injected callback; no implicit network, DB or timer
 """
 from __future__ import annotations
 
+import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -16,6 +17,7 @@ import re
 from .library_entry import build_library_entry
 from .public_discovery import (
     SOURCES, DiscoveryError, PR_CAP, MAX_TITLE, SHA40, _utc, public_feed_url,
+    public_feed_get,
 )
 from .source_registry import get_source, SourceRegistryError
 
@@ -215,3 +217,40 @@ def discover_positive_capabilities(*, source_ids: tuple[str, ...],
         "auto_promoted": False,
         "production_approved": False,
     }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="UCIE positive public capability research (explicit live opt-in)")
+    parser.add_argument("--source-id", required=True, choices=[
+        "repo:" + s for s in SOURCES])
+    parser.add_argument("--live", action="store_true",
+                        help="One bounded existing approved GitHub API GET")
+    args = parser.parse_args()
+    if not args.live:
+        response = {
+            "schema": SCHEMA,
+            "status": "W05_LIVE_DISCOVERY_NOT_AUTHORIZED",
+            "source_id": args.source_id,
+            "available_purpose_codes": [s[1] for s in SIGNALS],
+            "network_requests": 0,
+            "database_writes": 0,
+            "candidate_count": 0, "production_approved": False,
+        }
+        print(json.dumps(response, sort_keys=True, ensure_ascii=True))
+        return 0
+    try:
+        result = discover_positive_capabilities(
+            source_ids=(args.source_id,), fetch=public_feed_get)
+    except (DiscoveryError, OSError) as exc:
+        print(json.dumps({"schema": SCHEMA, "status": "FAIL_CLOSED",
+                          "error_type": type(exc).__name__,
+                          "database_writes": 0,
+                          "production_approved": False}, sort_keys=True))
+        return 2
+    print(json.dumps(result, sort_keys=True, ensure_ascii=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
