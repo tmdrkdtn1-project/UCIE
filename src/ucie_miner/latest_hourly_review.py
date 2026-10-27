@@ -18,6 +18,9 @@ import sys
 from .automated_candidate_qa import _checked_handoff
 from .public_candidate_learning import _review_path
 from .public_discovery import DiscoveryError
+from .public_external_history import (
+    _root_path as _history_path, _schema as _check_history_schema,
+)
 from .stage17_review_docket import attest_stage16_aggregate, build_review_docket
 from .verification_handoff import prepare_verification_handoff
 
@@ -25,6 +28,7 @@ SCHEMA = "UCIE_LATEST_HOURLY_NEW_REVIEW_HANDOFF_V1"
 MAX_RECEIPT_BYTES = 8192
 MAX_SELECTED = 12
 MAX_REVIEWED_ROWS = 1000
+RECENT_UPSTREAM_DAYS = 365
 PR_REF = re.compile(r"(?:pr|fix-pr):([1-9][0-9]*):([a-f0-9]{40})(?::[a-f0-9]{64})?\Z")
 COMMIT_REF = re.compile(r"commit:([a-f0-9]{40})\Z")
 APPROVED = frozenset((
@@ -96,6 +100,14 @@ def _base(status: str, receipt: dict, reported: int) -> dict:
         "linked_new_review_proposals": 0,
         "selected_count": 0, "omitted_count": 0,
         "new_review_tasks": [],
+        "recent_upstream_review_count": 0,
+        "recent_upstream_review_tasks": [],
+        "historical_backfill_review_count": 0,
+        "upstream_age_unknown_review_count": 0,
+        "recent_upstream_cutoff_days": RECENT_UPSTREAM_DAYS,
+        "upstream_merge_dates_from_local_history_only": True,
+        "important_new_evidence_verified": False,
+        "alert_emitted": False,
         "manual_review_required": True,
         "independent_fix_verified": False,
         "independent_qa_verified": False,
@@ -204,6 +216,95 @@ def build_latest_hourly_review(receipt: dict, handoff: dict,
     return result
 
 
+
+def _history_merge_dates(root: Path, tasks: list[dict]) -> dict:
+    """Read exact permitted Stage13 merge dates. Never infer freshness from insertion."""
+    lookups = []
+    for task in tasks:
+        source, ref = task["source"], task["reference"]
+        if source not in APPROVED or source == "git/git":
+            continue
+        m = PR_REF.fullmatch(ref)
+        if m is not None:
+            lookups.append((source, ref, int(m.group(1)), m.group(2), m.group(3)))
+    if not lookups:
+        return {}
+    path = _history_path(root)
+    if not path.exists():
+        return {}
+    found = {}
+    with closing(sqlite3.connect(path.as_uri() + "?mode=ro",
+                                 uri=True, timeout=3)) as conn:
+        conn.execute("PRAGMA query_only=ON")
+        _check_history_schema(conn, new=False)
+        for source, ref, number, merge, history_sha in lookups:
+            if history_sha is not None:
+                rows = conn.execute(
+                    "SELECT merged_at FROM upstream_history "
+                    "WHERE source=? AND pr_number=? AND merge_sha=? "
+                    "AND evidence_sha256=?",
+                    (source, number, merge, history_sha),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT merged_at FROM upstream_history "
+                    "WHERE source=? AND pr_number=? AND merge_sha=?",
+                    (source, number, merge),
+                ).fetchall()
+            merged_dates = {row[0] for row in rows}
+            if len(merged_dates) == 1:
+                found[(source, ref)] = next(iter(merged_dates))
+    return found
+
+
+def classify_upstream_recency(result: dict, merged_dates: dict) -> dict:
+    """Separate newly *entered* review rows from newly merged public changes.
+
+    Old public fixes remain in the Stage12 archive. Only valid Stage13 dates
+    within 365 days of the finished hourly cycle can be called RECENT.
+    Unknown ages are never represented as recent or as approved fixes.
+    """
+    if result.get("status") != "LATEST_HOURLY_NEW_REVIEWS_READY_NO_GO":
+        return result
+    finish = _utc(result["last_cycle_finished_utc"])
+    if type(merged_dates) is not dict:
+        raise ValueError("invalid local history merge date index")
+    recent = []
+    historical = 0
+    unknown = 0
+    for task in result["new_review_tasks"]:
+        value = merged_dates.get((task["source"], task["reference"]))
+        merge_date, age_days, age_class = None, None, "UPSTREAM_AGE_UNKNOWN"
+        if value is not None:
+            when = _utc(value)
+            if when <= finish:
+                age_days = (finish - when).days
+                merge_date = when.isoformat(timespec="seconds")
+                if finish - when <= timedelta(days=RECENT_UPSTREAM_DAYS):
+                    age_class = "RECENT_PUBLIC_MERGE_UNVERIFIED"
+                    recent.append(task)
+                else:
+                    age_class = "HISTORICAL_PUBLIC_BACKFILL"
+                    historical += 1
+            else:
+                unknown += 1
+        else:
+            unknown += 1
+        task["upstream_merged_at_utc"] = merge_date
+        task["upstream_merge_age_days"] = age_days
+        task["upstream_recency"] = age_class
+        task["recent_upstream_change"] = age_class == "RECENT_PUBLIC_MERGE_UNVERIFIED"
+    result["recent_upstream_review_count"] = len(recent)
+    result["recent_upstream_review_tasks"] = recent
+    result["historical_backfill_review_count"] = historical
+    result["upstream_age_unknown_review_count"] = unknown
+    if historical == len(result["new_review_tasks"]) and historical:
+        result["status"] = "LATEST_HOURLY_HISTORICAL_BACKFILL_ONLY_NO_NEW_UPSTREAM"
+    elif unknown == len(result["new_review_tasks"]) and unknown:
+        result["status"] = "LATEST_HOURLY_SOURCE_RECENCY_UNKNOWN_NO_NEW_UPSTREAM"
+    return result
+
+
 def inspect_latest_hourly_review(root: Path) -> dict:
     """One read-only command after an existing scheduled cycle; no new timer."""
     root = Path(root)
@@ -228,7 +329,9 @@ def inspect_latest_hourly_review(root: Path) -> dict:
         rows = conn.execute("SELECT fingerprint, first_seen_utc FROM review_queue").fetchall()
     if len(rows) > MAX_REVIEWED_ROWS or len({row[0] for row in rows}) != len(rows):
         raise ValueError("invalid bounded UCIE review timestamps")
-    return build_latest_hourly_review(receipt, handoff, docket, dict(rows))
+    linked = build_latest_hourly_review(receipt, handoff, docket, dict(rows))
+    return classify_upstream_recency(
+        linked, _history_merge_dates(root, linked["new_review_tasks"]))
 
 
 def _zero_new(receipt: dict) -> dict:
