@@ -29,7 +29,7 @@ MAX_RECEIPT_BYTES = 8192
 MAX_SELECTED = 12
 MAX_REVIEWED_ROWS = 1000
 RECENT_UPSTREAM_DAYS = 365
-PR_REF = re.compile(r"(?:pr|fix-pr):([1-9][0-9]*):([a-f0-9]{40})(?::[a-f0-9]{64})?\Z")
+PR_REF = re.compile(r"(?:pr|fix-pr):([1-9][0-9]*):([a-f0-9]{40})(?::([a-f0-9]{64}))?\Z")
 COMMIT_REF = re.compile(r"commit:([a-f0-9]{40})\Z")
 APPROVED = frozenset((
     "python/cpython", "PowerShell/PowerShell", "git/git",
