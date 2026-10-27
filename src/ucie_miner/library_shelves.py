@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from pathlib import Path
 import re
@@ -18,7 +18,7 @@ import sqlite3
 from .positive_capability_discovery import classify_public_capability_metadata
 from .public_discovery import DiscoveryError, SOURCES, public_feed_get, public_feed_url
 from .public_official_evidence import (
-    _path, _schema, _utc, RECORD_CAP, GHSA,
+    _path, _schema, RECORD_CAP, GHSA,
 )
 from .public_evidence_routes import DOC_ENDPOINTS
 from .source_registry import get_source, SourceRegistryError
@@ -96,6 +96,19 @@ def search_positive_capability_shelf(rows: object, *,
     }
 
 
+def _observed_utc(value: object) -> datetime:
+    """Stage14 stores both 'Z' published times and '+00:00' observation times."""
+    if type(value) is not str or not 1 <= len(value) <= 40:
+        raise LibraryShelfError("invalid bounded UTC evidence timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise LibraryShelfError("invalid UTC evidence timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
+        raise LibraryShelfError("untrusted non-UTC official evidence date")
+    return parsed
+
+
 def search_official_metadata_shelf(root: Path, *,
                                    source_id: str | None = None,
                                    kind: str | None = None,
@@ -164,7 +177,7 @@ def search_official_metadata_shelf(root: Path, *,
                 or type(digest) is not str or SHA64.fullmatch(digest) is None
                 or type(ref) is not str or not 1 <= len(ref) <= 80):
             raise LibraryShelfError("invalid public official evidence row")
-        _utc(observed)
+        _observed_utc(observed)
         if evidence_kind == "document":
             if ref != "pinned-doc-url":
                 raise LibraryShelfError("document reference mismatch")
@@ -230,6 +243,12 @@ def main() -> int:
             if args.source_id is None:
                 raise LibraryShelfError("positive shelf requires an exact approved source ID")
             if not args.live:
+                try:
+                    src = get_source(args.source_id)
+                except SourceRegistryError as exc:
+                    raise LibraryShelfError("source not approved") from exc
+                if src["source_kind"] != "INDEPENDENT_PUBLIC_REPOSITORY":
+                    raise LibraryShelfError("positive shelf requires approved repo")
                 result = {
                     "schema": SCHEMA, "shelf": "POSITIVE_CAPABILITY_HYPOTHESES",
                     "status": "W05_LIVE_PUBLIC_FETCH_NOT_REQUESTED",
