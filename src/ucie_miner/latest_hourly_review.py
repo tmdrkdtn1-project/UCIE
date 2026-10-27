@@ -25,7 +25,6 @@ SCHEMA = "UCIE_LATEST_HOURLY_NEW_REVIEW_HANDOFF_V1"
 MAX_RECEIPT_BYTES = 8192
 MAX_SELECTED = 12
 MAX_REVIEWED_ROWS = 1000
-HEX40 = re.compile(r"[0-9a-f]{40}\Z")
 PR_REF = re.compile(r"(?:pr|fix-pr):([1-9][0-9]*):([a-f0-9]{40})(?::[a-f0-9]{64})?\Z")
 COMMIT_REF = re.compile(r"commit:([a-f0-9]{40})\Z")
 APPROVED = frozenset((
@@ -116,6 +115,7 @@ def build_latest_hourly_review(receipt: dict, handoff: dict,
     """
     if (type(receipt) is not dict
             or receipt.get("schema") != "UCIE_MINER_CYCLE_V1"
+            or type(receipt.get("status")) is not str
             or receipt.get("verification_pass") != 0
             or receipt.get("production_approved") is not False
             or type(receipt.get("stage12_review_proposals_added")) is not int
@@ -217,7 +217,7 @@ def inspect_latest_hourly_review(root: Path) -> dict:
                 "COLLECTED_UNVERIFIED", "COLLECTED_UNVERIFIED_PARTIAL_NO_GO"}
             and receipt.get("stage12_review_status")
                 == "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO"):
-        return build_latest_hourly_review(receipt, {}, {}, {}) if False else _zero_new(receipt)
+        return _zero_new(receipt)
     handoff = prepare_verification_handoff(root)
     stage16 = attest_stage16_aggregate(root)
     docket = build_review_docket(handoff, stage16)
