@@ -24,7 +24,7 @@ MAX_QUERY = 80
 MAX_LIMIT = 20
 QUERY = re.compile(r"[A-Za-z0-9_.:/ -]{0,80}\Z")
 SOURCE = re.compile(r"(?:repo:)?[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\Z")
-ALLOWED_KINDS = frozenset(("PREVENTION_RULE", "REUSABLE_SKILL"))
+ALLOWED_KINDS = frozenset(("PREVENTION_RULE", "PUBLIC_TECHNICAL_EVIDENCE"))
 ALLOWED_DOMAINS = frozenset(p["domain"] for p in PROFILE.values())
 
 
@@ -64,7 +64,7 @@ def search_linked_public_candidates(handoff: dict, *, query: str = "",
                                     source_id: str | None = None,
                                     limit: int = 20,
                                     group_revisions: bool = False) -> dict:
-    """Search validated candidates; optionally group duplicate PR evidence."""
+    """Search public evidence, never calling unreviewed PRs a usable skill."""
     q, kind, domain, source_id, limit, group_revisions = _filters(
         query=query, kind=kind, domain=domain,
         source_id=source_id, limit=limit, group_revisions=group_revisions)
@@ -88,7 +88,7 @@ def search_linked_public_candidates(handoff: dict, *, query: str = "",
                 or type(task.get("skill_id")) is not str):
             raise LibrarySearchError("incomplete source-linked review task")
         shelf = ("PREVENTION_RULE" if task.get("stage6_candidate") is not None
-                 else "REUSABLE_SKILL")
+                 else "PUBLIC_TECHNICAL_EVIDENCE")
         record = build_library_entry({
             "kind": shelf,
             "source_id": "repo:" + task["source"],
@@ -169,7 +169,7 @@ def search_linked_public_candidates(handoff: dict, *, query: str = "",
         "returned_count": min(limit, len(matched)),
         "omitted_count": max(0, len(matched) - limit),
         "items": matched[:limit],
-        "shelves_available": ["PREVENTION_RULE", "REUSABLE_SKILL"],
+        "shelves_available": ["PREVENTION_RULE", "PUBLIC_TECHNICAL_EVIDENCE"],
         "available_domains": sorted(ALLOWED_DOMAINS),
         "full_library_implemented": False,
         "search_index_persisted": False,
