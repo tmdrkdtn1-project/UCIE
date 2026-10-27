@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from ucie_miner import capability_trials as t
+from ucie_miner.public_discovery import DiscoveryError
 from test_ucie_positive_capability_discovery import public_pr, NOW
 
 
@@ -78,12 +79,14 @@ class W05P8FirstPartyTrials(unittest.TestCase):
                    side_effect=AssertionError("no public GET")):
             result = t.evaluate_approved_w05_feed(
                 metadata, source_id="repo:python/cpython", now=NOW)
-        self.assertEqual(result["source_candidate_count"], 3)
-        self.assertEqual(result["returned_count"], 3)
+        self.assertEqual(result["source_candidate_count"], 4)
+        self.assertEqual(result["returned_count"], 4)
         self.assertEqual({x["kind"] for x in result["items"]},
                          {"DEVELOPMENT_ENGINE", "REUSABLE_SKILL", "LEARNING_LOGIC"})
-        self.assertTrue(all(x["synthetic_experiment"] is not None
-                            for x in result["items"]))
+        self.assertEqual(sum(x["synthetic_experiment"] is not None
+                             for x in result["items"]), 3)
+        self.assertEqual(sum(x["synthetic_experiment"] is None
+                             for x in result["items"]), 1)
         self.assertTrue(all(not x["upstream_capability_tested"]
                             and not x["export_allowed"]
                             for x in result["items"]))
@@ -102,11 +105,11 @@ class W05P8FirstPartyTrials(unittest.TestCase):
     def test_unapproved_or_forged_pr_is_blocked_by_real_w05_classifier(self):
         rows = [public_pr(11101, "Add incremental build cache for compilation")]
         for source in ("research:GH Archive", "repo:unapproved/private"):
-            with self.assertRaises((ValueError, Exception)):
+            with self.assertRaises(DiscoveryError):
                 t.verified_w05_cues(rows, source_id=source, now=NOW)
         changed = deepcopy(rows)
         changed[0]["html_url"] = "https://example.invalid/evil"
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DiscoveryError):
             t.verified_w05_cues(
                 changed, source_id="repo:python/cpython", now=NOW)
 
