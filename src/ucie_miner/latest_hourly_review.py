@@ -212,7 +212,8 @@ def inspect_latest_hourly_review(root: Path) -> dict:
     receipt = _read_last_receipt(root)
     # A zero-new or skipped run needs no additional ledger scans.
     if (receipt.get("schema") == "UCIE_MINER_CYCLE_V1"
-            and receipt.get("stage12_review_proposals_added") == 0
+            and type(receipt.get("stage12_review_proposals_added")) is int
+            and receipt["stage12_review_proposals_added"] == 0
             and receipt.get("status") in {
                 "COLLECTED_UNVERIFIED", "COLLECTED_UNVERIFIED_PARTIAL_NO_GO"}
             and receipt.get("stage12_review_status")
