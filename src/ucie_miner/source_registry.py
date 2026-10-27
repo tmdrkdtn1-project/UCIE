@@ -6,6 +6,8 @@ the only fetch authority. Research-only sources can never be activated here.
 """
 from __future__ import annotations
 
+import json
+
 from .evidence import SOURCES as KNOWN_OWNERS
 from .public_discovery import SOURCES as DISCOVERY_SOURCES
 from .public_evidence_routes import DOC_ENDPOINTS
@@ -60,7 +62,8 @@ def sources() -> tuple[dict, ...]:
             "source_id": "doc:" + repo,
             "source_kind": SOURCE_KINDS[1],
             "status": ACTIVE,
-            "owner_label": owner,
+            "owner_label": "OFFICIAL_PUBLISHER_NOT_INDEPENDENTLY_ATTESTED",
+            "related_approved_repo": repo,
             "public_url": doc_url,
             "existing_method": METHODS[1],
             "approved_material_types": [OFFICIAL_PUBLIC_MATERIAL[0]],
@@ -117,3 +120,12 @@ def preview_source_registry(*, include_research: bool = True) -> dict:
         "license_signoff": False,
         "future_sources_approved": False,
     }
+
+
+def main() -> int:
+    print(json.dumps(preview_source_registry(), ensure_ascii=True, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
