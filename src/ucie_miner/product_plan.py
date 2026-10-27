@@ -1,7 +1,8 @@
 """UCIE V1 final product goals and roadmap, strictly inert planning data.
 
-This module does NOT implement the proposed Source Registry, Virtual Library,
-learning engine or a production release. It offers a deterministic work-order
+This module does NOT implement the finished Source Registry, Virtual Library,
+learning engine or a production release. W01/W02 have initial code contracts,
+not an integrated source crawler or searchable library. It offers a work-order
 preview without network, filesystem, scheduler, source execution or mutation.
 Canonical human specifications: docs/UCIE_V1_MASTER_ROADMAP_20261027.md.
 """
@@ -87,6 +88,7 @@ WORK = (
      "Record UCIE-owned experience and demonstrate the complete P9 V1 closed loop."),
 )
 NEXT_PARALLEL = ("W01", "W02")
+FOUNDATION_CODE_AVAILABLE = ("W01", "W02")  # code only; no local runtime or V1 acceptance
 FOLLOWING_INTERFACE = ("W05",)
 SAFE_STATUS_VALUES = frozenset({
     "BASELINE_OBSERVED_PARTIAL", "NEXT", "PARTIAL",
@@ -123,7 +125,8 @@ def validate_product_plan() -> bool:
             raise ValueError("unknown development track")
         if not acceptance or any(positions.get(dep, i) >= i for dep in dependencies):
             raise ValueError("invalid or cyclic work dependencies")
-    if NEXT_PARALLEL != ("W01", "W02") or FOLLOWING_INTERFACE != ("W05",):
+    if (NEXT_PARALLEL != ("W01", "W02") or FOLLOWING_INTERFACE != ("W05",)
+            or FOUNDATION_CODE_AVAILABLE != ("W01", "W02")):
         raise ValueError("initial parallel roadmap boundary changed")
     return True
 
@@ -143,10 +146,13 @@ def preview_next_work() -> dict:
         ],
         "immediate_parallel_work": list(NEXT_PARALLEL),
         "next_contract_work": list(FOLLOWING_INTERFACE),
+        "foundation_code_available": list(FOUNDATION_CODE_AVAILABLE),
         "work_order": [
             {"id": x, "milestone": milestone, "track": track,
              "depends_on": list(deps), "acceptance": acceptance,
-             "execution_state": "PLANNED_NOT_EXECUTED"}
+             "execution_state": ("FOUNDATION_CODE_IMPLEMENTED_NOT_HOST_VERIFIED"
+                                  if x in FOUNDATION_CODE_AVAILABLE
+                                  else "PLANNED_NOT_EXECUTED")}
             for x, milestone, track, deps, acceptance in WORK
         ],
         "approved_public_repositories": list(APPROVED_REPOSITORIES),
