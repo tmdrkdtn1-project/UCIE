@@ -1,6 +1,7 @@
 """One focused functional regression for latest hourly Stage12 -> Stage17 handoff."""
 from __future__ import annotations
 
+from contextlib import closing
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
@@ -210,7 +211,7 @@ class LatestHourlyReviewTests(unittest.TestCase):
             runtime = root / "runtime"
             runtime.mkdir(parents=True)
             db = runtime / "stage13_external_public_history.sqlite3"
-            with sqlite3.connect(db) as conn:
+            with closing(sqlite3.connect(db)) as conn:
                 init_history_schema(conn, new=True)
                 for source, number, merge, sha, when in cases:
                     conn.execute(
