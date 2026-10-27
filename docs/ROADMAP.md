@@ -49,19 +49,32 @@ APPROVED PUBLIC TECHNICAL INPUTS ONLY
              +----> improves A, B and C; no private feedback return path
 ```
 
-## Implementation roadmap (product milestones, not invented Stage numbers)
+## Final UCIE V1 product roadmap — P0–P9 (2026-10-27)
 
-| Milestone | Deliverable and exact acceptance | Current verified boundary at 2026-10-27 |
+**Canonical detailed plan:** [UCIE V1 Master Roadmap](UCIE_V1_MASTER_ROADMAP_20261027.md).
+**Machine-readable final goals/work-order preview:** `python -m ucie_miner.product_plan` (inert, read-only, no network or deployment).
+
+The four pillars above are coequal; two foundational systems are mandatory and not optional appendices:
+
+1. **Source Registry and source selection:** evaluate public API sites, technical documentation, tools and datasets for utility, provenance, license, access policy and current explicit approval. Do **not** treat future candidates as approved sources.
+2. **Modular automatic public-source acquisition:** allowlisted API/document adapters, bounded incremental ingestion, checkpoints, deduplication, scheduling and safe failure recovery, leading into the Virtual Library. Reuse the existing UCIE hourly GitHub miner.
+
+| Milestone | Product outcome | Verified current boundary (2026-10-27) |
 |---|---|---|
-| P0. Preserve the working foundation | Keep the approved public-only hourly intake, evidence ledgers, review handoff, manual signature paths and regression tests functioning; repair only blocking defects | Hourly collected/unverified receipt and Stage12-to-Stage17 2/2 operator output observed; owner-signed Serial5 exists; no broad production certification |
-| **P1. Virtual Library core** | A unified **read-only** catalog/index over existing Stage10–17, evidence, knowledge and approved Rulepacks; kind/category taxonomy and provenance, deduplication, version lineage; actual task/capability search | Several isolated SQLite ledgers and rulepack tools exist; a unified searchable Virtual Library has **not** been demonstrated |
-| **P2. Skill/engine discovery and improvement** | Expand *within existing approved source scope* beyond error fixes to effective procedures, engines, reusable skills and learning logic; rank and compare candidates; generate UCIE-authored generic specifications with source constraints | Static profiles, rule candidates and safe templates are partial building blocks; general-purpose engine/skill discovery and evaluation are **not** complete |
-| P3. Prevention knowledge as first-class library entries | Integrate the existing prevention rules and bounded detectors into the same taxonomy, compare conflict/version applicability and access by search, not a separate silo | Some signed prevention rules and unsigned sixth/seventh candidates exist; not a blanket verified rule portfolio |
-| P4. Safe execution/evaluation and capability packaging | First-party synthetic/isolated evaluation of safe reusable components; benchmark tradeoffs; produce versioned, traceable, independently callable/exportable approved public/generic packages and learning-logic templates | CI, synthetic tests and manual signing exist; generalized artifact packaging and consumer integration remain incomplete |
-| P5. Library evolution/experience engine | Record UCIE-only successes, failures, rejected candidates, rule/engine performance, improvement hypotheses, supersession and retraction; incremental, measurable improvements to search quality and capability reuse | Evidence revision/deduplication and some history exist; full closed-loop evolution and effectiveness measurement are not complete |
-| P6. UCIE V1 integrated product | Search → evaluate sources → compare → select/export approved rule/skill/engine/learning logic → independently use → record only allowed UCIE-owned learning improvements | **NOT COMPLETED**. Do not equate multiple Stages or passing CI with integrated product readiness |
+| P0. Existing engine foundation | Preserve the public-only collector, evidence ledgers and approved signed rules; fix only blocking defects | Observed one successful hourly unverified intake and Stage12→17 review 2/2; Serial5 owner-signed; not V1 certification |
+| **P1. Source Registry** | Catalog accepted/research-only sources, ownership, API/access/license/version scope; reject unapproved fetch | **NEXT**: approved repo allowlist exists; generalized registry absent |
+| **P2. Modular public data intake** | Connect approved GitHub/official doc feeds to a common adapter contract; keep API budget and safe incremental pipeline | **PARTIAL**: bounded GitHub and official metadata stages exist; generic adapters incomplete |
+| **P3. Virtual Library** | Unified indexed/searchable categorized knowledge of engines, skills, learning logic and prevention rules | **NEXT**: separate ledgers exist, unified library not complete |
+| P4. Engine/skill/learning-logic discovery | Extract useful *positive* development techniques and improvement candidates, not just bugs | **FOUNDATION_ONLY**: skill profiles/heuristics exist |
+| P5. Prevention knowledge integration | Import versioned, evidence-bound, signed/unsigned error-prevention rules into searchable Library | **PARTIAL**: multiple scanners/rules exist; library integration missing |
+| P6. First-party safe testing/improvement | Execute bounded UCIE-authored regression and capability evaluation; show measured improvement | **PARTIAL**: synthetic tests exist; generalized evaluation incomplete |
+| P7. Portable capability packages | Package approved general-purpose skill/engine/learning logic with interfaces, dependencies and lineage | **NOT_IMPLEMENTED** as generalized product |
+| P8. Learning from UCIE-owned experience | Capture failures/successes and revise library contents and reusable methods without private project feedback | **PARTIAL**: revisions/dedup exist; closed-loop improvement missing |
+| P9. UCIE V1 integrated product | Source acquisition → discovery → library query → evaluation → approved export → library evolution | **NOT_ACCEPTED** |
 
-**Development order:** start P1 (library core) **and P2 (capability discovery)** as parallel product tracks while preserving P0. Integrate the already implemented prevention work as P3, then P4, P5 and P6. Do not suspend reusable capability development to pursue the eighth/ninth error rule or retest previously accepted fixes. Do not add redundant Stages when existing modules suffice.
+**Immediate development order:** W01 Approved Source Registry and W02 Library Entry taxonomy in parallel; bridge W05 discovery contracts; then W03 existing collector adapter, W04 read-only catalog search, W06 approved documentation connector, W07 rule integration, W08 first-party evaluation, W09 capability packaging, W10 evolution/V1 integration. See the canonical master document for exact dependencies, statuses and acceptance criteria.
+
+**Current milestone:** `P0_BASELINE_OBSERVED__P1_AND_P3_NEXT`. P2 and P4 reuse existing partial functionality; no new error-rule race or redundant re-testing.
 
 ## Source boundary / trust and distribution
 
