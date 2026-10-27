@@ -59,6 +59,59 @@ class W04ExactIndexTests(unittest.TestCase):
         self.assertFalse(out["production_index_replaced"])
         self.assertNotIn("guaranteed_faster", out)
 
+    def test_cost_policy_selects_linear_for_one_query_and_equal_cost(self):
+        handoff = handoff_two_evidence_revisions()
+        key = ("repo:modelcontextprotocol/python-sdk", "MCP/API",
+               "PUBLIC_TECHNICAL_EVIDENCE", "EXCEPTION_HANDLING")
+        single = exact_search_linked_public_candidates(
+            handoff, queries=(key,), limit=10)
+        self.assertEqual(single["selected_strategy"], "LINEAR_EXACT_SCAN")
+        self.assertFalse(single["index_built"])
+        self.assertIsNone(single["unique_index_keys"])
+        self.assertEqual(single["executed_strategy_estimated_operations"], 2)
+        self.assertEqual(single["alternative_strategy_estimated_operations"], 3)
+        self.assertEqual(single["items"][0]["total_matches"], 2)
+        # 2 * 2 = 2 + 2: tie must not build the index needlessly.
+        tie = exact_search_linked_public_candidates(
+            handoff, queries=(key, key), limit=10)
+        self.assertEqual(tie["selected_strategy"], "LINEAR_EXACT_SCAN")
+        self.assertEqual(tie["linear_scan_comparisons_for_same_queries"], 4)
+        self.assertEqual(tie["index_build_plus_lookup_operations"], 4)
+        self.assertFalse(tie["index_built"])
+
+    def test_cost_policy_selects_shared_index_for_three_queries(self):
+        handoff = handoff_two_evidence_revisions()
+        key = ("repo:modelcontextprotocol/python-sdk", "MCP/API",
+               "PUBLIC_TECHNICAL_EVIDENCE", "EXCEPTION_HANDLING")
+        missing = key[:3] + ("NO_SUCH_PURPOSE",)
+        batch = exact_search_linked_public_candidates(
+            handoff, queries=(key, missing, key), limit=1)
+        self.assertEqual(batch["selected_strategy"], "BUILD_ONCE_COMPOSITE_INDEX")
+        self.assertTrue(batch["index_built"])
+        self.assertEqual(batch["unique_index_keys"], 1)
+        self.assertEqual(batch["linear_scan_comparisons_for_same_queries"], 6)
+        self.assertEqual(batch["index_build_plus_lookup_operations"], 5)
+        self.assertEqual(batch["executed_strategy_estimated_operations"], 5)
+        self.assertEqual(batch["items"][0]["total_matches"], 2)
+        self.assertEqual(batch["items"][0]["omitted_count"], 1)
+        self.assertEqual(batch["items"][1]["total_matches"], 0)
+        self.assertEqual(batch["items"][2]["items"], batch["items"][0]["items"])
+        self.assertEqual(batch["operating_database_writes"], 0)
+        self.assertFalse(batch["auto_promoted"])
+
+    def test_policy_choices_preserve_identical_results_across_scan_and_index(self):
+        handoff = handoff_two_evidence_revisions()
+        key = ("repo:modelcontextprotocol/python-sdk", "MCP/API",
+               "PUBLIC_TECHNICAL_EVIDENCE", "EXCEPTION_HANDLING")
+        scan = exact_search_linked_public_candidates(
+            handoff, queries=(key,), limit=10)
+        indexed = exact_search_linked_public_candidates(
+            handoff, queries=(key, key, key), limit=10)
+        self.assertEqual(scan["items"][0], indexed["items"][0])
+        self.assertEqual(scan["items"][0], indexed["items"][2])
+        self.assertNotIn("elapsed_time_guaranteed_faster", indexed)
+        self.assertFalse(indexed["production_index_replaced"])
+
     def test_unapproved_sources_and_invalid_fields_are_denied(self):
         good = ("repo:python/cpython", "Python",
                 "PUBLIC_TECHNICAL_EVIDENCE", "API_CONTRACT")
