@@ -107,7 +107,7 @@ class OfficialReadOnlyShelfTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "UCIE"
-        (self.root / "runtime").mkdir()
+        (self.root / "runtime").mkdir(parents=True)
         self.db = self.root / "runtime" / "stage14_official_public_sources.sqlite3"
 
     def build_stage14(self):
