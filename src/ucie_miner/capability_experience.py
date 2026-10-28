@@ -16,7 +16,7 @@ import tempfile
 
 from .capability_trials import (
     SCHEMA as TRIAL_SCHEMA, RECIPES, CapabilityTrialError,
-    evaluate_ucie_owned_recipe, verified_w05_cues,
+    evaluate_ucie_owned_recipe, validate_w05_page_bundle,
 )
 from .public_discovery import DiscoveryError, public_feed_get, public_feed_url
 from .source_registry import get_source, SourceRegistryError
@@ -234,7 +234,12 @@ def run_capability_cycle(root: Path, *, source_rows: object,
             "network_requests": 0, "operating_database_writes": 0,
             "auto_promoted": False,
         }
-    cues = verified_w05_cues(source_rows, source_id=source_id, now=now)
+    # Keep old single-page caller contract, but permit a bounded tuple of
+    # independently validated original GitHub pages for explicit depth scans.
+    pages = (source_rows,) if type(source_rows) is list else source_rows
+    scanned = validate_w05_page_bundle(pages, source_id=source_id, now=now)
+    cues = scanned["cues"]
+    diagnostics = scanned["diagnostics"]
     seen = {(e["receipt"]["candidate_id"], e["receipt"]["workload_sha256"])
             for e in prior}
     chosen = None
@@ -255,6 +260,7 @@ def run_capability_cycle(root: Path, *, source_rows: object,
         return {
             "schema": SCHEMA, "status": "NO_UNTESTED_IMPLEMENTED_W05_RECIPE",
             "recorded_count": len(prior), "source_candidate_count": len(cues),
+            "source_scan_diagnostics": diagnostics,
             "unsupported_recipe_count": sum(
                 cue["purpose_code"] not in RECIPES for cue in cues),
             "new_event_written": False, "network_requests": 0,
@@ -290,6 +296,7 @@ def run_capability_cycle(root: Path, *, source_rows: object,
         "status": ("W05_FIRST_PARTY_EXPERIENCE_RECORDED_NO_GO" if event else
                    "W05_FIRST_PARTY_EXPERIENCE_PREVIEW_ONLY_NO_GO"),
         "source_candidate_count": len(cues),
+        "source_scan_diagnostics": diagnostics,
         "recorded_before": len(prior),
         "candidate_id": cue["library_item_id"],
         "purpose_code": cue["purpose_code"],
@@ -320,14 +327,18 @@ def main() -> int:
         "repo:modelcontextprotocol/python-sdk", "repo:actions/runner-images",
     ])
     parser.add_argument("--live", action="store_true",
-                        help="Explicit one original approved GitHub public PR GET")
+                        help="Explicit approved GitHub public PR metadata GET")
+    parser.add_argument("--pages", type=int, default=1,
+                        help="Explicit 1-3 original approved closed-PR pages; default 1")
     parser.add_argument("--record", action="store_true",
                         help="Explicitly persist ONE UCIE-owned synthetic experience")
     parser.add_argument("--history", action="store_true")
     args = parser.parse_args()
     try:
+        if type(args.pages) is not int or not 1 <= args.pages <= 3:
+            raise CapabilityExperienceError("only 1-3 approved public pages")
         if args.history:
-            if args.live or args.record or args.source_id:
+            if args.live or args.record or args.source_id or args.pages != 1:
                 raise CapabilityExperienceError("read-only history mode only")
             output = read_capability_history(args.ucie_root)
         elif args.live and args.source_id:
@@ -336,13 +347,14 @@ def main() -> int:
             if source["source_kind"] != "INDEPENDENT_PUBLIC_REPOSITORY":
                 raise CapabilityExperienceError("unapproved positive source")
             repo = args.source_id.removeprefix("repo:")
-            rows = public_feed_get(public_feed_url(repo))
+            pages = tuple(public_feed_get(public_feed_url(repo, page=p))
+                          for p in range(1, args.pages + 1))
             output = run_capability_cycle(
-                args.ucie_root, source_rows=rows, source_id=args.source_id,
+                args.ucie_root, source_rows=pages, source_id=args.source_id,
                 record=args.record)
-            output["explicit_public_gets"] = 1
-            output["network_requests"] = 1
-        elif args.record or args.live:
+            output["explicit_public_gets"] = args.pages
+            output["network_requests"] = args.pages
+        elif args.record or args.live or args.pages != 1:
             raise CapabilityExperienceError(
                 "record requires explicit --live and exact --source-id")
         else:
