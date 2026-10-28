@@ -201,6 +201,82 @@ def verified_w05_cues(source_rows: object, *, source_id: str, now=None) -> tuple
     return tuple(records)
 
 
+
+def validate_w05_page_bundle(page_rows: tuple[list, ...], *, source_id: str,
+                             now=None) -> dict:
+    """Validate 1-3 original approved GitHub pages, no new collection routes.
+
+    Each page gets the unmodified W05 title/merge/provenance validator. Stable
+    repeated PRs across pages are de-duplicated; conflicting PR metadata
+    fail closed. No titles, patches, source code or arbitrary text in output.
+    """
+    from .positive_capability_discovery import classify_public_capability_metadata
+    from .public_discovery import PR_CAP
+
+    if (type(page_rows) is not tuple or not 1 <= len(page_rows) <= 3
+            or type(source_id) is not str):
+        raise CapabilityTrialError("only 1-3 existing approved W05 pages")
+    seen_rows: dict[int, str] = {}
+    seen_candidates: dict[str, dict] = {}
+    diagnostics = []
+    repeated = 0
+    for page_number, rows in enumerate(page_rows, start=1):
+        if type(rows) is not list or len(rows) > PR_CAP:
+            raise CapabilityTrialError("invalid bounded original W05 page")
+        # Each page passes the original strict validator, not a relaxed
+        # aggregated parser. No network occurs in these two pure functions.
+        classified = classify_public_capability_metadata(
+            rows, source_id=source_id, now=now)
+        cues = verified_w05_cues(rows, source_id=source_id, now=now)
+        for row in rows:
+            if type(row) is not dict or type(row.get("number")) is not int:
+                raise CapabilityTrialError("invalid W05 public PR row")
+            fingerprint = sha256(json.dumps(
+                [row.get("number"), row.get("title"), row.get("merged_at"),
+                 row.get("merge_commit_sha"), row.get("html_url"),
+                 row.get("base", {}).get("repo", {}).get("full_name")],
+                ensure_ascii=True, separators=(",", ":"),
+            ).encode("ascii")).hexdigest()
+            prior = seen_rows.get(row["number"])
+            if prior is not None:
+                if prior != fingerprint:
+                    raise CapabilityTrialError("conflicting PR revisions across pages")
+                repeated += 1
+            seen_rows[row["number"]] = fingerprint
+        for cue in cues:
+            existing = seen_candidates.get(cue["public_url"])
+            if existing is not None and existing != cue:
+                raise CapabilityTrialError("conflicting candidate across pages")
+            seen_candidates[cue["public_url"]] = cue
+        diagnostics.append({
+            "page": page_number,
+            "source_rows_examined": classified["source_rows_examined"],
+            "positive_title_cues": classified["candidate_count"],
+            "nonmerged_count": classified["nonmerged_count"],
+            "repair_title_count": classified["repair_title_count"],
+            "ambiguous_positive_cue_count": classified["ambiguous_positive_cue_count"],
+            "unpinned_positive_cue_count": classified["unpinned_positive_cue_count"],
+            "unclassified_or_repair_count":
+                classified["unclassified_or_repair_count"],
+        })
+    items = sorted(seen_candidates.values(), key=lambda x: (
+        x["upstream_age_days"], x["public_url"], x["purpose_code"]))
+    return {
+        "cues": tuple(items),
+        "diagnostics": {
+            "schema": "UCIE_W05_BOUNDED_PAGES_DIAGNOSTICS_V1",
+            "pages_scanned": len(page_rows),
+            "public_rows_examined": sum(x["source_rows_examined"] for x in diagnostics),
+            "overlapping_rows_deduplicated": repeated,
+            "unique_positive_candidates": len(items),
+            "pages": diagnostics,
+            "unverified_title_cues_only": True,
+            "upstream_capability_verified": False,
+            "operating_database_writes": 0,
+            "auto_promoted": False,
+        },
+    }
+
 def evaluate_approved_w05_feed(source_rows: object, *, source_id: str,
                                now=None, max_trials: int = 5) -> dict:
     if type(max_trials) is not int or not 1 <= max_trials <= 5:
