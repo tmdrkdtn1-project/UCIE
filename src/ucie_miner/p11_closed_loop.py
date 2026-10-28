@@ -127,6 +127,7 @@ def activate(root: Path) -> dict:
             slot INTEGER PRIMARY KEY CHECK(slot=1),
             source_index INTEGER NOT NULL CHECK(source_index BETWEEN 0 AND 4),
             last_attempt_at TEXT,
+            last_attempt_failed INTEGER NOT NULL DEFAULT 0 CHECK(last_attempt_failed IN (0,1)),
             total_public_gets INTEGER NOT NULL CHECK(total_public_gets>=0)
         );
         INSERT OR IGNORE INTO cursor(slot,source_index,total_public_gets)
@@ -200,21 +201,27 @@ def collect_one(root: Path, *, fetch=public_feed_get,
     with closing(_conn(root)) as conn:
         conn.execute("BEGIN IMMEDIATE")
         cursor = conn.execute(
-            "SELECT source_index,last_attempt_at,total_public_gets FROM cursor "
+            "SELECT source_index,last_attempt_at,last_attempt_failed,total_public_gets FROM cursor "
             "WHERE slot=1").fetchone()
         if cursor is None:
             raise P11Error("missing P11 cursor")
         previous = cursor["last_attempt_at"]
         if previous and now < _parse(previous) + MIN_GET_INTERVAL:
             conn.execute("COMMIT")
+            # Never acknowledge a failed API fetch as a completed job only
+            # because the retry cooldown has not elapsed. P10 keeps this
+            # source job PENDING; other independent jobs still proceed.
             return {
-                "schema": SCHEMA, "status": "P11_RATE_WINDOW_NOT_DUE",
+                "schema": SCHEMA,
+                "status": ("P11_FAILED_SOURCE_REMAINS_PENDING" if
+                           cursor["last_attempt_failed"] else
+                           "P11_RATE_WINDOW_NOT_DUE"),
                 "public_api_gets_this_call": 0,
                 "unverified_new_leads": 0, "auto_promoted": False,
             }
         selected = cursor["source_index"]
-        conn.execute("UPDATE cursor SET last_attempt_at=? WHERE slot=1",
-                     (time_value,))
+        conn.execute("UPDATE cursor SET last_attempt_at=?,last_attempt_failed=1 "
+                     "WHERE slot=1", (time_value,))
         conn.execute("COMMIT")
     source = SOURCES[selected]
     # Existing first-party exact allowlisted route and redirect-denying GET.
@@ -255,8 +262,8 @@ def collect_one(root: Path, *, fetch=public_feed_get,
                 raise P11Error("failed first-party metadata insert") from exc
             added += result.rowcount
         # Advance only after the validated metadata and deduping have committed.
-        conn.execute("UPDATE cursor SET source_index=?,total_public_gets="
-                     "total_public_gets+1 WHERE slot=1",
+        conn.execute("UPDATE cursor SET source_index=?,last_attempt_failed=0,"
+                     "total_public_gets=total_public_gets+1 WHERE slot=1",
                      ((selected + 1) % len(SOURCES),))
         conn.execute("COMMIT")
     return {
@@ -364,7 +371,7 @@ def status(root: Path) -> dict:
     with closing(sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True,
                                  timeout=0.25)) as conn:
         cursor = conn.execute(
-            "SELECT source_index,last_attempt_at,total_public_gets FROM cursor"
+            "SELECT source_index,last_attempt_at,last_attempt_failed,total_public_gets FROM cursor"
         ).fetchone()
         leads = conn.execute("SELECT COUNT(*) FROM leads").fetchone()[0]
         unchecked = conn.execute(
@@ -377,7 +384,8 @@ def status(root: Path) -> dict:
         "status": "P11_PUBLIC_EVIDENCE_EXPERIENCE_READ_ONLY",
         "sources": len(SOURCES), "next_source_id": "repo:" + SOURCES[cursor[0]],
         "last_public_attempt_utc": cursor[1],
-        "total_successful_public_gets": cursor[2],
+        "last_public_attempt_failed": bool(cursor[2]),
+        "total_successful_public_gets": cursor[3],
         "unverified_leads": leads, "awaiting_synthetic_experiment": unchecked,
         "first_party_experiences": events, "synthetic_equivalence_observed": good,
         "approved_rules": 0, "approved_skills": 0,

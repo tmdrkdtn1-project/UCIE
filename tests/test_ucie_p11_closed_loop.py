@@ -118,10 +118,15 @@ class P11ClosedLoopTests(unittest.TestCase):
         due = p11.collect_one(
             self.root, now=T0 + timedelta(minutes=1),
             fetch=lambda _url: self.fail("no extra request during cooldown"))
-        self.assertEqual(due["status"], "P11_RATE_WINDOW_NOT_DUE")
+        self.assertEqual(due["status"], "P11_FAILED_SOURCE_REMAINS_PENDING")
+        self.assertTrue(p11.status(self.root)["last_public_attempt_failed"])
+        with patch("ucie_miner.p11_closed_loop.collect_one",
+                   return_value=due):
+            self.assertFalse(p10._safe_handler(self.root, "PUBLIC_INCREMENTAL_MINING"))
         recovered = self._one(now=T0 + timedelta(minutes=5))
         self.assertEqual(recovered["source_id"], "repo:" + SOURCES[0])
         self.assertEqual(p11.status(self.root)["total_successful_public_gets"], 1)
+        self.assertFalse(p11.status(self.root)["last_public_attempt_failed"])
 
     def test_malformed_or_foreign_feed_fails_without_persisting_evidence(self):
         self._activate()
