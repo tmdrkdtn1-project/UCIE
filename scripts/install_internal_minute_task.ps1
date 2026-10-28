@@ -9,7 +9,8 @@ if ((Get-Item -LiteralPath $root).Attributes -band [System.IO.FileAttributes]::R
 if (-not (Test-Path -LiteralPath (Join-Path $root '.git') -PathType Container)) { throw 'UCIE_P10_CHECKOUT_MISSING' }
 $py = Join-Path $root '.venv\Scripts\python.exe'
 $module = Join-Path $root 'src\ucie_miner\runtime_pipeline.py'
-if (-not (Test-Path -LiteralPath $py -PathType Leaf) -or -not (Test-Path -LiteralPath $module -PathType Leaf)) { throw 'UCIE_P10_RUNTIME_FILES_MISSING' }
+$entry = Join-Path $root 'scripts\internal_minute_tick.py'
+if (-not (Test-Path -LiteralPath $py -PathType Leaf) -or -not (Test-Path -LiteralPath $module -PathType Leaf) -or -not (Test-Path -LiteralPath $entry -PathType Leaf)) { throw 'UCIE_P10_RUNTIME_FILES_MISSING' }
 $version = (& $py --version 2>&1 | Out-String).Trim()
 if (-not $version.StartsWith('Python 3.15')) { throw 'UCIE_P10_REQUIRES_PYTHON_315' }
 $taskName = 'UCIE-Internal-Minute'
@@ -32,7 +33,7 @@ $env:PYTHONPATH = Join-Path $root 'src'
 $init = & $py -B -m ucie_miner.runtime_pipeline --ucie-root $root --initialize
 if ($LASTEXITCODE -ne 0) { throw 'UCIE_P10_QUEUE_INITIALIZE_FAILED_NO_TASK_CREATED' }
 Write-Output $init
-$action = New-ScheduledTaskAction -Execute $py -Argument ('-B -m ucie_miner.runtime_pipeline --ucie-root "' + $root + '" --tick') -WorkingDirectory $root
+$action = New-ScheduledTaskAction -Execute $py -Argument ('-B "' + $entry + '"') -WorkingDirectory $root
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 1)
 $principal = New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
