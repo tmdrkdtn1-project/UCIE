@@ -248,6 +248,9 @@ class P11ClosedLoopTests(unittest.TestCase):
         self.assertEqual(snap["counts"]["RUNNING"], 0)
 
     def test_p11_experience_rearms_after_one_minute_without_extra_public_get(self):
+        # Real P10 deployment explicitly initializes its stable recurrence
+        # summary table in addition to the original queue schema.
+        p10.initialize(self.root)
         self._activate()
         self.assertEqual(p10.PERIODS["EXPERIENCE_CLOSED_LOOP"], 1)
         launched = []
