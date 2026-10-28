@@ -92,12 +92,13 @@ class P10WorkerTests(unittest.TestCase):
         self.assertEqual(counts["PENDING"], 1)
         self.assertEqual(counts["RUNNING"], 2)
         self.assertEqual(counts["SUCCEEDED"], 2)
-        # Index success at +2s, period 1m; at +65s it rearms.
+        # The first job (1-minute index) was blocked; B/C successes
+        # recur after 5 minutes, never after an arbitrary 1-minute tick.
         for job in second:
             q.finish_job(self.root, job_id=job["job_id"],
                          lease_token=job["lease_token"],
                          outcome="SUCCEEDED", now=START + timedelta(seconds=4))
-        later = p.dispatch_tick(self.root, now=START + timedelta(seconds=65),
+        later = p.dispatch_tick(self.root, now=START + timedelta(seconds=305),
                                 spawn=lambda *_: None)
         self.assertGreaterEqual(later["rearmed_successful_jobs"], 1)
         with q.closing(q._conn(self.root)) as db:
