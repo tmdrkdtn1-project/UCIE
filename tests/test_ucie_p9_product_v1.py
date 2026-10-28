@@ -202,6 +202,48 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertEqual(payload["status"], "P9_PRODUCT_FAIL_CLOSED")
         self.assertFalse(payload["v1_accepted"])
 
+    def test_fresh_isolated_p9_cli_never_imports_optional_signed_verifier(self):
+        """Regression for host without ucie_public.fifth_owner_addendum."""
+        source = str(Path(product.__file__).resolve().parents[1])
+        runner = (
+            "import builtins,contextlib,io,json,sys\n"
+            "from pathlib import Path\n"
+            "original=builtins.__import__\n"
+            "def fail_signed(name,*a,**kw):\n"
+            "    if name.endswith('signed_rule_library') or name.endswith('fifth_owner_addendum'):\n"
+            "        raise ModuleNotFoundError('simulated missing Serial5 addendum',name='ucie_public.fifth_owner_addendum')\n"
+            "    return original(name,*a,**kw)\n"
+            "builtins.__import__=fail_signed\n"
+            "sys.path.insert(0,sys.argv[1])\n"
+            "from ucie_miner import product_v1 as p\n"
+            "root=Path(sys.argv[2])\n"
+            "sys.argv=['product_v1','--ucie-root',str(root),'--demo']\n"
+            "output=io.StringIO()\n"
+            "with contextlib.redirect_stdout(output):\n"
+            "    code=p.main()\n"
+            "obj=json.loads(output.getvalue())\n"
+            "assert code==0 and obj['status']=='P9_INTEGRATED_READ_ONLY_PRODUCT_PREVIEW_NO_GO'\n"
+            "assert obj['signed_rules']['status']=='NOT_INSPECTED_NO_GO'\n"
+            "assert obj['portable_first_party_consumer_demo']['all_queries_equivalent']\n"
+            "assert obj['network_requests']==0 and obj['operating_database_writes']==0\n"
+            "try:\n"
+            "    p.integrated_product_preview(root,signed_serial4=root/'not_real_pack',owner_public_trust=root/'not_real_trust')\n"
+            "except p.ProductIntegrationError as err:\n"
+            "    assert str(err)=='EXPLICIT_SIGNED_RULEPACK_VERIFIER_DEPENDENCY_MISSING_NO_GO'\n"
+            "else:\n"
+            "    raise AssertionError('explicit signed verifier must fail closed')\n"
+            "print(json.dumps({'status':'MISSING_OPTIONAL_SIGNED_DEPENDENCY_HANDLED','exit':code}))\n"
+        )
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+        process = subprocess.run(
+            [sys.executable, "-I", "-c", runner, source, str(self.root)],
+            cwd=self.root, env=env, text=True, capture_output=True,
+            timeout=30, check=True)
+        self.assertEqual(
+            json.loads(process.stdout)["status"],
+            "MISSING_OPTIONAL_SIGNED_DEPENDENCY_HANDLED")
+
     def test_cli_readonly_inert_and_explicit_draft_export(self):
         with patch("sys.argv", [
             "product_v1", "--ucie-root", str(self.root), "--demo"]):
