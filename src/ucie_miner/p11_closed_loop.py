@@ -220,9 +220,11 @@ def collect_one(root: Path, *, fetch=public_feed_get,
     # Existing first-party exact allowlisted route and redirect-denying GET.
     payload = fetch(public_feed_url(source))
     extracted = discover_public_leads(payload, source=source, now=now)
-    if (extracted["status"] if "status" in extracted else
-            extracted["schema"] != "UCIE_APPROVED_PUBLIC_DISCOVERY_V1"):
-        # Status is intentionally absent in the existing schema.
+    if (extracted.get("schema") != "UCIE_APPROVED_PUBLIC_DISCOVERY_V1"
+            or extracted.get("source") != source
+            or type(extracted.get("leads")) is not list
+            or extracted.get("raw_text_retained") is not False
+            or extracted.get("proposals_promoted") != 0):
         raise P11Error("original discovery contract changed")
     leads = extracted["leads"]
     for row in leads:
@@ -359,8 +361,8 @@ def status(root: Path) -> dict:
             "new_experiences": 0, "api_calls_this_request": 0,
             "auto_promoted": False,
         }
-    with sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True,
-                         timeout=0.25) as conn:
+    with closing(sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True,
+                                 timeout=0.25)) as conn:
         cursor = conn.execute(
             "SELECT source_index,last_attempt_at,total_public_gets FROM cursor"
         ).fetchone()
