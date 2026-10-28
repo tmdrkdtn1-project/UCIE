@@ -188,6 +188,15 @@ def _spawn(root: Path, claimed: dict) -> None:
         close_fds=True, env={**os.environ, "PYTHONPATH": str(root / "src")})
 
 
+def _expire_without_claim(root: Path, *, now: datetime) -> tuple[int, int]:
+    """Reclaim stale leases even when all real worker slots were occupied."""
+    with closing(queue._conn(root)) as db:
+        db.execute("BEGIN IMMEDIATE")
+        counts = queue._reclaim_stale(db, now)
+        db.execute("COMMIT")
+    return counts
+
+
 def dispatch_tick(root: Path, *, now: datetime | None = None,
                   spawn=None) -> dict:
     """Return promptly; no wait for A, B, C, HTTP, P8 or source scanning."""
@@ -203,21 +212,19 @@ def dispatch_tick(root: Path, *, now: datetime | None = None,
                 "scheduler_modified": False, "operating_db_writes": 0,
             }
         scheduled = _schedule(root, now=current)
+        reclaimed, review = _expire_without_claim(root, now=current)
         active = _running_count(root)
         free = max(0, MAX_ACTIVE - active)
-        # Even with no free slots, reclaim stale leases (limit remains >=1).
-        claims = queue.claim_ready(
-            root, now=current, limit=max(1, min(MAX_NEW_PER_TICK, free)),
-            lease_seconds=WORKER_LEASE_SECONDS)
+        if free:
+            claims = queue.claim_ready(
+                root, now=current, limit=min(MAX_NEW_PER_TICK, free),
+                lease_seconds=WORKER_LEASE_SECONDS)
+        else:
+            claims = {
+                "claimed": [], "stale_requeued_count": 0,
+                "stale_review_required_count": 0,
+            }
         for leased in claims["claimed"]:
-            # If active was already full, we still need a short lease so the
-            # queue core can clean stale rows, but do not spawn over capacity.
-            if launched >= free:
-                queue.finish_job(
-                    root, job_id=leased["job_id"],
-                    lease_token=leased["lease_token"], outcome="BLOCKED",
-                    reason="WORKER_BUSY", now=current)
-                continue
             try:
                 (spawn or _spawn)(root, leased)
                 launched += 1
@@ -232,8 +239,8 @@ def dispatch_tick(root: Path, *, now: datetime | None = None,
         **scheduled,
         "workers_launched": launched, "launch_failures_pending": errors,
         "running_before": active, "max_concurrent": MAX_ACTIVE,
-        "expired_worker_jobs_requeued": claims["stale_requeued_count"],
-        "expired_worker_jobs_review_required": claims["stale_review_required_count"],
+        "expired_worker_jobs_requeued": reclaimed + claims["stale_requeued_count"],
+        "expired_worker_jobs_review_required": review + claims["stale_review_required_count"],
         "jobs_executed_in_dispatcher": 0,
         "waited_for_running_jobs": False,
         "public_api_gets_in_dispatcher": 0,
