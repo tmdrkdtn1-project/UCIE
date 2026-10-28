@@ -42,7 +42,6 @@ KIND_INTERVALS_MINUTES = (
 )
 PERIODS = dict(KIND_INTERVALS_MINUTES)
 DEDUPES = {kind: "UCIE:P10:" + kind for kind in PERIODS}
-MAX_REARM_HISTORY = 10000
 # No catch-all actions, user strings or program-supplied shell commands.
 CHILD_ARGS = ("-B", "-m", "ucie_miner.runtime_pipeline")
 
@@ -100,15 +99,12 @@ def initialize(root: Path) -> dict:
     queue.initialize_queue(root)
     with closing(queue._conn(root)) as db:
         db.execute("""CREATE TABLE IF NOT EXISTS p10_completed (
-            event_id INTEGER PRIMARY KEY,
-            kind TEXT NOT NULL,
+            kind TEXT PRIMARY KEY,
             job_id INTEGER NOT NULL,
             finished_at TEXT NOT NULL,
-            final_status TEXT NOT NULL CHECK(
-                final_status IN ('SUCCEEDED','REVIEW_REQUIRED'))
+            final_status TEXT NOT NULL CHECK(final_status='SUCCEEDED'),
+            completion_count INTEGER NOT NULL CHECK(completion_count>=1)
         )""")
-        db.execute("CREATE INDEX IF NOT EXISTS p10_completed_by_kind "
-                   "ON p10_completed(kind,finished_at)")
     return {
         "schema": SCHEMA, "status": "P10_QUEUE_INITIALIZED_NO_TASK_REGISTERED",
         "separate_ucie_queue": "runtime/" + queue.DB_NAME,
@@ -125,7 +121,6 @@ def _schedule(root: Path, *, now: datetime) -> dict:
     rearmed = 0
     with closing(queue._conn(root)) as db:
         db.execute("BEGIN IMMEDIATE")
-        recorded = db.execute("SELECT COUNT(*) FROM p10_completed").fetchone()[0]
         rows = db.execute(
             "SELECT job_id,dedupe_key,kind,status,completed_at FROM jobs "
             "WHERE dedupe_key LIKE 'UCIE:P10:%'").fetchall()
@@ -139,11 +134,13 @@ def _schedule(root: Path, *, now: datetime) -> dict:
             if row is not None and row["status"] == "SUCCEEDED":
                 completed = queue._parse(row["completed_at"])
                 if completed + timedelta(minutes=minutes) <= now:
-                    if recorded + history_added >= MAX_REARM_HISTORY:
-                        raise RuntimePipelineError("P10 bounded history needs review")
                     db.execute(
-                        "INSERT INTO p10_completed(kind,job_id,finished_at,final_status)"
-                        " VALUES(?,?,?,'SUCCEEDED')",
+                        "INSERT INTO p10_completed(kind,job_id,finished_at,"
+                        "final_status,completion_count) VALUES(?,?,?,'SUCCEEDED',1)"
+                        " ON CONFLICT(kind) DO UPDATE SET"
+                        " job_id=excluded.job_id,"
+                        " finished_at=excluded.finished_at,"
+                        " completion_count=p10_completed.completion_count+1",
                         (kind, row["job_id"], row["completed_at"]))
                     history_added += 1
                     db.execute(
