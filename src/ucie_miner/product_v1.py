@@ -26,7 +26,6 @@ from .experience_application import experience_library_preview
 from .capability_experience import read_capability_history
 from .portable_exact import search_public_metadata, SCHEMA as CONSUMER_SCHEMA
 from .capability_trials import evaluate_ucie_owned_recipe
-from .signed_rule_library import inspect_signed_library
 
 SCHEMA = "UCIE_P9_PRODUCT_INTEGRATION_PREVIEW_V1"
 PACK_SCHEMA = "UCIE_W09_DRAFT_INDEPENDENT_CONSUMER_V1"
@@ -118,10 +117,22 @@ def integrated_product_preview(root: Path, *, query: str = "",
     official = search_official_metadata_shelf(root, limit=limit)
     p8 = experience_library_preview(root)
     w05 = read_capability_history(root, limit=limit)
-    signed = (inspect_signed_library(
-        root, serial4_pack=signed_serial4, owner_public_trust=owner_public_trust,
-        serial5_pack=signed_serial5)
-        if signed_serial4 is not None else None)
+    # Signed Rulepack inspection is an OPTIONAL feature. Do not load its
+    # Serial5 verifier unless the user explicitly supplies pack/trust files.
+    # Some existing UCIE Windows checkouts lack fifth_owner_addendum.py;
+    # public library and portable first-party demo must still be usable.
+    signed = None
+    if signed_serial4 is not None:
+        try:
+            from .signed_rule_library import inspect_signed_library
+        except ModuleNotFoundError as exc:
+            raise ProductIntegrationError(
+                "EXPLICIT_SIGNED_RULEPACK_VERIFIER_DEPENDENCY_MISSING_NO_GO"
+            ) from exc
+        signed = inspect_signed_library(
+            root, serial4_pack=signed_serial4,
+            owner_public_trust=owner_public_trust,
+            serial5_pack=signed_serial5)
     standalone_demo = portable_consumer_check() if include_demo else None
     synthetic_trials = (
         [evaluate_ucie_owned_recipe(purpose) for purpose in (
