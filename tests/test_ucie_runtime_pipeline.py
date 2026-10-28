@@ -186,11 +186,12 @@ class P10WorkerTests(unittest.TestCase):
         # Only UCIE's own source package copied into the isolated synthetic
         # UCIE test root. Neither a non-UCIE project nor live operator ledgers.
         shutil.copytree(source_dir, self.root / "src")
+        actual_now = datetime.now(timezone.utc)
         a = q.enqueue(self.root, kind="PUBLIC_METADATA_REVIEW",
-                      dedupe_key="UCIE:TEST:A", due=START)
+                      dedupe_key="UCIE:TEST:A", due=actual_now)
         b = q.enqueue(self.root, kind="UCIE_QA_REVIEW",
-                      dedupe_key="UCIE:TEST:B", due=START)
-        leases = q.claim_ready(self.root, now=START, limit=2)
+                      dedupe_key="UCIE:TEST:B", due=actual_now)
+        leases = q.claim_ready(self.root, now=actual_now, limit=2)
         l1, l2 = leases["claimed"]
         self.assertEqual((l1["job_id"], l2["job_id"]),
                          (a["job_id"], b["job_id"]))
@@ -224,6 +225,20 @@ class P10WorkerTests(unittest.TestCase):
         self.assertGreaterEqual(
             last["counts"]["PENDING"] + last["counts"]["SUCCEEDED"], 3)
         self.assertEqual(out["jobs_executed_in_dispatcher"], 0)
+
+    def test_scheduler_entrypoint_binds_exact_ucie_source_without_task_environment(self):
+        scripts = Path(__file__).resolve().parents[1] / "scripts"
+        wrapper = (scripts / "internal_minute_tick.py").read_text(encoding="utf-8")
+        installer = (scripts / "install_internal_minute_task.ps1").read_text(encoding="utf-8")
+        self.assertIn('sys.path.insert(0, str(ROOT / "src"))', wrapper)
+        self.assertIn('expected = Path("D:/UCIE").resolve()', wrapper)
+        self.assertIn("from ucie_miner.runtime_pipeline import dispatch_tick", wrapper)
+        self.assertIn("internal_minute_tick.py", installer)
+        self.assertIn("New-TimeSpan -Minutes 1", installer)
+        self.assertIn("MultipleInstances IgnoreNew", installer)
+        self.assertIn("param([switch]$Install)", installer)
+        self.assertIn("PREVIEW_ONLY_NO_QUEUE_OR_TASK_CREATION", installer)
+        self.assertNotIn("UCIE-PublicMiner-Hourly", installer)
 
     def test_explicit_initialization_is_only_queue_mutation(self):
         original = self.root / "runtime" / "public_miner.sqlite3"
