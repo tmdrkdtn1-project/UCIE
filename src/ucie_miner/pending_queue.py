@@ -13,6 +13,7 @@ require separately proven idempotent adapters before live activation.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from contextlib import closing
 from pathlib import Path
 from secrets import token_hex
 import argparse
@@ -99,7 +100,7 @@ def _conn(root: Path, *, create: bool = False) -> sqlite3.Connection:
 
 def initialize_queue(root: Path) -> dict:
     """Explicit opt-in. Never installs Windows Scheduled Tasks or workers."""
-    with _conn(root, create=True) as db:
+    with closing(_conn(root, create=True)) as db:
         db.executescript("""
         CREATE TABLE IF NOT EXISTS jobs (
             job_id INTEGER PRIMARY KEY,
@@ -143,7 +144,7 @@ def enqueue(root: Path, *, kind: str, dedupe_key: str,
             or not 1 <= max_attempts <= MAX_ATTEMPTS):
         raise PendingQueueError("only bounded first-party job metadata allowed")
     due_at = _stamp(_now(due))
-    with _conn(root) as db:
+    with closing(_conn(root)) as db:
         db.execute("BEGIN IMMEDIATE")
         count = db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
         prior = db.execute(
@@ -216,7 +217,7 @@ def claim_ready(root: Path, *, now: datetime | None = None,
             or not MIN_LEASE_SECONDS <= lease_seconds <= MAX_LEASE_SECONDS):
         raise PendingQueueError("bounded dispatch/lease required")
     claimed = []
-    with _conn(root) as db:
+    with closing(_conn(root)) as db:
         db.execute("BEGIN IMMEDIATE")
         repending, needs_review = _reclaim_stale(db, current)
         rows = db.execute(
@@ -275,7 +276,7 @@ def heartbeat(root: Path, *, job_id: int, lease_token: str,
     if (type(extension_seconds) is not int
             or not MIN_LEASE_SECONDS <= extension_seconds <= MAX_LEASE_SECONDS):
         raise PendingQueueError("bounded heartbeat extension required")
-    with _conn(root) as db:
+    with closing(_conn(root)) as db:
         db.execute("BEGIN IMMEDIATE")
         row = _leased(db, job_id, lease_token, current)
         until = max(
@@ -309,7 +310,7 @@ def finish_job(root: Path, *, job_id: int, lease_token: str,
             raise PendingQueueError("bounded retry interval required")
     elif reason is not None or retry_after_seconds is not None:
         raise PendingQueueError("success must not contain failure data")
-    with _conn(root) as db:
+    with closing(_conn(root)) as db:
         db.execute("BEGIN IMMEDIATE")
         row = _leased(db, job_id, lease_token, current)
         if outcome == "SUCCEEDED":
@@ -349,8 +350,8 @@ def inspect_queue(root: Path, *, limit: int = 20) -> dict:
             "jobs": [], "schedulers_changed": False,
         }
     # Read-only open does not change operating SQLite or create queue.
-    with sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True,
-                         timeout=0.25) as db:
+    with closing(sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True,
+                                 timeout=0.25)) as db:
         db.row_factory = sqlite3.Row
         counts = {r["status"]: r["n"] for r in db.execute(
             "SELECT status,COUNT(*) AS n FROM jobs GROUP BY status")}
