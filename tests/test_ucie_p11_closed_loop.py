@@ -247,6 +247,33 @@ class P11ClosedLoopTests(unittest.TestCase):
         self.assertEqual(snap["counts"]["SUCCEEDED"], 5)
         self.assertEqual(snap["counts"]["RUNNING"], 0)
 
+    def test_p11_experience_rearms_after_one_minute_without_extra_public_get(self):
+        self._activate()
+        self.assertEqual(p10.PERIODS["EXPERIENCE_CLOSED_LOOP"], 1)
+        launched = []
+        for i, delay in enumerate((0, 2, 4)):
+            p10.dispatch_tick(
+                self.root, now=T0 + timedelta(seconds=delay),
+                spawn=lambda _root, lease: launched.append(lease))
+            fresh = launched[3*i:]
+            for lease in fresh:
+                q.finish_job(
+                    self.root, job_id=lease["job_id"],
+                    lease_token=lease["lease_token"], outcome="SUCCEEDED",
+                    now=T0 + timedelta(seconds=delay+1))
+        experience = next(
+            row for row in q.inspect_queue(self.root)["jobs"]
+            if row["kind"] == "EXPERIENCE_CLOSED_LOOP")
+        self.assertEqual(experience["status"], "SUCCEEDED")
+        self.assertEqual(experience["attempts"], 1)
+        p10._schedule(self.root, now=T0 + timedelta(seconds=66))
+        updated = next(
+            row for row in q.inspect_queue(self.root)["jobs"]
+            if row["kind"] == "EXPERIENCE_CLOSED_LOOP")
+        self.assertEqual(updated["status"], "PENDING")
+        self.assertEqual(updated["attempts"], 0)
+        self.assertEqual(p11.status(self.root)["total_successful_public_gets"], 0)
+
     def test_direct_p10_learning_adapter_returns_success_when_no_new_evidence(self):
         self._activate()
         self.assertTrue(p10._safe_handler(self.root, "EXPERIENCE_CLOSED_LOOP"))
