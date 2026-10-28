@@ -39,7 +39,11 @@ KIND_INTERVALS_MINUTES = (
     ("UCIE_QA_REVIEW", 5),
     ("UCIE_FIRST_PARTY_EXPERIMENT", 15),
     ("UCIE_REPORT_PREPARATION", 60),
+    # Explicit P11 opt-in; otherwise existing P10 five jobs stay identical.
+    ("PUBLIC_INCREMENTAL_MINING", 5),
+    ("EXPERIENCE_CLOSED_LOOP", 10),
 )
+P11_KINDS = frozenset({"PUBLIC_INCREMENTAL_MINING", "EXPERIENCE_CLOSED_LOOP"})
 PERIODS = dict(KIND_INTERVALS_MINUTES)
 DEDUPES = {kind: "UCIE:P10:" + kind for kind in PERIODS}
 # No catch-all actions, user strings or program-supplied shell commands.
@@ -129,7 +133,11 @@ def _schedule(root: Path, *, now: datetime) -> dict:
             if row["kind"] not in PERIODS or row["dedupe_key"] != DEDUPES[row["kind"]]:
                 raise RuntimePipelineError("unsafe P10 source job identity")
             known[row["kind"]] = row
+        from .p11_closed_loop import enabled as p11_enabled
+        p11_on = p11_enabled(root)
         for kind, minutes in KIND_INTERVALS_MINUTES:
+            if kind in P11_KINDS and not p11_on:
+                continue
             row = known.get(kind)
             if row is not None and row["status"] == "SUCCEEDED":
                 completed = queue._parse(row["completed_at"])
@@ -155,6 +163,8 @@ def _schedule(root: Path, *, now: datetime) -> dict:
         db.execute("COMMIT")
     new_rows = 0
     for kind, _interval in KIND_INTERVALS_MINUTES:
+        if kind in P11_KINDS and not p11_on:
+            continue
         if kind not in known:
             result = queue.enqueue(
                 root, kind=kind, dedupe_key=DEDUPES[kind], due=now)
@@ -250,6 +260,18 @@ def _safe_handler(root: Path, kind: str) -> bool:
     """Strict read-only first-party work, no public GET or dataset training."""
     if kind not in PERIODS:
         raise RuntimePipelineError("unauthorized task kind")
+    if kind == "PUBLIC_INCREMENTAL_MINING":
+        from .p11_closed_loop import collect_one
+        return collect_one(root)["status"] in (
+            "P11_PUBLIC_HASH_METADATA_STAGED_UNVERIFIED",
+            "P11_RATE_WINDOW_NOT_DUE",
+        )
+    if kind == "EXPERIENCE_CLOSED_LOOP":
+        from .p11_closed_loop import learn_one
+        return learn_one(root)["status"] in (
+            "P11_FIRST_PARTY_EXPERIENCE_RECORDED_NO_GO",
+            "P11_NO_NEW_UNVERIFIED_LEADS",
+        )
     if kind == "PUBLIC_METADATA_REVIEW":
         from .library_search import search_existing_public_library
         out = search_existing_public_library(

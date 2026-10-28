@@ -36,6 +36,9 @@ KINDS = frozenset({
     "UCIE_FIRST_PARTY_EXPERIMENT",
     "UCIE_QA_REVIEW",
     "UCIE_REPORT_PREPARATION",
+    # P11 is opt-in and uses separate source/experience store only.
+    "PUBLIC_INCREMENTAL_MINING",
+    "EXPERIENCE_CLOSED_LOOP",
 })
 REASONS = frozenset({
     "DEPENDENCY_NOT_READY",
