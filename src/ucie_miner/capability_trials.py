@@ -231,10 +231,12 @@ def validate_w05_page_bundle(page_rows: tuple[list, ...], *, source_id: str,
         for row in rows:
             if type(row) is not dict or type(row.get("number")) is not int:
                 raise CapabilityTrialError("invalid W05 public PR row")
+            base = row.get("base")
+            repo = base.get("repo") if type(base) is dict else None
+            repo_name = repo.get("full_name") if type(repo) is dict else None
             fingerprint = sha256(json.dumps(
                 [row.get("number"), row.get("title"), row.get("merged_at"),
-                 row.get("merge_commit_sha"), row.get("html_url"),
-                 row.get("base", {}).get("repo", {}).get("full_name")],
+                 row.get("merge_commit_sha"), row.get("html_url"), repo_name],
                 ensure_ascii=True, separators=(",", ":"),
             ).encode("ascii")).hexdigest()
             prior = seen_rows.get(row["number"])
