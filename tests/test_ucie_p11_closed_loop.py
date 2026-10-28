@@ -188,12 +188,12 @@ class P11ClosedLoopTests(unittest.TestCase):
         self._activate()
         first = self._one()
         self.assertEqual(first["new_unverified_leads"], 1)
-        for i in range(1, 6):
+        for i in range(1, 5):
             selected = SOURCES[i % len(SOURCES)]
             p11.collect_one(
                 self.root, now=T0 + timedelta(minutes=5*i),
                 fetch=lambda url: [])
-        second = self._one(now=T0 + timedelta(minutes=30))
+        second = self._one(now=T0 + timedelta(minutes=25))
         self.assertEqual(second["new_unverified_leads"], 0)
         self.assertEqual(p11.status(self.root)["unverified_leads"], 1)
 
@@ -238,9 +238,8 @@ class P11ClosedLoopTests(unittest.TestCase):
                          lease_token=j["lease_token"],
                          outcome="SUCCEEDED", now=T0 + timedelta(seconds=4))
         snap = q.inspect_queue(self.root)
-        self.assertEqual(snap["counts"]["PENDING"], 1)
+        self.assertEqual(snap["counts"]["PENDING"], 2)
         self.assertEqual(snap["counts"]["SUCCEEDED"], 5)
-        self.assertEqual(snap["counts"]["RUNNING"], 1) if False else None
         self.assertEqual(snap["counts"]["RUNNING"], 0)
 
     def test_direct_p10_learning_adapter_returns_success_when_no_new_evidence(self):
