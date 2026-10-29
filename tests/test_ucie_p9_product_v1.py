@@ -187,6 +187,143 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertEqual(out["network_requests"], 0)
         self.assertFalse((runtime / "exports").exists())
 
+    def test_unified_catalog_search_reuses_original_public_ledger(self):
+        batch = fixture_batch(
+            root=self.root,
+            sources=("python/cpython", "PowerShell/PowerShell",
+                     "git/git", "modelcontextprotocol/python-sdk",
+                     "actions/runner-images"),
+            max_enrich=1, include_git_commits=True,
+            include_docs=False, include_advisories=False, backfill_pages=1)
+        stage_public_candidates(batch, root=self.root, allow_disk_write=True)
+        runtime = self.root / "runtime"
+        (runtime / OPT_IN_FILENAME).write_text(OPT_IN_TOKEN, encoding="ascii")
+        self.assertEqual(optional_hourly_review_learning(self.root)[
+            "new_review_proposals"], 2)
+        before = {
+            p.name: p.read_bytes() for p in (
+                runtime / DB_NAME,
+                runtime / "stage12_unverified_review.sqlite3",
+            )}
+        with patch("urllib.request.urlopen",
+                   side_effect=AssertionError("unified search cannot fetch")):
+            out = product.integrated_product_preview(
+                self.root, query="API_CONTRACT", limit=5)
+        after = {
+            p.name: p.read_bytes() for p in (
+                runtime / DB_NAME,
+                runtime / "stage12_unverified_review.sqlite3",
+            )}
+        self.assertEqual(before, after)
+        view = out["unified_catalog_search"]
+        self.assertEqual(view["status"],
+                         "READ_ONLY_BOUNDED_MULTI_SHELF_SEARCH_NO_GO")
+        self.assertEqual(view["schema"],
+                         "UCIE_P9_BOUNDED_UNIFIED_CATALOG_QUERY_V1")
+        self.assertFalse(view["full_catalog_match_count_known"])
+        self.assertEqual(
+            {item["library_item_id"] for item in view["items"]},
+            {item["library_item_id"] for item
+             in out["public_candidate_library"]["items"]},
+        )
+        self.assertTrue(all(item["shelf"] == "PUBLIC_CANDIDATE"
+                            for item in view["items"]))
+        self.assertTrue(all(item["human_approved"] is False
+                            and item["export_allowed"] is False
+                            for item in view["items"]))
+        self.assertEqual(view["network_requests"], 0)
+        self.assertEqual(view["operating_database_writes"], 0)
+        self.assertFalse(view["v1_accepted"])
+
+    def test_unified_catalog_combines_shelves_without_forged_approval(self):
+        public = {"status":"READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
+                  "omitted_count":0, "items":[{
+                      "library_item_id":"1"*64,
+                      "kind":"PUBLIC_TECHNICAL_EVIDENCE",
+                      "source_id":"repo:python/cpython",
+                      "public_url":"https://github.com/python/cpython/pull/153462",
+                      "evidence_sha256":"2"*64,
+                      "purpose_code":"SCANDIR_SHARED_RACE",
+                      "domain":"Python", "skill_profile":"PYTHON_STDLIB",
+                      "revision_hint":"pr:153462",
+                      "version_scope_claim":"UNDETERMINED",
+                      "lifecycle":"UNVERIFIED_CANDIDATE_ONLY",
+                      "signature_status":"NOT_ATTESTED_BY_THIS_SEARCH",
+                      "human_approved":False, "export_allowed":False}]}
+        official = {"status":"STAGE14_OFFICIAL_METADATA_READ_ONLY_UNVERIFIED_NO_GO",
+                    "omitted_count":0, "items":[{
+                        "kind":"OFFICIAL_DOCUMENT_EVIDENCE",
+                        "source_id":"doc:python/cpython",
+                        "public_url":"https://docs.python.org/3/",
+                        "source_reference":"pinned-doc-url",
+                        "reference_scope":"PINNED_OFFICIAL_DOCUMENT_CURRENT_URL",
+                        "content_sha256":"3"*64,
+                        "lifecycle":"PUBLIC_METADATA_UNVERIFIED",
+                        "human_approved":False, "export_allowed":False}]}
+        signed = {"status":"EXISTING_OWNER_SIGNED_RULEPACKS_VERIFIED_READ_ONLY",
+                  "items":[{
+                      "item_id":"4"*64,
+                      "kind":"PREVENTION_RULE",
+                      "rule_id":"PY_SCANDIR_SHARED_ITERATOR_RACE",
+                      "pack_serial":4,
+                      "source_package_sha256":"5"*64,
+                      "verification":"OWNER_SIGNED_VERIFIED_AT_INSPECTION_TIME",
+                      "approval_basis":"OWNER_RISK_ACCEPTED_CI_ONLY",
+                      "independent_qa_approved":False,
+                      "new_package_export_allowed":False}]}
+        p8 = {"status":"P8_HASH_CHAIN_EXPERIENCE_SEARCHABLE_NO_GO",
+              "items":[{
+                  "library_item_id":"6"*64,
+                  "experiment_id":"UCIE_LIBRARY_EXACT_KEY_INDEX_EXPERIMENT_V1",
+                  "workload_id":"UCIE_FIRST_PARTY_ROWS_256",
+                  "production_adopted":False}]}
+        w05 = {"status":"UCIE_FIRST_PARTY_W05_EXPERIENCE_READ_ONLY",
+               "recorded_count":1,"returned_count":1, "items":[{
+                   "experience_id":"7"*64,
+                   "kind":"REUSABLE_SKILL",
+                   "source_id":"repo:python/cpython",
+                   "public_url":"https://github.com/python/cpython/pull/153462",
+                   "purpose_code":"SKILL_TEST_AUTOMATION",
+                   "upstream_capability_verified":False,
+                   "approved_or_exportable":False}]}
+        params = dict(query="", domain=None, limit=8, public=public,
+                      official=official, signed=signed, p8=p8, w05=w05)
+        view = product._bounded_catalog_view(**params)
+        self.assertEqual(view["matches_in_loaded_windows"], 5)
+        self.assertEqual([x["shelf"] for x in view["items"]], [
+            "SIGNED_MANUAL_RULE", "PUBLIC_CANDIDATE", "OFFICIAL_METADATA",
+            "UCIE_CANDIDATE_TRIAL_EXPERIENCE", "UCIE_SYNTHETIC_EXPERIENCE"])
+        self.assertTrue(all(x["export_allowed"] is False for x in view["items"]))
+        self.assertEqual(view["items"][0]["independent_qa_approved"], False)
+        self.assertFalse(view["v1_accepted"])
+        filtered = product._bounded_catalog_view(**{**params,"query":"SCANDIR"})
+        self.assertEqual(filtered["matches_in_loaded_windows"], 2)
+        self.assertEqual({x["shelf"] for x in filtered["items"]},
+                         {"SIGNED_MANUAL_RULE", "PUBLIC_CANDIDATE"})
+        typed = product._bounded_catalog_view(**{
+            **params, "domain":"Python", "query":"", "limit":2})
+        self.assertEqual(typed["matches_in_loaded_windows"], 1)
+        self.assertEqual(typed["items"][0]["shelf"], "PUBLIC_CANDIDATE")
+        limited = product._bounded_catalog_view(**{
+            **params, "limit":2})
+        self.assertEqual(limited["returned_count"],2)
+        self.assertEqual(limited["omitted_from_loaded_windows"],3)
+        for updates in (
+            {"public":{**public,"items":[{
+                **public["items"][0],"human_approved":True}]}},
+            {"official":{**official,"items":[{
+                **official["items"][0],"export_allowed":True}]}},
+            {"signed":{**signed,"items":[{
+                **signed["items"][0],"independent_qa_approved":True}]}},
+            {"p8":{**p8,"items":[{
+                **p8["items"][0],"production_adopted":True}]}},
+            {"w05":{**w05,"items":[{
+                **w05["items"][0],"upstream_capability_verified":True}]}},
+        ):
+            with self.subTest(updates=tuple(updates)):
+                with self.assertRaises(product.ProductIntegrationError):
+                    product._bounded_catalog_view(**{**params,**updates})
+
     def test_failure_in_one_critical_ledger_must_not_be_claimed_pass(self):
         with patch("ucie_miner.product_v1.search_existing_public_library",
                    side_effect=ValueError("invalid Stage12 provenance")):
