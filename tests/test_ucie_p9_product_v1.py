@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ from zipfile import ZipFile
 from ucie_miner import product_v1 as product
 from ucie_miner import portable_exact as portable
 from ucie_miner import experience_evolution as evo
+from ucie_miner.capability_experience import run_capability_cycle
 from ucie_miner.public_candidate_staging import stage_public_candidates, DB_NAME
 from ucie_miner.public_candidate_learning import (
     OPT_IN_FILENAME, OPT_IN_TOKEN, optional_hourly_review_learning)
@@ -323,6 +325,96 @@ class P9IntegratedProductTests(unittest.TestCase):
             with self.subTest(updates=tuple(updates)):
                 with self.assertRaises(product.ProductIntegrationError):
                     product._bounded_catalog_view(**{**params,**updates})
+
+    def test_actual_w05_experience_is_comparable_in_product_without_upstream_execution(self):
+        """Actual original W05 hash-chained reader, not a fabricated receipt."""
+        repo = "python/cpython"
+        pr = {"number": 123456, "title": "Add test automation helpers",
+              "merged_at": "2026-10-10T12:00:00Z",
+              "merge_commit_sha": "a" * 40,
+              "html_url": "https://github.com/python/cpython/pull/123456",
+              "base": {"repo": {"full_name": repo}}}
+        out = run_capability_cycle(
+            self.root, source_rows=[pr], source_id="repo:" + repo,
+            record=True, now=datetime(2026, 10, 29, tzinfo=timezone.utc))
+        self.assertTrue(out["new_event_written"])
+        trial = out["trial_receipt"]
+        self.assertFalse(trial["upstream_tested"])
+        ledger = self.root / "runtime" / "ucie_p8_w05_capability_experience_v1.jsonl"
+        self.assertTrue(ledger.is_file())
+        before = ledger.read_bytes()
+        with patch("urllib.request.urlopen",
+                   side_effect=AssertionError("product cannot fetch upstream code")):
+            found = product.integrated_product_preview(
+                self.root, query="SKILL_TEST_AUTOMATION",
+                domain="Python", limit=5)
+        self.assertEqual(ledger.read_bytes(), before)
+        compare = found["capability_experience_comparison"]
+        self.assertEqual(compare["returned_count"], 1)
+        row = compare["items"][0]
+        self.assertEqual(row["source_id"], "repo:python/cpython")
+        self.assertEqual(row["purpose_code"], "SKILL_TEST_AUTOMATION")
+        self.assertEqual(row["kind"], "REUSABLE_SKILL")
+        self.assertEqual(row["baseline_operations"], trial["baseline_operations"])
+        self.assertEqual(row["candidate_operations"], trial["candidate_operations"])
+        self.assertEqual(row["domain"], "Python")
+        self.assertEqual(row["synthetic_rows"], trial["rows"])
+        self.assertEqual(row["synthetic_queries"], trial["queries"])
+        self.assertFalse(row["upstream_code_tested"])
+        self.assertFalse(row["owner_approved"])
+        self.assertFalse(row["export_allowed"])
+        self.assertFalse(compare["cross_candidate_speed_ranked"])
+        self.assertFalse(found["v1_accepted"])
+        self.assertEqual(compare["operating_database_writes"], 0)
+        self.assertEqual(compare["network_requests"], 0)
+        excluded = product.integrated_product_preview(
+            self.root, query="SKILL_TEST_AUTOMATION", domain="Git", limit=5)
+        self.assertEqual(
+            excluded["capability_experience_comparison"]["returned_count"], 0)
+
+    def test_capability_comparison_bounded_and_fails_closed_on_forged_status(self):
+        good = {
+            "experience_id": "c" * 64, "candidate_id": "a" * 64,
+            "kind": "REUSABLE_SKILL", "purpose_code": "SKILL_TEST_AUTOMATION",
+            "recipe_id": "TAGGED_TEST_CASE_LOOKUP_V1",
+            "source_id": "repo:python/cpython",
+            "public_url": "https://github.com/python/cpython/pull/123456",
+            "workload_sha256": "b" * 64, "rows": 128, "queries": 24,
+            "baseline_operations": 3072, "candidate_operations": 300,
+            "baseline_median_ns": 700, "candidate_median_ns": 400,
+            "equivalent": True, "decision": "RETEST_FIRST_PARTY_RECIPE",
+            "first_party_synthetic_only": True,
+            "upstream_capability_verified": False,
+            "approved_or_exportable": False,
+        }
+        history = {
+            "status": "UCIE_FIRST_PARTY_W05_EXPERIENCE_READ_ONLY",
+            "recorded_count": 2, "returned_count": 2,
+            "items": [good, {**good, "candidate_id": "d"*64,
+                              "experience_id": "e"*64}],
+        }
+        view = product._compare_existing_capability_experiences(
+            history=history, query="SKILL", domain=None, limit=1)
+        self.assertEqual(view["returned_count"], 1)
+        self.assertEqual(view["matches_in_loaded_experience_window"], 2)
+        self.assertEqual(view["same_workload_review_groups"], 1)
+        self.assertEqual(view["items"][0]["baseline_operations"], 3072)
+        self.assertFalse(view["cross_candidate_speed_ranked"])
+        self.assertFalse(view["full_history_comparison_complete"])
+        for override in (
+            {"upstream_capability_verified": True},
+            {"first_party_synthetic_only": False},
+            {"approved_or_exportable": True},
+            {"baseline_operations": 0},
+            {"candidate_operations": 0},
+            {"equivalent": False},
+            {"source_id": "repo:unapproved/repository"},
+        ):
+            with self.subTest(override=override):
+                tampered = {**history, "items": [{**good, **override}]}
+                with self.assertRaises(product.ProductIntegrationError):
+                    product._compare_existing_capability_experiences(
+                        history=tampered, query="", domain=None, limit=5)
 
     def test_failure_in_one_critical_ledger_must_not_be_claimed_pass(self):
         with patch("ucie_miner.product_v1.search_existing_public_library",

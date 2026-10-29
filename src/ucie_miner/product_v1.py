@@ -26,6 +26,8 @@ from .experience_application import experience_library_preview
 from .capability_experience import read_capability_history
 from .portable_exact import search_public_metadata, SCHEMA as CONSUMER_SCHEMA
 from .capability_trials import evaluate_ucie_owned_recipe
+from .public_discovery import SOURCE_SKILL
+from .skill_profiles import PROFILE
 
 SCHEMA = "UCIE_P9_PRODUCT_INTEGRATION_PREVIEW_V1"
 PACK_SCHEMA = "UCIE_W09_DRAFT_INDEPENDENT_CONSUMER_V1"
@@ -265,6 +267,99 @@ def _bounded_catalog_view(*, query: str, domain: str | None, limit: int,
     }
 
 
+def _compare_existing_capability_experiences(*, history: dict,
+                                             query: str, domain: str | None,
+                                             limit: int) -> dict:
+    """Compare verified UCIE-owned experiment receipts, not upstream code.
+
+    The existing experience reader validates the allowlist and full append-only
+    hash chain before returning these measurements. A shared synthetic recipe
+    does NOT establish that either external project improvement was tested.
+    """
+    if (history["status"] != "UCIE_FIRST_PARTY_W05_EXPERIENCE_READ_ONLY"
+            or type(limit) is not int or not 1 <= limit <= 20
+            or type(query) is not str or len(query) > 80):
+        raise ProductIntegrationError("invalid bounded capability comparison")
+    shown = []
+    for item in history["items"]:
+        if (item["first_party_synthetic_only"] is not True
+                or item["upstream_capability_verified"] is not False
+                or item["approved_or_exportable"] is not False
+                or item["equivalent"] is not True
+                and item["decision"] == "RETEST_FIRST_PARTY_RECIPE"):
+            raise ProductIntegrationError("untrusted capability experience status")
+        source = item["source_id"]
+        repo = source.removeprefix("repo:")
+        if source != "repo:" + repo or repo not in SOURCE_SKILL:
+            raise ProductIntegrationError("unapproved capability source")
+        item_domain = PROFILE[SOURCE_SKILL[repo]]["domain"]
+        if domain is not None and item_domain.casefold() != domain.casefold():
+            continue
+        if query and query.casefold() not in " ".join((
+                item["kind"], item["purpose_code"], item["recipe_id"],
+                source, item_domain, item["public_url"])).casefold():
+            continue
+        base, candidate = (item["baseline_operations"],
+                           item["candidate_operations"])
+        if (type(base) is not int or type(candidate) is not int
+                or base <= 0 or not 0 < candidate <= 3 * base):
+            raise ProductIntegrationError("invalid first-party trial measurement")
+        reduction_ppm = ((base - candidate) * 1_000_000 // base
+                         if item["equivalent"] else None)
+        shown.append({
+            "experience_id": item["experience_id"],
+            "candidate_id": item["candidate_id"],
+            "kind": item["kind"], "purpose_code": item["purpose_code"],
+            "recipe_id": item["recipe_id"],
+            "domain": item_domain, "source_id": source,
+            "public_url": item["public_url"],
+            "workload_sha256": item["workload_sha256"],
+            "synthetic_rows": item["rows"],
+            "synthetic_queries": item["queries"],
+            "baseline_operations": base,
+            "candidate_operations": candidate,
+            "equivalent_on_ucie_synthetic": item["equivalent"],
+            "within_trial_operation_reduction_ppm": reduction_ppm,
+            "baseline_median_ns_diagnostic": item["baseline_median_ns"],
+            "candidate_median_ns_diagnostic": item["candidate_median_ns"],
+            "review_decision": item["decision"],
+            "upstream_code_tested": False,
+            "upstream_capability_verified": False,
+            "general_performance_ranking_authorized": False,
+            "owner_approved": False,
+            "export_allowed": False,
+        })
+    shown.sort(key=lambda x: (x["kind"], x["purpose_code"],
+                              x["source_id"], x["candidate_id"],
+                              x["workload_sha256"]))
+    grouped = {}
+    for item in shown:
+        # Matching purpose/recipe/identical workload permits reviewing
+        # evidence together, not inferring cross-PR speed differences.
+        key = (item["kind"], item["purpose_code"], item["recipe_id"],
+               item["workload_sha256"])
+        grouped.setdefault(key, 0)
+        grouped[key] += 1
+    return {
+        "schema": "UCIE_V1_EXISTING_PUBLIC_CAPABILITY_TRIAL_COMPARISON_V1",
+        "status": "FIRST_PARTY_SYNTHETIC_COMPARISON_ONLY_UPSTREAM_UNVERIFIED",
+        "query": query, "domain_filter": domain,
+        "items": shown[:limit],
+        "matches_in_loaded_experience_window": len(shown),
+        "returned_count": min(limit, len(shown)),
+        "same_workload_review_groups": sum(v >= 2 for v in grouped.values()),
+        "experience_window_truncated": (
+            history["recorded_count"] > history["returned_count"]),
+        "full_history_comparison_complete": False,
+        "public_pr_code_executed": False,
+        "cross_candidate_speed_ranked": False,
+        "production_adopted": False,
+        "network_requests": 0, "operating_database_writes": 0,
+        "new_approvals": 0, "auto_promoted": False,
+        "v1_accepted": False,
+    }
+
+
 def integrated_product_preview(root: Path, *, query: str = "",
                                domain: str | None = None,
                                limit: int = 5,
@@ -310,6 +405,8 @@ def integrated_product_preview(root: Path, *, query: str = "",
     catalog = _bounded_catalog_view(
         query=query, domain=domain, limit=limit, public=public,
         official=official, signed=signed, p8=p8, w05=w05)
+    comparison = _compare_existing_capability_experiences(
+        history=w05, query=query, domain=domain, limit=limit)
     public_ok = public["status"] == "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"
     official_ok = official["status"] == "STAGE14_OFFICIAL_METADATA_READ_ONLY_UNVERIFIED_NO_GO"
     # A missing local official ledger remains a transparent blocker, never a
@@ -336,6 +433,7 @@ def integrated_product_preview(root: Path, *, query: str = "",
             "source_allowlist_changed": False,
         },
         "unified_catalog_search": catalog,
+        "capability_experience_comparison": comparison,
         "public_candidate_library": public,
         "official_public_metadata_library": official,
         "signed_rules": {
