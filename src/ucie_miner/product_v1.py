@@ -96,6 +96,175 @@ def portable_consumer_check() -> dict:
     }
 
 
+def _bounded_catalog_view(*, query: str, domain: str | None, limit: int,
+                          public: dict, official: dict, signed: dict | None,
+                          p8: dict, w05: dict) -> dict:
+    """One query over existing verified readers, not a new database/index.
+
+    Each original reader owns its source, provenance and signature checks.
+    This combines only the bounded pages already returned by those readers:
+    a match count here is NEVER a claim about every ledger record.
+    """
+    needle = query.casefold()
+    records = []
+
+    def matches(*terms: object) -> bool:
+        return not needle or needle in " ".join(
+            value for value in terms if type(value) is str
+        ).casefold()
+
+    def add(shelf: str, entry: dict, *terms: object) -> None:
+        if matches(*terms):
+            records.append((shelf, entry))
+
+    for item in public["items"]:
+        if (item["human_approved"] is not False
+                or item["export_allowed"] is not False
+                or item["signature_status"] != "NOT_ATTESTED_BY_THIS_SEARCH"
+                or item["lifecycle"] != "UNVERIFIED_CANDIDATE_ONLY"):
+            raise ProductIntegrationError("public candidate trust boundary changed")
+        add("PUBLIC_CANDIDATE", {
+            "library_item_id": item["library_item_id"],
+            "kind": item["kind"],
+            "source_id": item["source_id"],
+            "public_url": item["public_url"],
+            "evidence_sha256": item["evidence_sha256"],
+            "purpose_code": item["purpose_code"],
+            "domain": item["domain"],
+            "version_scope": item["version_scope_claim"],
+            "verification": item["lifecycle"],
+            "signature_status": item["signature_status"],
+            "human_approved": False,
+            "export_allowed": False,
+        }, item["kind"], item["source_id"], item["public_url"],
+            item["purpose_code"], item["domain"], item["skill_profile"],
+            item["revision_hint"])
+
+    # No source/domain lookup is invented for an official hash-only ledger.
+    # Domain filtering intentionally excludes rows with no attested domain.
+    if domain is None:
+        for item in official["items"]:
+            if (item["human_approved"] is not False
+                    or item["export_allowed"] is not False
+                    or item["lifecycle"] != "PUBLIC_METADATA_UNVERIFIED"):
+                raise ProductIntegrationError("official metadata trust boundary changed")
+            item_id = sha256(json.dumps((
+                item["source_id"], item["kind"], item["source_reference"],
+                item["content_sha256"]),
+                separators=(",", ":"), ensure_ascii=True).encode("ascii")
+            ).hexdigest()
+            add("OFFICIAL_METADATA", {
+                "library_item_id": item_id,
+                "kind": item["kind"],
+                "source_id": item["source_id"],
+                "public_url": item["public_url"],
+                "evidence_sha256": item["content_sha256"],
+                "reference_scope": item["reference_scope"],
+                "verification": item["lifecycle"],
+                "human_approved": False,
+                "export_allowed": False,
+            }, item["kind"], item["source_id"], item["public_url"],
+                item["source_reference"], item["reference_scope"])
+
+        # Signed owner-risk rules are only included after original verifier
+        # succeeds at read time. They are NOT independent QA or export grants.
+        if (signed is not None
+                and signed["status"] != "EXISTING_OWNER_SIGNED_RULEPACKS_VERIFIED_READ_ONLY"):
+            raise ProductIntegrationError("signed Rulepack verifier status changed")
+        for item in signed["items"] if signed is not None else ():
+            if (item["verification"] != "OWNER_SIGNED_VERIFIED_AT_INSPECTION_TIME"
+                    or item["independent_qa_approved"] is not False
+                    or item["new_package_export_allowed"] is not False):
+                raise ProductIntegrationError("signed Rulepack trust boundary changed")
+            add("SIGNED_MANUAL_RULE", {
+                "library_item_id": item["item_id"],
+                "kind": "PREVENTION_RULE",
+                "rule_id": item["rule_id"],
+                "pack_serial": item["pack_serial"],
+                "source_package_sha256": item["source_package_sha256"],
+                "verification": item["verification"],
+                "approval_basis": item["approval_basis"],
+                "independent_qa_approved": False,
+                "human_approved_for_general_export": False,
+                "export_allowed": False,
+            }, item["rule_id"], "PREVENTION_RULE", item["verification"])
+
+        for item in p8["items"]:
+            if item["production_adopted"] is not False:
+                raise ProductIntegrationError("synthetic experience trust boundary changed")
+            add("UCIE_SYNTHETIC_EXPERIENCE", {
+                "library_item_id": item["library_item_id"],
+                "kind": "UCIE_EXPERIENCE",
+                "experiment_id": item["experiment_id"],
+                "workload_id": item["workload_id"],
+                "verification": "UCIE_FIRST_PARTY_SYNTHETIC_ONLY",
+                "production_adopted": False,
+                "export_allowed": False,
+            }, item["experiment_id"], item["workload_id"],
+                "UCIE_EXPERIENCE")
+
+        # A recorded W05 trial is a UCIE experiment referencing a public
+        # candidate, NEVER verification of that upstream engine/skill.
+        for item in w05["items"]:
+            if (item["upstream_capability_verified"] is not False
+                    or item["approved_or_exportable"] is not False):
+                raise ProductIntegrationError("upstream skill verification boundary changed")
+            add("UCIE_CANDIDATE_TRIAL_EXPERIENCE", {
+                "library_item_id": item["experience_id"],
+                "kind": "UCIE_EXPERIENCE",
+                "linked_candidate_kind": item["kind"],
+                "source_id": item["source_id"],
+                "public_url": item["public_url"],
+                "purpose_code": item["purpose_code"],
+                "verification": "UCIE_FIRST_PARTY_SYNTHETIC_UPSTREAM_UNVERIFIED",
+                "upstream_capability_verified": False,
+                "export_allowed": False,
+            }, item["kind"], item["source_id"], item["public_url"],
+                item["purpose_code"], "UCIE_EXPERIENCE")
+
+    order = {
+        "SIGNED_MANUAL_RULE": 0, "PUBLIC_CANDIDATE": 1,
+        "OFFICIAL_METADATA": 2, "UCIE_CANDIDATE_TRIAL_EXPERIENCE": 3,
+        "UCIE_SYNTHETIC_EXPERIENCE": 4,
+    }
+    records.sort(key=lambda row: (
+        order[row[0]], row[1]["kind"],
+        row[1].get("source_id", ""),
+        row[1]["library_item_id"]))
+    window_count = len(records)
+    limited = [
+        {"shelf": shelf, **item}
+        for shelf, item in records[:limit]
+    ]
+    omitted_by_readers = (
+        public.get("omitted_count", 0) > 0
+        or official.get("omitted_count", 0) > 0
+        or w05["recorded_count"] > w05["returned_count"]
+    )
+    return {
+        "schema": "UCIE_P9_BOUNDED_UNIFIED_CATALOG_QUERY_V1",
+        "status": "READ_ONLY_BOUNDED_MULTI_SHELF_SEARCH_NO_GO",
+        "query": query, "domain_filter": domain,
+        "limit": limit, "returned_count": len(limited),
+        "matches_in_loaded_windows": window_count,
+        "omitted_from_loaded_windows": max(0, window_count - limit),
+        "source_window_truncated": omitted_by_readers,
+        "full_catalog_match_count_known": False,
+        "items": limited,
+        "shelf_statuses": {
+            "public_candidates": public["status"],
+            "official_metadata": official["status"],
+            "signed_rules": (signed["status"] if signed is not None
+                             else "NOT_INSPECTED_NO_GO"),
+            "ucie_experience": p8["status"],
+            "linked_capability_experience": w05["status"],
+        },
+        "network_requests": 0, "operating_database_writes": 0,
+        "new_approvals": 0, "new_signatures_created": 0,
+        "full_library_implemented": False, "v1_accepted": False,
+    }
+
+
 def integrated_product_preview(root: Path, *, query: str = "",
                                domain: str | None = None,
                                limit: int = 5,
@@ -138,6 +307,9 @@ def integrated_product_preview(root: Path, *, query: str = "",
         [evaluate_ucie_owned_recipe(purpose) for purpose in (
             "ENGINE_INCREMENTAL_BUILD", "SKILL_TEST_AUTOMATION",
             "LEARNING_FEEDBACK_LOOP")] if include_demo else None)
+    catalog = _bounded_catalog_view(
+        query=query, domain=domain, limit=limit, public=public,
+        official=official, signed=signed, p8=p8, w05=w05)
     public_ok = public["status"] == "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"
     official_ok = official["status"] == "STAGE14_OFFICIAL_METADATA_READ_ONLY_UNVERIFIED_NO_GO"
     # A missing local official ledger remains a transparent blocker, never a
@@ -163,6 +335,7 @@ def integrated_product_preview(root: Path, *, query: str = "",
             "approved_source_count": sources["active_source_count"],
             "source_allowlist_changed": False,
         },
+        "unified_catalog_search": catalog,
         "public_candidate_library": public,
         "official_public_metadata_library": official,
         "signed_rules": {
