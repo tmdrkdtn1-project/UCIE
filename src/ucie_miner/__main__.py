@@ -87,6 +87,16 @@ def main(argv=None):
     pyscan = sub.add_parser("scan-python-stdin", help="Parse only explicitly supplied approved public/synthetic Python text from stdin; no code execution or file scans")
     pyscan.add_argument("--preview-candidates", action="store_true",
                         help="Link heuristic findings to unverified Stage 6 proposals; no DB writes")
+    pyscan.add_argument("--all-existing-rules", action="store_true",
+                        help="Use four existing inert Python scanners in a bounded manual pass")
+    pyscan.add_argument("--serial4-pack", type=Path,
+                        help="Existing manual signed owner Rulepack, optional")
+    pyscan.add_argument("--owner-public-trust", type=Path,
+                        help="Original public owner trust for the signed pack")
+    pyscan.add_argument("--serial5-pack", type=Path,
+                        help="Existing fifth signed addendum, optional")
+    sub.add_parser("feedback-python-synthetic-stdin",
+                   help="Inspect bounded synthetic labels for existing detector FP/FN; no writes")
     sub.add_parser("preview-static-json-stdin", help="Link explicitly supplied untrusted static-scan JSON to nonexecuting rule/plan candidates")
     sub.add_parser("preview-review-docket-stdin", help="Offline structural review agenda for two supplied candidate receipts, never approval")
     discover = sub.add_parser("discover-public", help="Explicit one-shot public 5-repo metadata discovery and adaptive review; no writes")
@@ -183,9 +193,37 @@ def main(argv=None):
             data = sys.stdin.buffer.read(MAX_SOURCE_BYTES + 1)
             if len(data) > MAX_SOURCE_BYTES:
                 raise ValueError("input is oversized")
-            scan = inspect_python_scandir_source(data.decode("utf-8", errors="strict"))
-            result = (preview_static_rule_candidates(ROOT, scan)
-                      if args.preview_candidates else scan)
+            source_text = data.decode("utf-8", errors="strict")
+            if args.all_existing_rules:
+                if args.preview_candidates:
+                    raise ValueError("cannot combine existing-rule inspection and candidate preview")
+                from .existing_rule_inspection import inspect_existing_python
+                result = inspect_existing_python(
+                    source_text, root=ROOT,
+                    serial4_pack=args.serial4_pack,
+                    owner_public_trust=args.owner_public_trust,
+                    serial5_pack=args.serial5_pack)
+            else:
+                if args.serial4_pack or args.owner_public_trust or args.serial5_pack:
+                    raise ValueError("signed flags require --all-existing-rules")
+                scan = inspect_python_scandir_source(source_text)
+                result = (preview_static_rule_candidates(ROOT, scan)
+                          if args.preview_candidates else scan)
+        elif args.action == "feedback-python-synthetic-stdin":
+            from .existing_rule_inspection import evaluate_labeled_feedback
+            data = sys.stdin.buffer.read(81921)
+            if not data or len(data) > 81920:
+                raise ValueError("bounded synthetic feedback input required")
+            def strict_feedback_keys(pairs):
+                found = {}
+                for key, value in pairs:
+                    if key in found:
+                        raise ValueError("duplicate feedback JSON property")
+                    found[key] = value
+                return found
+            cases = json.loads(data.decode("utf-8", errors="strict"),
+                               object_pairs_hook=strict_feedback_keys)
+            result = evaluate_labeled_feedback(cases)
         elif args.action == "preview-static-json-stdin":
             data = sys.stdin.buffer.read(MAX_SOURCE_BYTES + 1)
             if len(data) > MAX_SOURCE_BYTES:
