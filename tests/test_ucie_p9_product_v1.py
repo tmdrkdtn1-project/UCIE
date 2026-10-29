@@ -75,6 +75,10 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertFalse(manifest["independent_qa_signed_off"])
         self.assertFalse(manifest["source_license_signoff"])
         self.assertFalse(manifest["upstream_public_code_included"])
+        self.assertEqual(manifest["version"], "1.1.0")
+        self.assertEqual(manifest["consumer_api_version"], "1.1.0")
+        self.assertEqual(manifest["supported_unverified_metadata_kinds"],
+                         sorted(portable.KINDS))
         with tempfile.TemporaryDirectory() as temp:
             f = Path(temp) / "draft.zip"
             f.write_bytes(a)
@@ -88,6 +92,38 @@ class P9IntegratedProductTests(unittest.TestCase):
                                  Path(portable.__file__).read_bytes())
                 self.assertNotIn(b"upstream PR contents", z.read("portable_exact.py"))
 
+    def test_portable_unverified_engine_skill_learning_kinds_and_strict_pr_identity(self):
+        source = "repo:python/cpython"
+        rows = []
+        for i, kind in enumerate(
+                ("DEVELOPMENT_ENGINE", "REUSABLE_SKILL", "LEARNING_LOGIC"), 1):
+            rows.append({
+                "source_id": source, "domain": "Python",
+                "kind": kind, "purpose_code": "SYNTHETIC_EXACT_LOOKUP",
+                "library_item_id": f"{i:064x}",
+                "public_url": f"https://github.com/python/cpython/pull/{i}",
+                "evidence_sha256": f"{i + 10:064x}",
+                "human_approved": False, "export_allowed": False,
+            })
+        q = tuple((source, "Python", kind, "SYNTHETIC_EXACT_LOOKUP")
+                  for kind in ("DEVELOPMENT_ENGINE", "REUSABLE_SKILL",
+                               "LEARNING_LOGIC"))
+        found = portable.search_public_metadata(rows, queries=q)
+        self.assertEqual(len(found["results"]), 3)
+        self.assertTrue(all(x["total_matches"] == 1 for x in found["results"]))
+        self.assertEqual(found["approved_or_exportable_items"], 0)
+        self.assertFalse(found["production_release_approved"])
+        for suffix in ("/extra", "-forged", "?query=bad", "#fragment", "0", "x"):
+            altered = [dict(row) for row in rows]
+            altered[0]["public_url"] += suffix
+            with self.subTest(suffix=suffix):
+                with self.assertRaises(portable.PortableLookupError):
+                    portable.search_public_metadata(altered, queries=q)
+        for kind in ("PRODUCTION_APPROVED_ENGINE", "EXECUTABLE_UPSTREAM_CODE"):
+            with self.assertRaises(portable.PortableLookupError):
+                portable.search_public_metadata(
+                    [{**rows[0], "kind": kind}], queries=q)
+
     def test_actual_independent_consumer_import_works_without_ucie_package(self):
         payload, _manifest = product.build_draft_package_bytes()
         with tempfile.TemporaryDirectory() as temp:
@@ -96,7 +132,7 @@ class P9IntegratedProductTests(unittest.TestCase):
                 z.extract("portable_exact.py", path=isolated)
             consumer_script = (
                 "import json,runpy,sys\n"
-                "m=runpy.run_path(sys.argv[1]); assert m['VERSION']=='1.0.0'\n"
+                "m=runpy.run_path(sys.argv[1]); assert m['VERSION']=='1.1.0'\n"
                 "h='a'*64\n"
                 "rows=[dict(source_id='repo:python/cpython',domain='Python',"
                 "kind='PUBLIC_TECHNICAL_EVIDENCE',purpose_code='API_CONTRACT',"
@@ -122,16 +158,29 @@ class P9IntegratedProductTests(unittest.TestCase):
             self.assertEqual(out["matches"], 1)
 
     def test_explicit_draft_export_is_only_ucie_local_and_no_overwrite(self):
+        with self.assertRaises(product.ProductIntegrationError):
+            product.verify_existing_draft(self.root)
         first = product.explicitly_export_draft(self.root)
         self.assertTrue(first["created"])
         self.assertFalse(first["production_release_approved"])
         self.assertFalse(first["standalone_consumer_qa_attested"])
         p = self.root / first["relative_path"]
         original = p.read_bytes()
+        verification = product.verify_existing_draft(self.root)
+        self.assertEqual(verification["sha256"], first["sha256"])
+        self.assertEqual(verification["code_sha256"], first["code_sha256"])
+        self.assertEqual(verification["status"],
+                         "UCIE_LOCAL_DRAFT_BYTES_VERIFIED_NOT_RELEASED")
+        self.assertTrue(verification["canonical_local_source_match"])
+        self.assertFalse(verification["independent_signature_verified"])
+        self.assertFalse(verification["production_release_approved"])
+        self.assertEqual(p.read_bytes(), original)
         second = product.explicitly_export_draft(self.root)
         self.assertFalse(second["created"])
         self.assertEqual(original, p.read_bytes())
         p.write_bytes(b"DIFFERENT")
+        with self.assertRaises(product.ProductIntegrationError):
+            product.verify_existing_draft(self.root)
         with self.assertRaises(product.ProductIntegrationError):
             product.explicitly_export_draft(self.root)
 
@@ -488,6 +537,22 @@ class P9IntegratedProductTests(unittest.TestCase):
         obj = json.loads(printed.call_args.args[0])
         self.assertEqual(obj["status"], "UCIE_ONLY_DRAFT_WRITTEN_NOT_RELEASED")
         self.assertTrue((self.root / obj["relative_path"]).is_file())
+        with patch("sys.argv", [
+            "product_v1", "--ucie-root", str(self.root), "--verify-draft"]):
+            with patch("builtins.print") as printed:
+                self.assertEqual(product.main(), 0)
+        verified = json.loads(printed.call_args.args[0])
+        self.assertEqual(verified["status"],
+                         "UCIE_LOCAL_DRAFT_BYTES_VERIFIED_NOT_RELEASED")
+        self.assertEqual(verified["sha256"], obj["sha256"])
+        self.assertFalse(verified["independent_signature_verified"])
+        with patch("sys.argv", [
+            "product_v1", "--ucie-root", str(self.root),
+            "--verify-draft", "--demo"]):
+            with patch("builtins.print") as printed:
+                self.assertEqual(product.main(), 2)
+        rejected = json.loads(printed.call_args.args[0])
+        self.assertEqual(rejected["status"], "P9_PRODUCT_FAIL_CLOSED")
         self.assertFalse(obj["v1_accepted"])
         with patch("sys.argv", [
             "product_v1", "--ucie-root", str(self.root),
