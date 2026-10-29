@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 SCHEMA = "UCIE_PORTABLE_EXACT_PUBLIC_METADATA_LOOKUP_V1"
 MAX_ITEMS = 1000
 MAX_QUERIES = 32
@@ -23,7 +23,11 @@ SOURCES = frozenset({
     "repo:actions/runner-images",
 })
 DOMAINS = frozenset({"Python", "PowerShell", "Git", "MCP/API", "GitHub Actions Runner"})
-KINDS = frozenset({"PUBLIC_TECHNICAL_EVIDENCE", "PREVENTION_RULE"})
+# These are *unapproved metadata types*, never executable upstream packages.
+KINDS = frozenset({
+    "PUBLIC_TECHNICAL_EVIDENCE", "PREVENTION_RULE",
+    "DEVELOPMENT_ENGINE", "REUSABLE_SKILL", "LEARNING_LOGIC",
+})
 PURPOSE_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
 HEX = frozenset("0123456789abcdef")
 FIELDS = frozenset({
@@ -44,6 +48,16 @@ def _purpose(x: Any) -> bool:
 
 def _hex64(x: Any) -> bool:
     return type(x) is str and len(x) == 64 and all(c in HEX for c in x)
+
+
+def _pinned_public_pull(source: str, url: Any) -> bool:
+    """Disallow a misleading GitHub PR prefix or arbitrary extra URL path."""
+    prefix = "https://github.com/" + source[5:] + "/pull/"
+    if type(url) is not str or not url.startswith(prefix):
+        return False
+    number = url[len(prefix):]
+    return (1 <= len(number) <= 9 and number[0] in "123456789"
+            and number.isascii() and number.isdecimal())
 
 
 def _key(source: Any, domain: Any, kind: Any, purpose: Any):
@@ -77,9 +91,7 @@ def search_public_metadata(items: list[dict], *,
         key = _key(row["source_id"], row["domain"], row["kind"], row["purpose_code"])
         if (not _hex64(row["library_item_id"])
                 or not _hex64(row["evidence_sha256"])
-                or type(row["public_url"]) is not str
-                or not row["public_url"].startswith(
-                    "https://github.com/" + row["source_id"][5:] + "/pull/")
+                or not _pinned_public_pull(row["source_id"], row["public_url"])
                 or type(row["export_allowed"]) is not bool
                 or row["export_allowed"]
                 or type(row["human_approved"]) is not bool
