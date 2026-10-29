@@ -118,6 +118,11 @@ def _bounded_catalog_view(*, query: str, domain: str | None, limit: int,
             records.append((shelf, entry))
 
     for item in public["items"]:
+        if (item["human_approved"] is not False
+                or item["export_allowed"] is not False
+                or item["signature_status"] != "NOT_ATTESTED_BY_THIS_SEARCH"
+                or item["lifecycle"] != "UNVERIFIED_CANDIDATE_ONLY"):
+            raise ProductIntegrationError("public candidate trust boundary changed")
         add("PUBLIC_CANDIDATE", {
             "library_item_id": item["library_item_id"],
             "kind": item["kind"],
@@ -139,6 +144,10 @@ def _bounded_catalog_view(*, query: str, domain: str | None, limit: int,
     # Domain filtering intentionally excludes rows with no attested domain.
     if domain is None:
         for item in official["items"]:
+            if (item["human_approved"] is not False
+                    or item["export_allowed"] is not False
+                    or item["lifecycle"] != "PUBLIC_METADATA_UNVERIFIED"):
+                raise ProductIntegrationError("official metadata trust boundary changed")
             item_id = sha256(json.dumps((
                 item["source_id"], item["kind"], item["source_reference"],
                 item["content_sha256"]),
@@ -159,7 +168,14 @@ def _bounded_catalog_view(*, query: str, domain: str | None, limit: int,
 
         # Signed owner-risk rules are only included after original verifier
         # succeeds at read time. They are NOT independent QA or export grants.
+        if (signed is not None
+                and signed["status"] != "EXISTING_OWNER_SIGNED_RULEPACKS_VERIFIED_READ_ONLY"):
+            raise ProductIntegrationError("signed Rulepack verifier status changed")
         for item in signed["items"] if signed is not None else ():
+            if (item["verification"] != "OWNER_SIGNED_VERIFIED_AT_INSPECTION_TIME"
+                    or item["independent_qa_approved"] is not False
+                    or item["new_package_export_allowed"] is not False):
+                raise ProductIntegrationError("signed Rulepack trust boundary changed")
             add("SIGNED_MANUAL_RULE", {
                 "library_item_id": item["item_id"],
                 "kind": "PREVENTION_RULE",
@@ -174,6 +190,8 @@ def _bounded_catalog_view(*, query: str, domain: str | None, limit: int,
             }, item["rule_id"], "PREVENTION_RULE", item["verification"])
 
         for item in p8["items"]:
+            if item["production_adopted"] is not False:
+                raise ProductIntegrationError("synthetic experience trust boundary changed")
             add("UCIE_SYNTHETIC_EXPERIENCE", {
                 "library_item_id": item["library_item_id"],
                 "kind": "UCIE_EXPERIENCE",
@@ -188,6 +206,9 @@ def _bounded_catalog_view(*, query: str, domain: str | None, limit: int,
         # A recorded W05 trial is a UCIE experiment referencing a public
         # candidate, NEVER verification of that upstream engine/skill.
         for item in w05["items"]:
+            if (item["upstream_capability_verified"] is not False
+                    or item["approved_or_exportable"] is not False):
+                raise ProductIntegrationError("upstream skill verification boundary changed")
             add("UCIE_CANDIDATE_TRIAL_EXPERIENCE", {
                 "library_item_id": item["experience_id"],
                 "kind": "UCIE_EXPERIENCE",
