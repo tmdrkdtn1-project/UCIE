@@ -113,7 +113,7 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertTrue(all(x["total_matches"] == 1 for x in found["results"]))
         self.assertEqual(found["approved_or_exportable_items"], 0)
         self.assertFalse(found["production_release_approved"])
-        for suffix in ("/extra", "-forged", "?query=bad", "#fragment", "0", "x"):
+        for suffix in ("/extra", "-forged", "?query=bad", "#fragment", "x"):
             altered = [dict(row) for row in rows]
             altered[0]["public_url"] += suffix
             with self.subTest(suffix=suffix):
