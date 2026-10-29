@@ -164,6 +164,13 @@ def read_capability_history(root: Path, *, limit: int = 20) -> dict:
             "public_url": r["public_url"],
             "workload_sha256": r["workload_sha256"],
             "rows": r["rows"], "queries": r["queries"],
+            # Only UCIE-authored synthetic data, revalidated by _load().
+            # These measured values support within-recipe discussion, never
+            # a claim that upstream PR code or a user project improved.
+            "baseline_operations": r["baseline_operations"],
+            "candidate_operations": r["candidate_operations"],
+            "baseline_median_ns": r["baseline_median_ns"],
+            "candidate_median_ns": r["candidate_median_ns"],
             "equivalent": r["equivalent"], "decision": r["decision"],
             "first_party_synthetic_only": True,
             "upstream_capability_verified": False,
