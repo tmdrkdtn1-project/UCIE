@@ -24,14 +24,15 @@ from .library_search import search_existing_public_library
 from .library_shelves import search_official_metadata_shelf
 from .experience_application import experience_library_preview
 from .capability_experience import read_capability_history
-from .portable_exact import search_public_metadata, SCHEMA as CONSUMER_SCHEMA
+from .portable_exact import (search_public_metadata, SCHEMA as CONSUMER_SCHEMA,
+                             VERSION as CONSUMER_VERSION, KINDS as CONSUMER_KINDS)
 from .capability_trials import evaluate_ucie_owned_recipe
 from .public_discovery import SOURCE_SKILL
 from .skill_profiles import PROFILE
 
 SCHEMA = "UCIE_P9_PRODUCT_INTEGRATION_PREVIEW_V1"
-PACK_SCHEMA = "UCIE_W09_DRAFT_INDEPENDENT_CONSUMER_V1"
-PACKAGE_NAME = "ucie_portable_exact_1_0_0_DRAFT.zip"
+PACK_SCHEMA = "UCIE_W09_DRAFT_INDEPENDENT_CONSUMER_V2"
+PACKAGE_NAME = "ucie_portable_exact_1_1_0_DRAFT.zip"
 MAX_SOURCE_BYTES = 16384
 MAX_ZIP_BYTES = 32768
 
@@ -488,8 +489,10 @@ def build_draft_package_bytes() -> tuple[bytes, dict]:
     manifest = {
         "schema": PACK_SCHEMA,
         "package_id": "UCIE_PORTABLE_EXACT_PUBLIC_METADATA",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "code_file": "portable_exact.py",
+        "consumer_api_version": CONSUMER_VERSION,
+        "supported_unverified_metadata_kinds": sorted(CONSUMER_KINDS),
         "code_sha256": fingerprint,
         "runtime_dependency": "PYTHON_STANDARD_LIBRARY_ONLY",
         "tested_platform_claim": "NOT_INDEPENDENTLY_ATTESTED",
@@ -508,6 +511,8 @@ def build_draft_package_bytes() -> tuple[bytes, dict]:
         "PR code, user project data, keys, or verified upstream skills.\n"
         "Only sanitized approved public-source metadata accepted by\n"
         "search_public_metadata(items, queries=tuple_of_exact_four_field_keys).\n"
+        "Engine, skill and learning-logic records are UNVERIFIED METADATA.\n"
+        "No source import, upstream code execution or endorsement.\n"
         "This draft cannot claim package release/signature/third-party QA.\n"
     ).encode("ascii")
     in_mem = io.BytesIO()
@@ -526,6 +531,48 @@ def build_draft_package_bytes() -> tuple[bytes, dict]:
     if len(payload) > MAX_ZIP_BYTES:
         raise ProductIntegrationError("draft package exceeds bound")
     return payload, manifest
+
+
+def verify_existing_draft(root: Path) -> dict:
+    """Read-only byte-for-byte verification against UCIE's canonical draft.
+
+    No signature or external provenance is inferred from a matching hash.
+    This deliberately accepts only the current first-party package version.
+    """
+    _root(root)
+    export_dir = root / "runtime" / "exports"
+    target = export_dir / PACKAGE_NAME
+    if (export_dir.is_symlink() or not export_dir.is_dir()
+            or target.is_symlink() or not target.is_file()):
+        raise ProductIntegrationError("UCIE-local canonical draft is missing or unsafe")
+    size = target.stat().st_size
+    if not 0 < size <= MAX_ZIP_BYTES:
+        raise ProductIntegrationError("UCIE-local draft exceeds bounded size")
+    actual = target.read_bytes()
+    expected, manifest = build_draft_package_bytes()
+    if actual != expected:
+        raise ProductIntegrationError("UCIE-local draft bytes differ from current source")
+    return {
+        "schema": PACK_SCHEMA,
+        "status": "UCIE_LOCAL_DRAFT_BYTES_VERIFIED_NOT_RELEASED",
+        "relative_path": "runtime/exports/" + PACKAGE_NAME,
+        "version": manifest["version"],
+        "consumer_api_version": manifest["consumer_api_version"],
+        "supported_unverified_metadata_kinds":
+            manifest["supported_unverified_metadata_kinds"],
+        "sha256": sha256(actual).hexdigest(),
+        "code_sha256": manifest["code_sha256"],
+        "canonical_local_source_match": True,
+        "independent_signature_verified": False,
+        "independent_consumer_qa_attested": False,
+        "production_release_approved": False,
+        "source_rights_independently_reviewed": False,
+        "operating_database_writes": 0,
+        "network_requests": 0,
+        "new_signatures_created": 0,
+        "auto_promoted": False,
+        "v1_accepted": False,
+    }
 
 
 def explicitly_export_draft(root: Path) -> dict:
@@ -585,13 +632,17 @@ def main() -> int:
     parser.add_argument("--serial5-pack", type=Path)
     parser.add_argument("--export-draft", action="store_true",
                         help="Explicitly write ONE UCIE-only draft zip (not a release)")
+    parser.add_argument("--verify-draft", action="store_true",
+                        help="Verify existing local draft against exact current UCIE source; no writes")
     args = parser.parse_args()
     try:
-        if args.export_draft:
-            if (args.query or args.domain or args.demo or args.serial4_pack or
+        if args.export_draft or args.verify_draft:
+            if (args.export_draft and args.verify_draft or
+                    args.query or args.domain or args.demo or args.serial4_pack or
                     args.owner_public_trust or args.serial5_pack or args.limit != 5):
-                raise ProductIntegrationError("draft export cannot combine search or pack flags")
-            out = explicitly_export_draft(args.ucie_root)
+                raise ProductIntegrationError("draft operation cannot combine other flags")
+            out = (explicitly_export_draft(args.ucie_root) if args.export_draft
+                   else verify_existing_draft(args.ucie_root))
         else:
             out = integrated_product_preview(
                 args.ucie_root, query=args.query, domain=args.domain,
