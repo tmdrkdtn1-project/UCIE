@@ -4,11 +4,14 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch, Mock
 
 from ucie_miner import product_v1 as product
+from ucie_miner import portable_exact as portable
 from ucie_miner.portable_consumer_qa import check_portable_engine_qa
 
 
@@ -52,6 +55,8 @@ class PortableIndependentConsumerQATests(unittest.TestCase):
         self.assertEqual(result["status"],
                          "FIRST_PARTY_ISOLATED_CONSUMER_QA_PASS_NOT_RELEASED")
         self.assertTrue(result["independent_python_process_executed"])
+        self.assertTrue(result["standalone_zip_without_ucie_install_executed"])
+        self.assertEqual(result["standalone_zip_exact_parity_cases"], 3)
         self.assertTrue(result["portable_source_exact_byte_match"])
         self.assertEqual(result["bounded_query_cases_verified"], 3)
         self.assertEqual(result["isolated_single_query_strategy"], "LINEAR_EXACT_SCAN")
@@ -131,6 +136,75 @@ class PortableIndependentConsumerQATests(unittest.TestCase):
                        returncode=1, stdout=b"", stderr=b"some uncaught error")):
             with self.assertRaises(product.ProductIntegrationError):
                 check_portable_engine_qa(self.root, public_handoff=handoff)
+
+    def test_zip_is_directly_executable_without_ucie_install_or_network(self):
+        from hashlib import sha256
+        payload, manifest = product.build_draft_package_bytes()
+        dest = Path(self.folder.name) / "independent_consumer"
+        dest.mkdir()
+        package = dest / "ucie_exact_DRAFT.zip"
+        package.write_bytes(payload)
+        root_files = sorted(self.root.rglob("*"))
+        rows = product._demo_input()
+        key = ["repo:python/cpython", "Python",
+               "PUBLIC_TECHNICAL_EVIDENCE", "API_CONTRACT"]
+        def invoke(raw: bytes, *args: str):
+            return subprocess.run(
+                [sys.executable, "-I", "-B", str(package), *args],
+                input=raw, capture_output=True, cwd=dest,
+                timeout=30, check=False)
+        request = {"items": rows, "queries": [key], "limit": 20}
+        original = json.dumps(request, sort_keys=True).encode("ascii")
+        good = invoke(original)
+        self.assertEqual(good.returncode, 0, good.stderr[-500:])
+        self.assertFalse(good.stderr)
+        record = json.loads(good.stdout)
+        self.assertEqual(record["schema"],
+                         "UCIE_STANDALONE_DRAFT_PUBLIC_METADATA_CLI_V1")
+        self.assertEqual(record["status"],
+                         "UNVERIFIED_PUBLIC_METADATA_QUERY_DRAFT_NOT_RELEASED")
+        self.assertEqual(record["engine_version"], "1.1.0")
+        self.assertEqual(record["result"],
+                         portable.search_public_metadata(
+                             rows, queries=(tuple(key),), limit=20))
+        self.assertFalse(record["owner_release_approved"])
+        self.assertFalse(record["package_released"])
+        self.assertEqual(record["new_public_candidate_approvals"], 0)
+        self.assertFalse(record["third_party_code_executed"])
+        self.assertEqual(sha256(package.read_bytes()).hexdigest(),
+                         sha256(payload).hexdigest())
+        self.assertEqual(manifest["version"], "1.2.0")
+        self.assertEqual(sorted(self.root.rglob("*")), root_files)
+
+        invalid = (
+            b"", b"not-json", b" " * 33000,
+            b'{"items":[],"queries":[],"limit":2}',
+            b'{"items":[],"queries":[["repo:python/cpython","Python",'
+            b'"PUBLIC_TECHNICAL_EVIDENCE","API_CONTRACT"]],"limit":true}',
+            original[:-1] + b',"owner_release_approved":true}',
+            original.replace(b'"limit": 20', b'"limit": 20, "limit": 20'),
+            original.replace(b'https://github.com/python/cpython',
+                             b'https://github.com/private/secret'),
+            original.replace(b'"human_approved": false',
+                             b'"human_approved": true'),
+            original.replace(b'"export_allowed": false',
+                             b'"export_allowed": true'),
+            b'{"items":[],"queries":[],"limit":NaN}',
+        )
+        for raw in invalid:
+            with self.subTest(raw=raw[:100]):
+                denied = invoke(raw)
+                self.assertEqual(denied.returncode, 2, denied.stderr[-500:])
+                self.assertFalse(denied.stderr)
+                rejected = json.loads(denied.stdout)
+                self.assertEqual(rejected["status"], "STANDALONE_DRAFT_FAIL_CLOSED")
+                self.assertFalse(rejected["owner_release_approved"])
+                self.assertFalse(rejected["package_released"])
+        denied = invoke(original, "--export", "external")
+        self.assertEqual(denied.returncode, 2)
+        self.assertEqual(json.loads(denied.stdout)["status"],
+                         "STANDALONE_DRAFT_FAIL_CLOSED")
+        self.assertEqual(sorted(self.root.rglob("*")), root_files)
 
     def test_real_product_cli_opt_in_only_and_read_only(self):
         with patch("sys.argv", [

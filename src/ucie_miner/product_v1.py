@@ -34,8 +34,8 @@ from .public_discovery import SOURCE_SKILL
 from .skill_profiles import PROFILE
 
 SCHEMA = "UCIE_P9_PRODUCT_INTEGRATION_PREVIEW_V1"
-PACK_SCHEMA = "UCIE_W09_DRAFT_INDEPENDENT_CONSUMER_V2"
-PACKAGE_NAME = "ucie_portable_exact_1_1_0_DRAFT.zip"
+PACK_SCHEMA = "UCIE_W09_DRAFT_INDEPENDENT_CONSUMER_V3"
+PACKAGE_NAME = "ucie_portable_exact_1_2_0_DRAFT.zip"
 MAX_SOURCE_BYTES = 16384
 MAX_ZIP_BYTES = 32768
 
@@ -1312,15 +1312,32 @@ def _portable_source() -> bytes:
     return source
 
 
+def _portable_cli_source() -> bytes:
+    """UCIE's own ZIP entrypoint, never third-party code."""
+    path = Path(__file__).with_name("portable_zip_main.py")
+    if path.is_symlink() or not path.is_file():
+        raise ProductIntegrationError("unsafe standalone draft entrypoint")
+    content = path.read_bytes()
+    if (not 0 < len(content) <= MAX_SOURCE_BYTES
+            or not content.startswith(
+                b'"""Standalone UCIE-authored ZIP draft CLI,')):
+        raise ProductIntegrationError("unrecognized first-party ZIP entrypoint")
+    return content
+
+
 def build_draft_package_bytes() -> tuple[bytes, dict]:
     """No write. Produce deterministic UCIE-authored DRAFT, never a signed release."""
     source = _portable_source()
+    cli = _portable_cli_source()
     fingerprint = sha256(source).hexdigest()
     manifest = {
         "schema": PACK_SCHEMA,
         "package_id": "UCIE_PORTABLE_EXACT_PUBLIC_METADATA",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "code_file": "portable_exact.py",
+        "standalone_cli_file": "__main__.py",
+        "standalone_cli_sha256": sha256(cli).hexdigest(),
+        "standalone_command": "python -I -B <existing-verified-draft.zip>",
         "consumer_api_version": CONSUMER_VERSION,
         "supported_unverified_metadata_kinds": sorted(CONSUMER_KINDS),
         "code_sha256": fingerprint,
@@ -1341,6 +1358,9 @@ def build_draft_package_bytes() -> tuple[bytes, dict]:
         "PR code, user project data, keys, or verified upstream skills.\n"
         "Only sanitized approved public-source metadata accepted by\n"
         "search_public_metadata(items, queries=tuple_of_exact_four_field_keys).\n"
+        "Standalone CLI: python -I -B verified-draft.zip < bounded.json\n"
+        "Input object keys: items, queries (arrays of four strings), limit.\n"
+        "This ZIP remains a DRAFT; do not install in third party projects.\n"
         "Engine, skill and learning-logic records are UNVERIFIED METADATA.\n"
         "No source import, upstream code execution or endorsement.\n"
         "This draft cannot claim package release/signature/third-party QA.\n"
@@ -1349,6 +1369,7 @@ def build_draft_package_bytes() -> tuple[bytes, dict]:
     with ZipFile(in_mem, "w", compression=ZIP_DEFLATED) as z:
         for name, data in (
             ("portable_exact.py", source),
+            ("__main__.py", cli),
             ("MANIFEST.json", json.dumps(
                 manifest, sort_keys=True, separators=(",", ":")).encode("ascii")),
             ("README.txt", readme),
