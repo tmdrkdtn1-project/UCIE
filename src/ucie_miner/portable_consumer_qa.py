@@ -119,7 +119,11 @@ def _validated_handoff(handoff: dict) -> list[dict]:
     if payload["queries"] != [list(k) for k in keys]:
         raise ProductIntegrationError("unexpected exact W04 keys")
     if rows:
-        result = search_public_metadata(rows, queries=tuple(keys), limit=20)
+        try:
+            result = search_public_metadata(rows, queries=tuple(keys), limit=20)
+        except PortableLookupError as exc:
+            raise ProductIntegrationError(
+                "W04 candidate source provenance or rights claim rejected") from exc
         if result["approved_or_exportable_items"] != 0:
             raise ProductIntegrationError("candidate marked approved during QA")
     return rows
