@@ -481,6 +481,7 @@ def _reuse_eligibility(*, catalog: dict, signed: dict | None,
         }
         if manual:
             choice["pack_serial"] = proof["pack_serial"]
+            choice["rule_id"] = proof["rule_id"]
             choice["source_package_sha256"] = proof["source_package_sha256"]
             choice["signed_scope"] = proof["signed_pack_manual_scope"]
             choice["current_signature_verification"] = proof["verification"]
@@ -528,6 +529,106 @@ def _reuse_eligibility(*, catalog: dict, signed: dict | None,
         "network_requests": 0, "operating_database_writes": 0,
         "new_signatures_created": 0, "new_package_released": False,
         "v1_accepted": False,
+    }
+
+
+def _selected_w09_manual_consumer_reference(root: Path, *, selection: dict,
+                                           serial4_pack: Path,
+                                           owner_public_trust: Path,
+                                           serial5_pack: Path | None) -> dict:
+    """Bind one selected owner-risk manual rule to the existing W09 verifier.
+
+    No unsigned candidate, cached descriptor, fake approval, or newly
+    generated consumer package can pass this in-process reference handoff.
+    """
+    if (type(selection) is not dict
+            or selection.get("selection_status") !=
+            "EXISTING_OWNER_SIGNED_MANUAL_REFERENCE_ONLY"
+            or selection.get("manual_reference_to_existing_pack_allowed") is not True
+            or selection.get("new_generic_package_export_allowed") is not False
+            or selection.get("production_auto_apply_allowed") is not False
+            or selection.get("approval_basis") != "OWNER_RISK_ACCEPTED_CI_ONLY"
+            or selection.get("current_signature_verification") !=
+            "OWNER_SIGNED_VERIFIED_AT_INSPECTION_TIME"
+            or type(selection.get("library_item_id")) is not str
+            or REUSE_ITEM_ID.fullmatch(selection["library_item_id"]) is None):
+        raise ProductIntegrationError("selected item is not eligible for W09 manual reference")
+    if serial4_pack is None or owner_public_trust is None:
+        raise ProductIntegrationError("explicit original pack and public trust required")
+    try:
+        from .signed_rule_library import build_existing_pack_consumer_descriptor
+    except ModuleNotFoundError as exc:
+        raise ProductIntegrationError(
+            "EXPLICIT_SIGNED_RULEPACK_VERIFIER_DEPENDENCY_MISSING_NO_GO"
+        ) from exc
+    # W09 MUST reverify signature, owner trust, parent pack SHA and expiry
+    # against actual original bytes, after the catalog selection.
+    descriptor = build_existing_pack_consumer_descriptor(
+        root, serial4_pack=serial4_pack,
+        owner_public_trust=owner_public_trust, serial5_pack=serial5_pack)
+    if (descriptor.get("schema") !=
+            "UCIE_W09_EXISTING_OWNER_PACK_CONSUMER_DESCRIPTOR_V1"
+            or descriptor.get("status") !=
+            "READ_ONLY_REFERENCE_DESCRIPTOR_NOT_A_NEW_RELEASE"
+            or descriptor.get("package_type") !=
+            "REFERENCE_TO_EXISTING_SIGNED_RULEPACKS_ONLY"
+            or descriptor.get("approval_scope") != selection["signed_scope"]
+            or descriptor.get("new_package_export_allowed") is not False
+            or descriptor.get("new_signature_or_approval_created") is not False
+            or descriptor.get("existing_manual_pack_distribution_scope_unchanged")
+               is not True
+            or descriptor.get("network_requests") != 0
+            or descriptor.get("database_writes") != 0
+            or type(descriptor.get("descriptor_sha256")) is not str
+            or REUSE_ITEM_ID.fullmatch(descriptor["descriptor_sha256"]) is None):
+        raise ProductIntegrationError("W09 consumer descriptor trust boundary changed")
+    # Re-check the canonical W09 descriptor digest so even a forged cached
+    # result cannot serve as a replacement for the original in-process API.
+    canonical = json.dumps(
+        {k: v for k, v in descriptor.items() if k != "descriptor_sha256"},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+        allow_nan=False).encode("ascii")
+    if sha256(canonical).hexdigest() != descriptor["descriptor_sha256"]:
+        raise ProductIntegrationError("W09 consumer descriptor digest mismatch")
+    key = ("serial5_addendum" if selection["pack_serial"] == 5 else "serial4")
+    digests = descriptor["source_pack_sha256s"]
+    if (selection["pack_serial"] not in (4, 5)
+            or type(digests) is not dict
+            or digests.get(key) != selection["source_package_sha256"]):
+        raise ProductIntegrationError("selected rule pack SHA differs from W09")
+    matching = [
+        rule for rule in descriptor["rules"]
+        if rule["item_id"] == selection["library_item_id"]
+    ]
+    if (len(matching) != 1
+            or matching[0]["rule_id"] != selection["rule_id"]
+            or matching[0]["pack_serial"] != selection["pack_serial"]
+            or matching[0]["approval_basis"] != selection["approval_basis"]
+            or matching[0]["independent_qa_approved"] is not False):
+        raise ProductIntegrationError("selected rule identity differs from W09")
+    return {
+        "schema": "UCIE_V1_SELECTED_EXISTING_W09_MANUAL_CONSUMER_REFERENCE_V1",
+        "status": "EXISTING_SIGNED_MANUAL_REFERENCE_VERIFIED_NOT_RELEASED",
+        "selected_library_item_id": selection["library_item_id"],
+        "rule_id": matching[0]["rule_id"],
+        "pack_serial": matching[0]["pack_serial"],
+        "source_package_sha256": selection["source_package_sha256"],
+        "parent_serial4_sha256": digests["serial4"],
+        "existing_w09_descriptor_sha256": descriptor["descriptor_sha256"],
+        "original_pack_reverified_at_handoff": True,
+        "consumer_instruction": descriptor["consumer_instructions"],
+        "manual_scope": descriptor["approval_scope"],
+        "approval_basis": "OWNER_RISK_ACCEPTED_CI_ONLY",
+        "independent_qa_approved": False,
+        "legal_license_signoff": False,
+        "consumer_signature_verified_after_handoff": False,
+        "new_generic_package_export_allowed": False,
+        "automatic_rule_application_allowed": False,
+        "source_code_executed": False,
+        "pack_bytes_copied": False,
+        "new_signature_created": False,
+        "network_requests": 0, "operating_database_writes": 0,
+        "package_released": False, "v1_accepted": False,
     }
 
 
@@ -906,11 +1007,19 @@ def integrated_product_preview(root: Path, *, query: str = "",
                                signed_serial4: Path | None = None,
                                owner_public_trust: Path | None = None,
                                signed_serial5: Path | None = None,
-                               select_item_id: str | None = None) -> dict:
+                               select_item_id: str | None = None,
+                               include_consumer_reference: bool = False) -> dict:
     """Read all UCIE-owned shelves without assuming any one shelf is V1 PASS."""
     _root(root)
     if type(include_demo) is not bool:
         raise ProductIntegrationError("invalid demo request")
+    if type(include_consumer_reference) is not bool:
+        raise ProductIntegrationError("invalid consumer-reference request")
+    if include_consumer_reference and (
+            select_item_id is None or signed_serial4 is None
+            or owner_public_trust is None):
+        raise ProductIntegrationError(
+            "consumer reference requires selected ID and existing signed pack/trust")
     if (signed_serial4 is None) != (owner_public_trust is None):
         raise ProductIntegrationError("existing signed pack and public trust must be paired")
     if signed_serial5 is not None and signed_serial4 is None:
@@ -963,6 +1072,13 @@ def integrated_product_preview(root: Path, *, query: str = "",
         sources=sources, public=public, official=official, limit=limit)
     reuse = _reuse_eligibility(
         catalog=catalog, signed=signed, selected_item_id=select_item_id)
+    consumer_reference = None
+    if include_consumer_reference:
+        consumer_reference = _selected_w09_manual_consumer_reference(
+            root, selection=reuse["selected_item"],
+            serial4_pack=signed_serial4,
+            owner_public_trust=owner_public_trust,
+            serial5_pack=signed_serial5)
     public_ok = public["status"] == "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"
     official_ok = official["status"] == "STAGE14_OFFICIAL_METADATA_READ_ONLY_UNVERIFIED_NO_GO"
     # A missing local official ledger remains a transparent blocker, never a
@@ -991,6 +1107,7 @@ def integrated_product_preview(root: Path, *, query: str = "",
         },
         "unified_catalog_search": catalog,
         "reuse_eligibility": reuse,
+        "selected_existing_w09_consumer_reference": consumer_reference,
         "source_version_rights_qa_readiness": evidence_readiness,
         "source_linked_portable_handoff": portable_handoff,
         "capability_experience_comparison": comparison,
@@ -1192,6 +1309,8 @@ def main() -> int:
     parser.add_argument("--serial5-pack", type=Path)
     parser.add_argument("--select-item", dest="select_item_id",
                         help="Exact 64-char library ID in the bounded query window")
+    parser.add_argument("--consumer-reference", action="store_true",
+                        help="Read-only W09 original-pack reference for one signed manual rule only")
     parser.add_argument("--export-draft", action="store_true",
                         help="Explicitly write ONE UCIE-only draft zip (not a release)")
     parser.add_argument("--verify-draft", action="store_true",
@@ -1202,7 +1321,8 @@ def main() -> int:
             if (args.export_draft and args.verify_draft or
                     args.query or args.domain or args.demo or args.serial4_pack or
                     args.owner_public_trust or args.serial5_pack
-                    or args.select_item_id is not None or args.limit != 5):
+                    or args.select_item_id is not None
+                    or args.consumer_reference or args.limit != 5):
                 raise ProductIntegrationError("draft operation cannot combine other flags")
             out = (explicitly_export_draft(args.ucie_root) if args.export_draft
                    else verify_existing_draft(args.ucie_root))
@@ -1213,7 +1333,8 @@ def main() -> int:
                 signed_serial4=args.serial4_pack,
                 owner_public_trust=args.owner_public_trust,
                 signed_serial5=args.serial5_pack,
-                select_item_id=args.select_item_id)
+                select_item_id=args.select_item_id,
+                include_consumer_reference=args.consumer_reference)
     except (ValueError, OSError) as exc:
         print(json.dumps({
             "schema": SCHEMA, "status": "P9_PRODUCT_FAIL_CLOSED",
