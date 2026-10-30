@@ -133,6 +133,30 @@ $result | ConvertFrom-Json
 
 원본 W09 참조·서명·만료·항목 ID·서명 소스 SHA가 달라지면 `MANUAL_CONSUMER_FAIL_CLOSED`로 종료한다. GitHub CI의 임시 테스트용 서명팩 검증은 실제 소유자 호스트의 기존 서명팩에 대한 운영 수용 PASS와 다르다. 전체 `v1_accepted=false`, 새 범용 배포·자동 적용 불가를 유지한다.
 
+## V1 실제 UCIE 운영환경 수용 현황 — 단일 읽기 전용 명령 (2026-10-30)
+
+새 모듈 `ucie_miner.v1_host_readiness`는 기존 Python 3.13/3.15 환경에서 원래 UCIE 전용 운영 경로를 **읽기 전용**으로 관측하는 단일 명령이다. 운영 DB를 마이그레이션하거나 초기화하지 않고, 새 공개 API 요청·권한 등록·자동승격·서명팩 발행·개인/다른 프로젝트 자료 열람을 하지 않는다.
+
+이 명령에서 검사하는 항목은 기존 `runtime/public_miner.sqlite3`의 읽기 전용 SQLite 무결성·후보 상태·허용된 출처·최근 실행 시각·`last_run.json`의 상태, 기존 Stage10 미승인 후보, 별도 P10 대기열, 별도 P11 공개 경험 원장, 공급원 레지스트리, V1 Library 제품 조회 차단 사유이다. **명시적으로 기존 Serial4 서명팩과 소유자의 공개 신뢰키를 제공한 경우에만**, 실제 원본 서명·만료를 재검증하고 UCIE가 작성한 고정 합성 Python `os.scandir` 사례로 기존 수동 스캐너를 실행한다. 사용자 코드나 실제 사용자 파일은 자동으로 열람하지 않는다.
+
+소스 버전이 PR #145의 병합 커밋을 포함하는 별도의 확인된 UCIE 전용 checkout에 있어야 한다. 현재 `D:\UCIE` 작업 트리에 이미 로컬 수정 파일이 있으므로 **강제 checkout, reset, pull 덮어쓰기 금지**. 깨끗한 별도 checkout의 `src`를 `PYTHONPATH`로 지정해 최신 검사기만 불러오고, 실제 운영 루트는 `--ucie-root D:\UCIE`로 그대로 읽는 방법을 사용한다.
+
+```powershell
+$releaseRoot = 'D:\UCIE_RELEASE\UCIE' # 실제 설치되어 있고 최신 main을 검증한 별도 checkout에 한정
+$runtimeRoot = 'D:\UCIE'
+$py = 'D:\UCIE\.venv\Scripts\python.exe'
+if (-not (Test-Path (Join-Path $releaseRoot 'src\ucie_miner\v1_host_readiness.py'))) { throw 'UCIE_HOST_OBSERVER_SOURCE_MISSING' }
+$env:PYTHONPATH = Join-Path $releaseRoot 'src'
+& $py -B -m ucie_miner.v1_host_readiness --ucie-root $runtimeRoot
+if ($LASTEXITCODE -ne 0) { throw 'UCIE_HOST_OBSERVER_FAIL_CLOSED' }
+```
+
+기존 UCIE 내부에 실제 서명팩·공개 신뢰키가 존재하고 정확한 경로를 알고 있을 때만 동일 명령 뒤에 `--serial4-pack $serial4 --owner-public-trust $publicTrust`를 덧붙인다. Serial5는 `--serial5-pack $serial5`를 추가한다. 개인키는 입력하거나 검사하지 않는다. 발급된 패키지가 이미 만료됐다면 검사기는 실패/미검증으로 보고해야 하며 기존 서명을 조작하거나 갱신하지 않는다.
+
+**Windows 예약 작업 확인은 별도다.** 이 스크립트는 `schtasks`를 실행하거나 Windows 작업 상태를 검증했다고 주장하지 않는다. 운영자 PC에서 별도로 `schtasks /Query /TN UCIE-PublicMiner-Hourly /V /FO LIST`의 최근 실행 결과와 시각을 확인해야 한다. 3시간 이내 완료 기록은 단회 신선도 관측일 뿐 매시간 안정 가동 증명은 아니다. `LAST_CYCLE_RECEIPT_NOT_FOUND`, P11 미활성, 소스 원장 부재, 사용권 미승인 등은 NO_GO로 보존한다.
+
+출력의 `UCIE_V1_LOCAL_OBSERVATIONS_NO_GO`는 정상적인 수용 평가 결과다. GitHub 4환경 CI PASS는 **실제 사용자 PC 운영 DB나 실제 서명팩 PASS가 아니다**. 일반 범용 패키지의 버전·사용권·배포 승인이 완료되지 않았으므로 `real_host_v1_accepted=false` 유지. CLI가 파일을 쓰지 않더라도 실행 환경/SQLite의 OS-level 임시 부수효과를 원리적으로 부정하지 않으며, 기록한 0건은 이 명령의 명시적 DB 변경/스케줄러/자동승격 동작에 한정한다.
+
 ## 완료 방향
 
 새 PR을 무한히 늘리지 않는다. **새 통합 진입점과 독립 소비 실기의 Windows/Ubuntu 3.13/3.15 CI를 먼저 완료**, 로컬 D:\UCIE에는 **신규 Python 모듈 두 개만** 원자적으로 반영(기존 dirty 수정 불변). 사용자 PC 실호스트 위 세 명령 결과에서 실제 수집기/도서관/경험 계보의 자료를 확인하고, 실행되는 명확한 blocker만 보수. 정식 릴리스·권리·신뢰 서명은 허가/근거가 없으면 NO_GO로 별도 표시.
