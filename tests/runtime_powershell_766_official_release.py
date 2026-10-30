@@ -142,7 +142,7 @@ def verify_release_runtime(binary: Path, tempdir: Path) -> dict:
             )
             or len(result.get("observations", [])) != 3
             or sorted(x["case_id"] for x in result["observations"]) !=
-               [".directory", "..directory", "directory"]):
+               ["..directory", ".directory", "directory"]):
         raise RuntimeError("incorrect or incomplete release behavior observation")
     return result
 
