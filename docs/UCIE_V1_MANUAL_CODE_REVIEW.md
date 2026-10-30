@@ -60,3 +60,7 @@ Each detected finding now includes `public_library`. UCIE reuses the original W0
 The query is performed once per distinct PR in the inspected snippet. Top-level metrics `public_library_exact_pr_lookups` and `public_library_linked_findings` describe this bounded source lookup. A match is **public source identity**, not proof the rule fixes input code, licensing, independent QA, or export approval. A partial 20-record window reports `truncated`.
 
 The same single command and both languages remain unchanged. No new miner, API collection, DB writes, source execution, automatic rule approval, package release or V1 acceptance.
+
+## UTF-8 input integrity
+
+PowerShell code review preserves the original strict UTF-8 bytes, including Korean comments, emoji and CRLF line endings, through the UCIE-owned stdin adapter. It does not rely on the machine's console codepage (including Windows PowerShell 5.1). The adapter rejects malformed UTF-8 and inputs over 16 KiB, and verifies the original source digest. Inputs are still parsed as inert AST data, never executed or echoed. CI exercises the real CLI and both available PowerShell engines with first-party synthetic Unicode samples; this does not grant new source permissions or product approval.
