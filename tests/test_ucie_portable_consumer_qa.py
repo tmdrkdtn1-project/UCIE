@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch, Mock
 
 from ucie_miner import product_v1 as product
+from ucie_miner import portable_exact as portable
 from ucie_miner.portable_consumer_qa import check_portable_engine_qa
 
 
