@@ -66,6 +66,25 @@
 
 **판정:** 공식 해시가 일치하는 **PowerShell 7.6.6 Linux x64 실제 바이너리에서 PR #28087 관련 점 접두어 상대 경로 결함이 재현됐다.** 앞 절의 동일 소스 비교와 합쳐 해당 출시·플랫폼의 취약 동작 관측을 강화한다.
 
-**여전히 미확인:** Windows용 7.6.6 릴리스 바이너리의 동작, 그 뒤 어떤 릴리스에서 고쳐졌는지, 다른 백포트·대체 구현의 존재 여부, 모든 환경에서의 수정 포함 여부, 독립 QA 및 법적 승인, 제품 배포. 실제 원본 PowerShell 바이너리는 사용자 PC나 UCIE 운영 서버에서 실행하지 않았고 임시 CI에서만 실행했다. 운영 DB·스케줄러·승인 상태·자동 규칙 승격을 변경하지 않았다.
+**Linux 검증 시점에 미확인:** Windows용 7.6.6 릴리스 바이너리의 동작(아래 Windows 공식 바이너리 후속 검증으로 확인), 그 뒤 어떤 릴리스에서 고쳐졌는지, 다른 백포트·대체 구현의 존재 여부, 모든 환경에서의 수정 포함 여부, 독립 QA 및 법적 승인, 제품 배포. 실제 원본 PowerShell 바이너리는 사용자 PC나 UCIE 운영 서버에서 실행하지 않았고 임시 CI에서만 실행했다. 운영 DB·스케줄러·승인 상태·자동 규칙 승격을 변경하지 않았다.
 
 이 검증에서 사용한 프로그램은 공식 공개 배포 아티팩트이지만 다운로드 단계까지 외부 코드는 신뢰하지 않으며, 게시된 릴리스 SHA-256 검증을 통과한 다음 격리 CI에서만 실행했다. 게시 SHA-256의 일치가 코드 서명이나 독립 출처 인증을 대체하지는 않는다.
+
+## PR #28087 — Windows x64 7.6.6 공식 출시 바이너리 직접 재현 (추가 확인)
+
+Linux 근거를 반복하지 않고, **공식 Windows x64 ZIP의 SHA-256을 검증한 후 실제 Windows GitHub Actions 호스트에서 UCIE의 기존 합성 경로 시험을 실행**했다.
+
+- 공식 출처: [PowerShell/PowerShell v7.6.6](https://github.com/PowerShell/PowerShell/releases/tag/v7.6.6)
+- 릴리스 ZIP: [PowerShell-7.6.6-win-x64.zip](https://github.com/PowerShell/PowerShell/releases/download/v7.6.6/PowerShell-7.6.6-win-x64.zip)
+- 릴리스에 게시된 ZIP SHA-256: `02fe458be20493fbdf43f61ea20610b811ee6c738ab1676c61b9cfcd1a33c860`, 다운로드 ZIP과 정확히 일치
+- 실제 격리 실행 `pwsh.exe` SHA-256: `bfb46af89433268872ddb43d1ca7a3f433452ee91ed356a9786940f90118e285`
+- 실제 실행 버전: PowerShell `7.6.6`; Windows x64 `Microsoft Windows 10.0.26100`
+- 정확한 UCIE 실행 증거: [Run 40995356035 / Job 123867089278](https://github.com/tmdrkdtn1-project/UCIE/actions/runs/40995356035/job/123867089278), PR 헤드 `b4452971a0975a6049adbfb9cc1e91d8c83a9958`, 검증 단계 `success`
+- 동작: 일반 `directory` 케이스는 정상. `.directory`, `..directory`는 원래 `Resolve-Path -Relative` 결과가 예상과 다름 (`dot_prefix_cases_matching_expected=0`).
+- 기존 UCIE 안전 경로 처리 함수: 세 케이스 모두 예상 결과와 일치. 시험 실행 성공은 승인이나 수정 코드 포함을 의미하지 않음.
+
+**검증 결론:** PowerShell **7.6.6 Windows x64 및 Linux x64 공식 릴리스 바이너리 양쪽에서** PR #28087 관련 점 접두어 상대 경로 동작 결함을 재현했다. 파일 해시와 출력값은 원격 CI 영수증으로 확인된다.
+
+**여전히 확인되지 않은 범위:** ARM64/x86, 실제 사용자 운영 PC, 이후 버전에서의 해결 여부 및 첫 수정 출시 버전, 대체 백포트 구현, 독립 QA/권리 검토, 자동 승인·배포·학습 효과. ZIP의 릴리스 SHA-256 일치는 서명이나 별도의 공급망 인증이 아니며, 이 바이너리는 격리된 공식 CI 호스트에서만 실행됐다. 사용자 로컬 저장소·운영 DB·스케줄러에는 쓰지 않았다.
+
+재실행을 줄이기 위해 임시 원샷 CI 트리거는 검증 후 제거하고, UCIE 작성 검증 스크립트와 정확한 SHA·CI 영수증만 보존한다.
