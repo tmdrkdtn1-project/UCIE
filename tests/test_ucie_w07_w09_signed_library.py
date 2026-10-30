@@ -20,6 +20,7 @@ from ucie_public.mixed_release import (
 )
 from ucie_public.selected_release import EXPECTED_SECOND_CI, EXPECTED_THIRD_CI
 from ucie_public.fifth_owner_addendum import RULE_ID
+from ucie_miner import product_v1 as product
 from ucie_miner.product_v1 import integrated_product_preview
 from ucie_miner.signed_rule_library import (
     SCHEMA, SignedLibraryError, inspect_signed_library,
@@ -181,6 +182,24 @@ class W07W09SignedLibraryTests(unittest.TestCase):
         self.assertFalse(handoff["package_released"])
         self.assertFalse(selected["v1_accepted"])
         self.assertEqual(selected["operating_database_writes"], 0)
+        self.assertEqual(self.serial4.read_bytes(), original)
+
+        # Exercise the actual user-facing single command, not only the API.
+        with patch("sys.argv", [
+            "product_v1", "--ucie-root", str(self.root),
+            "--limit", "20", "--serial4-pack", str(self.serial4),
+            "--owner-public-trust", str(self.trust),
+            "--select-item", choice["library_item_id"],
+            "--consumer-reference",
+        ]):
+            with patch("builtins.print") as printed:
+                self.assertEqual(product.main(), 0)
+        cli = json.loads(printed.call_args.args[0])
+        self.assertEqual(
+            cli["selected_existing_w09_consumer_reference"],
+            handoff)
+        self.assertFalse(cli["package_released"])
+        self.assertFalse(cli["v1_accepted"])
         self.assertEqual(self.serial4.read_bytes(), original)
 
         # Forged old W09 receipt is not sufficient at the new handoff.
