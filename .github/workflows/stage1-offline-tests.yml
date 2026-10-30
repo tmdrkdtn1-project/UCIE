@@ -39,6 +39,13 @@ jobs:
         env:
           PYTHONPATH: src
           PYTHONDONTWRITEBYTECODE: '1'
+      - name: V1 real manual shell pipeline acceptance in clean Windows CI
+        if: runner.os == 'Windows' && matrix.python-version == '3.15'
+        shell: pwsh
+        run: ./tests/runtime_ucie_v1_real_shell_acceptance.ps1
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
       - name: CLI is importable
         run: python -m ucie_public.cli --help
         env:
