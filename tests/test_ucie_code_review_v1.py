@@ -204,9 +204,20 @@ class UnifiedCodeReviewV1Tests(unittest.TestCase):
                              "EXACT_PUBLIC_PR_SOURCE_LINKED_UNVERIFIED")
             search.assert_called_once()
             self.assertFalse(output["items"][0]["rule_fix_independently_verified"])
+            # A different *unverified but otherwise valid* PR from the same
+            # allowed repository is skipped, not incorrectly inherited.
+            other = {**base, "items": [{
+                **row,
+                "public_url": "https://github.com/python/cpython/pull/9999",
+            }]}
+            with patch("ucie_miner.code_review_v1.search_existing_public_library",
+                       return_value=other):
+                unrelated = _linked_library_for_finding(root, url)
+            self.assertEqual(unrelated["status"],
+                             "NO_EXACT_PUBLIC_PR_IN_CURRENT_LINKED_LEDGER")
+            self.assertEqual(unrelated["items"], [])
             for modify in (
                 {"source_id": "repo:PowerShell/PowerShell"},
-                {"public_url": "https://github.com/python/cpython/pull/9999"},
                 {"human_approved": True}, {"export_allowed": True},
                 {"signature_status": "APPROVED"},
                 {"evidence_sha256": "garbage"},
