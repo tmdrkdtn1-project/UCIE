@@ -54,6 +54,18 @@ _PINNED = (
         "release_tag_commit_sha": "f260eb9c31ec72c5282f98e5ea24d9be4f8d7536",
         "merge_base_sha": "8a723f8b19ed5ae387aaf1a8cc106d6111dee6f1",
         "ahead_by": 207, "behind_by": 428,
+        # Direct read-only inspection of SAME source path on exact commit
+        # versus exact release tag commit; Git blob IDs are NOT SHA-256.
+        "tag_source_comparison": {
+            "path": "src/Microsoft.PowerShell.Commands.Management/commands/management/ResolvePathCommand.cs",
+            "fix_commit_blob_git_sha1": "e6a89e2a11732dfc0ed36af8194432155265486c",
+            "tag_commit_blob_git_sha1": "3d1b66933d26f5e55632184e0981c67771c4d853",
+            "fix_helper_identifier": "StartsWithRelativePathToken",
+            "old_branch_condition": "!adjustedPath.StartsWith('.')",
+            "fix_helper_found_in_merge_source": True,
+            "fix_helper_found_in_tag_source": False,
+            "old_condition_found_in_tag_source": True,
+        },
     },
 )
 
@@ -90,7 +102,35 @@ def lookup_pinned_review(*, source_id: str, public_url: str,
             raise ValueError("invalid pinned divergence evidence")
         license_url = (f"https://github.com/{repo}/blob/"
                        f"{merge_sha}/{pinned['license_file']}")
+        inspection = pinned.get("tag_source_comparison")
+        if inspection is not None:
+            if (inspection["fix_commit_blob_git_sha1"]
+                    == inspection["tag_commit_blob_git_sha1"]
+                    or inspection["fix_helper_found_in_merge_source"] is not True
+                    or inspection["fix_helper_found_in_tag_source"] is not False
+                    or inspection["old_condition_found_in_tag_source"] is not True):
+                raise ValueError("invalid exact-tag source comparison evidence")
         return {
+            "examined_tag_source_patch": (
+                {
+                    "status": "SPECIFIC_PR28087_IMPLEMENTATION_ABSENT_IN_EXAMINED_TAG_SOURCE",
+                    "scope": "ONE_EXACT_C_SHARP_SOURCE_FILE",
+                    "path": inspection["path"],
+                    "fix_commit_blob_git_sha1": inspection["fix_commit_blob_git_sha1"],
+                    "tag_commit_blob_git_sha1": inspection["tag_commit_blob_git_sha1"],
+                    "fixed_helper_identifier": inspection["fix_helper_identifier"],
+                    "pre_fix_condition_identifier": inspection["old_branch_condition"],
+                    "fixed_helper_present_at_merge": True,
+                    "fixed_helper_present_in_tag": False,
+                    "pre_fix_condition_present_in_tag": True,
+                    "equivalent_backport_excluded": False,
+                    "all_alternate_fix_paths_reviewed": False,
+                    "runtime_bug_reproduced_for_tag": False,
+                    "runtime_fix_coverage_verified": False,
+                    "release_artifact_binaries_examined": False,
+                    "source_was_executed": False,
+                } if inspection is not None else None
+            ),
             "schema": SCHEMA,
             "status": "PINNED_REPOSITORY_LICENSE_AND_DIVERGENT_RELEASE_OBSERVED_NO_GO",
             "source_id": source_id,
