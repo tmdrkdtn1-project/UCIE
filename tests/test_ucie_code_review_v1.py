@@ -324,6 +324,33 @@ class UnifiedCodeReviewV1Tests(unittest.TestCase):
                                         "POWERSHELL_RUNTIME_UNAVAILABLE"):
                 review_code(PS_DOT, language="powershell", root=ROOT)
 
+    def test_cli_bom_input_is_rejected_without_hashing_normalized_text(self):
+        # This is a byte-level provenance contract. utf-8-sig would have
+        # removed the BOM while claiming the remaining SHA was the input hash.
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(ROOT / "src")
+        bom_input = bytes.fromhex("efbbbf") + SCANDIR.encode("utf-8")
+        self.assertNotEqual(sha256(bom_input).hexdigest(),
+                            sha256(SCANDIR.encode("utf-8")).hexdigest())
+        for language in ("python", "powershell"):
+            with self.subTest(language=language):
+                cmd = [sys.executable, "-B", "-m", "ucie_miner.code_review_v1",
+                       "--ucie-root", str(ROOT), "--language", language]
+                run = subprocess.run(cmd, input=bom_input, capture_output=True,
+                                     timeout=15, cwd=ROOT, env=env, check=False)
+                self.assertEqual(run.returncode, 2, run.stderr[-500:])
+                result = json.loads(run.stdout.decode("utf-8"))
+                self.assertEqual(result["status"], "CODE_REVIEW_FAIL_CLOSED")
+                self.assertEqual(result["reason_code"],
+                                 "SOURCE_UTF8_BOM_UNSUPPORTED")
+                self.assertNotIn("source_sha256", result)
+                self.assertFalse(result["source_executed"])
+                self.assertEqual(result["network_requests"], 0)
+                self.assertEqual(result["database_writes"], 0)
+                self.assertFalse(result["auto_promoted"])
+                self.assertFalse(result["production_approved"])
+                self.assertNotIn(b"scandir", run.stdout + run.stderr)
+
     def test_actual_single_command_python_and_failclosed_error(self):
         env = os.environ.copy()
         env["PYTHONPATH"] = str(ROOT / "src")
