@@ -175,6 +175,20 @@ $env:PYTHONPATH = 'D:\UCIE_RELEASE\UCIE\src'
 
 다음 제품 단계는 수집된 공개 엔진/스킬의 개별 릴리스 계보·적용 버전·라이선스/권리와 사용 방법을 명시적으로 검토하고, 승인된 산출물만 외부 소비 계약에 연결하는 것이다. 서명팩의 소유자 위험 인수 수동 사용과 별개로 신규 범용 반출 승인이 필요하다.
 
+## V1 정확한 공개 후보 선택 시 릴리스·권리 검토 — 기존 근거만 사용 (2026-10-30)
+
+기존 P9 `--select-item`가 미검증 W04 공개 후보를 선택한 경우 새 읽기 전용 응답 `selected_public_release_rights_review`를 함께 반환한다. 선택한 `library_item_id`와 W04 근거 SHA/병합 커밋을 원본 `_evidence_readiness`에 다시 연결하고, 이미 소스에 고정한 세 공개 PR의 라이선스/릴리스 관측을 정확한 PR URL 및 병합 SHA와 대조한다. 별도 API 호출·임시 DB·자동승격·범용 패키지 생성이 없다.
+
+선택된 공개 후보 3가지 상태:
+
+- `EXACT_RELEASE_BUG_REPRODUCED_MANUAL_REVIEW_NO_GO`: PowerShell PR #28087처럼 **원래 기록한 특정 PowerShell 7.6.6 Windows x64와 Linux x64 공식 바이너리**에서 오류가 실제로 재현된 경우에만 해당 두 런타임/해시/기존 CI 링크를 표시한다. 모든 버전의 오류, 수정 포함 여부, backport 없음, 배포 사용권은 **증명되지 않았다**.
+- `MERGE_LICENSE_PINNED_RUNTIME_APPLICABILITY_UNKNOWN_NO_GO`: 정확한 공개 병합 SHA와 저장소 LICENSE blob이 고정됐어도 특정 런타임 영향·수정 포함 여부는 미확인인 후보.
+- `UNPINNED_PUBLIC_MERGE_NEEDS_MANUAL_REVIEW_NO_GO`: 정확한 기존 내부 검토 기록이 없는 공개 후보. 다른 PR이나 부정확한 SHA의 근거를 상속하지 않는다.
+
+예시: 기존 `python -B -m ucie_miner.product_v1 --ucie-root D:\UCIE --query <공개목적검색어> --limit 20 --select-item <W04에서 반환된 64자리 library_item_id>` 결과에서 `selected_public_release_rights_review`를 확인한다. 선택하지 않거나 공개 후보가 아닌 서명된 수동 규칙을 선택하면 이 항목은 `null`로 유지된다. 선택 대상이 현재 제한된 검색창에 없으면 전체 Library에 없다고 단정하지 않는다.
+
+**라이선스 출처를 보았다는 사실과 코드 재배포 허용은 다르다.** PR #28087의 LICENSE.txt Git blob/가족명 관측은 per-file 라이선스, 고지 의무 및 법적 승인 완료를 뜻하지 않는다. 소스 수정·재패키징·사용자/외부 프로젝트 스캔, 모델 변경, 배포 없이 검토할 근거만 제공한다. 모든 후보의 `new_package_export_allowed=false`, `v1_accepted=false` 유지.
+
 ## 완료 방향
 
 새 PR을 무한히 늘리지 않는다. **새 통합 진입점과 독립 소비 실기의 Windows/Ubuntu 3.13/3.15 CI를 먼저 완료**, 로컬 D:\UCIE에는 **신규 Python 모듈 두 개만** 원자적으로 반영(기존 dirty 수정 불변). 사용자 PC 실호스트 위 세 명령 결과에서 실제 수집기/도서관/경험 계보의 자료를 확인하고, 실행되는 명확한 blocker만 보수. 정식 릴리스·권리·신뢰 서명은 허가/근거가 없으면 NO_GO로 별도 표시.
