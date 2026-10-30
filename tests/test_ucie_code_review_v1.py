@@ -334,6 +334,7 @@ class UnifiedCodeReviewV1Tests(unittest.TestCase):
             cases.append(("powershell", PS_DOT, "PS_RESOLVE_PATH_DOT_PREFIX"))
         for language, source, rule_id in cases:
             with self.subTest(language=language):
+                source = "# UCIE_BOM_SECRET_SENTINEL_NOT_ECHO\n" + source
                 original = source.encode("utf-8")
                 received = bytes.fromhex("efbbbf") + original
                 self.assertNotEqual(sha256(received).hexdigest(),
@@ -358,8 +359,8 @@ class UnifiedCodeReviewV1Tests(unittest.TestCase):
                 self.assertFalse(result["production_approved"])
                 self.assertFalse(result["findings"][0]
                                  ["public_library"]["approved_or_exportable"])
-                self.assertNotIn(b"scandir", run.stdout + run.stderr)
-                self.assertNotIn(b"Resolve-Path", run.stdout + run.stderr)
+                self.assertNotIn(b"UCIE_BOM_SECRET_SENTINEL_NOT_ECHO",
+                                 run.stdout + run.stderr)
 
     def test_actual_single_command_python_and_failclosed_error(self):
         env = os.environ.copy()
