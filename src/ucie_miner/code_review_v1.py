@@ -358,9 +358,22 @@ def main(argv=None) -> int:
         raw = sys.stdin.buffer.read(MAX_BYTES+1)
         if not 0 < len(raw) <= MAX_BYTES:
             raise CodeReviewError("SOURCE_SIZE_INVALID")
-        source = raw.decode("utf-8-sig", errors="strict")
+        # Windows PowerShell 5.1 native pipelines may prefix UTF-8 BOM.
+        # Parse without the transport prefix, but never claim that the
+        # parsed-source digest identifies the raw stdin bytes.
+        bom = raw.startswith(b"\xef\xbb\xbf")
+        source = raw.decode("utf-8-sig" if bom else "utf-8",
+                            errors="strict")
         result = review_code(source, language=args.language,
                              root=args.ucie_root)
+        if bom:
+            parsed_digest = sha256(source.encode("utf-8")).hexdigest()
+            if result["source_sha256"] != parsed_digest:
+                raise CodeReviewError("SOURCE_PARSE_DIGEST_MISMATCH")
+            result["parsed_source_sha256"] = parsed_digest
+            result["source_sha256"] = sha256(raw).hexdigest()
+        result["source_byte_encoding"] = ("UTF8_BOM_PARSED_WITH_RAW_HASH"
+                                          if bom else "UTF8_NO_BOM")
     except (CodeReviewError, UnicodeError) as exc:
         result = {
             "schema": SCHEMA,
