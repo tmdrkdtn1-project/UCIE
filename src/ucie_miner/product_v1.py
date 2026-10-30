@@ -34,8 +34,8 @@ from .public_discovery import SOURCE_SKILL
 from .skill_profiles import PROFILE
 
 SCHEMA = "UCIE_P9_PRODUCT_INTEGRATION_PREVIEW_V1"
-PACK_SCHEMA = "UCIE_W09_DRAFT_INDEPENDENT_CONSUMER_V3"
-PACKAGE_NAME = "ucie_portable_exact_1_2_0_DRAFT.zip"
+PACK_SCHEMA = "UCIE_W09_DRAFT_INDEPENDENT_CONSUMER_V4"
+PACKAGE_NAME = "ucie_portable_exact_1_3_0_DRAFT.zip"
 MAX_SOURCE_BYTES = 16384
 MAX_ZIP_BYTES = 32768
 
@@ -1325,18 +1325,41 @@ def _portable_cli_source() -> bytes:
     return content
 
 
+def _portable_rights_security_text() -> bytes:
+    """Non-license factual distribution warning. Not an ownership attestation."""
+    return (
+        "UCIE FIRST-PARTY DRAFT - RIGHTS NOT CLEARED FOR RELEASE\n"
+        "No owner-reviewed LICENSE/COPYING grant is included in this ZIP.\n"
+        "This notice itself grants no permissions to third parties.\n"
+        "Author/owner rights, export scope and obligations require review.\n"
+        "Only first-party portable_exact.py and __main__.py are executable.\n"
+        "No upstream patches, user project content, credentials, or models.\n"
+        "Runtime dependencies: Python standard library (Python >=3.13).\n"
+        "Input: bounded unverified public PR metadata; never execute PR code.\n"
+        "Max stdin 32768 bytes, stdout JSON 65536 bytes, fail closed.\n"
+        "Manifest and SHA-256 are integrity claims only, NOT a signature.\n"
+        "No independent security/QA acceptance or public release approval.\n"
+    ).encode("ascii")
+
+
 def build_draft_package_bytes() -> tuple[bytes, dict]:
     """No write. Produce deterministic UCIE-authored DRAFT, never a signed release."""
     source = _portable_source()
     cli = _portable_cli_source()
+    rights = _portable_rights_security_text()
     fingerprint = sha256(source).hexdigest()
     manifest = {
         "schema": PACK_SCHEMA,
         "package_id": "UCIE_PORTABLE_EXACT_PUBLIC_METADATA",
-        "version": "1.2.0",
+        "version": "1.3.0",
         "code_file": "portable_exact.py",
         "standalone_cli_file": "__main__.py",
         "standalone_cli_sha256": sha256(cli).hexdigest(),
+        "rights_security_file": "RIGHTS_SECURITY.txt",
+        "rights_security_sha256": sha256(rights).hexdigest(),
+        "owner_source_license_declared_and_approved": False,
+        "standalone_max_stdin_bytes": 32768,
+        "standalone_max_stdout_bytes": 65536,
         "standalone_command": "python -I -B <existing-verified-draft.zip>",
         "consumer_api_version": CONSUMER_VERSION,
         "supported_unverified_metadata_kinds": sorted(CONSUMER_KINDS),
@@ -1370,11 +1393,15 @@ def build_draft_package_bytes() -> tuple[bytes, dict]:
         for name, data in (
             ("portable_exact.py", source),
             ("__main__.py", cli),
+            ("RIGHTS_SECURITY.txt", rights),
             ("MANIFEST.json", json.dumps(
                 manifest, sort_keys=True, separators=(",", ":")).encode("ascii")),
             ("README.txt", readme),
         ):
             info = ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+            # ZipInfo otherwise chooses a different creating OS on Windows.
+            # Pin ZIP headers as well as entry bytes for cross-host QA.
+            info.create_system = 3
             info.compress_type = ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
             z.writestr(info, data)

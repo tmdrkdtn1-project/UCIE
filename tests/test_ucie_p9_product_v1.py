@@ -192,7 +192,7 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertFalse(manifest["independent_qa_signed_off"])
         self.assertFalse(manifest["source_license_signoff"])
         self.assertFalse(manifest["upstream_public_code_included"])
-        self.assertEqual(manifest["version"], "1.2.0")
+        self.assertEqual(manifest["version"], "1.3.0")
         self.assertEqual(manifest["consumer_api_version"], "1.1.0")
         self.assertEqual(manifest["supported_unverified_metadata_kinds"],
                          sorted(portable.KINDS))
@@ -201,7 +201,7 @@ class P9IntegratedProductTests(unittest.TestCase):
             f.write_bytes(a)
             with ZipFile(f) as z:
                 self.assertEqual(z.namelist(),
-                                 ["portable_exact.py", "__main__.py", "MANIFEST.json", "README.txt"])
+                                 ["portable_exact.py", "__main__.py", "RIGHTS_SECURITY.txt", "MANIFEST.json", "README.txt"])
                 self.assertEqual(z.read("MANIFEST.json"),
                                  json.dumps(manifest, sort_keys=True,
                                             separators=(",", ":")).encode("ascii"))
@@ -211,6 +211,14 @@ class P9IntegratedProductTests(unittest.TestCase):
                                  Path(product.__file__).with_name(
                                      "portable_zip_main.py").read_bytes())
                 self.assertEqual(manifest["standalone_cli_file"], "__main__.py")
+                self.assertEqual(manifest["rights_security_file"], "RIGHTS_SECURITY.txt")
+                self.assertEqual(z.read("RIGHTS_SECURITY.txt"),
+                                 product._portable_rights_security_text())
+                self.assertFalse(manifest["owner_source_license_declared_and_approved"])
+                self.assertEqual(manifest["standalone_max_stdin_bytes"], 32768)
+                self.assertEqual(manifest["standalone_max_stdout_bytes"], 65536)
+                self.assertTrue(all(member.create_system == 3
+                                    for member in z.infolist()))
                 self.assertEqual(manifest["standalone_cli_sha256"],
                                  __import__("hashlib").sha256(
                                      z.read("__main__.py")).hexdigest())

@@ -23,7 +23,7 @@ from .portable_exact import (
 from .product_v1 import (
     ProductIntegrationError, _root, _demo_input,
     _portable_public_ledger_handoff, _portable_source, _portable_cli_source,
-    build_draft_package_bytes, PACK_SCHEMA,
+    _portable_rights_security_text, build_draft_package_bytes, PACK_SCHEMA,
 )
 
 SCHEMA = "UCIE_V1_ISOLATED_PORTABLE_ENGINE_QA_V1"
@@ -50,13 +50,16 @@ def _validated_draft_bytes(payload: bytes, expected: bytes, expected_manifest: d
         with ZipFile(io.BytesIO(payload)) as pack:
             if pack.namelist() != [
                     "portable_exact.py", "__main__.py",
-                    "MANIFEST.json", "README.txt"]:
+                    "RIGHTS_SECURITY.txt", "MANIFEST.json", "README.txt"]:
                 raise ProductIntegrationError("portable package contents changed")
             source = pack.read("portable_exact.py")
             cli = pack.read("__main__.py")
+            rights = pack.read("RIGHTS_SECURITY.txt")
             manifest_raw = pack.read("MANIFEST.json")
             if (source != _portable_source()
                     or cli != _portable_cli_source()
+                    or rights != _portable_rights_security_text()
+                    or sha256(rights).hexdigest() != expected_manifest["rights_security_sha256"]
                     or sha256(source).hexdigest() != expected_manifest["code_sha256"]
                     or sha256(cli).hexdigest() != expected_manifest["standalone_cli_sha256"]
                     or manifest_raw != json.dumps(
@@ -67,11 +70,14 @@ def _validated_draft_bytes(payload: bytes, expected: bytes, expected_manifest: d
         raise ProductIntegrationError("invalid canonical portable draft") from exc
     manifest = json.loads(manifest_raw.decode("ascii"))
     if (manifest != expected_manifest or manifest.get("schema") != PACK_SCHEMA
-            or manifest.get("version") != "1.2.0"
+            or manifest.get("version") != "1.3.0"
             or manifest.get("consumer_api_version") != LOOKUP_VERSION
             or manifest.get("code_file") != "portable_exact.py"
             or manifest.get("standalone_cli_file") != "__main__.py"
-            or manifest.get("version") != "1.2.0"
+            or manifest.get("rights_security_file") != "RIGHTS_SECURITY.txt"
+            or manifest.get("owner_source_license_declared_and_approved") is not False
+            or manifest.get("standalone_max_stdin_bytes") != 32768
+            or manifest.get("standalone_max_stdout_bytes") != 65536
             or manifest.get("standalone_command") !=
             "python -I -B <existing-verified-draft.zip>"
             or manifest.get("runtime_dependency") != "PYTHON_STANDARD_LIBRARY_ONLY"

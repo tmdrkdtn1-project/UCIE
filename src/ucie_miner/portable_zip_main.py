@@ -13,6 +13,7 @@ from portable_exact import (
 )
 
 MAX_INPUT_BYTES = 32768
+MAX_OUTPUT_BYTES = 65536
 CLI_SCHEMA = "UCIE_STANDALONE_DRAFT_PUBLIC_METADATA_CLI_V1"
 
 
@@ -75,6 +76,11 @@ def main():
                              object_pairs_hook=_unique_pairs,
                              parse_constant=_bad_constant)
         output = execute(payload)
+        # 32 exact queries over 20 results can amplify one bounded request.
+        # No partial JSON or silent truncation is ever emitted on overflow.
+        serialized = json.dumps(output, sort_keys=True, ensure_ascii=True)
+        if len(serialized.encode("ascii")) > MAX_OUTPUT_BYTES:
+            raise ValueError("standalone result amplification bound exceeded")
     except (ValueError, UnicodeError, TypeError, KeyError,
             PortableLookupError, OverflowError):
         output = {
@@ -87,7 +93,7 @@ def main():
         }
         print(json.dumps(output, sort_keys=True, ensure_ascii=True))
         return 2
-    print(json.dumps(output, sort_keys=True, ensure_ascii=True))
+    print(serialized)
     return 0
 
 

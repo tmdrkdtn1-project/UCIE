@@ -199,6 +199,26 @@ $env:PYTHONPATH = 'D:\UCIE_RELEASE\UCIE\src'
 
 검증 상태 `FIRST_PARTY_ISOLATED_CONSUMER_QA_PASS_NOT_RELEASED`는 이 UCIE 작성 ZIP의 직접 실행·출력 동등성까지만 의미한다. 서명 없음, 소유자 배포 승인 없음, 외부 독립 QA 없음, 제3자 소스 사용권 승인 0건, `package_released=false`, `v1_accepted=false`. **임의의 ZIP을 직접 실행하지 말고** 먼저 신뢰하는 UCIE 코드에서 바이트 단위 무결성을 확인해야 한다. 앞선 1.1.0 초안과 1.2.0 초안의 해시는 다르며 과거 QA 영수증은 변하지 않는다.
 
+## V1 퍼스트파티 릴리스 준비 묶음 — 버전 1.3.0 미배포 초안 (2026-10-30)
+
+이 묶음은 UCIE가 직접 작성한 표준 라이브러리 전용 `portable_exact` 검색기를 제품화하는 데 필요한 남은 **기술/권리 검토**를 하나로 통합한다. 별도 릴리스, 키 발급, 서명, 외부 배포 또는 운영 DB 변경을 수행하지 않는다.
+
+1. **실제 보안 결함 수정:** stdin은 32KiB지만 동일한 결과를 32개 질의로 복제하면 stdout이 크게 늘어날 수 있다. 초안 ZIP의 진입점은 64KiB 초과 출력을 전부 차단하고 짧은 `STANDALONE_DRAFT_FAIL_CLOSED` JSON/exit 2만 출력한다. 부분 결과나 잘린 JSON은 절대 출력하지 않는다.
+2. **재현 가능한 아카이브 헤더:** `ZipInfo.create_system = 3`, 고정 UTC ZIP 시각과 일반 파일 0644 모드, 지정된 5개 엔트리만 허용한다. 동일 코드 기준 Windows/Linux의 작성 OS 헤더 차이를 제거한다. 압축 엔진/런타임이 완전히 같다는 별도 주장 없이 동일 프로세스 재생성 ZIP 바이트를 직접 비교한다.
+3. **권한·의존성 경계:** `RIGHTS_SECURITY.txt`는 법적 라이선스나 외부 권리 승인이 아님을 밝히고, `MANIFEST.json`은 코드 두 파일과 권한 알림의 각각 SHA-256, stdin/stdout 한도, stdlib만 필요함을 명시한다. UCIE 전체 개발 의존성 `cryptography`는 이 별도 ZIP의 런타임 의존성이 아니다.
+4. **실제 배포 장애:** 현재 검토한 UCIE 저장소 루트에 `LICENSE`, `LICENSE.txt`, `COPYING`, `COPYING.txt` 파일은 없다. 이미 공개 저장소라는 사실이나 `SECURITY.md`의 'open-source code' 설명이 라이선스 권리 부여를 대신하지 않는다. 라이선스가 나중에 생겨도 소유자·권리·고지·의무를 검토하지 않으면 승인하지 않는다.
+
+운영 루트 `D:\UCIE`의 변경 파일을 건드리지 않고 별도 RELEASE checkout에서 아래 단회 명령으로 이 QA를 실행한다. 운영 DB, 서명팩, 예약 작업, 외부 코드에는 변경이 없다.
+
+```powershell
+$env:PYTHONPATH = 'D:\UCIE_RELEASE\UCIE\src'
+& 'D:\UCIE\.venv\Scripts\python.exe' -B -m ucie_miner.portable_release_readiness --ucie-root 'D:\UCIE'
+```
+
+응답 `FIRST_PARTY_RELEASE_TECHNICAL_READINESS_REVIEWED_NO_GO`에서 `canonical_zip_sha256`, 5개 엔트리, 정적 import 금지목록 검사, 명시적인 라이선스 상태와 `blocked_release_requirements`를 확인한다. 이 결과는 자체 정적 검사에 불과하며 악성코드 전문 감사, 실제 OS 강제 격리, 외부 독립 QA를 대체하지 않는다. 제품 수용 `v1_accepted=false`, 배포 `package_released=false` 유지.
+
+**남은 결정은 실제 소유자가 해야 한다:** (a) 코드 소유자·기여자·권한과 선택한 LICENSE/COPYING 고지, (b) 독립 보안·패키지 QA 범위, (c) 배포 패키지 서명 신원·비밀키 보관·릴리스 승인, (d) 제3자 후보 코드를 제외하는 첫 배포 범위. 무단으로 오픈소스 라이선스를 결정하거나 서명키를 사용하지 않는다. 1.2.0 및 1.3.0 ZIP은 서로 다른 초안이며 과거 SHA/검증은 그대로 유지된다.
+
 ## 완료 방향
 
 새 PR을 무한히 늘리지 않는다. **새 통합 진입점과 독립 소비 실기의 Windows/Ubuntu 3.13/3.15 CI를 먼저 완료**, 로컬 D:\UCIE에는 **신규 Python 모듈 두 개만** 원자적으로 반영(기존 dirty 수정 불변). 사용자 PC 실호스트 위 세 명령 결과에서 실제 수집기/도서관/경험 계보의 자료를 확인하고, 실행되는 명확한 blocker만 보수. 정식 릴리스·권리·신뢰 서명은 허가/근거가 없으면 NO_GO로 별도 표시.
