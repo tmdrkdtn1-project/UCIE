@@ -25,7 +25,8 @@ from .library_shelves import search_official_metadata_shelf
 from .experience_application import experience_library_preview
 from .capability_experience import read_capability_history
 from .portable_exact import (search_public_metadata, SCHEMA as CONSUMER_SCHEMA,
-                             VERSION as CONSUMER_VERSION, KINDS as CONSUMER_KINDS)
+                             VERSION as CONSUMER_VERSION, KINDS as CONSUMER_KINDS,
+                             _pinned_public_pull)
 from .capability_trials import evaluate_ucie_owned_recipe
 from .public_discovery import SOURCE_SKILL
 from .skill_profiles import PROFILE
@@ -96,6 +97,115 @@ def portable_consumer_check() -> dict:
         "all_queries_equivalent": valid,
         "original_upstream_code_executed": False,
         "approved_or_exportable_public_candidates": 0,
+    }
+
+
+def _portable_public_ledger_handoff(public: dict, *, limit: int) -> dict:
+    """Check whether the REAL W04 public metadata window is consumable by P7.
+
+    The W04 reader must already have validated Stage10/12/15 source linkage.
+    This does not package, transfer or approve upstream source code. It emits
+    ONLY the same sanitized unapproved PR metadata available through W04.
+    An approved git/git commit reference cannot be represented by the P7
+    PR-only contract and is explicitly counted as unsupported.
+    """
+    if type(limit) is not int or not 1 <= limit <= 20:
+        raise ProductIntegrationError("invalid portable handoff page size")
+    if public["status"] == "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
+        if public["items"] or public["returned_count"] != 0:
+            raise ProductIntegrationError("incomplete W04 ledger carries results")
+        return {
+            "schema": "UCIE_P9_SOURCE_LINKED_PORTABLE_HANDOFF_V1",
+            "status": "SOURCE_LINKAGE_INCOMPLETE_NO_GO",
+            "consumer_payload": None,
+            "source_window_items": 0, "portable_candidate_items": 0,
+            "unsupported_reference_count": 0,
+            "in_process_exact_search_equivalent": False,
+            "independent_consumer_executed_here": False,
+            "approved_or_exportable_items": 0,
+            "network_requests": 0, "operating_database_writes": 0,
+            "package_released": False, "v1_accepted": False,
+        }
+    if (public["status"] != "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"
+            or type(public["items"]) is not list
+            or type(public["returned_count"]) is not int
+            or len(public["items"]) != public["returned_count"]
+            or public["returned_count"] > limit):
+        raise ProductIntegrationError("unexpected W04 portable source window")
+    rows, unsupported = [], 0
+    for item in public["items"]:
+        if (type(item) is not dict
+                or item["lifecycle"] != "UNVERIFIED_CANDIDATE_ONLY"
+                or item["signature_status"] != "NOT_ATTESTED_BY_THIS_SEARCH"
+                or item["human_approved"] is not False
+                or item["export_allowed"] is not False):
+            raise ProductIntegrationError("W04 public metadata trust boundary changed")
+        source, url = item["source_id"], item["public_url"]
+        if not _pinned_public_pull(source, url):
+            # git/git commit evidence is legitimate W04 public metadata, but
+            # the portable exact consumer currently accepts only PRs.
+            prefix = "https://github.com/git/git/commit/"
+            if (source != "repo:git/git" or type(url) is not str
+                    or not url.startswith(prefix)
+                    or len(url[len(prefix):]) != 40
+                    or any(ch not in "0123456789abcdef"
+                           for ch in url[len(prefix):])):
+                raise ProductIntegrationError("unsupported or malformed W04 provenance")
+            unsupported += 1
+            continue
+        rows.append({
+            "source_id": source, "domain": item["domain"],
+            "kind": item["kind"], "purpose_code": item["purpose_code"],
+            "library_item_id": item["library_item_id"],
+            "public_url": url, "evidence_sha256": item["evidence_sha256"],
+            "human_approved": False, "export_allowed": False,
+        })
+    keys = sorted({(row["source_id"], row["domain"],
+                    row["kind"], row["purpose_code"]) for row in rows})
+    equivalent = False
+    if keys:
+        result = search_public_metadata(rows, queries=tuple(keys), limit=limit)
+        if (result["production_release_approved"] is not False
+                or result["approved_or_exportable_items"] != 0
+                or result["catalog_count"] != len(rows)):
+            raise ProductIntegrationError("portable consumer trust boundary changed")
+        expected = {
+            key: sorted((row["library_item_id"], row["public_url"],
+                         row["evidence_sha256"]) for row in rows
+                        if (row["source_id"], row["domain"],
+                            row["kind"], row["purpose_code"]) == key)
+            for key in keys
+        }
+        equivalent = all(
+            len(got["items"]) == got["total_matches"]
+            and sorted((row["library_item_id"], row["public_url"],
+                        row["evidence_sha256"]) for row in got["items"])
+            == expected[key]
+            for key, got in zip(keys, result["results"])
+        )
+        if not equivalent or len(result["results"]) != len(keys):
+            raise ProductIntegrationError("source-linked portable search mismatch")
+    return {
+        "schema": "UCIE_P9_SOURCE_LINKED_PORTABLE_HANDOFF_V1",
+        "status": ("SOURCE_LINKED_PUBLIC_PR_METADATA_PORTABLE_PARITY_NO_GO"
+                   if rows else "NO_PORTABLE_PUBLIC_PR_WINDOW_NO_GO"),
+        "consumer_schema": CONSUMER_SCHEMA,
+        "consumer_version": CONSUMER_VERSION,
+        # This is inert metadata in a read-only response, not a published ZIP.
+        "consumer_payload": {
+            "items": rows, "queries": [list(key) for key in keys],
+            "limit": limit,
+        },
+        "source_window_items": public["returned_count"],
+        "portable_candidate_items": len(rows),
+        "unsupported_reference_count": unsupported,
+        "source_window_truncated": public.get("omitted_count", 0) > 0,
+        "full_ledger_covered": False,
+        "in_process_exact_search_equivalent": equivalent,
+        "independent_consumer_executed_here": False,
+        "approved_or_exportable_items": 0,
+        "network_requests": 0, "operating_database_writes": 0,
+        "package_released": False, "v1_accepted": False,
     }
 
 
@@ -511,6 +621,7 @@ def integrated_product_preview(root: Path, *, query: str = "",
     sources = preview_source_registry(include_research=False)
     public = search_existing_public_library(
         root, query=query, domain=domain, limit=limit, group_revisions=True)
+    portable_handoff = _portable_public_ledger_handoff(public, limit=limit)
     official = search_official_metadata_shelf(root, limit=limit)
     p8 = experience_library_preview(root)
     w05 = read_capability_history(root, limit=limit)
@@ -577,6 +688,7 @@ def integrated_product_preview(root: Path, *, query: str = "",
             "source_allowlist_changed": False,
         },
         "unified_catalog_search": catalog,
+        "source_linked_portable_handoff": portable_handoff,
         "capability_experience_comparison": comparison,
         "library_revision_review_queue": revision_review,
         "public_candidate_library": public,
