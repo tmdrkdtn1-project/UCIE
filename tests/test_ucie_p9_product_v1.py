@@ -31,6 +31,39 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.root = Path(self.tmp.name) / "UCIE"
         (self.root / "runtime").mkdir(parents=True)
 
+    def test_w09_reference_requires_selected_valid_signed_pack_and_no_draft_mode(self):
+        # No implicit trust from a selected ID or an unverified candidate.
+        with self.assertRaises(product.ProductIntegrationError):
+            product.integrated_product_preview(
+                self.root, select_item_id="a" * 64,
+                include_consumer_reference=True)
+        with self.assertRaises(product.ProductIntegrationError):
+            product.integrated_product_preview(
+                self.root, include_consumer_reference=True)
+        with self.assertRaises(product.ProductIntegrationError):
+            product.integrated_product_preview(
+                self.root, include_consumer_reference=1)
+
+        # Even a supposedly signed-looking dict cannot become a reference
+        # without the original W07/W09 cryptographic verification.
+        forged = {
+            "selection_status": "CANDIDATE_OR_EXPERIENCE_REUSE_BLOCKED",
+            "library_item_id": "a" * 64,
+            "manual_reference_to_existing_pack_allowed": False,
+            "new_generic_package_export_allowed": False,
+            "production_auto_apply_allowed": False,
+            "approval_basis": "OWNER_RISK_ACCEPTED_CI_ONLY",
+        }
+        with patch("ucie_miner.signed_rule_library."
+                   "build_existing_pack_consumer_descriptor",
+                   side_effect=AssertionError("must never invoke W09 for unsigned")):
+            with self.assertRaises(product.ProductIntegrationError):
+                product._selected_w09_manual_consumer_reference(
+                    self.root, selection=forged,
+                    serial4_pack=self.root / "untrusted.zip",
+                    owner_public_trust=self.root / "untrusted-public.pem",
+                    serial5_pack=None)
+
     def test_bounded_reuse_selection_never_promotes_unsigned_candidates(self):
         item = {
             "shelf": "PUBLIC_CANDIDATE", "library_item_id": "a" * 64,
@@ -1126,6 +1159,13 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertFalse((self.root / "runtime" / "exports").exists())
         with patch("sys.argv", [
             "product_v1", "--ucie-root", str(self.root),
+            "--select-item", "a" * 64, "--consumer-reference"]):
+            with patch("builtins.print") as printed:
+                self.assertEqual(product.main(), 2)
+        no_pack = json.loads(printed.call_args.args[0])
+        self.assertEqual(no_pack["status"], "P9_PRODUCT_FAIL_CLOSED")
+        with patch("sys.argv", [
+            "product_v1", "--ucie-root", str(self.root),
             "--select-item", "a" * 64]):
             with patch("builtins.print") as printed:
                 self.assertEqual(product.main(), 0)
@@ -1142,6 +1182,14 @@ class P9IntegratedProductTests(unittest.TestCase):
                 self.assertEqual(product.main(), 2)
         invalid = json.loads(printed.call_args.args[0])
         self.assertEqual(invalid["status"], "P9_PRODUCT_FAIL_CLOSED")
+        self.assertFalse((self.root / "runtime" / "exports").exists())
+        with patch("sys.argv", [
+            "product_v1", "--ucie-root", str(self.root),
+            "--export-draft", "--consumer-reference"]):
+            with patch("builtins.print") as printed:
+                self.assertEqual(product.main(), 2)
+        self.assertEqual(json.loads(printed.call_args.args[0])["status"],
+                         "P9_PRODUCT_FAIL_CLOSED")
         self.assertFalse((self.root / "runtime" / "exports").exists())
         with patch("sys.argv", [
             "product_v1", "--ucie-root", str(self.root), "--export-draft"]):
