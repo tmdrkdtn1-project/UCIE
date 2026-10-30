@@ -245,6 +245,25 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertEqual(out["operating_database_writes"], 0)
         self.assertEqual(out["network_requests"], 0)
         self.assertFalse((runtime / "exports").exists())
+        reviews = out["library_revision_review_queue"]
+        self.assertEqual(reviews["candidate_count_in_loaded_window"], 1)
+        self.assertEqual(reviews["returned_count"], 1)
+        self.assertFalse(reviews["new_revision_persisted"])
+        self.assertFalse(reviews["reviewer_approved"])
+        proposal = reviews["items"][0]
+        self.assertEqual(proposal["source_library_item_id"],
+                         experience["event_sha256"])
+        self.assertEqual(proposal["target_ucie_component"],
+                         "ucie_miner.library_exact_index:EXACT_QUERY_POLICY")
+        self.assertFalse(proposal["production_improvement_verified"])
+        unfiltered = product.integrated_product_preview(
+            self.root, query="", limit=5)
+        linked = [item for item in unfiltered["unified_catalog_search"]["items"]
+                  if item["shelf"] == "UCIE_SYNTHETIC_EXPERIENCE"]
+        self.assertEqual(len(linked), 1)
+        self.assertEqual(linked[0]["revision_review_proposal_id"],
+                         proposal["proposal_id"])
+        self.assertEqual([p.read_bytes() for p in checks], before)
 
     def test_unified_catalog_search_reuses_original_public_ledger(self):
         batch = fixture_batch(
@@ -421,6 +440,22 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertFalse(row["owner_approved"])
         self.assertFalse(row["export_allowed"])
         self.assertFalse(compare["cross_candidate_speed_ranked"])
+        revision = found["library_revision_review_queue"]
+        self.assertEqual(revision["candidate_count_in_loaded_window"], 1)
+        self.assertEqual(revision["items"][0]["source_shelf"],
+                         "UCIE_CANDIDATE_TRIAL_EXPERIENCE")
+        self.assertEqual(revision["items"][0][
+            "public_candidate_identity_only"]["candidate_id"],
+            out["candidate_id"])
+        self.assertFalse(revision["items"][0]["library_revision_written"])
+        wide = product.integrated_product_preview(
+            self.root, query="SKILL_TEST_AUTOMATION", limit=5)
+        linked = [item for item in wide["unified_catalog_search"]["items"]
+                  if item["shelf"] == "UCIE_CANDIDATE_TRIAL_EXPERIENCE"]
+        self.assertEqual(len(linked), 1)
+        self.assertEqual(linked[0]["revision_review_proposal_id"],
+                         revision["items"][0]["proposal_id"])
+        self.assertEqual(ledger.read_bytes(), before)
         self.assertFalse(found["v1_accepted"])
         self.assertEqual(compare["operating_database_writes"], 0)
         self.assertEqual(compare["network_requests"], 0)
@@ -472,6 +507,68 @@ class P9IntegratedProductTests(unittest.TestCase):
                 with self.assertRaises(product.ProductIntegrationError):
                     product._compare_existing_capability_experiences(
                         history=tampered, query="", domain=None, limit=5)
+
+    def test_p8_review_queue_is_deterministic_bounded_and_rejects_false_promotion(self):
+        p8 = {"status": "P8_HASH_CHAIN_EXPERIENCE_SEARCHABLE_NO_GO",
+              "recorded_experiments": 1,
+              "items": [{
+                  "library_item_id": "a" * 64, "kind": "UCIE_EXPERIENCE",
+                  "provenance": "LOCAL_P8_HASH_CHAIN_NOT_THIRD_PARTY_ATTESTATION",
+                  "real_library_benefit_verified": False,
+                  "production_adopted": False, "independent_qa": False,
+                  "decision": "REJECT_OR_REVISE_SYNTHETIC_CANDIDATE",
+                  "exact_results_equivalent": False,
+              }]}
+        w05 = {"status": "UCIE_FIRST_PARTY_W05_EXPERIENCE_READ_ONLY",
+               "recorded_count": 1, "returned_count": 1,
+               "items": [{
+                   "experience_id": "b" * 64, "candidate_id": "c" * 64,
+                   "source_id": "repo:python/cpython",
+                   "public_url": "https://github.com/python/cpython/pull/123",
+                   "recipe_id": "TAGGED_TEST_CASE_LOOKUP_V1",
+                   "decision": "RETEST_FIRST_PARTY_RECIPE",
+                   "equivalent": True, "baseline_operations": 100,
+                   "candidate_operations": 20,
+                   "first_party_synthetic_only": True,
+                   "upstream_capability_verified": False,
+                   "approved_or_exportable": False,
+               }]}
+        view = product._revision_review_queue(p8=p8, w05=w05, limit=2)
+        self.assertEqual(view, product._revision_review_queue(
+            p8=p8, w05=w05, limit=2))
+        self.assertEqual(view["candidate_count_in_loaded_window"], 2)
+        self.assertEqual(view["items"][0]["review_state"],
+                         "HOLD_FOR_MANUAL_REVIEW_NOT_APPLIED")
+        self.assertEqual(view["items"][1]["review_state"],
+                         "MORE_UCIE_TESTING_REQUIRED_NOT_APPLIED")
+        self.assertEqual(view["items"][1]["public_candidate_identity_only"][
+            "source_id"], "repo:python/cpython")
+        self.assertTrue(all(not item["export_allowed"] and
+                            not item["library_revision_written"]
+                            for item in view["items"]))
+        bounded = product._revision_review_queue(p8=p8, w05=w05, limit=1)
+        self.assertEqual(bounded["returned_count"], 1)
+        self.assertEqual(bounded["omitted_from_loaded_window"], 1)
+        for field, bad in (
+            ("production_adopted", True),
+            ("independent_qa", True),
+            ("real_library_benefit_verified", True),
+            ("provenance", "PRIVATE_PROJECT_TELEMETRY"),
+        ):
+            wrong = {**p8, "items": [{**p8["items"][0], field: bad}]}
+            with self.subTest(field=field):
+                with self.assertRaises(product.ProductIntegrationError):
+                    product._revision_review_queue(p8=wrong, w05=w05, limit=2)
+        for field, bad in (
+            ("approved_or_exportable", True),
+            ("upstream_capability_verified", True),
+            ("first_party_synthetic_only", False),
+            ("candidate_operations", 150),
+        ):
+            wrong = {**w05, "items": [{**w05["items"][0], field: bad}]}
+            with self.subTest(field=field):
+                with self.assertRaises(product.ProductIntegrationError):
+                    product._revision_review_queue(p8=p8, w05=wrong, limit=2)
 
     def test_failure_in_one_critical_ledger_must_not_be_claimed_pass(self):
         with patch("ucie_miner.product_v1.search_existing_public_library",

@@ -361,6 +361,138 @@ def _compare_existing_capability_experiences(*, history: dict,
     }
 
 
+def _revision_review_queue(*, p8: dict, w05: dict,
+                           limit: int) -> dict:
+    """Derive reproducible, unapproved Library revision review candidates.
+
+    Both inputs MUST come from the original source-checked, hash-chain-checked
+    UCIE experience readers. No experiment or upstream source is executed.
+    The target is existing UCIE-authored code, never an upstream PR.
+    """
+    if (type(limit) is not int or not 1 <= limit <= 20
+            or p8["status"] not in (
+                "P8_HASH_CHAIN_EXPERIENCE_SEARCHABLE_NO_GO",
+                "EXPERIENCE_REQUIRES_REVIEW_NO_GO")
+            or w05["status"] != "UCIE_FIRST_PARTY_W05_EXPERIENCE_READ_ONLY"
+            or type(p8["recorded_experiments"]) is not int
+            or len(p8["items"]) != p8["recorded_experiments"]
+            or type(w05["recorded_count"]) is not int
+            or type(w05["returned_count"]) is not int
+            or len(w05["items"]) != w05["returned_count"]
+            or w05["recorded_count"] < w05["returned_count"]):
+        raise ProductIntegrationError("untrusted UCIE experience review source")
+    proposals = []
+
+    def add(*, source_event: str, target: str, source_shelf: str,
+            decision: str, next_action: str, hold: bool,
+            public_link: dict | None = None) -> None:
+        if (type(source_event) is not str or len(source_event) != 64
+                or any(c not in "0123456789abcdef" for c in source_event)):
+            raise ProductIntegrationError("invalid UCIE experience lineage hash")
+        parts = ["UCIE_P8_LIBRARY_REVISION_REVIEW_V1", source_event, target,
+                 decision]
+        proposal_id = sha256(json.dumps(
+            parts, ensure_ascii=True, separators=(",", ":")
+        ).encode("ascii")).hexdigest()
+        proposal = {
+            "proposal_id": proposal_id,
+            "source_library_item_id": source_event,
+            "target_ucie_component": target,
+            "source_shelf": source_shelf,
+            "original_experiment_decision": decision,
+            "review_action": next_action,
+            "review_state": ("HOLD_FOR_MANUAL_REVIEW_NOT_APPLIED" if hold
+                             else "MORE_UCIE_TESTING_REQUIRED_NOT_APPLIED"),
+            "evidence_scope": "UCIE_FIRST_PARTY_SYNTHETIC_ONLY",
+            "independent_quality_assurance": False,
+            "production_improvement_verified": False,
+            "source_code_changed": False,
+            "library_revision_written": False,
+            "auto_promoted": False,
+            "export_allowed": False,
+        }
+        if public_link is not None:
+            proposal["public_candidate_identity_only"] = public_link
+            proposal["upstream_capability_verified"] = False
+        proposals.append(proposal)
+
+    for item in p8["items"]:
+        decision = item["decision"]
+        if (item["kind"] != "UCIE_EXPERIENCE"
+                or item["provenance"] !=
+                "LOCAL_P8_HASH_CHAIN_NOT_THIRD_PARTY_ATTESTATION"
+                or item["real_library_benefit_verified"] is not False
+                or item["production_adopted"] is not False
+                or item["independent_qa"] is not False
+                or decision not in (
+                    "SYNTHETIC_CANDIDATE_WORTH_MORE_TESTING",
+                    "REJECT_OR_REVISE_SYNTHETIC_CANDIDATE")):
+            raise ProductIntegrationError("P8 synthetic revision trust boundary changed")
+        positive = decision == "SYNTHETIC_CANDIDATE_WORTH_MORE_TESTING"
+        if positive and not item["exact_results_equivalent"]:
+            raise ProductIntegrationError("positive P8 revision lacks equivalence")
+        add(
+            source_event=item["library_item_id"],
+            source_shelf="UCIE_SYNTHETIC_EXPERIENCE",
+            target="ucie_miner.library_exact_index:EXACT_QUERY_POLICY",
+            decision=decision,
+            next_action=("RETEST_INDEX_POLICY_ON_DIVERSE_UCIE_WORKLOADS"
+                         if positive else "HOLD_INDEX_POLICY_FOR_CORRECTION"),
+            hold=not positive)
+
+    for item in w05["items"]:
+        decision = item["decision"]
+        if (item["first_party_synthetic_only"] is not True
+                or item["upstream_capability_verified"] is not False
+                or item["approved_or_exportable"] is not False
+                or decision not in (
+                    "RETEST_FIRST_PARTY_RECIPE",
+                    "HOLD_FOR_FIRST_PARTY_RECIPE_CORRECTION")
+                or type(item["equivalent"]) is not bool):
+            raise ProductIntegrationError("W05 revision trust boundary changed")
+        positive = decision == "RETEST_FIRST_PARTY_RECIPE"
+        if positive and (not item["equivalent"]
+                         or item["baseline_operations"] <=
+                         item["candidate_operations"]):
+            raise ProductIntegrationError("positive W05 revision lacks own result")
+        add(
+            source_event=item["experience_id"],
+            source_shelf="UCIE_CANDIDATE_TRIAL_EXPERIENCE",
+            target="ucie_miner.capability_trials:" + item["recipe_id"],
+            decision=decision,
+            next_action=("RETEST_UCIE_OWNED_RECIPE_WITH_INDEPENDENT_WORKLOAD"
+                         if positive else "HOLD_UCIE_OWNED_RECIPE_FOR_CORRECTION"),
+            hold=not positive,
+            public_link={
+                "candidate_id": item["candidate_id"],
+                "source_id": item["source_id"],
+                "public_url": item["public_url"],
+                "upstream_code_executed": False,
+            })
+
+    proposals.sort(key=lambda item: (
+        item["review_state"] != "HOLD_FOR_MANUAL_REVIEW_NOT_APPLIED",
+        item["target_ucie_component"], item["proposal_id"]))
+    return {
+        "schema": "UCIE_P8_LIBRARY_REVISION_REVIEW_QUEUE_V1",
+        "status": "UNAPPROVED_REPRODUCIBLE_REVIEW_CANDIDATES_ONLY",
+        "source": "ORIGINAL_UCIE_VERIFIED_EXPERIENCE_READERS",
+        "candidate_count_in_loaded_window": len(proposals),
+        "returned_count": min(limit, len(proposals)),
+        "omitted_from_loaded_window": max(0, len(proposals) - limit),
+        "source_window_truncated": (
+            w05["recorded_count"] > w05["returned_count"]),
+        "items": proposals[:limit],
+        "new_revision_persisted": False,
+        "reviewer_approved": False,
+        "learning_model_changed": False,
+        "network_requests": 0,
+        "operating_database_writes": 0,
+        "auto_promoted": False,
+        "v1_accepted": False,
+    }
+
+
 def integrated_product_preview(root: Path, *, query: str = "",
                                domain: str | None = None,
                                limit: int = 5,
@@ -408,6 +540,17 @@ def integrated_product_preview(root: Path, *, query: str = "",
         official=official, signed=signed, p8=p8, w05=w05)
     comparison = _compare_existing_capability_experiences(
         history=w05, query=query, domain=domain, limit=limit)
+    revision_review = _revision_review_queue(p8=p8, w05=w05, limit=limit)
+    review_links = {
+        item["source_library_item_id"]: item["proposal_id"]
+        for item in revision_review["items"]
+    }
+    for item in catalog["items"]:
+        if item["shelf"] in (
+                "UCIE_SYNTHETIC_EXPERIENCE",
+                "UCIE_CANDIDATE_TRIAL_EXPERIENCE"):
+            item["revision_review_proposal_id"] = review_links.get(
+                item["library_item_id"])
     public_ok = public["status"] == "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"
     official_ok = official["status"] == "STAGE14_OFFICIAL_METADATA_READ_ONLY_UNVERIFIED_NO_GO"
     # A missing local official ledger remains a transparent blocker, never a
@@ -435,6 +578,7 @@ def integrated_product_preview(root: Path, *, query: str = "",
         },
         "unified_catalog_search": catalog,
         "capability_experience_comparison": comparison,
+        "library_revision_review_queue": revision_review,
         "public_candidate_library": public,
         "official_public_metadata_library": official,
         "signed_rules": {
