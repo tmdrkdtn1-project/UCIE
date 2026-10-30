@@ -28,6 +28,10 @@ from .public_discovery import (
     DiscoveryError, CATEGORIES,
 )
 from .capability_trials import evaluate_ucie_owned_recipe
+from .p11_improvement_gate import (
+    classify_existing, assess_new, ImprovementGateError,
+    GOOD as IMPROVEMENT_GOOD, PROPOSAL as IMPROVEMENT_PROPOSAL,
+)
 from . import pending_queue as queue
 
 SCHEMA = "UCIE_P11_PUBLIC_EXPERIENCE_CLOSED_LOOP_V1"
@@ -298,24 +302,44 @@ def learn_one(root: Path, *, now: datetime | None = None) -> dict:
                 "new_experiments": 0, "network_requests": 0,
                 "auto_promoted": False,
             }
-        best = sorted(rows, key=lambda r: (
+        # Reuse the actual P11 experiment history instead of counting
+        # parity-only results as a successful improvement. One failed
+        # recipe is held while unrelated recipes may continue.
+        history = [dict(r) for r in conn.execute(
+            "SELECT recipe,workload,baseline_ops,candidate_ops,"
+            "exact_equal,hypothesis_status FROM experience"
+        ).fetchall()]
+        passed, held = classify_existing(history)
+        ordered = sorted(rows, key=lambda r: (
             min((PRIORITIES.index(t) for t in json.loads(r["tags"])
                  if t in PRIORITIES), default=99),
-            r["source"], r["pr_number"]))[0]
-        tags = json.loads(best["tags"])
-        recipe = next((RECIPES[t] for t in PRIORITIES if t in tags), None)
-        if recipe is None:
-            raise P11Error("unapproved or empty validated tag")
-        earlier = conn.execute(
-            "SELECT COUNT(*) FROM experience WHERE recipe=? AND exact_equal=1",
-            (recipe,)).fetchone()[0]
+            r["source"], r["pr_number"]))
+        best = recipe = None
+        for row in ordered:
+            tags = json.loads(row["tags"])
+            choice = next((RECIPES[t] for t in PRIORITIES if t in tags), None)
+            if choice is None:
+                raise P11Error("unapproved or empty validated tag")
+            if choice not in held:
+                best, recipe = row, choice
+                break
+        if best is None:
+            return {
+                "schema": SCHEMA,
+                "status": "P11_IMPROVEMENT_REVIEW_HOLD_NO_GO",
+                "held_first_party_recipes": sorted(held),
+                "new_experiments": 0, "improvement_proposals_written": 0,
+                "network_requests": 0, "auto_promoted": False,
+                "production_algorithm_changed": False,
+            }
+        earlier = passed[recipe]
     rows_count = WORKLOADS[earlier % len(WORKLOADS)]
     outcome = evaluate_ucie_owned_recipe(
         recipe, rows=rows_count, queries=24, repeats=2)
+    gate = assess_new(outcome, recipe=recipe, workload=rows_count)
     equal = outcome["exact_result_equivalence_observed"] is True
-    improvement = outcome["synthetic_operation_reduction_observed"] is True
-    hyp = ("SYNTHETIC_UNVERIFIED_PROMISING" if equal and improvement
-           else "NEEDS_REVIEW")
+    improvement = gate["decision"] == IMPROVEMENT_PROPOSAL
+    hyp = gate["hypothesis_status"]
     canonical = json.dumps({
         "source": best["source"], "pr_number": best["pr_number"],
         "merge_sha": best["commit_sha"], "title_sha256": best["title_sha256"],
@@ -340,6 +364,28 @@ def learn_one(root: Path, *, now: datetime | None = None) -> dict:
              outcome["baseline_operations"],
              outcome["candidate_operations_including_setup"], int(equal),
              hyp, moment, digest))
+        # Atomic with P11 experiment + reviewed state. Existing opt-in P11
+        # roots migrate lazily on the next NEW trial; 65 historical trials
+        # remain historical, never backfilled as new improvement evidence.
+        conn.execute("""CREATE TABLE IF NOT EXISTS improvement_review (
+            source TEXT NOT NULL, pr_number INTEGER NOT NULL,
+            receipt_sha256 TEXT NOT NULL,
+            recipe TEXT NOT NULL, workload INTEGER NOT NULL,
+            decision TEXT NOT NULL CHECK(decision IN (
+                'FIRST_PARTY_RETEST_PROPOSAL_NOT_ADOPTED',
+                'FIRST_PARTY_REGRESSION_HOLD_NO_GO')),
+            mismatches INTEGER NOT NULL CHECK(mismatches>=0),
+            operation_reduction_ppm INTEGER NOT NULL
+                CHECK(operation_reduction_ppm BETWEEN 0 AND 1000000),
+            observed_at TEXT NOT NULL,
+            PRIMARY KEY(source,pr_number)
+        )""")
+        conn.execute(
+            "INSERT INTO improvement_review VALUES (?,?,?,?,?,?,?,?,?)",
+            (best["source"], best["pr_number"], digest,
+             recipe, rows_count, gate["decision"],
+             gate["mismatched_queries"],
+             gate["relative_operation_reduction_ppm"], moment))
         conn.execute(
             "UPDATE leads SET reviewed=1 WHERE source=? AND pr_number=?",
             (best["source"], best["pr_number"]))
@@ -352,6 +398,12 @@ def learn_one(root: Path, *, now: datetime | None = None) -> dict:
         "exact_result_equivalence": equal,
         "synthetic_operations_reduced": improvement,
         "next_run_uses_prior_experience": True,
+        "improvement_gate_decision": gate["decision"],
+        "improvement_proposal_created": improvement,
+        "improvement_review_records_written": 1,
+        "improvement_operation_reduction_ppm":
+            gate["relative_operation_reduction_ppm"],
+        "production_algorithm_changed": False,
         "experience_ledger_writes": 1, "network_requests": 0,
         "original_miner_modified": False,
         "model_weights_changed": False, "auto_promoted": False,
@@ -379,6 +431,16 @@ def status(root: Path) -> dict:
         events = conn.execute("SELECT COUNT(*) FROM experience").fetchone()[0]
         good = conn.execute(
             "SELECT COUNT(*) FROM experience WHERE exact_equal=1").fetchone()[0]
+        has_reviews = conn.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' "
+            "AND name='improvement_review'").fetchone()[0] == 1
+        if has_reviews:
+            review_rows = conn.execute(
+                "SELECT decision,COUNT(*) FROM improvement_review "
+                "GROUP BY decision").fetchall()
+            review_counts = {r[0]: r[1] for r in review_rows}
+        else:
+            review_counts = {}
     return {
         "schema": SCHEMA,
         "status": "P11_PUBLIC_EVIDENCE_EXPERIENCE_READ_ONLY",
@@ -388,6 +450,13 @@ def status(root: Path) -> dict:
         "total_successful_public_gets": cursor[3],
         "unverified_leads": leads, "awaiting_synthetic_experiment": unchecked,
         "first_party_experiences": events, "synthetic_equivalence_observed": good,
+        "improvement_review_record_count": sum(review_counts.values()),
+        "first_party_retest_proposals_not_adopted":
+            review_counts.get("FIRST_PARTY_RETEST_PROPOSAL_NOT_ADOPTED", 0),
+        "first_party_regression_holds":
+            review_counts.get("FIRST_PARTY_REGRESSION_HOLD_NO_GO", 0),
+        "prior_experience_auto_backfilled": False,
+        "production_improvements_auto_applied": 0,
         "approved_rules": 0, "approved_skills": 0,
         "network_requests": 0, "auto_promoted": False,
         "production_algorithm_changed": False,
@@ -412,7 +481,8 @@ def main() -> int:
             result = collect_one(args.ucie_root)
         else:
             result = learn_one(args.ucie_root)
-    except (P11Error, DiscoveryError, sqlite3.Error, OSError, ValueError) as exc:
+    except (P11Error, ImprovementGateError, DiscoveryError,
+            sqlite3.Error, OSError, ValueError) as exc:
         result = {
             "schema": SCHEMA, "status": "P11_FAIL_CLOSED",
             "error_type": type(exc).__name__, "auto_promoted": False,

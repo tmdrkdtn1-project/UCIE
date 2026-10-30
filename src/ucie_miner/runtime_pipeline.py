@@ -271,6 +271,9 @@ def _safe_handler(root: Path, kind: str) -> bool:
         return learn_one(root)["status"] in (
             "P11_FIRST_PARTY_EXPERIENCE_RECORDED_NO_GO",
             "P11_NO_NEW_UNVERIFIED_LEADS",
+            # A held recipe is not a transient worker failure; recheck
+            # when an explicitly revised first-party recipe is reviewed.
+            "P11_IMPROVEMENT_REVIEW_HOLD_NO_GO",
         )
     if kind == "PUBLIC_METADATA_REVIEW":
         from .library_search import search_existing_public_library
