@@ -147,13 +147,33 @@ def _linked_library_for_finding(root: Path, public_url: str) -> dict:
     if found is None:
         raise CodeReviewError("UNAPPROVED_PUBLIC_EVIDENCE_REFERENCE")
     source_id = "repo:" + found.group(1)
+    runtime = root / "runtime"
+    if runtime.is_symlink() or (runtime.exists() and not runtime.is_dir()):
+        raise CodeReviewError("PUBLIC_RUNTIME_DIR_UNSAFE")
+    # A clean checkout is valid input for manual code review. Missing UCIE
+    # runtime is a transparent NO_GO, not an integrity error or a reason to
+    # create a ledger/directories during read-only inspection.
+    if not runtime.is_dir():
+        return {
+            "status": "PUBLIC_SOURCE_LEDGER_INCOMPLETE_NO_GO",
+            "exact_public_pr_url": public_url,
+            "matched_public_evidence_count": 0,
+            "source_linkage_checked": False,
+            "items": [], "truncated": False,
+            "rule_verification": False,
+            "approved_or_exportable": False,
+        }
     try:
         source = get_source(source_id)
         if (source["status"] != "ACTIVE_APPROVED"
                 or source["source_kind"] != "INDEPENDENT_PUBLIC_REPOSITORY"):
             raise CodeReviewError("PUBLIC_SOURCE_NOT_ACTIVE")
+        # The W04 index searches source reference text, not necessarily its
+        # normalized public_url. Use a bounded SOURCE window and compare
+        # returned canonical PR URLs *exactly*; do not claim full coverage
+        # when W04 omits rows beyond the bounded window.
         result = search_existing_public_library(
-            root, query=public_url, source_id=source_id,
+            root, query="", source_id=source_id,
             limit=20, group_revisions=True)
     except (LibrarySearchError, DiscoveryError, SourceRegistryError,
             OSError, ValueError, KeyError) as exc:
@@ -186,7 +206,6 @@ def _linked_library_for_finding(root: Path, public_url: str) -> dict:
     linked = []
     for row in result["items"]:
         if (row["source_id"] != source_id
-                or row["public_url"] != public_url
                 or row["lifecycle"] != "UNVERIFIED_CANDIDATE_ONLY"
                 or row["signature_status"] != "NOT_ATTESTED_BY_THIS_SEARCH"
                 or row["human_approved"] is not False
@@ -195,6 +214,10 @@ def _linked_library_for_finding(root: Path, public_url: str) -> dict:
                 or not _SHA256.fullmatch(row["evidence_sha256"])
                 or not _SHA40.fullmatch(row["revision_hint"])):
             raise CodeReviewError("PUBLIC_LIBRARY_SOURCE_ROW_INVALID")
+        if row["public_url"] != public_url:
+            # Other *approved-public* PRs on the same source are not evidence
+            # for the user's finding. Ignore their records after validation.
+            continue
         linked.append({
             "library_item_id": row["library_item_id"],
             "source_id": source_id,
@@ -211,9 +234,12 @@ def _linked_library_for_finding(root: Path, public_url: str) -> dict:
         })
     return {
         "status": ("EXACT_PUBLIC_PR_SOURCE_LINKED_UNVERIFIED" if linked
-                   else "NO_EXACT_PUBLIC_PR_IN_CURRENT_LINKED_LEDGER"),
+                   else "NO_EXACT_PUBLIC_PR_IN_BOUNDED_SOURCE_WINDOW"
+                   if result["omitted_count"] else
+                   "NO_EXACT_PUBLIC_PR_IN_CURRENT_LINKED_LEDGER"),
         "exact_public_pr_url": public_url,
-        "matched_public_evidence_count": result["total_matches"],
+        "matched_public_evidence_count": len(linked),
+        "total_public_source_records_in_window": result["total_matches"],
         "source_linkage_checked": True,
         "items": linked,
         "truncated": result["omitted_count"] > 0,
