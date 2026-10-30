@@ -189,6 +189,16 @@ $env:PYTHONPATH = 'D:\UCIE_RELEASE\UCIE\src'
 
 **라이선스 출처를 보았다는 사실과 코드 재배포 허용은 다르다.** PR #28087의 LICENSE.txt Git blob/가족명 관측은 per-file 라이선스, 고지 의무 및 법적 승인 완료를 뜻하지 않는다. 소스 수정·재패키징·사용자/외부 프로젝트 스캔, 모델 변경, 배포 없이 검토할 근거만 제공한다. 모든 후보의 `new_package_export_allowed=false`, `v1_accepted=false` 유지.
 
+## V1 직접 실행형 범용 엔진 독립 소비 ZIP — 1.2.0 DRAFT (2026-10-30)
+
+기존 초안은 `portable_exact.py`를 외부 프로세스에서 별도 import해야 했다. 이제 UCIE 자체 작성 `__main__.py`와 기존 `portable_exact.py`를 하나의 결정적 `ucie_portable_exact_1_2_0_DRAFT.zip`에 포함하여 **UCIE를 설치하지 않은 Python 표준 라이브러리 환경에서도 ZIP을 직접 실행**한다. 이는 사용자 승인 없는 배포/설치가 아닌 소프트웨어 QA를 위한 실행 계약이다. 검색 API는 `1.1.0` 유지, ZIP 포맷/실행 진입점은 `1.2.0`으로 분리하여 과거 1.1.0 초안 SHA를 덮어쓰지 않는다.
+
+`python -I -B <검증된_기존_DRAFT_ZIP>`은 stdin으로 정확한 JSON `{"items": [...], "queries": [["repo:python/cpython","Python","PUBLIC_TECHNICAL_EVIDENCE","API_CONTRACT"]], "limit": 20}`을 받아 JSON을 stdout에 반환한다. 필수 세 필드 외 추가 옵션/CLI 플래그, 입력 32KiB 초과, JSON 중복 키·NaN, 미승인 저장소/개인 경로·사용권/승인 위조·잘못된 PR URL은 종료 2 및 `STANDALONE_DRAFT_FAIL_CLOSED`. 원본 소스 코드를 검색하는 엔진이 아닌, 이미 소스 결속된 **비승인 공개 메타데이터만 검색**하는 엔진이다.
+
+기존 `product_v1 --qa-portable`의 읽기 전용 QA는 ZIP 바이트·매니페스트와 두 퍼스트파티 코드의 SHA를 확인하고, 임시 디렉터리에 실제 ZIP을 작성하여 **그 ZIP만 별도 Python `-I -B` 프로세스로 직접 실행**한 뒤 기존 검색 API 결과와 3개 질의 사례를 대조한다. QA 후 임시 ZIP은 정리한다. 검증된 서명팩처럼 새 패키지를 운영 설치하거나 독립 프로젝트에 반출하지 않는다.
+
+검증 상태 `FIRST_PARTY_ISOLATED_CONSUMER_QA_PASS_NOT_RELEASED`는 이 UCIE 작성 ZIP의 직접 실행·출력 동등성까지만 의미한다. 서명 없음, 소유자 배포 승인 없음, 외부 독립 QA 없음, 제3자 소스 사용권 승인 0건, `package_released=false`, `v1_accepted=false`. **임의의 ZIP을 직접 실행하지 말고** 먼저 신뢰하는 UCIE 코드에서 바이트 단위 무결성을 확인해야 한다. 앞선 1.1.0 초안과 1.2.0 초안의 해시는 다르며 과거 QA 영수증은 변하지 않는다.
+
 ## 완료 방향
 
 새 PR을 무한히 늘리지 않는다. **새 통합 진입점과 독립 소비 실기의 Windows/Ubuntu 3.13/3.15 CI를 먼저 완료**, 로컬 D:\UCIE에는 **신규 Python 모듈 두 개만** 원자적으로 반영(기존 dirty 수정 불변). 사용자 PC 실호스트 위 세 명령 결과에서 실제 수집기/도서관/경험 계보의 자료를 확인하고, 실행되는 명확한 blocker만 보수. 정식 릴리스·권리·신뢰 서명은 허가/근거가 없으면 NO_GO로 별도 표시.
