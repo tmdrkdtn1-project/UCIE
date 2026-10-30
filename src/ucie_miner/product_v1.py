@@ -381,7 +381,7 @@ def _bounded_catalog_view(*, query: str, domain: str | None, limit: int,
     }
 
 
-REUSE_ITEM_ID = re.compile(r"[0-9a-f]{64}\\Z")
+REUSE_ITEM_ID = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def _reuse_eligibility(*, catalog: dict, signed: dict | None,
