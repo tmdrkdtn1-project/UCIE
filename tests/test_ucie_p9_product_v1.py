@@ -31,6 +31,78 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.root = Path(self.tmp.name) / "UCIE"
         (self.root / "runtime").mkdir(parents=True)
 
+    def test_bounded_reuse_selection_never_promotes_unsigned_candidates(self):
+        item = {
+            "shelf": "PUBLIC_CANDIDATE", "library_item_id": "a" * 64,
+            "verification": "UNVERIFIED_CANDIDATE_ONLY",
+            "export_allowed": False,
+        }
+        catalog = {
+            "status": "READ_ONLY_BOUNDED_MULTI_SHELF_SEARCH_NO_GO",
+            "items": [item], "returned_count": 1,
+            "omitted_from_loaded_windows": 2,
+            "source_window_truncated": True,
+        }
+        out = product._reuse_eligibility(
+            catalog=catalog, signed=None, selected_item_id="a" * 64)
+        self.assertEqual(out["schema"], "UCIE_V1_BOUNDED_REUSE_ELIGIBILITY_V1")
+        self.assertEqual(out["returned_count"], 1)
+        self.assertTrue(out["catalog_window_truncated"])
+        self.assertFalse(out["full_catalog_inspected"])
+        self.assertFalse(out["original_signed_verifier_used"])
+        self.assertEqual(out["manual_reference_count_in_loaded_window"], 0)
+        self.assertEqual(out["new_generic_package_exportable_count"], 0)
+        selected = out["selected_item"]
+        self.assertEqual(selected["selection_status"],
+                         "CANDIDATE_OR_EXPERIENCE_REUSE_BLOCKED")
+        self.assertEqual(selected["permitted_action"], "EVIDENCE_REVIEW_ONLY")
+        self.assertFalse(selected["manual_reference_to_existing_pack_allowed"])
+        self.assertFalse(selected["new_generic_package_export_allowed"])
+        self.assertFalse(selected["production_auto_apply_allowed"])
+        self.assertIn("VERSION_APPLICABILITY_NOT_CONFIRMED",
+                      selected["review_blockers"])
+        no_match = product._reuse_eligibility(
+            catalog=catalog, signed=None, selected_item_id="b" * 64)
+        self.assertEqual(no_match["selected_item"]["selection_status"],
+                         "NOT_IN_CURRENT_BOUNDED_QUERY_WINDOW_NO_GO")
+        self.assertFalse(
+            no_match["selected_item"]["not_found_in_full_catalog_proven"])
+        for malformed in ("../../secret", "", "a" * 63, "X" * 64, 42):
+            with self.subTest(malformed=malformed):
+                with self.assertRaises(product.ProductIntegrationError):
+                    product._reuse_eligibility(
+                        catalog=catalog, signed=None,
+                        selected_item_id=malformed)
+        forged = {**catalog, "items": [{**item, "export_allowed": True}]}
+        with self.assertRaises(product.ProductIntegrationError):
+            product._reuse_eligibility(
+                catalog=forged, signed=None, selected_item_id=None)
+        signed_claim = {**catalog, "items": [{
+            "shelf": "SIGNED_MANUAL_RULE", "library_item_id": "a" * 64,
+            "verification": "OWNER_SIGNED_VERIFIED_AT_INSPECTION_TIME",
+            "rule_id": "UNTRUSTED", "pack_serial": 4,
+            "source_package_sha256": "b" * 64,
+            "independent_qa_approved": False,
+            "export_allowed": False,
+        }]}
+        with self.assertRaises(product.ProductIntegrationError):
+            product._reuse_eligibility(
+                catalog=signed_claim, signed=None, selected_item_id=None)
+
+    def test_integrated_reuse_window_absence_is_not_catalog_absence(self):
+        out = product.integrated_product_preview(
+            self.root, query="", limit=5, select_item_id="a" * 64)
+        reuse = out["reuse_eligibility"]
+        self.assertEqual(reuse["selected_item"]["selection_status"],
+                         "NOT_IN_CURRENT_BOUNDED_QUERY_WINDOW_NO_GO")
+        self.assertEqual(reuse["manual_reference_count_in_loaded_window"], 0)
+        self.assertEqual(reuse["new_generic_package_exportable_count"], 0)
+        self.assertFalse(reuse["original_signed_verifier_used"])
+        self.assertFalse(reuse["new_package_released"])
+        self.assertEqual(reuse["network_requests"], 0)
+        self.assertEqual(reuse["operating_database_writes"], 0)
+        self.assertFalse(out["v1_accepted"])
+
     def test_portable_self_authored_demo_search_equivalent_no_approval(self):
         result = product.portable_consumer_check()
         self.assertTrue(result["all_queries_equivalent"])
