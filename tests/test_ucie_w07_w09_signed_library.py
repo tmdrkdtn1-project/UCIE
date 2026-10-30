@@ -20,6 +20,7 @@ from ucie_public.mixed_release import (
 )
 from ucie_public.selected_release import EXPECTED_SECOND_CI, EXPECTED_THIRD_CI
 from ucie_public.fifth_owner_addendum import RULE_ID
+from ucie_miner.product_v1 import integrated_product_preview
 from ucie_miner.signed_rule_library import (
     SCHEMA, SignedLibraryError, inspect_signed_library,
     build_existing_pack_consumer_descriptor, main,
@@ -80,6 +81,59 @@ class W07W09SignedLibraryTests(unittest.TestCase):
         self.assertEqual(result["database_writes"], 0)
         self.assertFalse(result["new_release_approved"])
         self.assertFalse(result["v1_library_accepted"])
+
+    def test_product_selection_requires_actual_signed_pack_and_limits_manual_scope(self):
+        self._publish_serial4()
+        (self.root / "runtime").mkdir(exist_ok=True)
+        with patch("urllib.request.urlopen",
+                   side_effect=AssertionError("UCIE preview must not fetch")):
+            first = integrated_product_preview(
+                self.root, limit=20,
+                signed_serial4=self.serial4,
+                owner_public_trust=self.trust)
+            choices = first["reuse_eligibility"]["items"]
+            signed = [x for x in choices if x["shelf"] == "SIGNED_MANUAL_RULE"]
+            self.assertEqual(len(signed), 4)
+            self.assertEqual(
+                first["reuse_eligibility"]["manual_reference_count_in_loaded_window"],
+                4)
+            self.assertEqual(
+                first["reuse_eligibility"]["new_generic_package_exportable_count"],
+                0)
+            for item in signed:
+                self.assertEqual(item["selection_status"],
+                                 "EXISTING_OWNER_SIGNED_MANUAL_REFERENCE_ONLY")
+                self.assertEqual(
+                    item["permitted_action"],
+                    "REFERENCE_EXISTING_VERIFIED_PACK_MANUALLY")
+                self.assertTrue(
+                    item["manual_reference_to_existing_pack_allowed"])
+                self.assertFalse(item["new_generic_package_export_allowed"])
+                self.assertEqual(item["source_package_sha256"],
+                                 first["signed_rules"]
+                                      ["source_pack_metadata"]["serial4"])
+                self.assertEqual(item["approval_basis"],
+                                 "OWNER_RISK_ACCEPTED_CI_ONLY")
+            selected = integrated_product_preview(
+                self.root, limit=20,
+                signed_serial4=self.serial4,
+                owner_public_trust=self.trust,
+                select_item_id=signed[0]["library_item_id"])
+            self.assertEqual(
+                selected["reuse_eligibility"]["selected_item"]
+                ["library_item_id"], signed[0]["library_item_id"])
+            self.assertFalse(selected["package_released"])
+            self.assertFalse(selected["v1_accepted"])
+            self.assertEqual(selected["operating_database_writes"], 0)
+            absent = integrated_product_preview(
+                self.root, limit=20,
+                select_item_id=signed[0]["library_item_id"])
+        self.assertEqual(
+            absent["reuse_eligibility"]["selected_item"]["selection_status"],
+            "NOT_IN_CURRENT_BOUNDED_QUERY_WINDOW_NO_GO")
+        self.assertEqual(
+            absent["reuse_eligibility"]["manual_reference_count_in_loaded_window"],
+            0)
 
     def test_w09_descriptor_is_bound_to_same_genuine_signed_pack(self):
         self._publish_serial4()
