@@ -1329,8 +1329,8 @@ def _portable_rights_security_text() -> bytes:
     """Non-license factual distribution warning. Not an ownership attestation."""
     return (
         "UCIE FIRST-PARTY DRAFT - RIGHTS NOT CLEARED FOR RELEASE\n"
-        "No repository-root LICENSE/COPYING grant was present in the reviewed\n"
-        "source revision. This text grants no permissions to third parties.\n"
+        "No owner-reviewed LICENSE/COPYING grant is included in this ZIP.\n"
+        "This notice itself grants no permissions to third parties.\n"
         "Author/owner rights, export scope and obligations require review.\n"
         "Only first-party portable_exact.py and __main__.py are executable.\n"
         "No upstream patches, user project content, credentials, or models.\n"
