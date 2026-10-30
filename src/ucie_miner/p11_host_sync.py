@@ -19,6 +19,9 @@ import tempfile
 
 BASE = "9f1adce92f1eaf13c306da9fe42538f4e619c907"
 PIN = "b6a5244925bfe59cd3b64fe2a6bf2f9bedfd9d42"
+# First-party P11 merged program is validated by exact Git *blob identity*;
+# a subsequent docs-only/main commit cannot silently substitute a new engine.
+P11_MERGED_BLOB = "45b753e1066fcaff10c35958cf05166ed00ab0f4"
 FILES = (
     "src/ucie_miner/p11_improvement_gate.py",
     "src/ucie_miner/p11_closed_loop.py",
@@ -61,6 +64,83 @@ def _same_python_source(actual: bytes | None, pinned: bytes) -> bool:
         return False
     return actual.replace(b"\r\n", b"\n") == pinned
 
+
+
+def _legacy_owner_quiet_source(original: bytes) -> bytes:
+    """Reconstruct the user's exact five-hunk P11 quiet-backoff local delta.
+
+    Reconstructing from the exact BASE Git blob, instead of trusting
+    keywords or modifying user files, enables a safe three-way source merge.
+    No fuzzy matching or arbitrary local-content promotion.
+    """
+    if type(original) is not bytes or b"\r" in original or b"\x00" in original:
+        raise P8SyncError("unexpected historical P11 base bytes")
+    edits = (
+        (b"MIN_GET_INTERVAL = timedelta(minutes=5)\nRECIPES = {",
+         b"MIN_GET_INTERVAL = timedelta(minutes=5)\n"
+         b"# No new evidence for 30 minutes after >=10 successful GETs: cap redundant\n"
+         b"# collection at one GET every 20 minutes; rotate approved sources unchanged.\n"
+         b"# Any fetch failure retains the original 5-minute retry cooldown.\n"
+         b"QUIET_AFTER = timedelta(minutes=30)\n"
+         b"QUIET_GET_INTERVAL = timedelta(minutes=20)\n"
+         b"QUIET_MIN_GETS = 10\nRECIPES = {"),
+        (b'        previous = cursor["last_attempt_at"]\n'
+         b'        if previous and now < _parse(previous) + MIN_GET_INTERVAL:',
+         b'        previous = cursor["last_attempt_at"]\n'
+         b'        # Source-neutral, no-new-evidence idle backoff. Reuse the existing\n'
+         b'        # ledger/cursor only: NO schema migration, no extra API request.\n'
+         b'        # Pending experiments and failed sources always use the base cadence.\n'
+         b'        latest_new = conn.execute(\n'
+         b'            "SELECT MAX(observed_at) FROM leads").fetchone()[0]\n'
+         b'        pending = conn.execute(\n'
+         b'            "SELECT COUNT(*) FROM leads WHERE reviewed=0").fetchone()[0]\n'
+         b'        quiet = (\n'
+         b'            cursor["last_attempt_failed"] == 0\n'
+         b'            and cursor["total_public_gets"] >= QUIET_MIN_GETS\n'
+         b'            and pending == 0\n'
+         b'            and (latest_new is None or now >= _parse(latest_new) + QUIET_AFTER)\n'
+         b'        )\n'
+         b'        interval = QUIET_GET_INTERVAL if quiet else MIN_GET_INTERVAL\n'
+         b'        if previous and now < _parse(previous) + interval:'),
+        (b'                "public_api_gets_this_call": 0,\n'
+         b'                "unverified_new_leads": 0, "auto_promoted": False,',
+         b'                "public_api_gets_this_call": 0,\n'
+         b'                "unverified_new_leads": 0,\n'
+         b'                "quiet_collection_backoff": quiet,\n'
+         b'                "interval_minutes": int(interval.total_seconds() // 60),\n'
+         b'                "auto_promoted": False,'),
+        (b'        good = conn.execute(\n'
+         b'            "SELECT COUNT(*) FROM experience WHERE exact_equal=1").fetchone()[0]\n'
+         b'    return {',
+         b'        good = conn.execute(\n'
+         b'            "SELECT COUNT(*) FROM experience WHERE exact_equal=1").fetchone()[0]\n'
+         b'        last_new = conn.execute(\n'
+         b'            "SELECT MAX(observed_at) FROM leads").fetchone()[0]\n'
+         b'    now = datetime.now(timezone.utc)\n'
+         b'    quiet = (\n'
+         b'        cursor[2] == 0 and cursor[3] >= QUIET_MIN_GETS\n'
+         b'        and unchecked == 0\n'
+         b'        and (last_new is None or now >= _parse(last_new) + QUIET_AFTER)\n'
+         b'    )\n'
+         b'    interval = QUIET_GET_INTERVAL if quiet else MIN_GET_INTERVAL\n'
+         b'    next_due = (\n'
+         b'        _stamp(_parse(cursor[1]) + interval) if cursor[1] else None\n'
+         b'    )\n'
+         b'    return {'),
+        (b'        "last_public_attempt_failed": bool(cursor[2]),\n'
+         b'        "total_successful_public_gets": cursor[3],',
+         b'        "last_public_attempt_failed": bool(cursor[2]),\n'
+         b'        "quiet_collection_backoff": quiet,\n'
+         b'        "effective_interval_minutes": int(interval.total_seconds() // 60),\n'
+         b'        "next_public_get_due_utc": next_due,\n'
+         b'        "total_successful_public_gets": cursor[3],'),
+    )
+    output = original
+    for before, after in edits:
+        if output.count(before) != 1:
+            raise P8SyncError("historical P11 quiet patch no longer exact")
+        output = output.replace(before, after, 1)
+    return output
 
 def _pinned(source: Path, path: str, rev: str) -> bytes:
     return _git(source, "show", f"{rev}:{path}", content=True)
@@ -112,7 +192,17 @@ def plan(source: Path, root: Path, *, allow_test_root: bool = False) -> tuple[li
     _git(source, "merge-base", "--is-ancestor", PIN, "HEAD")
     pieces = []
     for rel in FILES:
-        upstream = _pinned(source, rel, PIN)
+        owner_quiet = None
+        if rel.endswith("p11_closed_loop.py"):
+            # Only this path contains the independently observed owner's
+            # quiet-backoff delta. HEAD must have the exact combined blob;
+            # the other two PR #150 code paths remain pinned separately.
+            if (_git(source, "rev-parse", "HEAD:" + rel).decode("ascii")
+                    != P11_MERGED_BLOB):
+                raise P8SyncError("P11_MERGED_SOURCE_BLOB_CHANGED_NO_OVERWRITE")
+            upstream = _pinned(source, rel, "HEAD")
+        else:
+            upstream = _pinned(source, rel, PIN)
         candidate = _safe_parent(source, rel)
         if not candidate.is_file() or not _same_python_source(
                 candidate.read_bytes(), upstream):
@@ -123,9 +213,20 @@ def plan(source: Path, root: Path, *, allow_test_root: bool = False) -> tuple[li
             base = None
         else:
             base = _pinned(source, rel, BASE)
+        if (rel.endswith("p11_closed_loop.py") and current is not None
+                and not _same_python_source(current, upstream)
+                and not _same_python_source(current, base)):
+            try:
+                owner_quiet = _legacy_owner_quiet_source(base)
+            except P8SyncError:
+                # An unexpected historical base cannot be reinterpreted as
+                # owner quiet source. Continue to the ordinary drift-denial.
+                owner_quiet = None
         if (current is not None and
                 not _same_python_source(current, upstream) and
-                not (base is not None and _same_python_source(current, base))):
+                not (base is not None and _same_python_source(current, base)) and
+                not (owner_quiet is not None and
+                     _same_python_source(current, owner_quiet))):
             raise P8SyncError("LOCAL_P8_SOURCE_DRIFT_NO_OVERWRITE: " + rel)
         pieces.append((rel, live, current, upstream))
     result = {
@@ -133,6 +234,8 @@ def plan(source: Path, root: Path, *, allow_test_root: bool = False) -> tuple[li
         "status": "EXACT_P8_HOST_SYNC_READY_NO_CHANGE",
         "pinned_main_source": PIN,
         "files_pinned": len(FILES),
+        "owner_quiet_p11_base_merged_with_feedback": True,
+        "p11_combined_source_git_blob": P11_MERGED_BLOB,
         "already_current_files": sum(_same_python_source(current, target)
                                      for _, _, current, target in pieces),
         "files_needing_update": sum(not _same_python_source(current, target)

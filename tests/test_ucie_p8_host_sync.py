@@ -49,10 +49,16 @@ class P8HostSyncTests(unittest.TestCase):
         self.target = self.run_git("rev-parse", "HEAD").decode().strip()
         self.patch1 = patch.object(s, "BASE", self.base)
         self.patch2 = patch.object(s, "PIN", self.target)
+        self.patch3 = patch.object(
+            s, "P11_MERGED_BLOB",
+            self.run_git("rev-parse", "HEAD:src/ucie_miner/p11_closed_loop.py")
+            .decode("ascii").strip())
         self.patch1.start()
         self.patch2.start()
+        self.patch3.start()
         self.addCleanup(self.patch1.stop)
         self.addCleanup(self.patch2.stop)
+        self.addCleanup(self.patch3.stop)
         with closing(sqlite3.connect(
                 self.live / "runtime" / "ucie_internal_pending_queue_v1.sqlite3"
         )) as db:
@@ -221,7 +227,7 @@ class P8HostSyncTests(unittest.TestCase):
             self.run_git("status", "--porcelain", "--untracked-files=all"),
             b"")
         with self.assertRaisesRegex(
-                s.P8SyncError, "source at pinned PR differs from checkout"):
+                s.P8SyncError, "P11_MERGED_SOURCE_BLOB_CHANGED_NO_OVERWRITE"): 
             s.sync(self.release, self.live, allow_test_root=True)
         self.assertFalse(
             (self.live / "runtime" / "p8_pinned_sync_backups").exists())
@@ -238,6 +244,40 @@ class P8HostSyncTests(unittest.TestCase):
             with self.subTest(actual=actual):
                 self.assertEqual(
                     s._same_python_source(actual, pinned), expected)
+
+    def test_exact_owner_quiet_variant_is_merged_with_full_byte_backup(self):
+        # Represent exactly one recognized legacy owner variant. Unrecognized
+        # edits to the same file are still rejected.
+        rel = "src/ucie_miner/p11_closed_loop.py"
+        original = b"# owner local quiet throttle + old P11 implementation\n"
+        (self.live / rel).write_bytes(original)
+        with patch.object(s, "_legacy_owner_quiet_source",
+                          return_value=original):
+            preview = s.sync(self.release, self.live, allow_test_root=True)
+            self.assertTrue(preview["owner_quiet_p11_base_merged_with_feedback"])
+            self.assertEqual(preview["files_needing_update"], 3)
+            applied = s.sync(
+                self.release, self.live, apply=True, allow_test_root=True)
+        self.assertEqual(applied["status"],
+                         "P8_HOST_PINNED_CODE_APPLIED_NOT_LIVE_WORKER_ATTESTED")
+        self.assertEqual((self.live / rel).read_bytes(), self.new[rel])
+        self.assertEqual((Path(applied["backup_dir"]) /
+                          "p11_closed_loop.py.previous").read_bytes(), original)
+        self.assertFalse(applied["production_code_auto_promoted"])
+        self.assertFalse(applied["existing_operating_miner_database_changed"])
+
+    def test_owner_quiet_is_not_fuzzy_accepted_when_modified(self):
+        rel = "src/ucie_miner/p11_closed_loop.py"
+        (self.live / rel).write_bytes(b"# quietly changed, extra private source\n")
+        with patch.object(s, "_legacy_owner_quiet_source",
+                          return_value=b"# owner local quiet throttle\n"):
+            with self.assertRaisesRegex(s.P8SyncError, "LOCAL_P8_SOURCE_DRIFT"):
+                s.sync(self.release, self.live, apply=True, allow_test_root=True)
+        self.assertEqual(
+            (self.live / rel).read_bytes(),
+            b"# quietly changed, extra private source\n")
+        self.assertFalse(
+            (self.live / "runtime" / "p8_pinned_sync_backups").exists())
 
     def test_other_project_names_are_never_accepted(self):
         other = self.live.parent / "NOT_UCIE"
