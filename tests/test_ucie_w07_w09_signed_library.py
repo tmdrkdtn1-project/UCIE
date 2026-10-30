@@ -135,6 +135,88 @@ class W07W09SignedLibraryTests(unittest.TestCase):
             absent["reuse_eligibility"]["manual_reference_count_in_loaded_window"],
             0)
 
+    def test_selected_signed_rule_gets_fresh_w09_readonly_consumer_reference(self):
+        self._publish_serial4()
+        (self.root / "runtime").mkdir(exist_ok=True)
+        original = self.serial4.read_bytes()
+        with patch("urllib.request.urlopen",
+                   side_effect=AssertionError("selected W09 reference must not fetch")):
+            catalog = integrated_product_preview(
+                self.root, limit=20,
+                signed_serial4=self.serial4,
+                owner_public_trust=self.trust)
+            choice = next(x for x in catalog["reuse_eligibility"]["items"]
+                          if x["shelf"] == "SIGNED_MANUAL_RULE")
+            selected = integrated_product_preview(
+                self.root, limit=20,
+                signed_serial4=self.serial4,
+                owner_public_trust=self.trust,
+                select_item_id=choice["library_item_id"],
+                include_consumer_reference=True)
+        handoff = selected["selected_existing_w09_consumer_reference"]
+        self.assertEqual(handoff["status"],
+                         "EXISTING_SIGNED_MANUAL_REFERENCE_VERIFIED_NOT_RELEASED")
+        self.assertEqual(handoff["selected_library_item_id"],
+                         choice["library_item_id"])
+        self.assertEqual(handoff["rule_id"], choice["rule_id"])
+        self.assertEqual(handoff["pack_serial"], 4)
+        self.assertEqual(handoff["source_package_sha256"],
+                         choice["source_package_sha256"])
+        self.assertEqual(handoff["parent_serial4_sha256"],
+                         choice["source_package_sha256"])
+        # Compare with the actual original W09 descriptor, not an
+        # independently invented product-level descriptor or signing scheme.
+        original_w09 = build_existing_pack_consumer_descriptor(
+            self.root, serial4_pack=self.serial4,
+            owner_public_trust=self.trust)
+        self.assertEqual(handoff["existing_w09_descriptor_sha256"],
+                         original_w09["descriptor_sha256"])
+        self.assertTrue(handoff["original_pack_reverified_at_handoff"])
+        self.assertEqual(handoff["consumer_instruction"],
+                         original_w09["consumer_instructions"])
+        self.assertFalse(handoff["consumer_signature_verified_after_handoff"])
+        self.assertFalse(handoff["new_generic_package_export_allowed"])
+        self.assertFalse(handoff["automatic_rule_application_allowed"])
+        self.assertFalse(handoff["pack_bytes_copied"])
+        self.assertFalse(handoff["package_released"])
+        self.assertFalse(selected["v1_accepted"])
+        self.assertEqual(selected["operating_database_writes"], 0)
+        self.assertEqual(self.serial4.read_bytes(), original)
+
+        # Forged old W09 receipt is not sufficient at the new handoff.
+        for change in (
+            {"descriptor_sha256": "f" * 64},
+            {"new_package_export_allowed": True},
+            {"rules": [{**original_w09["rules"][0],
+                        "rule_id": "FORGED_WRONG_RULE"}]},
+        ):
+            with self.subTest(change=change):
+                forged = {**original_w09, **change}
+                with patch(
+                    "ucie_miner.signed_rule_library."
+                    "build_existing_pack_consumer_descriptor",
+                    return_value=forged,
+                ):
+                    with self.assertRaisesRegex(
+                            ValueError, "descriptor|identity"):
+                        integrated_product_preview(
+                            self.root, limit=20,
+                            signed_serial4=self.serial4,
+                            owner_public_trust=self.trust,
+                            select_item_id=choice["library_item_id"],
+                            include_consumer_reference=True)
+
+        # Once the signed original changes, the next lookup does not
+        # reuse its earlier successful verification.
+        self.serial4.write_bytes(b"UNSIGNED_TAMPERED_PACK")
+        with self.assertRaises(ValueError):
+            integrated_product_preview(
+                self.root, limit=20,
+                signed_serial4=self.serial4,
+                owner_public_trust=self.trust,
+                select_item_id=choice["library_item_id"],
+                include_consumer_reference=True)
+
     def test_w09_descriptor_is_bound_to_same_genuine_signed_pack(self):
         self._publish_serial4()
         original = self.serial4.read_bytes()
