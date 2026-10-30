@@ -46,6 +46,22 @@ def _hex(data: bytes) -> str:
     return sha256(data).hexdigest()
 
 
+def _same_python_source(actual: bytes | None, pinned: bytes) -> bool:
+    """Accept only CRLF/LF transport spelling; never source-code drift.
+
+    Git stores the canonical blob bytes while Windows core.autocrlf can
+    materialize CRLF in a clean checkout. Keep the ORIGINAL actual bytes
+    for backup/rollback; compare only narrowly normalized line endings.
+    """
+    if type(actual) is not bytes or type(pinned) is not bytes:
+        return False
+    if b"\x00" in actual or b"\x00" in pinned:
+        return False
+    if b"\r" in actual.replace(b"\r\n", b""):
+        return False
+    return actual.replace(b"\r\n", b"\n") == pinned
+
+
 def _pinned(source: Path, path: str, rev: str) -> bytes:
     return _git(source, "show", f"{rev}:{path}", content=True)
 
@@ -98,15 +114,18 @@ def plan(source: Path, root: Path, *, allow_test_root: bool = False) -> tuple[li
     for rel in FILES:
         upstream = _pinned(source, rel, PIN)
         candidate = _safe_parent(source, rel)
-        if not candidate.is_file() or candidate.read_bytes() != upstream:
-            raise P8SyncError("source at pinned PR differs from checkout")
+        if not candidate.is_file() or not _same_python_source(
+                candidate.read_bytes(), upstream):
+            raise P8SyncError("source at pinned PR differs from checkout: " + rel)
         live = _safe_parent(root, rel)
         current = live.read_bytes() if live.is_file() else None
         if rel.endswith("p11_improvement_gate.py"):
             base = None
         else:
             base = _pinned(source, rel, BASE)
-        if current != upstream and current != base:
+        if (current is not None and
+                not _same_python_source(current, upstream) and
+                not (base is not None and _same_python_source(current, base))):
             raise P8SyncError("LOCAL_P8_SOURCE_DRIFT_NO_OVERWRITE: " + rel)
         pieces.append((rel, live, current, upstream))
     result = {
@@ -114,15 +133,22 @@ def plan(source: Path, root: Path, *, allow_test_root: bool = False) -> tuple[li
         "status": "EXACT_P8_HOST_SYNC_READY_NO_CHANGE",
         "pinned_main_source": PIN,
         "files_pinned": len(FILES),
-        "already_current_files": sum(current == target
+        "already_current_files": sum(_same_python_source(current, target)
                                      for _, _, current, target in pieces),
-        "files_needing_update": sum(current != target
+        "files_needing_update": sum(not _same_python_source(current, target)
                                     for _, _, current, target in pieces),
+        "source_worktree_crlf_normalization_allowed": True,
+        "only_eol_equivalent_local_files_preserved": [
+            rel for rel, _, original, target in pieces
+            if original is not None and original != target
+            and _same_python_source(original, target)
+        ],
         "files_to_update": [
             {"file": rel, "from_sha256": _hex(current)
              if current is not None else None,
              "to_sha256": _hex(target)}
-            for rel, _, current, target in pieces if current != target
+            for rel, _, current, target in pieces
+            if not _same_python_source(current, target)
         ],
         "outside_p8_files_modified": 0, "scheduler_modified": False,
         "public_miner_modified": False, "auto_promoted": False,
@@ -137,7 +163,8 @@ def sync(source: Path, root: Path, *, apply: bool = False,
     pieces, report = plan(source, root, allow_test_root=allow_test_root)
     if not apply:
         return report
-    if all(current == target for _, _, current, target in pieces):
+    if all(_same_python_source(current, target)
+           for _, _, current, target in pieces):
         return {**report, "status": "P8_HOST_ALREADY_PINNED_NO_CHANGE"}
     if _running(root):
         raise P8SyncError("P10_RUNNING_JOBS_RETRY_WHEN_IDLE_NO_CHANGE")
@@ -158,7 +185,7 @@ def sync(source: Path, root: Path, *, apply: bool = False,
     updated = []
     try:
         for rel, path, original, target in pieces:
-            if original == target:
+            if _same_python_source(original, target):
                 continue
             if (path.read_bytes() if path.is_file() else None) != original:
                 raise P8SyncError("concurrent change while applying")
@@ -173,14 +200,15 @@ def sync(source: Path, root: Path, *, apply: bool = False,
             finally:
                 Path(temporary).unlink(missing_ok=True)
         # Check installed files are exactly source-pinned; rollback otherwise.
-        if any(path.read_bytes() != target for _, path, _, target in pieces):
+        if any(not _same_python_source(path.read_bytes(), target)
+               for _, path, _, target in pieces):
             raise P8SyncError("postflight source mismatch")
         audit = {
             "schema": STATUS,
             "status": "P8_HOST_PINNED_CODE_APPLIED_NOT_LIVE_WORKER_ATTESTED",
             "source_main_commit": PIN,
             "changed_files": [rel for rel, _, before, after
-                              in pieces if before != after],
+                              in pieces if not _same_python_source(before, after)],
             "backup_dir": str(receipt),
             "new_p11_learning_events_not_yet_observed": True,
             "task_registration_changed": False,
@@ -226,6 +254,11 @@ def main() -> int:
         output = {
             "schema": STATUS, "status": "P8_HOST_SYNC_BLOCKED_NO_CHANGE",
             "reason": str(exc).split(":")[0][:80],
+            "blocked_file": (
+                str(exc).split(": ", 1)[1]
+                if str(exc).startswith(("source at pinned PR differs from checkout: ",
+                                        "LOCAL_P8_SOURCE_DRIFT_NO_OVERWRITE: "))
+                else None),
             "operating_db_writes": 0, "scheduler_modified": False,
             "production_auto_approval": False,
         }

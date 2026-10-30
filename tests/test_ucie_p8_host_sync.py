@@ -148,6 +148,97 @@ class P8HostSyncTests(unittest.TestCase):
         self.assertEqual((self.live / "runtime" / "do_not_touch.txt").read_text(),
                          "KEEP")
 
+    def test_real_windows_autocrlf_clean_checkout_and_local_baseline(self):
+        # Git blob at PIN/BASE remains LF, despite a clean Windows checkout
+        # with materialized CRLF source files. Treat only EOL as equivalent.
+        self.run_git("config", "core.autocrlf", "true")
+        for rel in s.FILES:
+            (self.release / rel).write_bytes(
+                self.new[rel].replace(b"\n", b"\r\n"))
+        for rel in s.FILES[1:]:
+            (self.live / rel).write_bytes(
+                self.originals[rel].replace(b"\n", b"\r\n"))
+        # Refresh only the synthetic test Git index after changing the
+        # checkout's core.autocrlf setting. Git can report an M until the
+        # index stat cache is refreshed even if the canonical blob is equal.
+        self.run_git("add", "-u")
+        self.assertEqual(
+            self.run_git("diff", "--cached", "--name-only"), b"")
+        self.assertEqual(
+            self.run_git("status", "--porcelain", "--untracked-files=all"),
+            b"")
+        check = s.sync(self.release, self.live, allow_test_root=True)
+        self.assertEqual(check["files_needing_update"], 3)
+        self.assertTrue(check["source_worktree_crlf_normalization_allowed"])
+        applied = s.sync(
+            self.release, self.live, apply=True, allow_test_root=True)
+        self.assertEqual(applied["status"],
+                         "P8_HOST_PINNED_CODE_APPLIED_NOT_LIVE_WORKER_ATTESTED")
+        self.assertEqual(len(applied["changed_files"]), 3)
+        for rel in s.FILES:
+            self.assertEqual((self.live / rel).read_bytes(), self.new[rel])
+        for rel in s.FILES[1:]:
+            backup = (Path(applied["backup_dir"]) /
+                      (Path(rel).name + ".previous"))
+            self.assertEqual(
+                backup.read_bytes(),
+                self.originals[rel].replace(b"\n", b"\r\n"))
+        self.assertEqual(
+            s.sync(self.release, self.live, allow_test_root=True)[
+                "files_needing_update"], 0)
+
+    def test_already_current_crlf_only_is_not_rewritten(self):
+        self.run_git("config", "core.autocrlf", "true")
+        for rel in s.FILES:
+            source_bytes = self.new[rel].replace(b"\n", b"\r\n")
+            (self.release / rel).write_bytes(source_bytes)
+            (self.live / rel).write_bytes(source_bytes)
+        self.run_git("add", "-u")
+        self.assertEqual(
+            self.run_git("diff", "--cached", "--name-only"), b"")
+        self.assertEqual(
+            self.run_git("status", "--porcelain", "--untracked-files=all"),
+            b"")
+        report = s.sync(
+            self.release, self.live, apply=True, allow_test_root=True)
+        self.assertEqual(report["status"], "P8_HOST_ALREADY_PINNED_NO_CHANGE")
+        self.assertEqual(len(report["only_eol_equivalent_local_files_preserved"]), 3)
+        for rel in s.FILES:
+            self.assertEqual(
+                (self.live / rel).read_bytes(),
+                self.new[rel].replace(b"\n", b"\r\n"))
+        self.assertFalse(
+            (self.live / "runtime" / "p8_pinned_sync_backups").exists())
+
+    def test_non_eol_change_in_clean_source_commit_still_blocks(self):
+        rel = s.FILES[1]
+        (self.release / rel).write_bytes(b"# different committed module\n")
+        self.run_git("add", ".")
+        self.run_git("-c", "user.email=test@ucie.local",
+                     "-c", "user.name=UCIE Test",
+                     "commit", "-m", "unrelated later source modification")
+        self.assertEqual(
+            self.run_git("status", "--porcelain", "--untracked-files=all"),
+            b"")
+        with self.assertRaisesRegex(
+                s.P8SyncError, "source at pinned PR differs from checkout"):
+            s.sync(self.release, self.live, allow_test_root=True)
+        self.assertFalse(
+            (self.live / "runtime" / "p8_pinned_sync_backups").exists())
+
+    def test_line_endings_only_never_authorize_byte_changes(self):
+        for actual, pinned, expected in (
+            (b"a\r\nb\r\n", b"a\nb\n", True),
+            (b"a\nb\n", b"a\nb\n", True),
+            (b"a\rb", b"a\nb", False),
+            (b"a\r\nb changed\n", b"a\nb\n", False),
+            (b"a\x00b", b"a\x00b", False),
+            (None, b"a\nb", False),
+        ):
+            with self.subTest(actual=actual):
+                self.assertEqual(
+                    s._same_python_source(actual, pinned), expected)
+
     def test_other_project_names_are_never_accepted(self):
         other = self.live.parent / "NOT_UCIE"
         (other / "runtime").mkdir(parents=True)
