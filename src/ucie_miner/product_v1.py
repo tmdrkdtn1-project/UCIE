@@ -247,6 +247,7 @@ def _bounded_catalog_view(*, query: str, domain: str | None, limit: int,
             "purpose_code": item["purpose_code"],
             "domain": item["domain"],
             "version_scope": item["version_scope_claim"],
+            "source_license_status": item["license_status"],
             "verification": item["lifecycle"],
             "signature_status": item["signature_status"],
             "human_approved": False,
@@ -470,6 +471,12 @@ def _reuse_eligibility(*, catalog: dict, signed: dict | None,
             "manual_reference_to_existing_pack_allowed": manual,
             "new_generic_package_export_allowed": False,
             "production_auto_apply_allowed": False,
+            "version_evidence_status": (
+                "EXISTING_SIGNED_PACKAGE_SHA256_PINNED_MANUAL_SCOPE_ONLY"
+                if manual else "RUNTIME_VERSION_APPLICABILITY_UNVERIFIED"),
+            "rights_verification_status": (
+                "OWNER_RISK_MANUAL_SCOPE_NO_LEGAL_LICENSE_SIGNOFF"
+                if manual else "PER_REVISION_DISTRIBUTION_RIGHTS_NOT_CONFIRMED"),
             "review_blockers": reasons,
         }
         if manual:
@@ -480,6 +487,14 @@ def _reuse_eligibility(*, catalog: dict, signed: dict | None,
             choice["approval_basis"] = proof["approval_basis"]
         else:
             choice["observed_verification"] = row["verification"]
+            if shelf == "PUBLIC_CANDIDATE":
+                if (row.get("version_scope") != "UNDETERMINED"
+                        or row.get("source_license_status") !=
+                        "NOT_ATTESTED_PER_REVISION"):
+                    raise ProductIntegrationError(
+                        "unverified public version or rights claim")
+                choice["version_scope"] = row["version_scope"]
+                choice["source_license_status"] = row["source_license_status"]
         choices.append(choice)
     selection = None
     if selected_item_id is not None:
