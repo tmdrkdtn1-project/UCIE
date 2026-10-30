@@ -309,6 +309,98 @@ class UnifiedCodeReviewV1Tests(unittest.TestCase):
                         with self.assertRaises(CodeReviewError):
                             _linked_library_for_finding(root, url)
 
+    def test_related_public_candidates_are_bounded_deduplicated_and_not_approved(self):
+        # A genuine exact PR match enables a separate, non-authoritative
+        # comparison of other PRs with the same source/kind/purpose only.
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work) / "UCIE"
+            (root / "runtime").mkdir(parents=True)
+            url = "https://github.com/python/cpython/pull/153462"
+            original = {
+                "source_id": "repo:python/cpython",
+                "public_url": url, "kind": "PUBLIC_TECHNICAL_EVIDENCE",
+                "purpose_code": "API_CONTRACT",
+                "library_item_id": "a" * 64,
+                "evidence_sha256": "b" * 64,
+                "revision_hint": "c" * 40,
+                "lifecycle": "UNVERIFIED_CANDIDATE_ONLY",
+                "signature_status": "NOT_ATTESTED_BY_THIS_SEARCH",
+                "human_approved": False, "export_allowed": False,
+            }
+            other = [
+                {**original, "public_url": f"https://github.com/python/cpython/pull/{n}",
+                 "library_item_id": f"{n:064x}",
+                 "evidence_sha256": f"{n + 100:064x}"}
+                for n in (200001, 200002, 200003, 200004)
+            ]
+            revision = {**other[0], "library_item_id": "f" * 64,
+                        "evidence_sha256": "e" * 64}
+            unrelated = {**other[0], "purpose_code": "CONCURRENCY",
+                         "public_url": "https://github.com/python/cpython/pull/299999"}
+            rows = [original, *other, revision, unrelated]
+            receipt = {
+                "status": "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
+                "items": rows, "returned_count": len(rows),
+                "total_matches": len(rows) + 5, "omitted_count": 5,
+                "approved_or_exportable_items": 0,
+                "operating_database_writes": 0, "network_requests": 0,
+            }
+            with patch("ucie_miner.code_review_v1.search_existing_public_library",
+                       return_value=receipt) as search:
+                linked = _linked_library_for_finding(root, url)
+            search.assert_called_once()
+            self.assertEqual(linked["status"],
+                             "EXACT_PUBLIC_PR_SOURCE_LINKED_UNVERIFIED")
+            view = linked["related_public_evidence"]
+            self.assertEqual(view["status"],
+                             "RELATED_PUBLIC_CANDIDATES_UNVERIFIED")
+            self.assertEqual(view["related_candidate_count_in_loaded_window"], 4)
+            self.assertEqual(len(view["items"]), 3)
+            self.assertEqual([x["public_url"] for x in view["items"]],
+                             [x["public_url"] for x in other[:3]])
+            self.assertTrue(view["comparison_truncated"])
+            self.assertTrue(view["source_window_truncated"])
+            self.assertFalse(view["full_source_coverage_verified"])
+            self.assertFalse(view["fix_equivalence_verified"])
+            self.assertFalse(view["approved_or_exportable"])
+            for item in view["items"]:
+                self.assertEqual(item["match_basis"],
+                                 "SAME_APPROVED_SOURCE_KIND_AND_PURPOSE_ONLY")
+                self.assertFalse(item["rule_fix_equivalence_verified"])
+                self.assertFalse(item["version_applicability_verified"])
+                self.assertFalse(item["human_approved"])
+                self.assertFalse(item["export_allowed"])
+                self.assertNotEqual(item["public_url"], url)
+            # No exact PR anchor: never treat a same-purpose PR as direct
+            # evidence for the source snippet or as a comparable fix.
+            without_anchor = {**receipt, "items": rows[1:],
+                              "returned_count": len(rows) - 1,
+                              "total_matches": len(rows) - 1,
+                              "omitted_count": 0}
+            with patch("ucie_miner.code_review_v1.search_existing_public_library",
+                       return_value=without_anchor):
+                missing = _linked_library_for_finding(root, url)
+            self.assertEqual(missing["matched_public_evidence_count"], 0)
+            self.assertEqual(missing["related_public_evidence"]["items"], [])
+            self.assertEqual(missing["related_public_evidence"]["status"],
+                             "NO_EXACT_ANCHOR_NO_COMPARISON")
+            # Untrusted forged approvals/foreign PRs cannot be represented
+            # as reusable related candidates.
+            for bad in (
+                {**other[0], "human_approved": True},
+                {**other[0], "public_url":
+                 "https://github.com/PowerShell/PowerShell/pull/123"},
+                {**other[0], "public_url": None},
+            ):
+                with self.subTest(bad=bad):
+                    forged = {**receipt, "items": [original, bad],
+                              "returned_count": 2, "total_matches": 2,
+                              "omitted_count": 0}
+                    with patch("ucie_miner.code_review_v1.search_existing_public_library",
+                               return_value=forged):
+                        with self.assertRaises(CodeReviewError):
+                            _linked_library_for_finding(root, url)
+
     def test_bounded_input_and_no_shell_fail_closed(self):
         for source, language in (("", "python"),
                                  ("x" * (MAX_BYTES + 1), "python"),
