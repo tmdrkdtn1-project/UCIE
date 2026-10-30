@@ -77,7 +77,7 @@ The same single command and both languages remain unchanged. No new miner, API c
 
 ## UTF-8 input integrity
 
-PowerShell code review preserves the original strict UTF-8 bytes, including Korean comments, emoji and CRLF line endings, through the UCIE-owned stdin adapter. It does not rely on the machine's console codepage (including Windows PowerShell 5.1). The adapter rejects malformed UTF-8 and inputs over 16 KiB, and verifies the original source digest. Inputs are still parsed as inert AST data, never executed or echoed. CI exercises the real CLI and both available PowerShell engines with first-party synthetic Unicode samples; this does not grant new source permissions or product approval.
+PowerShell code review preserves the original strict UTF-8 bytes, including Korean comments, emoji and CRLF line endings, through the UCIE-owned stdin adapter. It does not rely on the machine's console codepage (including Windows PowerShell 5.1). The adapter rejects malformed UTF-8 and inputs over 16 KiB, and verifies the original source digest. The Python CLI also rejects UTF-8 BOM-prefixed stdin with `SOURCE_UTF8_BOM_UNSUPPORTED` instead of silently dropping the three BOM bytes and reporting the wrong original-source SHA-256. Remove the BOM only in an explicitly authorized source preparation step and treat the resulting bytes as a different input. Inputs are still parsed as inert AST data, never executed or echoed. CI exercises the real CLI and both available PowerShell engines with first-party synthetic Unicode samples; this does not grant new source permissions or product approval.
 
 
 ## V1 manual CLI acceptance verdict (bounded)
