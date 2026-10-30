@@ -55,12 +55,14 @@ def _scan_powershell(root: Path, source: str, expected_sha: str) -> list[dict]:
     try:
         proc = subprocess.run(
             [shell, "-NoProfile", "-NonInteractive", "-File", str(wrapper)],
-            input=source, text=True, encoding="utf-8",
-            capture_output=True, cwd=root, timeout=25, check=False,
+            # Binary stdin preserves exact LF/CRLF bytes on Windows; text
+            # mode would silently rewrite newlines and break SHA validation.
+            input=source.encode("utf-8"), capture_output=True,
+            cwd=root, timeout=25, check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise CodeReviewError("UCIE_POWERSHELL_SCANNER_FAILED") from exc
-    if proc.returncode != 0 or len(proc.stdout.encode("utf-8")) > 196608:
+    if proc.returncode != 0 or len(proc.stdout) > 196608:
         raise CodeReviewError("UCIE_POWERSHELL_SCANNER_FAILED")
     try:
         # Reject duplicate JSON keys and opaque PowerShell stdout banners.
@@ -71,7 +73,8 @@ def _scan_powershell(root: Path, source: str, expected_sha: str) -> list[dict]:
                     raise CodeReviewError("UCIE_POWERSHELL_RECEIPT_DUPLICATED")
                 out[name] = value
             return out
-        receipt = json.loads(proc.stdout, object_pairs_hook=unique_object)
+        receipt = json.loads(proc.stdout.decode("utf-8-sig", errors="strict"),
+                             object_pairs_hook=unique_object)
         if (_check_receipt(receipt) != "powershell"
                 or receipt["source_sha256"] != expected_sha):
             raise CodeReviewError("UCIE_POWERSHELL_RECEIPT_INVALID")
