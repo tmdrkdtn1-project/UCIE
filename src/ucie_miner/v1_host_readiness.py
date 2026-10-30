@@ -137,8 +137,16 @@ def _miner(runtime: Path, now: datetime) -> dict:
         elif age_receipt > 10800:
             freshness = "STALE_OVER_THREE_HOURS_NO_GO"
         # A last-run file is not a registered Windows scheduler receipt.
+    complete = (
+        last is not None and last[1] == "COLLECTED_UNVERIFIED"
+        and receipt["status"] == "LAST_CYCLE_RECEIPT_OBSERVED_NOT_AUTHORIZED"
+        and receipt["last_cycle_status"] == "COLLECTED_UNVERIFIED"
+    )
+    if not complete and freshness == "FRESH_WITHIN_THREE_HOURS":
+        freshness = "RECENT_BUT_COLLECTION_INCOMPLETE_OR_UNRECEIPTED_NO_GO"
     return {
         "status": "MINER_DB_READONLY_OBSERVED_UNVERIFIED",
+        "last_observed_complete_collection": complete,
         "database_integrity": "ok",
         "candidate_count": candidates, "run_count": runs,
         "invalid_candidate_states": invalid, "foreign_sources": foreign,
