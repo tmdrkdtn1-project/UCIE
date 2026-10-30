@@ -238,6 +238,35 @@ $env:PYTHONPATH = 'D:\UCIE_RELEASE\UCIE\src'
 
 신규 `improvement_review_record_count`는 **새 버전이 실제 호스트의 P11 워커에서 실험을 기록한 이후** 증가한다. GitHub CI 합성 시험 PASS나 기존 65건 기록만으로 신규 개선 폐회로 실운영을 PASS로 표시하지 않는다. 외부 독립 QA, 배포 허가, 사용자 프로젝트 자동 적용 및 UCIE V1 최종 수용은 여전히 별도다.
 
+## P8 기존 UCIE 운영 PC로 단회 무손실 적용 — 2026-10-30
+
+PR #150의 P11→P10 첫 실사용 코드를 이중으로 작성하지 않고 정확한 기존 세 파일만 `D:\UCIE_RELEASE\UCIE`에서 `D:\UCIE`로 반영하는 **소유자 실행 단회 동기화**를 추가했다: `src/ucie_miner/p11_improvement_gate.py`, `src/ucie_miner/p11_closed_loop.py`, `src/ucie_miner/runtime_pipeline.py`.
+
+운영 `D:\UCIE`에는 13개 추적 수정과 다수 미추적 파일이 있으므로 `git pull`, `git reset`, `checkout`, 운영 소스 루트 통째 덮어쓰기를 하지 않는다. 소스 Git 체크아웃은 깔끔하고 PR #150 main 병합 `b6a5244925bfe59cd3b64fe2a6bf2f9bedfd9d42`를 조상으로 포함해야 한다. 이 세 대상은 해당 커밋의 `git show` 원본과 정확하게 같아야 한다. 운영 대상은 해당 PR의 이전 main `9f1adce92f1eaf13c306da9fe42538f4e619c907`와 **바이트 단위 동일하거나**, 이미 최신 바이트거나, 새 파일은 없어야 한다. 어느 하나라도 다른 로컬 버전이면 `LOCAL_P8_SOURCE_DRIFT_NO_OVERWRITE`로 중단한다.
+
+```powershell
+# 먼저 소스 전용 독립 체크아웃만 최신 병합 main으로 갱신
+$src='D:\UCIE_RELEASE\UCIE'
+$expected='REPLACE_WITH_VERIFIED_HEAD_FROM_GITHUB_MAIN'
+if ((git -C $src status --porcelain --untracked-files=all)) { throw 'UCIE_RELEASE_DIRTY' }
+git -C $src fetch --no-tags origin main
+if ($LASTEXITCODE -ne 0) { throw 'UCIE_FETCH_FAILED' }
+if ((git -C $src rev-parse FETCH_HEAD).Trim() -ne $expected) { throw 'SOURCE_HEAD_CHANGED' }
+git -C $src checkout --detach $expected
+$old=$env:PYTHONPATH
+try {
+  $env:PYTHONPATH=Join-Path $src 'src'
+  & 'D:\UCIE\.venv\Scripts\python.exe' -B -m ucie_miner.p11_host_sync
+  # 승인된 정확 세 파일만 원본 백업 후 원자적 반영. 초안 소스 검증 실패시 미변경
+  & 'D:\UCIE\.venv\Scripts\python.exe' -B -m ucie_miner.p11_host_sync --apply
+  & 'D:\UCIE\.venv\Scripts\python.exe' -B -m ucie_miner.p11_closed_loop --ucie-root 'D:\UCIE' --status
+} finally { $env:PYTHONPATH=$old }
+```
+
+단회 적용(`--apply`)은 이미 초기화한 P10 작업 큐가 있고 `RUNNING` 임대 작업이 0이어야 한다. 대상 파일 3개를 `runtime/p8_pinned_sync_backups/` 아래에 백업하고, 원자적 교체 후 바이트 SHA 검증한다. 중간 오류 시 이전 파일을 복원하며, 정상 종결은 `P8_HOST_PINNED_CODE_APPLIED_NOT_LIVE_WORKER_ATTESTED`. `P8_HOST_ALREADY_PINNED_NO_CHANGE`면 재실행 중복 적용 없음. 어느 경우에도 기존 예약 작업·공개 마이너 DB·기타 로컬 파일을 변경하지 않는다. P11 경험 원장은 실제 **다음 성공적인 P10 실험 수행 시점에만** `improvement_review` 판단이 추가된다. 이 명령은 P10 스케줄러를 등록하거나 서비스 기동을 확인하지 않으므로 별도 읽기 전용 예약작업 확인이 필요하다.
+
+기존 P11 로컬 파일이 기존 main과 다를 경우 **강제 적용 금지**. SHA 또는 전체 차이 확인 후 별도 정확 대상 변경만 통합해야 한다. 이 차단은 개발 실패가 아니라 원본 보존 정책이다.
+
 ## 완료 방향
 
 새 PR을 무한히 늘리지 않는다. **새 통합 진입점과 독립 소비 실기의 Windows/Ubuntu 3.13/3.15 CI를 먼저 완료**, 로컬 D:\UCIE에는 **신규 Python 모듈 두 개만** 원자적으로 반영(기존 dirty 수정 불변). 사용자 PC 실호스트 위 세 명령 결과에서 실제 수집기/도서관/경험 계보의 자료를 확인하고, 실행되는 명확한 blocker만 보수. 정식 릴리스·권리·신뢰 서명은 허가/근거가 없으면 NO_GO로 별도 표시.
