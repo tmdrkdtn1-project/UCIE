@@ -358,7 +358,12 @@ def main(argv=None) -> int:
         raw = sys.stdin.buffer.read(MAX_BYTES+1)
         if not 0 < len(raw) <= MAX_BYTES:
             raise CodeReviewError("SOURCE_SIZE_INVALID")
-        source = raw.decode("utf-8-sig", errors="strict")
+        # UTF-8-SIG would silently drop the BOM while the report hashes
+        # decoded text, falsely identifying different input bytes as equal.
+        # Reject rather than normalize an explicitly supplied source.
+        if raw.startswith(b"\xef\xbb\xbf"):
+            raise CodeReviewError("SOURCE_UTF8_BOM_UNSUPPORTED")
+        source = raw.decode("utf-8", errors="strict")
         result = review_code(source, language=args.language,
                              root=args.ucie_root)
     except (CodeReviewError, UnicodeError) as exc:
