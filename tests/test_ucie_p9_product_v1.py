@@ -17,6 +17,7 @@ from ucie_miner import product_v1 as product
 from ucie_miner import portable_exact as portable
 from ucie_miner import experience_evolution as evo
 from ucie_miner.capability_experience import run_capability_cycle
+from ucie_miner.p9_pinned_public_review import lookup_pinned_review
 from ucie_miner.public_candidate_staging import stage_public_candidates, DB_NAME
 from ucie_miner.public_candidate_learning import (
     OPT_IN_FILENAME, OPT_IN_TOKEN, optional_hourly_review_learning)
@@ -552,6 +553,103 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertIn("NO_MATCHING_EVIDENCE_IN_BOUNDED_READ_WINDOW",
                       absent["review_blockers"])
         self.assertFalse(absent["v1_accepted"])
+
+    def test_p9_pinned_upstream_pr_repository_license_and_release_divergence(self):
+        """Three exact real public identities, not synthetic upstream execution."""
+        pinned = [
+            ("repo:python/cpython", 153462,
+             "999a046b24cff4ba0e72b574196721f66bd08237",
+             "20cf39097c68baa17cc566b64e76d34ebf034044",
+             "v3.15.0", "d220409a13b77de7a6c30abe16ea90db01528edc"),
+            ("repo:PowerShell/PowerShell", 28042,
+             "bd8cb01a7d5b86129c45eaa14ab5830a63b1283f",
+             "b2f52a2bad4e27e2d9c68a755abb74cb8943f2fa",
+             "v7.6.6", "f260eb9c31ec72c5282f98e5ea24d9be4f8d7536"),
+            ("repo:PowerShell/PowerShell", 28087,
+             "373f6a7b7972a0a4b73bfd9737a0d768d28b347e",
+             "b2f52a2bad4e27e2d9c68a755abb74cb8943f2fa",
+             "v7.6.6", "f260eb9c31ec72c5282f98e5ea24d9be4f8d7536"),
+        ]
+        sources = product.preview_source_registry(include_research=False)
+        public_rows = []
+        for n, (source_id, number, merge, license_blob,
+                tag, tag_sha) in enumerate(pinned):
+            url = "https://github.com/" + source_id[5:] + f"/pull/{number}"
+            inspected = lookup_pinned_review(
+                source_id=source_id, public_url=url, merge_sha=merge)
+            self.assertEqual(inspected["repository_license_blob_sha"],
+                             license_blob)
+            self.assertEqual(inspected["release_tag_commit_sha"], tag_sha)
+            self.assertEqual(inspected["upstream_release_tag"], tag)
+            self.assertEqual(inspected["compare_status"], "diverged")
+            self.assertGreater(inspected["release_ahead_by"], 0)
+            self.assertGreater(inspected["release_behind_by"], 0)
+            self.assertFalse(inspected["release_contains_fix_verified"])
+            self.assertFalse(inspected["absence_of_backport_verified"])
+            self.assertFalse(inspected["per_file_third_party_license_cleared"])
+            self.assertFalse(inspected["legal_signoff_completed"])
+            self.assertFalse(inspected["independent_qa_completed"])
+            self.assertFalse(inspected["approved_or_exportable"])
+            self.assertEqual(inspected["network_requests"], 0)
+            self.assertEqual(inspected, lookup_pinned_review(
+                source_id=source_id, public_url=url, merge_sha=merge))
+            self.assertIsNone(lookup_pinned_review(
+                source_id=source_id, public_url=url + "/files", merge_sha=merge))
+            self.assertIsNone(lookup_pinned_review(
+                source_id=source_id, public_url=url,
+                merge_sha="f" * 40))
+            public_rows.append({
+                "library_item_id": f"{n + 1:064x}",
+                "source_id": source_id, "public_url": url,
+                "evidence_sha256": f"{n + 11:064x}",
+                "revision_hint": merge,
+                "version_scope_claim": "UNDETERMINED",
+                "license_status": "NOT_ATTESTED_PER_REVISION",
+                "lifecycle": "UNVERIFIED_CANDIDATE_ONLY",
+                "signature_status": "NOT_ATTESTED_BY_THIS_SEARCH",
+                "human_approved": False, "export_allowed": False,
+            })
+        with self.assertRaises(ValueError):
+            lookup_pinned_review(
+                source_id="repo:unapproved/private",
+                public_url="https://github.com/unapproved/private/pull/1",
+                merge_sha="1" * 40)
+        with self.assertRaises(ValueError):
+            lookup_pinned_review(
+                source_id="repo:python/cpython",
+                public_url="https://github.com/python/cpython/pull/153462",
+                merge_sha="garbage")
+        preview = product._evidence_readiness(
+            sources=sources,
+            public={"status": "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
+                    "returned_count": 3, "omitted_count": 0,
+                    "items": public_rows},
+            official={"status": "STAGE14_OFFICIAL_LEDGER_ABSENT_NO_GO",
+                      "returned_count": 0, "items": []},
+            limit=5)
+        self.assertEqual(preview["pinned_public_revision_observations_in_window"], 3)
+        self.assertEqual(preview["readiness_record_count"], 3)
+        self.assertTrue(all(
+            row["repository_license_observed_in_pinned_review"]
+            and not row["export_allowed"]
+            and not row["pinned_public_revision_review"][
+                "release_contains_fix_verified"]
+            for row in preview["rows"]))
+        self.assertIn("PINNED_RELEASE_ANCESTRY_OR_BACKPORT_NOT_PROVEN",
+                      preview["review_blockers"])
+        self.assertFalse(preview["all_required_evidence_accepted"])
+        altered = dict(public_rows[0], revision_hint="b" * 40)
+        with self.assertRaises(AssertionError):
+            # Not a trust failure: an otherwise valid W04 row cannot be
+            # falsely matched to the pinned PR license/release observation.
+            unknown = product._evidence_readiness(
+                sources=sources,
+                public={"status": "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
+                        "returned_count": 1, "items": [altered]},
+                official={"status": "STAGE14_OFFICIAL_LEDGER_ABSENT_NO_GO",
+                          "returned_count": 0, "items": []},
+                limit=5)
+            self.assertIsNotNone(unknown["rows"][0]["pinned_public_revision_review"])
 
     def test_unified_catalog_combines_shelves_without_forged_approval(self):
         public = {"status":"READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
