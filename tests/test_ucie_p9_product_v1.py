@@ -639,17 +639,16 @@ class P9IntegratedProductTests(unittest.TestCase):
                       preview["review_blockers"])
         self.assertFalse(preview["all_required_evidence_accepted"])
         altered = dict(public_rows[0], revision_hint="b" * 40)
-        with self.assertRaises(AssertionError):
-            # Not a trust failure: an otherwise valid W04 row cannot be
-            # falsely matched to the pinned PR license/release observation.
-            unknown = product._evidence_readiness(
-                sources=sources,
-                public={"status": "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
-                        "returned_count": 1, "items": [altered]},
-                official={"status": "STAGE14_OFFICIAL_LEDGER_ABSENT_NO_GO",
-                          "returned_count": 0, "items": []},
-                limit=5)
-            self.assertIsNotNone(unknown["rows"][0]["pinned_public_revision_review"])
+        # An unreviewed merge SHA must not inherit another revision's evidence.
+        unknown = product._evidence_readiness(
+            sources=sources,
+            public={"status": "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
+                    "returned_count": 1, "items": [altered]},
+            official={"status": "STAGE14_OFFICIAL_LEDGER_ABSENT_NO_GO",
+                      "returned_count": 0, "items": []},
+            limit=5)
+        self.assertIsNone(unknown["rows"][0]["pinned_public_revision_review"])
+        self.assertEqual(unknown["pinned_public_revision_observations_in_window"], 0)
 
     def test_unified_catalog_combines_shelves_without_forged_approval(self):
         public = {"status":"READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
