@@ -213,7 +213,9 @@ def plan(source: Path, root: Path, *, allow_test_root: bool = False) -> tuple[li
             base = None
         else:
             base = _pinned(source, rel, BASE)
-        if rel.endswith("p11_closed_loop.py"):
+        if (rel.endswith("p11_closed_loop.py") and current is not None
+                and not _same_python_source(current, upstream)
+                and not _same_python_source(current, base)):
             owner_quiet = _legacy_owner_quiet_source(base)
         if (current is not None and
                 not _same_python_source(current, upstream) and
