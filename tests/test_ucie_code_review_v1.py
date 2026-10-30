@@ -324,32 +324,42 @@ class UnifiedCodeReviewV1Tests(unittest.TestCase):
                                         "POWERSHELL_RUNTIME_UNAVAILABLE"):
                 review_code(PS_DOT, language="powershell", root=ROOT)
 
-    def test_cli_bom_input_is_rejected_without_hashing_normalized_text(self):
-        # This is a byte-level provenance contract. utf-8-sig would have
-        # removed the BOM while claiming the remaining SHA was the input hash.
+    def test_cli_bom_input_retains_original_digest_and_separate_parse_digest(self):
+        # PS5.1 native pipelines can add BOM bytes. Do not reject that
+        # existing usage or silently identify different bytes as equal.
         env = os.environ.copy()
         env["PYTHONPATH"] = str(ROOT / "src")
-        bom_input = bytes.fromhex("efbbbf") + SCANDIR.encode("utf-8")
-        self.assertNotEqual(sha256(bom_input).hexdigest(),
-                            sha256(SCANDIR.encode("utf-8")).hexdigest())
-        for language in ("python", "powershell"):
+        cases = [("python", SCANDIR, "PY_SCANDIR_SHARED_ITERATOR_RACE")]
+        if (shutil.which("pwsh") or shutil.which("powershell.exe")):
+            cases.append(("powershell", PS_DOT, "PS_RESOLVE_PATH_DOT_PREFIX"))
+        for language, source, rule_id in cases:
             with self.subTest(language=language):
+                original = source.encode("utf-8")
+                received = bytes.fromhex("efbbbf") + original
+                self.assertNotEqual(sha256(received).hexdigest(),
+                                    sha256(original).hexdigest())
                 cmd = [sys.executable, "-B", "-m", "ucie_miner.code_review_v1",
                        "--ucie-root", str(ROOT), "--language", language]
-                run = subprocess.run(cmd, input=bom_input, capture_output=True,
-                                     timeout=15, cwd=ROOT, env=env, check=False)
-                self.assertEqual(run.returncode, 2, run.stderr[-500:])
+                run = subprocess.run(cmd, input=received, capture_output=True,
+                                     timeout=35, cwd=ROOT, env=env, check=False)
+                self.assertEqual(run.returncode, 0, run.stderr[-500:])
                 result = json.loads(run.stdout.decode("utf-8"))
-                self.assertEqual(result["status"], "CODE_REVIEW_FAIL_CLOSED")
-                self.assertEqual(result["reason_code"],
-                                 "SOURCE_UTF8_BOM_UNSUPPORTED")
-                self.assertNotIn("source_sha256", result)
+                self.assertEqual(result["source_sha256"],
+                                 sha256(received).hexdigest())
+                self.assertEqual(result["parsed_source_sha256"],
+                                 sha256(original).hexdigest())
+                self.assertEqual(result["source_byte_encoding"],
+                                 "UTF8_BOM_PARSED_WITH_RAW_HASH")
+                self.assertEqual(result["findings"][0]["rule_id"], rule_id)
                 self.assertFalse(result["source_executed"])
                 self.assertEqual(result["network_requests"], 0)
                 self.assertEqual(result["database_writes"], 0)
                 self.assertFalse(result["auto_promoted"])
                 self.assertFalse(result["production_approved"])
+                self.assertFalse(result["findings"][0]
+                                 ["public_library"]["approved_or_exportable"])
                 self.assertNotIn(b"scandir", run.stdout + run.stderr)
+                self.assertNotIn(b"Resolve-Path", run.stdout + run.stderr)
 
     def test_actual_single_command_python_and_failclosed_error(self):
         env = os.environ.copy()
