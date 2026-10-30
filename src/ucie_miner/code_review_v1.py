@@ -156,6 +156,8 @@ def _related_public_comparison(*, source_id: str, exact_url: str,
             if (row["public_url"] == exact_url
                     or (row["kind"], row["purpose_code"]) not in keys):
                 continue
+            if type(row["public_url"]) is not str:
+                raise CodeReviewError("RELATED_PUBLIC_SOURCE_REFERENCE_INVALID")
             match = _PUBLIC_PR.fullmatch(row["public_url"])
             if match is None:
                 # A git/git commit can be a legitimate W04 record, but this
