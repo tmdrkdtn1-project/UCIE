@@ -110,6 +110,10 @@ jobs:
         if: matrix.python-version == '3.15'
         shell: pwsh
         run: ./tests/runtime_powershell_dotpath_probe.ps1
+      - name: One-shot exact official Windows PowerShell 7.6.6 x64 release runtime observation
+        if: github.event_name == 'pull_request' && github.head_ref == 'test/ucie-p9-ps766-win-x64-release-runtime-20261030' && runner.os == 'Windows' && matrix.python-version == '3.15'
+        run: python -B tests/runtime_powershell_766_official_windows.py
+
       - name: UCIE-authored inert PowerShell AST candidate tests (no user code)
         if: runner.os == 'Windows'
         shell: pwsh
