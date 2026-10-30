@@ -108,6 +108,86 @@ class UnifiedCodeReviewV1Tests(unittest.TestCase):
         with self.assertRaises(CodeReviewError):
             review_code("if (", language="powershell", root=ROOT)
 
+    @unittest.skipUnless(
+        shutil.which("pwsh") or shutil.which("powershell.exe"),
+        "no PowerShell runtime on CI")
+    def test_strict_utf8_unicode_crlf_original_bytes_on_actual_powershell_hosts(self):
+        # UCIE-authored synthetic sample: harmless Korean/emoji comments and
+        # CRLF must survive BOTH PowerShell 7 and Windows PowerShell 5.1.
+        source = ("# UCIE 합성 실험: 한글 주석 🐼\\r\\n"
+                  "Resolve-Path -Relative '.directory'\\r\\n"
+                  "# 유니코드 테스트 끝\\r\\n").replace("\\r\\n", "\r\n")
+        encoded = source.encode("utf-8")
+        expected_sha = sha256(encoded).hexdigest()
+        wrapper = ROOT / "scripts" / "ucie_powershell_review_stdin.ps1"
+        shells = []
+        for name in ("pwsh", "powershell.exe"):
+            executable = shutil.which(name)
+            if executable and executable not in shells:
+                shells.append(executable)
+        self.assertGreater(len(shells), 0)
+        for shell in shells:
+            with self.subTest(shell=Path(shell).name):
+                raw = subprocess.run(
+                    [shell, "-NoProfile", "-NonInteractive",
+                     "-File", str(wrapper)],
+                    input=encoded, capture_output=True,
+                    timeout=30, cwd=ROOT, check=False)
+                self.assertEqual(raw.returncode, 0,
+                                 raw.stderr[-650:].decode("utf-8", "replace"))
+                receipt = json.loads(raw.stdout.decode("utf-8-sig"))
+                self.assertEqual(receipt["source_sha256"], expected_sha)
+                self.assertEqual(len(receipt["findings"]), 1)
+                self.assertEqual(receipt["findings"][0]["line"], 2)
+                self.assertEqual(receipt["findings"][0]["pattern_code"],
+                                 "PS_RESOLVE_PATH_DOT_PREFIX")
+                self.assertNotIn("한글", raw.stdout.decode("utf-8", "replace"))
+                self.assertNotIn("🐼", raw.stdout.decode("utf-8", "replace"))
+                for invalid in (b"\xffResolve-Path", b"x" * (MAX_BYTES + 1)):
+                    failed = subprocess.run(
+                        [shell, "-NoProfile", "-NonInteractive",
+                         "-File", str(wrapper)],
+                        input=invalid, capture_output=True,
+                        timeout=30, cwd=ROOT, check=False)
+                    self.assertEqual(failed.returncode, 2)
+                    self.assertNotIn(b"Resolve-Path", failed.stdout)
+                    self.assertNotIn(b"Resolve-Path", failed.stderr)
+        # The actual user-facing CLI must preserve these bytes too.
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(ROOT / "src")
+        cmd = [sys.executable, "-B", "-m", "ucie_miner.code_review_v1",
+               "--ucie-root", str(ROOT), "--language", "powershell"]
+        completed = subprocess.run(cmd, input=encoded, capture_output=True,
+                                   timeout=35, cwd=ROOT, env=env, check=False)
+        self.assertEqual(completed.returncode, 0,
+                         completed.stderr[-650:].decode("utf-8", "replace"))
+        report = json.loads(completed.stdout.decode("utf-8-sig"))
+        self.assertEqual(report["source_sha256"], expected_sha)
+        self.assertEqual(report["findings"][0]["line"], 2)
+        self.assertEqual(report["findings"][0]["rule_id"],
+                         "PS_RESOLVE_PATH_DOT_PREFIX")
+        self.assertFalse(report["source_executed"])
+        self.assertFalse(report["auto_applied"])
+        self.assertFalse(report["production_approved"])
+        self.assertEqual(report["database_writes"], 0)
+
+    @unittest.skipUnless(shutil.which("pwsh") or shutil.which("powershell.exe"),
+                         "PowerShell runtime unavailable")
+    def test_duplicate_public_pr_findings_do_not_repeat_library_read(self):
+        source = ("Resolve-Path -Relative '.directory'\n"
+                  "Resolve-Path -Relative '..directory'\n")
+        with patch("ucie_miner.code_review_v1._linked_library_for_finding",
+                   return_value={
+                       "status": "PUBLIC_SOURCE_LEDGER_INCOMPLETE_NO_GO",
+                       "approved_or_exportable": False, "items": [],
+                   }) as lookup:
+            report = review_code(source, language="powershell", root=ROOT)
+        self.assertEqual(report["finding_count"], 2)
+        self.assertEqual(report["public_library_exact_pr_lookups"], 1)
+        lookup.assert_called_once()
+        self.assertTrue(all(not x["public_library"]["approved_or_exportable"]
+                            for x in report["findings"]))
+
     def test_real_source_linked_public_ledger_is_read_once_and_never_mutated(self):
         with tempfile.TemporaryDirectory() as work:
             root = Path(work) / "UCIE"
