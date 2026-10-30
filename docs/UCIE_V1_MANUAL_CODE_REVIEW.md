@@ -53,7 +53,8 @@ Each detected finding now includes `public_library`. UCIE reuses the original W0
 
 - `EXACT_PUBLIC_PR_SOURCE_LINKED_UNVERIFIED`: exact public PR identity matched a source-validated UCIE ledger row. Returned library ID, source revision hint and evidence SHA-256 are still unverified.
 - `PUBLIC_SOURCE_LEDGER_INCOMPLETE_NO_GO`: local Stage12 ledger missing or source linkage incomplete; no assertion is made.
-- `NO_EXACT_PUBLIC_PR_IN_CURRENT_LINKED_LEDGER`: a valid W04 ledger has no row for the exact public PR; UCIE will not substitute another PR.
+- `NO_EXACT_PUBLIC_PR_IN_CURRENT_LINKED_LEDGER`: a fully returned source window has no exact public PR row; UCIE will not substitute another PR.
+- `NO_EXACT_PUBLIC_PR_IN_BOUNDED_SOURCE_WINDOW`: a partial 20-row source window has no exact PR row; later rows may still exist, so this is not proof of absence.
 - Corrupt/forged provenance fails closed rather than inheriting approvals or release coverage.
 
 The query is performed once per distinct PR in the inspected snippet. Top-level metrics `public_library_exact_pr_lookups` and `public_library_linked_findings` describe this bounded source lookup. A match is **public source identity**, not proof the rule fixes input code, licensing, independent QA, or export approval. A partial 20-record window reports `truncated`.
