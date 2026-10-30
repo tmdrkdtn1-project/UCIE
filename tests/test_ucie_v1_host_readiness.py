@@ -90,6 +90,21 @@ class UCIEV1HostReadinessTests(unittest.TestCase):
         self.assertFalse(report["real_host_v1_accepted"])
         self.assertEqual(sha256(db.read_bytes()).hexdigest(), original)
 
+    def test_recent_partial_cycle_does_not_look_healthy(self):
+        self._miner_db()
+        file = self.runtime / "last_run.json"
+        receipt = json.loads(file.read_text(encoding="utf-8"))
+        receipt["status"] = "COLLECTED_UNVERIFIED_PARTIAL_NO_GO"
+        file.write_text(json.dumps(receipt), encoding="utf-8")
+        observed = _miner(self.runtime, self.now)
+        self.assertFalse(observed["last_observed_complete_collection"])
+        self.assertEqual(
+            observed["last_run_freshness"],
+            "RECENT_BUT_COLLECTION_INCOMPLETE_OR_UNRECEIPTED_NO_GO")
+        report = observe_ucie_host(self.root, now=self.now)
+        self.assertIn("MINER_LAST_RUN_NOT_FRESH", report["blockers"])
+        self.assertFalse(report["real_host_v1_accepted"])
+
     def test_stale_cycle_and_receipt_are_not_silent_operating_pass(self):
         self._miner_db(age_minutes=300)
         report = observe_ucie_host(self.root, now=self.now)
