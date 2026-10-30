@@ -40,6 +40,12 @@ OPT_IN = "ucie_p11_closed_loop_opt_in.txt"
 TOKEN = "UCIE_P11_PUBLIC_EXPERIENCE_OPT_IN_V1"
 MAX_LEADS = 2400
 MIN_GET_INTERVAL = timedelta(minutes=5)
+# No new evidence for 30 minutes after >=10 successful GETs: cap redundant
+# collection at one GET every 20 minutes; rotate approved sources unchanged.
+# Any fetch failure retains the original 5-minute retry cooldown.
+QUIET_AFTER = timedelta(minutes=30)
+QUIET_GET_INTERVAL = timedelta(minutes=20)
+QUIET_MIN_GETS = 10
 RECIPES = {
     "SECURITY": "SKILL_TEST_AUTOMATION",
     "CRASH": "ENGINE_INCREMENTAL_BUILD",
@@ -210,7 +216,21 @@ def collect_one(root: Path, *, fetch=public_feed_get,
         if cursor is None:
             raise P11Error("missing P11 cursor")
         previous = cursor["last_attempt_at"]
-        if previous and now < _parse(previous) + MIN_GET_INTERVAL:
+        # Source-neutral, no-new-evidence idle backoff. Reuse the existing
+        # ledger/cursor only: NO schema migration, no extra API request.
+        # Pending experiments and failed sources always use the base cadence.
+        latest_new = conn.execute(
+            "SELECT MAX(observed_at) FROM leads").fetchone()[0]
+        pending = conn.execute(
+            "SELECT COUNT(*) FROM leads WHERE reviewed=0").fetchone()[0]
+        quiet = (
+            cursor["last_attempt_failed"] == 0
+            and cursor["total_public_gets"] >= QUIET_MIN_GETS
+            and pending == 0
+            and (latest_new is None or now >= _parse(latest_new) + QUIET_AFTER)
+        )
+        interval = QUIET_GET_INTERVAL if quiet else MIN_GET_INTERVAL
+        if previous and now < _parse(previous) + interval:
             conn.execute("COMMIT")
             # Never acknowledge a failed API fetch as a completed job only
             # because the retry cooldown has not elapsed. P10 keeps this
@@ -221,7 +241,10 @@ def collect_one(root: Path, *, fetch=public_feed_get,
                            cursor["last_attempt_failed"] else
                            "P11_RATE_WINDOW_NOT_DUE"),
                 "public_api_gets_this_call": 0,
-                "unverified_new_leads": 0, "auto_promoted": False,
+                "unverified_new_leads": 0,
+                "quiet_collection_backoff": quiet,
+                "interval_minutes": int(interval.total_seconds() // 60),
+                "auto_promoted": False,
             }
         selected = cursor["source_index"]
         conn.execute("UPDATE cursor SET last_attempt_at=?,last_attempt_failed=1 "
@@ -431,6 +454,8 @@ def status(root: Path) -> dict:
         events = conn.execute("SELECT COUNT(*) FROM experience").fetchone()[0]
         good = conn.execute(
             "SELECT COUNT(*) FROM experience WHERE exact_equal=1").fetchone()[0]
+        last_new = conn.execute(
+            "SELECT MAX(observed_at) FROM leads").fetchone()[0]
         has_reviews = conn.execute(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' "
             "AND name='improvement_review'").fetchone()[0] == 1
@@ -441,12 +466,25 @@ def status(root: Path) -> dict:
             review_counts = {r[0]: r[1] for r in review_rows}
         else:
             review_counts = {}
+    now = datetime.now(timezone.utc)
+    quiet = (
+        cursor[2] == 0 and cursor[3] >= QUIET_MIN_GETS
+        and unchecked == 0
+        and (last_new is None or now >= _parse(last_new) + QUIET_AFTER)
+    )
+    interval = QUIET_GET_INTERVAL if quiet else MIN_GET_INTERVAL
+    next_due = (
+        _stamp(_parse(cursor[1]) + interval) if cursor[1] else None
+    )
     return {
         "schema": SCHEMA,
         "status": "P11_PUBLIC_EVIDENCE_EXPERIENCE_READ_ONLY",
         "sources": len(SOURCES), "next_source_id": "repo:" + SOURCES[cursor[0]],
         "last_public_attempt_utc": cursor[1],
         "last_public_attempt_failed": bool(cursor[2]),
+        "quiet_collection_backoff": quiet,
+        "effective_interval_minutes": int(interval.total_seconds() // 60),
+        "next_public_get_due_utc": next_due,
         "total_successful_public_gets": cursor[3],
         "unverified_leads": leads, "awaiting_synthetic_experiment": unchecked,
         "first_party_experiences": events, "synthetic_equivalence_observed": good,
