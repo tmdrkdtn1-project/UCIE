@@ -287,6 +287,10 @@ class P9IntegratedProductTests(unittest.TestCase):
                    side_effect=AssertionError("unified search cannot fetch")):
             out = product.integrated_product_preview(
                 self.root, query="API_CONTRACT", limit=5)
+            # A specific W04 query may match no portable PRs. Verify the
+            # actual complete bounded Stage12 window as a separate handoff.
+            all_out = product.integrated_product_preview(
+                self.root, query="", limit=5)
         after = {
             p.name: p.read_bytes() for p in (
                 runtime / DB_NAME,
@@ -312,6 +316,109 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertEqual(view["network_requests"], 0)
         self.assertEqual(view["operating_database_writes"], 0)
         self.assertFalse(view["v1_accepted"])
+        self.assertFalse(out["source_linked_portable_handoff"]["v1_accepted"])
+        handoff = all_out["source_linked_portable_handoff"]
+        self.assertEqual(handoff["schema"],
+                         "UCIE_P9_SOURCE_LINKED_PORTABLE_HANDOFF_V1")
+        self.assertEqual(handoff["status"],
+                         "SOURCE_LINKED_PUBLIC_PR_METADATA_PORTABLE_PARITY_NO_GO")
+        self.assertGreater(handoff["portable_candidate_items"], 0)
+        self.assertTrue(handoff["in_process_exact_search_equivalent"])
+        self.assertFalse(handoff["independent_consumer_executed_here"])
+        self.assertFalse(handoff["package_released"])
+        self.assertFalse(handoff["v1_accepted"])
+        payload = handoff["consumer_payload"]
+        self.assertEqual(payload["limit"], 5)
+        self.assertEqual(len(payload["items"]), handoff["portable_candidate_items"])
+        self.assertEqual(
+            {row["library_item_id"] for row in payload["items"]},
+            {row["library_item_id"] for row in
+             all_out["public_candidate_library"]["items"]
+             if "/pull/" in row["public_url"]})
+        self.assertTrue(all(not row["export_allowed"] and
+                            not row["human_approved"] for row in payload["items"]))
+
+        # Actual independent stdlib-only P7 consumer, using this test fixture's
+        # original source-linked W04 metadata rather than canned demo rows.
+        bundle, _ = product.build_draft_package_bytes()
+        with tempfile.TemporaryDirectory() as work:
+            isolated = Path(work)
+            with ZipFile(io_bytes(bundle)) as archive:
+                archive.extract("portable_exact.py", path=isolated)
+            script = (
+                "import json,runpy,sys\n"
+                "payload=json.load(sys.stdin)\n"
+                "consumer=runpy.run_path(sys.argv[1])\n"
+                "queries=tuple(tuple(q) for q in payload['queries'])\n"
+                "out=consumer['search_public_metadata']("
+                "payload['items'],queries=queries,limit=payload['limit'])\n"
+                "assert not out['production_release_approved']\n"
+                "assert out['approved_or_exportable_items']==0\n"
+                "print(json.dumps({'matched':sum(x['total_matches'] "
+                "for x in out['results']),"
+                "'query_count':out['query_count'],"
+                "'schema':out['schema']}))\n"
+            )
+            env = os.environ.copy()
+            env.pop("PYTHONPATH", None)
+            observed = subprocess.run(
+                [sys.executable, "-I", "-c", script,
+                 str(isolated / "portable_exact.py")],
+                input=json.dumps(payload, sort_keys=True),
+                text=True, capture_output=True, cwd=isolated,
+                env=env, check=True, timeout=25)
+            seen = json.loads(observed.stdout)
+        self.assertEqual(seen["matched"], handoff["portable_candidate_items"])
+        self.assertEqual(seen["query_count"], len(payload["queries"]))
+        self.assertEqual(seen["schema"], portable.SCHEMA)
+        self.assertEqual(before, after)
+
+    def test_portable_public_handoff_rejects_forged_approvals_and_nonpublic_urls(self):
+        one = {
+            "library_item_id": "a" * 64,
+            "kind": "PUBLIC_TECHNICAL_EVIDENCE",
+            "source_id": "repo:python/cpython",
+            "public_url": "https://github.com/python/cpython/pull/10",
+            "domain": "Python", "purpose_code": "API_CONTRACT",
+            "evidence_sha256": "b" * 64,
+            "lifecycle": "UNVERIFIED_CANDIDATE_ONLY",
+            "signature_status": "NOT_ATTESTED_BY_THIS_SEARCH",
+            "human_approved": False, "export_allowed": False,
+        }
+        source = {
+            "status": "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
+            "returned_count": 1, "omitted_count": 0,
+            "items": [one],
+        }
+        valid = product._portable_public_ledger_handoff(source, limit=5)
+        self.assertEqual(valid["portable_candidate_items"], 1)
+        self.assertTrue(valid["in_process_exact_search_equivalent"])
+        self.assertEqual(valid["consumer_payload"]["items"][0]["public_url"],
+                         one["public_url"])
+        for change in (
+            {"human_approved": True}, {"export_allowed": True},
+            {"signature_status": "OWNER_SIGNED"},
+            {"public_url": "https://github.com/python/cpython/pull/10/extra"},
+            {"source_id": "repo:unapproved/repo"},
+        ):
+            with self.subTest(change=change):
+                corrupted = {**source, "items": [{**one, **change}]}
+                with self.assertRaises((ValueError, TypeError)):
+                    product._portable_public_ledger_handoff(corrupted, limit=5)
+        commit = {**one, "source_id": "repo:git/git",
+                  "public_url": "https://github.com/git/git/commit/" + "c" * 40,
+                  "domain": "Git"}
+        only_commit = product._portable_public_ledger_handoff(
+            {**source, "items": [commit]}, limit=5)
+        self.assertEqual(only_commit["portable_candidate_items"], 0)
+        self.assertEqual(only_commit["unsupported_reference_count"], 1)
+        self.assertFalse(only_commit["in_process_exact_search_equivalent"])
+        incomplete = product._portable_public_ledger_handoff({
+            "status": "SOURCE_LINKAGE_INCOMPLETE_NO_GO",
+            "items": [], "returned_count": 0,
+        }, limit=5)
+        self.assertIsNone(incomplete["consumer_payload"])
+        self.assertFalse(incomplete["v1_accepted"])
 
     def test_unified_catalog_combines_shelves_without_forged_approval(self):
         public = {"status":"READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
