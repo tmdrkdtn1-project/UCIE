@@ -288,8 +288,16 @@ def _safe_handler(root: Path, kind: str) -> bool:
         from .capability_trials import evaluate_ucie_owned_recipe
         out = evaluate_ucie_owned_recipe(
             "ENGINE_INCREMENTAL_BUILD", rows=128, queries=24, repeats=1)
-        return (out["exact_result_equivalence_observed"] is True
-                and out["mismatched_queries_across_repetitions"] == 0)
+        if (out["exact_result_equivalence_observed"] is not True
+                or out["mismatched_queries_across_repetitions"] != 0):
+            return False
+        # Reuse the existing 15-minute leased experiment worker. P9 opens
+        # P11 read-only, validates a NEW improvement receipt and records
+        # one immutable retest receipt in the existing P10-only queue DB.
+        # No eighth job, new Windows task, rule/code adoption, or P11 write.
+        from .p9_auto_retest import run_one, RECORDED, NO_WORK, NO_OPT_IN
+        retest = run_one(root)
+        return retest["status"] in (RECORDED, NO_WORK, NO_OPT_IN)
     if kind == "UCIE_QA_REVIEW":
         from .product_v1 import portable_consumer_check
         out = portable_consumer_check()
