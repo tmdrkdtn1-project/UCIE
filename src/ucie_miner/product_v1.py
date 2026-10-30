@@ -20,6 +20,7 @@ import tempfile
 from zipfile import ZipFile, ZIP_DEFLATED, ZipInfo
 
 from .source_registry import preview_source_registry
+from .p9_pinned_public_review import lookup_pinned_review
 from .library_search import search_existing_public_library
 from .library_shelves import search_official_metadata_shelf
 from .experience_application import experience_library_preview
@@ -652,8 +653,13 @@ def _evidence_readiness(*, sources: dict, public: dict,
                 or any(c not in "0123456789abcdef"
                        for c in item["revision_hint"])):
             raise ProductIntegrationError("untrusted W04 evidence readiness fields")
+        pinned = lookup_pinned_review(
+            source_id=item["source_id"], public_url=item["public_url"],
+            merge_sha=item["revision_hint"])
         rows.append({
             "shelf": "W04_PUBLIC_CANDIDATE",
+            "pinned_public_revision_review": pinned,
+            "repository_license_observed_in_pinned_review": pinned is not None,
             "library_item_id": item["library_item_id"],
             "source_id": item["source_id"],
             "public_url": item["public_url"],
@@ -702,6 +708,10 @@ def _evidence_readiness(*, sources: dict, public: dict,
         blockers.append("W04_PUBLIC_EVIDENCE_LINKAGE_NOT_READY")
     if not official_available:
         blockers.append("W06_OFFICIAL_EVIDENCE_LEDGER_NOT_READY")
+    pinned_count = sum(row.get("pinned_public_revision_review") is not None
+                       for row in rows)
+    if pinned_count:
+        blockers.append("PINNED_RELEASE_ANCESTRY_OR_BACKPORT_NOT_PROVEN")
     if not rows:
         blockers.append("NO_MATCHING_EVIDENCE_IN_BOUNDED_READ_WINDOW")
     else:
@@ -719,6 +729,8 @@ def _evidence_readiness(*, sources: dict, public: dict,
         "public_window_count": len(public["items"]),
         "official_window_count": len(official["items"]),
         "readiness_record_count": len(rows),
+        "pinned_public_revision_observations_in_window": pinned_count,
+        "public_revision_observation_scope": "THREE_EXACT_PUBLIC_PR_MERGE_SHAS_ONLY",
         "source_window_truncated": (
             (public.get("omitted_count", 0) > 0)
             or (official.get("omitted_count", 0) > 0)),
