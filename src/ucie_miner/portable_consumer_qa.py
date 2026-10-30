@@ -67,7 +67,7 @@ def _validated_draft_bytes(payload: bytes, expected: bytes, expected_manifest: d
         raise ProductIntegrationError("invalid canonical portable draft") from exc
     manifest = json.loads(manifest_raw.decode("ascii"))
     if (manifest != expected_manifest or manifest.get("schema") != PACK_SCHEMA
-            or manifest.get("version") != LOOKUP_VERSION
+            or manifest.get("version") != "1.2.0"
             or manifest.get("consumer_api_version") != LOOKUP_VERSION
             or manifest.get("code_file") != "portable_exact.py"
             or manifest.get("standalone_cli_file") != "__main__.py"
