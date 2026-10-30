@@ -227,7 +227,7 @@ class P8HostSyncTests(unittest.TestCase):
             self.run_git("status", "--porcelain", "--untracked-files=all"),
             b"")
         with self.assertRaisesRegex(
-                s.P8SyncError, "source at pinned PR differs from checkout"):
+                s.P8SyncError, "P11_MERGED_SOURCE_BLOB_CHANGED_NO_OVERWRITE"): 
             s.sync(self.release, self.live, allow_test_root=True)
         self.assertFalse(
             (self.live / "runtime" / "p8_pinned_sync_backups").exists())
