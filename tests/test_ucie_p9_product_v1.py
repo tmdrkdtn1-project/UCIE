@@ -1125,6 +1125,25 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertEqual(obj["status"], "P9_INTEGRATED_READ_ONLY_PRODUCT_PREVIEW_NO_GO")
         self.assertFalse((self.root / "runtime" / "exports").exists())
         with patch("sys.argv", [
+            "product_v1", "--ucie-root", str(self.root),
+            "--select-item", "a" * 64]):
+            with patch("builtins.print") as printed:
+                self.assertEqual(product.main(), 0)
+        chosen = json.loads(printed.call_args.args[0])
+        self.assertEqual(chosen["reuse_eligibility"]["selected_item"]
+                         ["selection_status"],
+                         "NOT_IN_CURRENT_BOUNDED_QUERY_WINDOW_NO_GO")
+        self.assertFalse(chosen["reuse_eligibility"]
+                         ["selected_item"]["new_generic_package_export_allowed"])
+        with patch("sys.argv", [
+            "product_v1", "--ucie-root", str(self.root),
+            "--select-item", "../../unsafe"]):
+            with patch("builtins.print") as printed:
+                self.assertEqual(product.main(), 2)
+        invalid = json.loads(printed.call_args.args[0])
+        self.assertEqual(invalid["status"], "P9_PRODUCT_FAIL_CLOSED")
+        self.assertFalse((self.root / "runtime" / "exports").exists())
+        with patch("sys.argv", [
             "product_v1", "--ucie-root", str(self.root), "--export-draft"]):
             with patch("builtins.print") as printed:
                 self.assertEqual(product.main(), 0)
