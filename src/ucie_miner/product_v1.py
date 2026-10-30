@@ -582,6 +582,14 @@ def _selected_w09_manual_consumer_reference(root: Path, *, selection: dict,
             or type(descriptor.get("descriptor_sha256")) is not str
             or REUSE_ITEM_ID.fullmatch(descriptor["descriptor_sha256"]) is None):
         raise ProductIntegrationError("W09 consumer descriptor trust boundary changed")
+    # Re-check the canonical W09 descriptor digest so even a forged cached
+    # result cannot serve as a replacement for the original in-process API.
+    canonical = json.dumps(
+        {k: v for k, v in descriptor.items() if k != "descriptor_sha256"},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+        allow_nan=False).encode("ascii")
+    if sha256(canonical).hexdigest() != descriptor["descriptor_sha256"]:
+        raise ProductIntegrationError("W09 consumer descriptor digest mismatch")
     key = ("serial5_addendum" if selection["pack_serial"] == 5 else "serial4")
     digests = descriptor["source_pack_sha256s"]
     if (selection["pack_serial"] not in (4, 5)
