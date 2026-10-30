@@ -1,6 +1,7 @@
 """P9 read-only first-party improvement retest and fail-closed review QA."""
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sqlite3
@@ -168,7 +169,7 @@ class P9FirstPartyRetestTests(unittest.TestCase):
     def test_corrupted_original_review_refuses_to_retest(self):
         self.activate_and_learn()
         path = self.root / "runtime" / p11.DB_NAME
-        with sqlite3.connect(path) as conn:
+        with closing(sqlite3.connect(path)) as conn:
             conn.execute("UPDATE improvement_review SET receipt_sha256=?",
                          ("f" * 64,))
             conn.commit()
