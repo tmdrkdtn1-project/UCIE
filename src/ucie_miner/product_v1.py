@@ -603,6 +603,138 @@ def _revision_review_queue(*, p8: dict, w05: dict,
     }
 
 
+def _evidence_readiness(*, sources: dict, public: dict,
+                        official: dict, limit: int) -> dict:
+    """Explain remaining P9 evidence gates for the current bounded read window.
+
+    This reuses the existing W01/W04/W06 validators. Source linkage and a
+    content SHA-256 are *not* upstream fixed-version verification, a license
+    grant, independent QA, signature, or approval for distribution.
+    """
+    if type(limit) is not int or not 1 <= limit <= 20:
+        raise ProductIntegrationError("invalid evidence inspection limit")
+    approved = {
+        row["source_id"]: row
+        for row in sources["sources"]
+        if row["status"] == "ACTIVE_APPROVED"
+    }
+    if len(approved) != sources["active_source_count"]:
+        raise ProductIntegrationError("UCIE source registry count mismatch")
+    public_linked = public["status"] == "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"
+    official_available = (
+        official["status"] == "STAGE14_OFFICIAL_METADATA_READ_ONLY_UNVERIFIED_NO_GO"
+    )
+    if (type(public["items"]) is not list
+            or type(official["items"]) is not list
+            or len(public["items"]) != public["returned_count"]
+            or len(official["items"]) != official["returned_count"]
+            or len(public["items"]) > limit
+            or len(official["items"]) > limit
+            or (not public_linked and public["items"])
+            or (not official_available and official["items"])):
+        raise ProductIntegrationError("invalid bounded evidence reader response")
+    rows = []
+    for item in public["items"]:
+        src = approved.get(item["source_id"])
+        if (src is None or src["source_kind"] != "INDEPENDENT_PUBLIC_REPOSITORY"
+                or item["license_status"] != src["license_verdict"]
+                or item["lifecycle"] != "UNVERIFIED_CANDIDATE_ONLY"
+                or item["signature_status"] != "NOT_ATTESTED_BY_THIS_SEARCH"
+                or item["human_approved"] is not False
+                or item["export_allowed"] is not False
+                or item["version_scope_claim"] != "UNDETERMINED"
+                or type(item["evidence_sha256"]) is not str
+                or len(item["evidence_sha256"]) != 64
+                or any(c not in "0123456789abcdef"
+                       for c in item["evidence_sha256"])
+                or type(item["revision_hint"]) is not str
+                or len(item["revision_hint"]) != 40
+                or any(c not in "0123456789abcdef"
+                       for c in item["revision_hint"])):
+            raise ProductIntegrationError("untrusted W04 evidence readiness fields")
+        rows.append({
+            "shelf": "W04_PUBLIC_CANDIDATE",
+            "library_item_id": item["library_item_id"],
+            "source_id": item["source_id"],
+            "public_url": item["public_url"],
+            "evidence_sha256": item["evidence_sha256"],
+            "revision_hint": item["revision_hint"],
+            "version_scope_claim": item["version_scope_claim"],
+            "source_license_status": item["license_status"],
+            "local_source_linkage_checked": True,
+            "upstream_revision_independently_attested": False,
+            "runtime_version_applicability_verified": False,
+            "source_rights_for_export_verified": False,
+            "independent_qa_verified": False,
+            "export_allowed": False,
+        })
+    for item in official["items"]:
+        src = approved.get(item["source_id"])
+        if (src is None or item["lifecycle"] != "PUBLIC_METADATA_UNVERIFIED"
+                or item["source_license_reviewed"] is not False
+                or item["verified_applicability"] is not False
+                or item["human_approved"] is not False
+                or item["export_allowed"] is not False
+                or type(item["content_sha256"]) is not str
+                or len(item["content_sha256"]) != 64
+                or any(c not in "0123456789abcdef"
+                       for c in item["content_sha256"])
+                or item["reference_scope"] not in (
+                    "PINNED_OFFICIAL_DOCUMENT_CURRENT_URL",
+                    "PUBLIC_REPOSITORY_RELEASE_INDEX_NOT_EXACT_RELEASE",
+                    "PUBLIC_ADVISORY_IDENTIFIER_UNVERIFIED")):
+            raise ProductIntegrationError("untrusted W06 official evidence readiness")
+        rows.append({
+            "shelf": "W06_OFFICIAL_METADATA",
+            "source_id": item["source_id"],
+            "public_url": item["public_url"],
+            "content_sha256": item["content_sha256"],
+            "reference_scope": item["reference_scope"],
+            "local_source_linkage_checked": True,
+            "exact_published_version_independently_attested": False,
+            "runtime_version_applicability_verified": False,
+            "source_rights_for_export_verified": False,
+            "independent_qa_verified": False,
+            "export_allowed": False,
+        })
+    blockers = []
+    if not public_linked:
+        blockers.append("W04_PUBLIC_EVIDENCE_LINKAGE_NOT_READY")
+    if not official_available:
+        blockers.append("W06_OFFICIAL_EVIDENCE_LEDGER_NOT_READY")
+    if not rows:
+        blockers.append("NO_MATCHING_EVIDENCE_IN_BOUNDED_READ_WINDOW")
+    else:
+        blockers.extend((
+            "EXACT_UPSTREAM_VERSION_APPLICABILITY_NOT_VERIFIED",
+            "PER_REVISION_SOURCE_RIGHTS_NOT_REVIEWED_FOR_EXPORT",
+            "INDEPENDENT_EVIDENCE_QA_NOT_ATTESTED",
+        ))
+    return {
+        "schema": "UCIE_P9_SOURCE_VERSION_RIGHTS_QA_READINESS_V1",
+        "status": "INSPECTED_EVIDENCE_PENDING_REVIEW_NO_GO",
+        "scope": "CURRENT_FILTERED_READ_WINDOWS_ONLY",
+        "public_reader_source_linked": public_linked,
+        "official_reader_available": official_available,
+        "public_window_count": len(public["items"]),
+        "official_window_count": len(official["items"]),
+        "readiness_record_count": len(rows),
+        "source_window_truncated": (
+            (public.get("omitted_count", 0) > 0)
+            or (official.get("omitted_count", 0) > 0)),
+        "full_public_universe_inspected": False,
+        "rows": rows,
+        "review_blockers": blockers,
+        "all_required_evidence_accepted": False,
+        "new_authorizations": 0,
+        "independent_verification_executed_here": False,
+        "network_requests": 0,
+        "database_writes": 0,
+        "auto_promoted": False,
+        "v1_accepted": False,
+    }
+
+
 def integrated_product_preview(root: Path, *, query: str = "",
                                domain: str | None = None,
                                limit: int = 5,
@@ -662,6 +794,8 @@ def integrated_product_preview(root: Path, *, query: str = "",
                 "UCIE_CANDIDATE_TRIAL_EXPERIENCE"):
             item["revision_review_proposal_id"] = review_links.get(
                 item["library_item_id"])
+    evidence_readiness = _evidence_readiness(
+        sources=sources, public=public, official=official, limit=limit)
     public_ok = public["status"] == "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"
     official_ok = official["status"] == "STAGE14_OFFICIAL_METADATA_READ_ONLY_UNVERIFIED_NO_GO"
     # A missing local official ledger remains a transparent blocker, never a
@@ -673,6 +807,7 @@ def integrated_product_preview(root: Path, *, query: str = "",
         blockers.append("STAGE14_OFFICIAL_METADATA_NOT_READY")
     if signed is None:
         blockers.append("SIGNED_RULEPACK_OR_PUBLIC_TRUST_NOT_SUPPLIED")
+    blockers.extend(evidence_readiness["review_blockers"])
     blockers.extend((
         "INDEPENDENT_PACKAGE_QA_NOT_ATTESTED",
         "PORTABLE_DRAFT_NOT_OWNER_APPROVED_FOR_RELEASE",
@@ -688,6 +823,7 @@ def integrated_product_preview(root: Path, *, query: str = "",
             "source_allowlist_changed": False,
         },
         "unified_catalog_search": catalog,
+        "source_version_rights_qa_readiness": evidence_readiness,
         "source_linked_portable_handoff": portable_handoff,
         "capability_experience_comparison": comparison,
         "library_revision_review_queue": revision_review,

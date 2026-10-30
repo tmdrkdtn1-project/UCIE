@@ -420,6 +420,139 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertIsNone(incomplete["consumer_payload"])
         self.assertFalse(incomplete["v1_accepted"])
 
+    def test_p9_version_license_qa_readiness_reuses_real_ucie_public_ledger(self):
+        batch = fixture_batch(
+            root=self.root,
+            sources=("python/cpython", "PowerShell/PowerShell",
+                     "git/git", "modelcontextprotocol/python-sdk",
+                     "actions/runner-images"),
+            max_enrich=1, include_git_commits=True,
+            include_docs=False, include_advisories=False, backfill_pages=1)
+        stage_public_candidates(batch, root=self.root, allow_disk_write=True)
+        runtime = self.root / "runtime"
+        (runtime / OPT_IN_FILENAME).write_text(OPT_IN_TOKEN, encoding="ascii")
+        self.assertEqual(optional_hourly_review_learning(self.root)[
+            "new_review_proposals"], 2)
+        files = [runtime / DB_NAME,
+                 runtime / "stage12_unverified_review.sqlite3"]
+        before = [p.read_bytes() for p in files]
+        with patch("urllib.request.urlopen",
+                   side_effect=AssertionError("P9 evidence gate cannot fetch")):
+            out = product.integrated_product_preview(
+                self.root, query="", limit=5)
+        self.assertEqual([p.read_bytes() for p in files], before)
+        gate = out["source_version_rights_qa_readiness"]
+        self.assertEqual(gate["schema"],
+                         "UCIE_P9_SOURCE_VERSION_RIGHTS_QA_READINESS_V1")
+        self.assertTrue(gate["public_reader_source_linked"])
+        self.assertFalse(gate["official_reader_available"])
+        self.assertGreater(gate["public_window_count"], 0)
+        self.assertEqual(gate["official_window_count"], 0)
+        self.assertEqual(gate["readiness_record_count"],
+                         gate["public_window_count"])
+        self.assertTrue(all(row["revision_hint"] and
+                            not row["runtime_version_applicability_verified"]
+                            and not row["source_rights_for_export_verified"]
+                            and not row["export_allowed"] for row in gate["rows"]))
+        self.assertIn("W06_OFFICIAL_EVIDENCE_LEDGER_NOT_READY",
+                      gate["review_blockers"])
+        self.assertIn("PER_REVISION_SOURCE_RIGHTS_NOT_REVIEWED_FOR_EXPORT",
+                      out["gates_blocking_product_acceptance"])
+        self.assertFalse(gate["all_required_evidence_accepted"])
+        self.assertFalse(out["v1_accepted"])
+        self.assertEqual(gate["database_writes"], 0)
+        self.assertEqual(gate["network_requests"], 0)
+
+    def test_p9_evidence_gate_reports_exact_scope_and_rejects_forged_approval(self):
+        sources = product.preview_source_registry(include_research=False)
+        public_row = {
+            "library_item_id": "1" * 64,
+            "kind": "PUBLIC_TECHNICAL_EVIDENCE",
+            "source_id": "repo:python/cpython",
+            "public_url": "https://github.com/python/cpython/pull/153462",
+            "evidence_sha256": "2" * 64, "revision_hint": "3" * 40,
+            "version_scope_claim": "UNDETERMINED",
+            "license_status": "NOT_ATTESTED_PER_REVISION",
+            "lifecycle": "UNVERIFIED_CANDIDATE_ONLY",
+            "signature_status": "NOT_ATTESTED_BY_THIS_SEARCH",
+            "human_approved": False, "export_allowed": False,
+        }
+        official_row = {
+            "kind": "OFFICIAL_RELEASE_EVIDENCE",
+            "source_id": "repo:python/cpython",
+            "public_url": "https://github.com/python/cpython/releases",
+            "reference_scope": "PUBLIC_REPOSITORY_RELEASE_INDEX_NOT_EXACT_RELEASE",
+            "content_sha256": "4" * 64,
+            "lifecycle": "PUBLIC_METADATA_UNVERIFIED",
+            "source_license_reviewed": False,
+            "verified_applicability": False,
+            "human_approved": False, "export_allowed": False,
+        }
+        public = {
+            "status": "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
+            "returned_count": 1, "omitted_count": 5,
+            "items": [public_row],
+        }
+        official = {
+            "status": "STAGE14_OFFICIAL_METADATA_READ_ONLY_UNVERIFIED_NO_GO",
+            "returned_count": 1, "omitted_count": 1,
+            "items": [official_row],
+        }
+        params = dict(sources=sources, public=public, official=official,
+                      limit=5)
+        gate = product._evidence_readiness(**params)
+        self.assertEqual(gate["readiness_record_count"], 2)
+        self.assertTrue(gate["source_window_truncated"])
+        self.assertFalse(gate["full_public_universe_inspected"])
+        self.assertFalse(gate["all_required_evidence_accepted"])
+        self.assertEqual(gate["rows"][1]["reference_scope"],
+                         "PUBLIC_REPOSITORY_RELEASE_INDEX_NOT_EXACT_RELEASE")
+        self.assertTrue(all(not x["independent_qa_verified"]
+                            for x in gate["rows"]))
+        self.assertEqual(gate, product._evidence_readiness(**params))
+        for field, altered in (
+            ("source_id", "repo:unapproved/repo"),
+            ("license_status", "LICENSE_APPROVED"),
+            ("version_scope_claim", "Python>=3.15"),
+            ("human_approved", True),
+            ("export_allowed", True),
+            ("evidence_sha256", "wrong"),
+            ("revision_hint", "not-a-merge-sha"),
+        ):
+            with self.subTest(public_field=field):
+                forged = {**public, "items": [{
+                    **public_row, field: altered,
+                }]}
+                with self.assertRaises(product.ProductIntegrationError):
+                    product._evidence_readiness(
+                        **{**params, "public": forged})
+        for field, altered in (
+            ("source_license_reviewed", True),
+            ("verified_applicability", True),
+            ("human_approved", True),
+            ("export_allowed", True),
+            ("content_sha256", "wrong"),
+            ("reference_scope", "EXACT_RELEASE_VERIFIED"),
+        ):
+            with self.subTest(official_field=field):
+                forged = {**official, "items": [{
+                    **official_row, field: altered,
+                }]}
+                with self.assertRaises(product.ProductIntegrationError):
+                    product._evidence_readiness(
+                        **{**params, "official": forged})
+        absent = product._evidence_readiness(
+            sources=sources,
+            public={"status": "SOURCE_LINKAGE_INCOMPLETE_NO_GO",
+                    "items": [], "returned_count": 0},
+            official={"status": "STAGE14_OFFICIAL_LEDGER_ABSENT_NO_GO",
+                      "items": [], "returned_count": 0},
+            limit=5)
+        self.assertEqual(absent["readiness_record_count"], 0)
+        self.assertIn("NO_MATCHING_EVIDENCE_IN_BOUNDED_READ_WINDOW",
+                      absent["review_blockers"])
+        self.assertFalse(absent["v1_accepted"])
+
     def test_unified_catalog_combines_shelves_without_forged_approval(self):
         public = {"status":"READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
                   "omitted_count":0, "items":[{
