@@ -137,6 +137,75 @@ _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 
 
+MAX_RELATED_PUBLIC = 3
+
+
+def _related_public_comparison(*, source_id: str, exact_url: str,
+                               linked: list[dict], rows: list[dict],
+                               source_window_omitted: int) -> dict:
+    """Compare only candidate metadata with same approved source/kind/purpose.
+
+    These are nearby review leads, NOT equivalently validated fixes. Uses
+    the already loaded W04 source window; no new DB read or HTTP request.
+    """
+    keys = {(item["source_candidate_kind"], item["purpose_code"])
+            for item in linked}
+    related = {}
+    if keys:
+        for row in rows:
+            if (row["public_url"] == exact_url
+                    or (row["kind"], row["purpose_code"]) not in keys):
+                continue
+            match = _PUBLIC_PR.fullmatch(row["public_url"])
+            if match is None:
+                # A git/git commit can be a legitimate W04 record, but this
+                # comparison has an exact public PR-only contract.
+                if (source_id == "repo:git/git"
+                        and type(row["public_url"]) is str
+                        and re.fullmatch(
+                            r"https://github[.]com/git/git/commit/[a-f0-9]{40}",
+                            row["public_url"])):
+                    continue
+                raise CodeReviewError("RELATED_PUBLIC_SOURCE_REFERENCE_INVALID")
+            if "repo:" + match.group(1) != source_id:
+                raise CodeReviewError("RELATED_PUBLIC_SOURCE_REFERENCE_INVALID")
+            # One candidate per *other PR*, even if W04 has multiple
+            # revisions or purpose-linked entries for that PR.
+            candidate = {
+                "public_url": row["public_url"],
+                "library_item_id": row["library_item_id"],
+                "evidence_sha256": row["evidence_sha256"],
+                "revision_hint": row["revision_hint"],
+                "kind": row["kind"], "purpose_code": row["purpose_code"],
+                "match_basis": "SAME_APPROVED_SOURCE_KIND_AND_PURPOSE_ONLY",
+                "rule_fix_equivalence_verified": False,
+                "version_applicability_verified": False,
+                "rights_for_export_verified": False,
+                "human_approved": False, "export_allowed": False,
+            }
+            url = row["public_url"]
+            if (url not in related or
+                    (candidate["library_item_id"], candidate["evidence_sha256"])
+                    < (related[url]["library_item_id"],
+                       related[url]["evidence_sha256"])):
+                related[url] = candidate
+    ordered = [related[url] for url in sorted(related)]
+    return {
+        "status": ("NO_EXACT_ANCHOR_NO_COMPARISON" if not keys
+                   else "RELATED_PUBLIC_CANDIDATES_UNVERIFIED" if ordered
+                   else "NO_RELATED_PUBLIC_PR_IN_BOUNDED_WINDOW"),
+        "related_candidate_count_in_loaded_window": len(ordered),
+        "items": ordered[:MAX_RELATED_PUBLIC],
+        "limit": MAX_RELATED_PUBLIC,
+        "source_window_truncated": source_window_omitted > 0,
+        "comparison_truncated": (source_window_omitted > 0
+                                 or len(ordered) > MAX_RELATED_PUBLIC),
+        "full_source_coverage_verified": False,
+        "fix_equivalence_verified": False,
+        "approved_or_exportable": False,
+    }
+
+
 def _linked_library_for_finding(root: Path, public_url: str) -> dict:
     """Match exact public PR identity using existing W04 source-linked readers.
 
@@ -162,6 +231,9 @@ def _linked_library_for_finding(root: Path, public_url: str) -> dict:
             "items": [], "truncated": False,
             "rule_verification": False,
             "approved_or_exportable": False,
+            "related_public_evidence": _related_public_comparison(
+                source_id=source_id, exact_url=public_url,
+                linked=[], rows=[], source_window_omitted=0),
         }
     try:
         source = get_source(source_id)
@@ -190,6 +262,9 @@ def _linked_library_for_finding(root: Path, public_url: str) -> dict:
             "items": [], "truncated": False,
             "rule_verification": False,
             "approved_or_exportable": False,
+            "related_public_evidence": _related_public_comparison(
+                source_id=source_id, exact_url=public_url,
+                linked=[], rows=[], source_window_omitted=0),
         }
     if (status != "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"
             or result["approved_or_exportable_items"] != 0
@@ -245,6 +320,9 @@ def _linked_library_for_finding(root: Path, public_url: str) -> dict:
         "truncated": result["omitted_count"] > 0,
         "rule_verification": False,
         "approved_or_exportable": False,
+        "related_public_evidence": _related_public_comparison(
+            source_id=source_id, exact_url=public_url, linked=linked,
+            rows=result["items"], source_window_omitted=result["omitted_count"]),
     }
 
 
@@ -331,6 +409,11 @@ def review_code(source: str, *, language: str, root: Path) -> dict:
             item["public_library"]["status"] ==
             "EXACT_PUBLIC_PR_SOURCE_LINKED_UNVERIFIED" for item in findings),
         "public_library_no_approval_inferred": True,
+        "related_public_pr_candidates_in_loaded_windows": sum(
+            len(value.get("related_public_evidence", {}).get("items", ()))
+            for value in library_cache.values()),
+        "related_public_evidence_not_fix_equivalence": True,
+        "approved_reusable_artifacts_from_this_lookup": 0,
         "covered_scanners": (
             "EXISTING_FOUR_PYTHON_STATIC_SCANNERS" if language == "python"
             else "EXISTING_POWERSHELL_AST_STATIC_SCANNER"),
