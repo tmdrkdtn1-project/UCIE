@@ -68,6 +68,21 @@ _PINNED = (
         },
         # One REAL official released binary on a disposable Linux CI host.
         # Source observation and runtime observation are separate claims.
+        "official_windows_release_runtime_observation": {
+            "ci_run_id": 40995356035,
+            "ci_job_id": 123867089278,
+            "ci_verified_head_sha": "b4452971a0975a6049adbfb9cc1e91d8c83a9958",
+            "artifact": "PowerShell-7.6.6-win-x64.zip",
+            "archive_sha256": "02fe458be20493fbdf43f61ea20610b811ee6c738ab1676c61b9cfcd1a33c860",
+            "release_binary_sha256": "bfb46af89433268872ddb43d1ca7a3f433452ee91ed356a9786940f90118e285",
+            "runtime_version": "7.6.6",
+            "platform": "Microsoft Windows 10.0.26100",
+            "target_arch": "windows-x64",
+            "dot_prefix_cases_matching_expected": 0,
+            "native_behavior": "DOT_PREFIX_BUG_OBSERVED_ON_RUNNER",
+            "baseline_case_passed": True,
+            "guarded_cases_passed": True,
+        },
         "official_release_runtime_observation": {
             "ci_run_id": 40994655459,
             "ci_job_id": 123864860275,
@@ -133,6 +148,19 @@ def lookup_pinned_review(*, source_id: str, public_url: str,
                     or len(observed_runtime["archive_sha256"]) != 64
                     or len(observed_runtime["release_binary_sha256"]) != 64):
                 raise ValueError("invalid pinned release runtime receipt")
+        observed_windows = pinned.get("official_windows_release_runtime_observation")
+        if observed_windows is not None:
+            if (observed_windows["runtime_version"] != "7.6.6"
+                    or observed_windows["target_arch"] != "windows-x64"
+                    or observed_windows["native_behavior"] !=
+                       "DOT_PREFIX_BUG_OBSERVED_ON_RUNNER"
+                    or observed_windows["dot_prefix_cases_matching_expected"] != 0
+                    or observed_windows["baseline_case_passed"] is not True
+                    or observed_windows["guarded_cases_passed"] is not True
+                    or observed_windows["archive_sha256"] !=
+                       "02fe458be20493fbdf43f61ea20610b811ee6c738ab1676c61b9cfcd1a33c860"
+                    or len(observed_windows["release_binary_sha256"]) != 64):
+                raise ValueError("invalid pinned Windows release runtime evidence")
         inspection = pinned.get("tag_source_comparison")
         if inspection is not None:
             if (inspection["fix_commit_blob_git_sha1"]
@@ -159,13 +187,30 @@ def lookup_pinned_review(*, source_id: str, public_url: str,
                     "runtime_bug_reproduced_for_tag":
                         observed_runtime is not None,
                     "runtime_bug_reproduction_scope": (
-                        "ONE_OFFICIAL_LINUX_X64_7_6_6_RELEASE_BINARY"
+                        "OFFICIAL_7_6_6_LINUX_X64_AND_WINDOWS_X64_RELEASE_BINARIES"
+                        if observed_runtime is not None and observed_windows is not None
+                        else "ONE_OFFICIAL_LINUX_X64_7_6_6_RELEASE_BINARY"
                         if observed_runtime is not None else None),
                     "runtime_fix_coverage_verified": False,
                     "release_artifact_binaries_examined":
                         observed_runtime is not None,
                     "source_was_executed": False,
                 } if inspection is not None else None
+            ),
+            "official_windows_release_runtime_observation": (
+                {
+                    "status": "PINNED_RELEASE_WINDOWS_X64_BUG_REPRODUCED_NO_GO",
+                    **observed_windows,
+                    "ci_job_url": "https://github.com/tmdrkdtn1-project/UCIE/actions/runs/40995356035/job/123867089278",
+                    "archive_sha256_verified_against_published_release": True,
+                    "actual_release_binary_executed": True,
+                    "other_windows_architectures_tested": False,
+                    "all_platforms_verified": False,
+                    "equivalent_backports_excluded": False,
+                    "independent_qa_completed": False,
+                    "production_approved": False,
+                    "auto_promoted": False,
+                } if observed_windows is not None else None
             ),
             "official_release_runtime_observation": (
                 {

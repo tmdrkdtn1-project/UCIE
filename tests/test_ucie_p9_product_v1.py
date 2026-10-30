@@ -596,7 +596,7 @@ class P9IntegratedProductTests(unittest.TestCase):
                 self.assertFalse(checked_source["equivalent_backport_excluded"])
                 self.assertTrue(checked_source["runtime_bug_reproduced_for_tag"])
                 self.assertEqual(checked_source["runtime_bug_reproduction_scope"],
-                                 "ONE_OFFICIAL_LINUX_X64_7_6_6_RELEASE_BINARY")
+                                 "OFFICIAL_7_6_6_LINUX_X64_AND_WINDOWS_X64_RELEASE_BINARIES")
                 self.assertFalse(checked_source["runtime_fix_coverage_verified"])
                 released = inspected["official_release_runtime_observation"]
                 self.assertEqual(released["status"],
@@ -618,9 +618,28 @@ class P9IntegratedProductTests(unittest.TestCase):
                 self.assertFalse(released["equivalent_backports_excluded"])
                 self.assertFalse(released["independent_qa_completed"])
                 self.assertFalse(released["production_approved"])
+                windows = inspected["official_windows_release_runtime_observation"]
+                self.assertEqual(windows["status"],
+                                 "PINNED_RELEASE_WINDOWS_X64_BUG_REPRODUCED_NO_GO")
+                self.assertEqual(windows["runtime_version"], "7.6.6")
+                self.assertEqual(windows["target_arch"], "windows-x64")
+                self.assertEqual(windows["archive_sha256"],
+                    "02fe458be20493fbdf43f61ea20610b811ee6c738ab1676c61b9cfcd1a33c860")
+                self.assertEqual(windows["release_binary_sha256"],
+                    "bfb46af89433268872ddb43d1ca7a3f433452ee91ed356a9786940f90118e285")
+                self.assertEqual(windows["ci_run_id"], 40995356035)
+                self.assertTrue(windows["actual_release_binary_executed"])
+                self.assertEqual(windows["dot_prefix_cases_matching_expected"], 0)
+                self.assertTrue(windows["baseline_case_passed"])
+                self.assertTrue(windows["guarded_cases_passed"])
+                self.assertFalse(windows["all_platforms_verified"])
+                self.assertFalse(windows["independent_qa_completed"])
+                self.assertFalse(windows["production_approved"])
+                self.assertFalse(windows["auto_promoted"])
             else:
                 self.assertIsNone(checked_source)
                 self.assertIsNone(inspected["official_release_runtime_observation"])
+                self.assertIsNone(inspected["official_windows_release_runtime_observation"])
             self.assertGreater(inspected["release_ahead_by"], 0)
             self.assertGreater(inspected["release_behind_by"], 0)
             self.assertFalse(inspected["release_contains_fix_verified"])
@@ -675,6 +694,8 @@ class P9IntegratedProductTests(unittest.TestCase):
             "pinned_public_revision_review"]["release_contains_fix_verified"])
         self.assertTrue(preview["rows"][2]["pinned_public_revision_review"][
             "official_release_runtime_observation"]["actual_release_binary_executed"])
+        self.assertTrue(preview["rows"][2]["pinned_public_revision_review"][
+            "official_windows_release_runtime_observation"]["actual_release_binary_executed"])
         self.assertFalse(preview["rows"][2]["export_allowed"])
         self.assertFalse(preview["all_required_evidence_accepted"])
         self.assertTrue(all(
