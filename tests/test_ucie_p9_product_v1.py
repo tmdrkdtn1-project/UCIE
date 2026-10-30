@@ -582,6 +582,22 @@ class P9IntegratedProductTests(unittest.TestCase):
             self.assertEqual(inspected["release_tag_commit_sha"], tag_sha)
             self.assertEqual(inspected["upstream_release_tag"], tag)
             self.assertEqual(inspected["compare_status"], "diverged")
+            checked_source = inspected["examined_tag_source_patch"]
+            if number == 28087:
+                self.assertEqual(checked_source["status"],
+                    "SPECIFIC_PR28087_IMPLEMENTATION_ABSENT_IN_EXAMINED_TAG_SOURCE")
+                self.assertEqual(checked_source["fix_commit_blob_git_sha1"],
+                                 "e6a89e2a11732dfc0ed36af8194432155265486c")
+                self.assertEqual(checked_source["tag_commit_blob_git_sha1"],
+                                 "3d1b66933d26f5e55632184e0981c67771c4d853")
+                self.assertTrue(checked_source["fixed_helper_present_at_merge"])
+                self.assertFalse(checked_source["fixed_helper_present_in_tag"])
+                self.assertTrue(checked_source["pre_fix_condition_present_in_tag"])
+                self.assertFalse(checked_source["equivalent_backport_excluded"])
+                self.assertFalse(checked_source["runtime_bug_reproduced_for_tag"])
+                self.assertFalse(checked_source["runtime_fix_coverage_verified"])
+            else:
+                self.assertIsNone(checked_source)
             self.assertGreater(inspected["release_ahead_by"], 0)
             self.assertGreater(inspected["release_behind_by"], 0)
             self.assertFalse(inspected["release_contains_fix_verified"])
@@ -629,6 +645,12 @@ class P9IntegratedProductTests(unittest.TestCase):
             limit=5)
         self.assertEqual(preview["pinned_public_revision_observations_in_window"], 3)
         self.assertEqual(preview["readiness_record_count"], 3)
+        self.assertEqual(preview["rows"][2]["pinned_public_revision_review"][
+            "examined_tag_source_patch"]["tag_commit_blob_git_sha1"],
+            "3d1b66933d26f5e55632184e0981c67771c4d853")
+        self.assertFalse(preview["rows"][2][
+            "pinned_public_revision_review"]["release_contains_fix_verified"])
+        self.assertFalse(preview["all_required_evidence_accepted"])
         self.assertTrue(all(
             row["repository_license_observed_in_pinned_review"]
             and not row["export_allowed"]
