@@ -78,6 +78,29 @@ $env:PYTHONPATH = Join-Path $root 'src'
 
 새 파일 출력·서명·배포·코드 실행·자동 규칙 승격·운영 DB 쓰기는 전혀 없다. 이는 **독립 소비자의 참조 계약을 기존 서명 검증기에 연결**한 것이지 새 범용 패키징이나 소비자 측 실제 실행·서명 재검증까지 완료했다는 뜻이 아니다. 일반 외부 배포/라이선스·독립 QA 승인, UCIE 제품 전체 `v1_accepted`는 여전히 불충족이다.
 
+## V1 독립 프로세스의 W09 소비자 재검증 (2026-10-30)
+
+추가 모듈: `ucie_miner.manual_consumer_v1`. **기존 UCIE 설치에 포함된 별도 Python 프로세스**가 생산자 `--consumer-reference`의 정확한 JSON 참조 하나를 입력받아, 기존 W09 `build_existing_pack_consumer_descriptor` 검증기를 직접 실행한다. 이 검증은 원본 Serial4 서명·소유자 공개 신뢰키·현재 만료 조건과 선택적 Serial5의 부모 결속을 포함한다. 소비자는 앞선 생산자 JSON의 승인/검증 주장만 믿지 않는다.
+
+동일한 UCIE 전용 checkout 및 Python 환경에서 실행하는 **읽기 전용** PowerShell 예시:
+
+```powershell
+$env:PYTHONPATH = Join-Path $root 'src'
+# $root, $py, $serial4, $publicTrust, $libraryItemId는 UCIE 전용으로 확인된 값
+$producerOutput = & $py -B -m ucie_miner.product_v1 --ucie-root $root --limit 20 --serial4-pack $serial4 --owner-public-trust $publicTrust --select-item $libraryItemId --consumer-reference
+if ($LASTEXITCODE -ne 0) { throw 'UCIE_W09_PRODUCER_FAILED' }
+$selected = ($producerOutput | ConvertFrom-Json).selected_existing_w09_consumer_reference
+if (-not $selected) { throw 'UCIE_W09_REFERENCE_MISSING' }
+$referenceJson = $selected | ConvertTo-Json -Depth 16 -Compress
+$receipt = $referenceJson | & $py -B -m ucie_miner.manual_consumer_v1 --ucie-root $root --serial4-pack $serial4 --owner-public-trust $publicTrust
+if ($LASTEXITCODE -ne 0) { throw 'UCIE_W09_CONSUMER_REVERIFY_FAILED' }
+$receipt | ConvertFrom-Json
+```
+
+Serial5 항목에는 두 명령 모두 확인된 기존 `--serial5-pack $serial5` 인자를 **함께** 지정한다. 새 서명이나 ZIP을 생성하지 않으며 사용자가 지정한 UCIE 내부의 기존 공개 trust 키만 읽는다. 소비자 입력은 최대 4KiB UTF-8 JSON(Windows PowerShell 5.1 BOM 허용); 중복 필드·변조된 서명팩·다른 서명키·잘못된 항목·출력 승인 위조·임의 추가 필드는 모두 실패한다. 실패 시 입력 JSON이나 경로를 출력하지 않는다.
+
+소비 성공 결과 `ORIGINAL_SIGNED_RULE_REVERIFIED_MANUAL_REFERENCE_ONLY`의 의미는 **현재 원본의 서명·키·만료를 소비자 프로세스가 다시 확인하고, 소유자 위험 인수 수동 규칙 ID만 열람했다**는 뜻이다. 그 자체로 사용자 프로그램 코드 검사·규칙 적용·버전 적합성·독립 QA·원본 코드 반출·타 프로젝트 사용을 수행하거나 승인하지 않는다. 외부 범용 배포·자동 규칙 승격·신규 승인·운영 DB 쓰기는 모두 비활성화이며 전체 제품 `v1_accepted=false` 유지. 실제 제품의 독립 설치/배포 QA 및 소유자 PC 검증은 별도 미완료 항목이다.
+
 ## 완료 방향
 
 새 PR을 무한히 늘리지 않는다. **새 통합 진입점과 독립 소비 실기의 Windows/Ubuntu 3.13/3.15 CI를 먼저 완료**, 로컬 D:\UCIE에는 **신규 Python 모듈 두 개만** 원자적으로 반영(기존 dirty 수정 불변). 사용자 PC 실호스트 위 세 명령 결과에서 실제 수집기/도서관/경험 계보의 자료를 확인하고, 실행되는 명확한 blocker만 보수. 정식 릴리스·권리·신뢰 서명은 허가/근거가 없으면 NO_GO로 별도 표시.
