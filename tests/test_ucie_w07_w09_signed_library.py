@@ -371,6 +371,139 @@ class W07W09SignedLibraryTests(unittest.TestCase):
         self.assertEqual(
             json.loads(process.stdout)["status"], "MANUAL_CONSUMER_FAIL_CLOSED")
 
+    def test_selected_signed_rule_real_python_scan_in_separate_process(self):
+        from hashlib import sha256
+        from ucie_miner.manual_consumer_v1 import (
+            ManualConsumerError, scan_selected_signed_python,
+        )
+        self._publish_serial4()
+        (self.root / "runtime").mkdir(exist_ok=True)
+        signed_bytes = self.serial4.read_bytes()
+        source = """# UCIE_OWNED_SOURCE_SENTINEL_DO_NOT_ECHO
+import os
+from concurrent.futures import ThreadPoolExecutor
+def review(folder, callback):
+    iterator = os.scandir(folder)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        return pool.submit(callback, iterator).result()
+"""
+        with patch("urllib.request.urlopen",
+                   side_effect=AssertionError("signed manual scan must not GET")):
+            selection = integrated_product_preview(
+                self.root, limit=20, signed_serial4=self.serial4,
+                owner_public_trust=self.trust)
+            rule = next(
+                item for item in selection["reuse_eligibility"]["items"]
+                if item["shelf"] == "SIGNED_MANUAL_RULE"
+                and item["rule_id"] == "PY_SCANDIR_SHARED_ITERATOR_RACE")
+            reference = integrated_product_preview(
+                self.root, limit=20, signed_serial4=self.serial4,
+                owner_public_trust=self.trust,
+                select_item_id=rule["library_item_id"],
+                include_consumer_reference=True,
+            )["selected_existing_w09_consumer_reference"]
+            scanned = scan_selected_signed_python(
+                self.root, reference=reference, source=source,
+                serial4_pack=self.serial4, owner_public_trust=self.trust)
+        self.assertEqual(scanned["status"],
+                         "SELECTED_SIGNED_STATIC_FINDINGS_REVIEW_REQUIRED")
+        self.assertEqual(scanned["selected_rule_id"], rule["rule_id"])
+        self.assertEqual(scanned["selected_rule_finding_count"], 1)
+        self.assertEqual(len(scanned["findings"]), 1)
+        self.assertEqual(scanned["findings"][0]["authorization"],
+                         "EXISTING_OWNER_SIGNED_MANUAL_ONLY")
+        self.assertEqual(scanned["source_sha256"],
+                         sha256(source.encode("utf-8")).hexdigest())
+        self.assertFalse(scanned["source_executed"])
+        self.assertFalse(scanned["auto_applied"])
+        self.assertFalse(scanned["auto_promoted"])
+        self.assertFalse(scanned["v1_accepted"])
+        self.assertEqual(scanned["source_files_read"], 0)
+        self.assertEqual(scanned["network_requests"], 0)
+        self.assertEqual(scanned["operating_database_writes"], 0)
+        self.assertNotIn("UCIE_OWNED_SOURCE_SENTINEL_DO_NOT_ECHO",
+                         json.dumps(scanned))
+        clean = scan_selected_signed_python(
+            self.root, reference=reference, source="pass\n",
+            serial4_pack=self.serial4, owner_public_trust=self.trust)
+        self.assertEqual(clean["selected_rule_finding_count"], 0)
+        self.assertEqual(clean["status"],
+                         "NO_SELECTED_RULE_PATTERN_NOT_SAFETY_PASS")
+        self.assertFalse(clean["full_source_safety_verified"])
+
+        runner = (
+            "import runpy,sys\n"
+            "sys.path.insert(0,sys.argv[1])\n"
+            "sys.argv=['manual_consumer_v1',*sys.argv[2:]]\n"
+            "runpy.run_module('ucie_miner.manual_consumer_v1',run_name='__main__')\n"
+        )
+        command = [
+            sys.executable, "-I", "-B", "-c", runner,
+            str(Path(__file__).resolve().parents[1] / "src"),
+            "--ucie-root", str(self.root),
+            "--serial4-pack", str(self.serial4),
+            "--owner-public-trust", str(self.trust), "--scan-python",
+        ]
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+        def isolated(raw: str):
+            return subprocess.run(
+                command, input=raw, encoding="utf-8", errors="replace",
+                capture_output=True, env=env, cwd=self.root, check=False,
+                timeout=45)
+        envelope = json.dumps({"reference": reference, "source": source},
+                              ensure_ascii=True, sort_keys=True)
+        real = isolated(envelope)
+        self.assertEqual(real.returncode, 0, real.stderr[-700:])
+        self.assertEqual(json.loads(real.stdout), scanned)
+        self.assertNotIn("UCIE_OWNED_SOURCE_SENTINEL_DO_NOT_ECHO",
+                         real.stdout + real.stderr)
+        # The exact same bounded JSON is compatible with BOM-prefixed stdin.
+        bom = isolated("\ufeff" + envelope)
+        self.assertEqual(bom.returncode, 0, bom.stderr[-700:])
+        self.assertEqual(json.loads(bom.stdout), scanned)
+
+        signed_others = [
+            item for item in selection["reuse_eligibility"]["items"]
+            if item["shelf"] == "SIGNED_MANUAL_RULE"
+            and item["rule_id"] != rule["rule_id"]
+        ]
+        self.assertTrue(signed_others)
+        other_reference = integrated_product_preview(
+            self.root, limit=20, signed_serial4=self.serial4,
+            owner_public_trust=self.trust,
+            select_item_id=signed_others[0]["library_item_id"],
+            include_consumer_reference=True,
+        )["selected_existing_w09_consumer_reference"]
+        with self.assertRaises(ManualConsumerError):
+            scan_selected_signed_python(
+                self.root, reference=other_reference, source=source,
+                serial4_pack=self.serial4, owner_public_trust=self.trust)
+        for invalid in (
+            {"reference": reference, "source": ""},
+            {"reference": reference, "source": "pass\n", "approve": True},
+            {"reference": reference, "source": "x" * 16500},
+            {"reference": {**reference, "automatic_rule_application_allowed":
+                           True}, "source": source},
+            {"reference": reference, "source": "def broken(:\n"},
+        ):
+            with self.subTest(invalid=list(invalid)):
+                failed = isolated(json.dumps(invalid, ensure_ascii=True))
+                self.assertEqual(failed.returncode, 2, failed.stdout[-500:])
+                self.assertEqual(json.loads(failed.stdout)["status"],
+                                 "MANUAL_CONSUMER_FAIL_CLOSED")
+        missing = isolated(json.dumps(reference))
+        self.assertEqual(missing.returncode, 2)
+        self.assertEqual(json.loads(missing.stdout)["status"],
+                         "MANUAL_CONSUMER_FAIL_CLOSED")
+        self.assertEqual(self.serial4.read_bytes(), signed_bytes)
+        # Changed original pack after successful receipt cannot be replayed.
+        self.serial4.write_bytes(b"TAMPERED_AFTER_SIGNED_STATIC_SCAN")
+        replay = isolated(envelope)
+        self.assertEqual(replay.returncode, 2)
+        self.assertEqual(json.loads(replay.stdout)["status"],
+                         "MANUAL_CONSUMER_FAIL_CLOSED")
+
     def test_w09_descriptor_is_bound_to_same_genuine_signed_pack(self):
         self._publish_serial4()
         original = self.serial4.read_bytes()

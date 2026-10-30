@@ -20,6 +20,12 @@ from .signed_rule_library import (
 
 SCHEMA = "UCIE_V1_MANUAL_W09_CONSUMER_REVERIFICATION_V1"
 MAX_INPUT_BYTES = 4096
+MAX_SCAN_BYTES = 16384
+MAX_SCAN_ENVELOPE_BYTES = MAX_INPUT_BYTES + MAX_SCAN_BYTES + 512
+SIGNED_PYTHON_MANUAL_RULES = frozenset({
+    "PY_SCANDIR_SHARED_ITERATOR_RACE",
+    "PY_ASYNCIO_PROTOCOL_FACTORY_PRETRANSPORT_LEAK",
+})
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 INPUT_KEYS = frozenset({
     "schema", "status", "selected_library_item_id", "rule_id", "pack_serial",
@@ -165,6 +171,104 @@ def consume_existing_manual_reference(
     }
 
 
+def scan_selected_signed_python(
+    root: Path, *, reference: dict, source: str,
+    serial4_pack: Path, owner_public_trust: Path,
+    serial5_pack: Path | None = None,
+) -> dict:
+    """One explicitly supplied Python snippet; never scan host/project files.
+
+    First reverify producer handoff using genuine W09. Then run the already
+    implemented signed static matcher and filter to the *selected* rule ID.
+    Other unsigned candidate detections cannot be laundered into approval.
+    """
+    if type(source) is not str:
+        raise ManualConsumerError("exact Python source text required")
+    try:
+        source_raw = source.encode("utf-8", errors="strict")
+    except UnicodeError as exc:
+        raise ManualConsumerError("source must be strict UTF-8") from exc
+    if not 0 < len(source_raw) <= MAX_SCAN_BYTES:
+        raise ManualConsumerError("Python snippet exceeds bounded scan input")
+    verified = consume_existing_manual_reference(
+        root, reference=reference, serial4_pack=serial4_pack,
+        owner_public_trust=owner_public_trust, serial5_pack=serial5_pack)
+    rule_id = verified["rule_id"]
+    if rule_id not in SIGNED_PYTHON_MANUAL_RULES:
+        raise ManualConsumerError("selected signed rule has no Python source scanner")
+    try:
+        from .existing_rule_inspection import (
+            InspectionError, inspect_existing_python,
+        )
+        inspected = inspect_existing_python(
+            source, root=root, serial4_pack=serial4_pack,
+            owner_public_trust=owner_public_trust, serial5_pack=serial5_pack)
+    except (InspectionError, ValueError, OSError, SyntaxError) as exc:
+        raise ManualConsumerError("signed manual static scan rejected") from exc
+    if (inspected.get("schema") !=
+            "UCIE_EXISTING_RULES_MANUAL_CODE_INSPECTION_V1"
+            or inspected.get("source_sha256") != sha256(source_raw).hexdigest()
+            or type(inspected.get("findings")) is not list
+            or inspected.get("finding_count") != len(inspected["findings"])
+            or type(inspected.get("existing_signed_manual_matches")) is not int
+            or inspected["existing_signed_manual_matches"] < 0
+            or type(inspected.get("unverified_candidate_count")) is not int
+            or inspected["unverified_candidate_count"] < 0
+            or (inspected["existing_signed_manual_matches"]
+                + inspected["unverified_candidate_count"]
+                != inspected["finding_count"])
+            or inspected.get("source_executed") is not False
+            or inspected.get("source_files_read") != 0
+            or inspected.get("network_requests") != 0
+            or inspected.get("database_writes") != 0
+            or inspected.get("auto_applied") is not False
+            or inspected.get("auto_promoted") is not False
+            or inspected.get("source_fix_proven") is not False
+            or inspected.get("independent_qa_completed") is not False):
+        raise ManualConsumerError("signed scanner trust boundary changed")
+    approved = [row for row in inspected["findings"]
+                if row.get("authorization") == "EXISTING_OWNER_SIGNED_MANUAL_ONLY"]
+    if len(approved) != inspected["existing_signed_manual_matches"]:
+        raise ManualConsumerError("signed scan finding count mismatch")
+    if any(type(row.get("rule_id")) is not str
+           or type(row.get("line")) is not int or row["line"] < 1
+           or type(row.get("column")) is not int or row["column"] < 0
+           or row.get("manual_review_required") is not True
+           or row.get("runtime_bug_confirmed_for_input") is not False
+           for row in approved):
+        raise ManualConsumerError("malformed signed scan finding")
+    selected = [row for row in approved if row["rule_id"] == rule_id]
+    return {
+        "schema": "UCIE_V1_SELECTED_SIGNED_MANUAL_PYTHON_SCAN_V1",
+        "status": ("SELECTED_SIGNED_STATIC_FINDINGS_REVIEW_REQUIRED"
+                   if selected else "NO_SELECTED_RULE_PATTERN_NOT_SAFETY_PASS"),
+        "selected_library_item_id": verified["selected_library_item_id"],
+        "selected_rule_id": rule_id,
+        "pack_serial": verified["pack_serial"],
+        "original_pack_reverified_at_consume": True,
+        "scanner_reverified_original_pack_before_matching": True,
+        "w09_descriptor_sha256": verified["w09_descriptor_sha256"],
+        "source_sha256": inspected["source_sha256"],
+        "source_byte_encoding": "UTF8_SOURCE_IN_JSON",
+        "findings": selected,
+        "selected_rule_finding_count": len(selected),
+        "other_signed_rule_findings_excluded": len(approved) - len(selected),
+        "unsigned_review_candidates_not_authorized":
+            inspected["unverified_candidate_count"],
+        "manual_review_required": bool(selected),
+        "full_source_safety_verified": False,
+        "runtime_version_applicability_verified": False,
+        "independent_qa_approved": False,
+        "legal_license_signoff": False,
+        "source_executed": False, "source_files_read": 0,
+        "network_requests": 0, "operating_database_writes": 0,
+        "auto_applied": False, "auto_promoted": False,
+        "new_generic_package_export_allowed": False,
+        "pack_bytes_copied": False, "package_released": False,
+        "v1_accepted": False,
+    }
+
+
 def _unique_pairs(pairs: list[tuple[str, object]]) -> dict:
     out = {}
     for key, value in pairs:
@@ -185,20 +289,34 @@ def main() -> int:
     parser.add_argument("--serial4-pack", type=Path, required=True)
     parser.add_argument("--owner-public-trust", type=Path, required=True)
     parser.add_argument("--serial5-pack", type=Path)
+    parser.add_argument("--scan-python", action="store_true",
+                        help="Manually scan a bounded Python source string in stdin JSON")
     args = parser.parse_args()
     try:
-        raw = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
-        if not raw or len(raw) > MAX_INPUT_BYTES:
+        ceiling = (MAX_SCAN_ENVELOPE_BYTES if args.scan_python
+                   else MAX_INPUT_BYTES)
+        raw = sys.stdin.buffer.read(ceiling + 1)
+        if not raw or len(raw) > ceiling:
             raise ManualConsumerError("bounded reference JSON required")
-        ref = json.loads(raw.decode("utf-8-sig" if raw.startswith(b"\xef\xbb\xbf")
-                                    else "utf-8", errors="strict"),
-                         object_pairs_hook=_unique_pairs,
-                         parse_constant=_invalid_constant)
-        receipt = consume_existing_manual_reference(
-            args.ucie_root, reference=ref,
-            serial4_pack=args.serial4_pack,
-            owner_public_trust=args.owner_public_trust,
-            serial5_pack=args.serial5_pack)
+        payload = json.loads(
+            raw.decode("utf-8-sig" if raw.startswith(b"\xef\xbb\xbf")
+                       else "utf-8", errors="strict"),
+            object_pairs_hook=_unique_pairs,
+            parse_constant=_invalid_constant)
+        if args.scan_python:
+            if type(payload) is not dict or set(payload) != {"reference", "source"}:
+                raise ManualConsumerError("scan requires reference and source JSON")
+            receipt = scan_selected_signed_python(
+                args.ucie_root, reference=payload["reference"],
+                source=payload["source"], serial4_pack=args.serial4_pack,
+                owner_public_trust=args.owner_public_trust,
+                serial5_pack=args.serial5_pack)
+        else:
+            receipt = consume_existing_manual_reference(
+                args.ucie_root, reference=payload,
+                serial4_pack=args.serial4_pack,
+                owner_public_trust=args.owner_public_trust,
+                serial5_pack=args.serial5_pack)
     except (ManualConsumerError, SignedLibraryError, UnicodeError,
             ValueError, OSError, TypeError, KeyError, OverflowError):
         print(json.dumps({

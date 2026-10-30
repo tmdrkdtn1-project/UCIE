@@ -101,6 +101,38 @@ Serial5 항목에는 두 명령 모두 확인된 기존 `--serial5-pack $serial5
 
 소비 성공 결과 `ORIGINAL_SIGNED_RULE_REVERIFIED_MANUAL_REFERENCE_ONLY`의 의미는 **현재 원본의 서명·키·만료를 소비자 프로세스가 다시 확인하고, 소유자 위험 인수 수동 규칙 ID만 열람했다**는 뜻이다. 그 자체로 사용자 프로그램 코드 검사·규칙 적용·버전 적합성·독립 QA·원본 코드 반출·타 프로젝트 사용을 수행하거나 승인하지 않는다. 외부 범용 배포·자동 규칙 승격·신규 승인·운영 DB 쓰기는 모두 비활성화이며 전체 제품 `v1_accepted=false` 유지. 실제 제품의 독립 설치/배포 QA 및 소유자 PC 검증은 별도 미완료 항목이다.
 
+## V1 통합 수동 서명규칙 검사 — 독립 소비자에서 직접 실행 (2026-10-30)
+
+기존 W09 재검증 소비자 `ucie_miner.manual_consumer_v1`에 `--scan-python`을 추가한다. **새 규칙·서명 승인·스캐너·가상 공개 근거를 만들지 않는다.** 생산자 `product_v1 --consumer-reference`로 만든 단일 W09 참조와 사용자가 명시적으로 제공한 Python 소스 문자열을 `{"reference": ..., "source": ...}` JSON 하나로 전달한다. 소비자는 기존 W09 검증기로 원본 Serial4/선택적 Serial5 팩의 서명·만료·공개 trust·부모 SHA를 재검증한 뒤 기존 `inspect_existing_python()`을 호출한다. 그 결과 가운데 **선택한 하나의 서명된 Python 규칙과 일치하는 정적 수동 검토 후보**만 반환한다.
+
+사용 예 (사전에 승인된 UCIE 전용 checkout의 실제 변수 `$root`, `$py`, `$serial4`, `$publicTrust`, `$libraryItemId` 사용):
+
+```powershell
+$env:PYTHONPATH = Join-Path $root 'src'
+$producer = & $py -B -m ucie_miner.product_v1 --ucie-root $root --limit 20 --serial4-pack $serial4 --owner-public-trust $publicTrust --select-item $libraryItemId --consumer-reference
+if ($LASTEXITCODE -ne 0) { throw 'UCIE_W09_PRODUCER_FAILED' }
+$ref = ($producer | ConvertFrom-Json).selected_existing_w09_consumer_reference
+if (-not $ref) { throw 'UCIE_W09_REFERENCE_MISSING' }
+$pythonSource = @'
+import os
+from concurrent.futures import ThreadPoolExecutor
+def review(folder, callback):
+    iterator = os.scandir(folder)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        return pool.submit(callback, iterator).result()
+'@
+$payload = @{ reference = $ref; source = $pythonSource } | ConvertTo-Json -Depth 16 -Compress
+$result = $payload | & $py -B -m ucie_miner.manual_consumer_v1 --ucie-root $root --serial4-pack $serial4 --owner-public-trust $publicTrust --scan-python
+if ($LASTEXITCODE -ne 0) { throw 'UCIE_SIGNED_MANUAL_PYTHON_SCAN_FAILED' }
+$result | ConvertFrom-Json
+```
+
+대상은 승인된 기존 Serial4의 `PY_SCANDIR_SHARED_ITERATOR_RACE`, 기존 Serial5가 명시되면 `PY_ASYNCIO_PROTOCOL_FACTORY_PRETRANSPORT_LEAK` **단 두 Python 규칙**이다. 다른 서명 규칙 또는 PowerShell 규칙을 Python 검사로 허위 판단하지 않도록 차단한다. Serial5 선택 시 생산자·소비자 모두 `--serial5-pack`에 동일한 검증된 UCIE 내부 서명팩 경로를 추가해야 한다.
+
+이 모드는 JSON 입력 크기와 내부 Python 소스 16KiB를 제한한다. 경로로 전달받은 사용자 프로젝트 파일을 자동 열람하지 않고, 외부 소스를 실행하거나 네트워크·운영 DB·모델·규칙에 변경을 가하지 않는다. 결과 `SELECTED_SIGNED_STATIC_FINDINGS_REVIEW_REQUIRED`는 **정적 패턴의 수동 검토 후보**이지 실제 런타임 오류의 확정이 아니다. `NO_SELECTED_RULE_PATTERN_NOT_SAFETY_PASS`도 해당 소스의 안전성을 보장하지 않는다. 같은 소스의 다른 규칙 후보와 미승인 규칙의 결과는 승인된 것처럼 합산·출력하지 않는다.
+
+원본 W09 참조·서명·만료·항목 ID·서명 소스 SHA가 달라지면 `MANUAL_CONSUMER_FAIL_CLOSED`로 종료한다. GitHub CI의 임시 테스트용 서명팩 검증은 실제 소유자 호스트의 기존 서명팩에 대한 운영 수용 PASS와 다르다. 전체 `v1_accepted=false`, 새 범용 배포·자동 적용 불가를 유지한다.
+
 ## 완료 방향
 
 새 PR을 무한히 늘리지 않는다. **새 통합 진입점과 독립 소비 실기의 Windows/Ubuntu 3.13/3.15 CI를 먼저 완료**, 로컬 D:\UCIE에는 **신규 Python 모듈 두 개만** 원자적으로 반영(기존 dirty 수정 불변). 사용자 PC 실호스트 위 세 명령 결과에서 실제 수집기/도서관/경험 계보의 자료를 확인하고, 실행되는 명확한 blocker만 보수. 정식 릴리스·권리·신뢰 서명은 허가/근거가 없으면 NO_GO로 별도 표시.
