@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -235,6 +238,134 @@ class W07W09SignedLibraryTests(unittest.TestCase):
                 owner_public_trust=self.trust,
                 select_item_id=choice["library_item_id"],
                 include_consumer_reference=True)
+
+    def test_real_consumer_reverifies_original_signed_manual_reference(self):
+        from ucie_miner.manual_consumer_v1 import (
+            consume_existing_manual_reference, SCHEMA as CONSUMER_SCHEMA,
+        )
+        self._publish_serial4()
+        (self.root / "runtime").mkdir(exist_ok=True)
+        original = self.serial4.read_bytes()
+        with patch("urllib.request.urlopen",
+                   side_effect=AssertionError("manual consumer must not fetch")):
+            catalog = integrated_product_preview(
+                self.root, limit=20, signed_serial4=self.serial4,
+                owner_public_trust=self.trust)
+            first_id = next(row["library_item_id"]
+                            for row in catalog["reuse_eligibility"]["items"]
+                            if row["shelf"] == "SIGNED_MANUAL_RULE")
+            producer = integrated_product_preview(
+                self.root, limit=20, signed_serial4=self.serial4,
+                owner_public_trust=self.trust, select_item_id=first_id,
+                include_consumer_reference=True)
+            ref = producer["selected_existing_w09_consumer_reference"]
+            consumed = consume_existing_manual_reference(
+                self.root, reference=ref,
+                serial4_pack=self.serial4, owner_public_trust=self.trust)
+        self.assertEqual(consumed["schema"], CONSUMER_SCHEMA)
+        self.assertEqual(consumed["status"],
+                         "ORIGINAL_SIGNED_RULE_REVERIFIED_MANUAL_REFERENCE_ONLY")
+        self.assertTrue(
+            consumed["original_signature_trust_and_expiry_reverified_in_consumer"])
+        self.assertEqual(consumed["selected_library_item_id"], first_id)
+        self.assertEqual(consumed["source_pack_sha256"],
+                         ref["source_package_sha256"])
+        self.assertEqual(consumed["w09_descriptor_sha256"],
+                         ref["existing_w09_descriptor_sha256"])
+        self.assertFalse(consumed["actual_rule_scan_executed"])
+        self.assertFalse(consumed["new_generic_package_export_allowed"])
+        self.assertFalse(consumed["automatic_rule_application_allowed"])
+        self.assertFalse(consumed["pack_bytes_copied"])
+        self.assertFalse(consumed["package_released"])
+        self.assertFalse(consumed["v1_accepted"])
+        self.assertEqual(consumed["network_requests"], 0)
+        self.assertEqual(consumed["operating_database_writes"], 0)
+        self.assertEqual(self.serial4.read_bytes(), original)
+
+        # The independent consumer has its own Python process, input JSON
+        # and fresh cryptographic verification; not a producer function call.
+        runner = (
+            "import runpy,sys\n"
+            "sys.path.insert(0,sys.argv[1])\n"
+            "sys.argv=['manual_consumer_v1',*sys.argv[2:]]\n"
+            "runpy.run_module('ucie_miner.manual_consumer_v1',"
+            "run_name='__main__')\n"
+        )
+        command = [
+            sys.executable, "-I", "-B", "-c", runner,
+            str(Path(__file__).resolve().parents[1] / "src"),
+            "--ucie-root", str(self.root),
+            "--serial4-pack", str(self.serial4),
+            "--owner-public-trust", str(self.trust),
+        ]
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+        payload = json.dumps(ref, ensure_ascii=True, sort_keys=True)
+        def run_consumer(raw: str, args: list[str] | None = None):
+            return subprocess.run(
+                command if args is None else args, input=raw,
+                capture_output=True, encoding="utf-8", errors="replace",
+                env=env, cwd=self.root, check=False, timeout=45)
+        process = run_consumer(payload)
+        self.assertEqual(process.returncode, 0, process.stderr[-800:])
+        child = json.loads(process.stdout)
+        self.assertEqual(child, consumed)
+        self.assertNotIn(str(self.root), process.stdout)
+        self.assertEqual(self.serial4.read_bytes(), original)
+
+        # Every replayed/forged version and approval flag must fail closed.
+        changes = (
+            {"rule_id": "FORGED_RULE"},
+            {"pack_serial": 5},
+            {"source_package_sha256": "a" * 64},
+            {"parent_serial4_sha256": "b" * 64},
+            {"existing_w09_descriptor_sha256": "c" * 64},
+            {"new_generic_package_export_allowed": True},
+            {"automatic_rule_application_allowed": True},
+            {"consumer_signature_verified_after_handoff": True},
+            {"manual_scope": "ANY_PROJECT"},
+            {"unexpected_authorization": True},
+        )
+        from ucie_miner.manual_consumer_v1 import ManualConsumerError
+        for change in changes:
+            with self.subTest(change=change):
+                with self.assertRaises(ManualConsumerError):
+                    consume_existing_manual_reference(
+                        self.root, reference={**ref, **change},
+                        serial4_pack=self.serial4, owner_public_trust=self.trust)
+        for bad in (
+            payload.replace('"status":', '"status":"X","status":', 1),
+            "{not-json", " " * 4097,
+            json.dumps({**ref, "new_generic_package_export_allowed": True}),
+        ):
+            process = run_consumer(bad)
+            self.assertEqual(process.returncode, 2, process.stdout[-800:])
+            self.assertEqual(
+                json.loads(process.stdout)["status"],
+                "MANUAL_CONSUMER_FAIL_CLOSED")
+            self.assertNotIn(str(self.root), process.stdout)
+
+        _, outsider_trust = generate_keys(
+            self.root / "invalid-consumer-trust", purpose="production")
+        with self.assertRaises(ManualConsumerError):
+            consume_existing_manual_reference(
+                self.root, reference=ref,
+                serial4_pack=self.serial4, owner_public_trust=outsider_trust)
+        bad_trust_cmd = command[:-1] + [str(outsider_trust)]
+        process = run_consumer(payload, args=bad_trust_cmd)
+        self.assertEqual(process.returncode, 2)
+        self.assertEqual(
+            json.loads(process.stdout)["status"], "MANUAL_CONSUMER_FAIL_CLOSED")
+
+        self.serial4.write_bytes(b"TAMPERED_AFTER_PRODUCER")
+        with self.assertRaises(ManualConsumerError):
+            consume_existing_manual_reference(
+                self.root, reference=ref,
+                serial4_pack=self.serial4, owner_public_trust=self.trust)
+        process = run_consumer(payload)
+        self.assertEqual(process.returncode, 2)
+        self.assertEqual(
+            json.loads(process.stdout)["status"], "MANUAL_CONSUMER_FAIL_CLOSED")
 
     def test_w09_descriptor_is_bound_to_same_genuine_signed_pack(self):
         self._publish_serial4()
