@@ -48,3 +48,24 @@
 **허용되지 않는 결론:** 다른 백포트 구현이나 대체 수정이 전혀 없다 / 7.6.6 바이너리에서 결함이 반드시 재현된다 / 수정이 포함된 첫 릴리스가 무엇이다 / 해당 PR의 코드 반출이 승인됐다. 해당 항목은 별도 공개 소스 및 재현 근거가 필요하다. 외부 소스 코드는 UCIE에 복사하지 않았으며 위 비교는 코드 실행이 아니다.
 
 제품 조회에서는 정확한 `source_id=repo:PowerShell/PowerShell`, `PR URL=#28087`, `merge SHA=373f6a7...`가 모두 일치할 때에만 이 한정 판정을 표시한다. 원장/패키지/승인 상태는 변경하지 않는다.
+
+
+## PR #28087 — 공식 PowerShell 7.6.6 릴리스 바이너리 직접 실행 (추가 확인)
+
+이전의 소스 비교와 구분하여 공식 **7.6.6 Linux x64 릴리스 바이너리**를 SHA-256으로 검사한 뒤, UCIE 소유 합성 `Resolve-Path -Relative` 재현 스크립트를 일회성 격리 GitHub Actions에서 실행했다.
+
+- 공식 릴리스: [PowerShell/PowerShell v7.6.6](https://github.com/PowerShell/PowerShell/releases/tag/v7.6.6)
+- 공식 아티팩트: [powershell-7.6.6-linux-x64.tar.gz](https://github.com/PowerShell/PowerShell/releases/download/v7.6.6/powershell-7.6.6-linux-x64.tar.gz)
+- 릴리스 게시 SHA-256 (다운로드 원본과 **일치**): `ddbc4a2d113bbd46d283cfedcbcd117a70caefd7673f41f2b4e0000badf103bc`
+- 격리 환경에서 실행한 `pwsh` 파일 SHA-256: `3c6e4d629571429cf6cc86db94278e2ce17349edbbfe0a0de007bb6bccdbc208`
+- 실제 확인 버전: `7.6.6` / 플랫폼: `Ubuntu 24.04.5 LTS, Linux x64`
+- 원본 실행 결과: `.directory`와 `..directory` 케이스 모두 예상 경로와 **불일치**, 일반 `directory` 케이스 **일치**
+- UCIE 기존 안전 함수 `Resolve-UCIESafeRelativePath`: 3개 케이스 모두 예상 결과 일치
+- GitHub Actions CI 영수증: [Run 40994655459, Job 123864860275](https://github.com/tmdrkdtn1-project/UCIE/actions/runs/40994655459/job/123864860275), 정확한 커밋 `c8cf6335cd1cbb9b10d9ff39a405d64ced9c39cd`, 첫 런타임 검증 단계 **success**
+- 출력 상태: `UCIE_PS_766_PINNED_RELEASE_BINARY_DOTPATH_OBSERVATION_V1` / `DOT_PREFIX_BUG_OBSERVED_ON_RUNNER` / `dot_prefix_cases_matching_expected=0`.
+
+**판정:** 공식 해시가 일치하는 **PowerShell 7.6.6 Linux x64 실제 바이너리에서 PR #28087 관련 점 접두어 상대 경로 결함이 재현됐다.** 앞 절의 동일 소스 비교와 합쳐 해당 출시·플랫폼의 취약 동작 관측을 강화한다.
+
+**여전히 미확인:** Windows용 7.6.6 릴리스 바이너리의 동작, 그 뒤 어떤 릴리스에서 고쳐졌는지, 다른 백포트·대체 구현의 존재 여부, 모든 환경에서의 수정 포함 여부, 독립 QA 및 법적 승인, 제품 배포. 실제 원본 PowerShell 바이너리는 사용자 PC나 UCIE 운영 서버에서 실행하지 않았고 임시 CI에서만 실행했다. 운영 DB·스케줄러·승인 상태·자동 규칙 승격을 변경하지 않았다.
+
+이 검증에서 사용한 프로그램은 공식 공개 배포 아티팩트이지만 다운로드 단계까지 외부 코드는 신뢰하지 않으며, 게시된 릴리스 SHA-256 검증을 통과한 다음 격리 CI에서만 실행했다. 게시 SHA-256의 일치가 코드 서명이나 독립 출처 인증을 대체하지는 않는다.

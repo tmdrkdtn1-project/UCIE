@@ -594,10 +594,33 @@ class P9IntegratedProductTests(unittest.TestCase):
                 self.assertFalse(checked_source["fixed_helper_present_in_tag"])
                 self.assertTrue(checked_source["pre_fix_condition_present_in_tag"])
                 self.assertFalse(checked_source["equivalent_backport_excluded"])
-                self.assertFalse(checked_source["runtime_bug_reproduced_for_tag"])
+                self.assertTrue(checked_source["runtime_bug_reproduced_for_tag"])
+                self.assertEqual(checked_source["runtime_bug_reproduction_scope"],
+                                 "ONE_OFFICIAL_LINUX_X64_7_6_6_RELEASE_BINARY")
                 self.assertFalse(checked_source["runtime_fix_coverage_verified"])
+                released = inspected["official_release_runtime_observation"]
+                self.assertEqual(released["status"],
+                                 "PINNED_RELEASE_LINUX_X64_BUG_REPRODUCED_NO_GO")
+                self.assertEqual(released["runtime_version"], "7.6.6")
+                self.assertEqual(released["target_arch"], "linux-x64")
+                self.assertEqual(released["dot_prefix_cases_matching_expected"], 0)
+                self.assertTrue(released["baseline_case_passed"])
+                self.assertTrue(released["guarded_cases_passed"])
+                self.assertTrue(released["archive_sha256_verified_against_published_release"])
+                self.assertTrue(released["actual_release_binary_executed"])
+                self.assertEqual(released["archive_sha256"],
+                                 "ddbc4a2d113bbd46d283cfedcbcd117a70caefd7673f41f2b4e0000badf103bc")
+                self.assertEqual(released["release_binary_sha256"],
+                                 "3c6e4d629571429cf6cc86db94278e2ce17349edbbfe0a0de007bb6bccdbc208")
+                self.assertEqual(released["ci_run_id"], 40994655459)
+                self.assertFalse(released["windows_release_binary_tested"])
+                self.assertFalse(released["same_behavior_on_all_platforms_verified"])
+                self.assertFalse(released["equivalent_backports_excluded"])
+                self.assertFalse(released["independent_qa_completed"])
+                self.assertFalse(released["production_approved"])
             else:
                 self.assertIsNone(checked_source)
+                self.assertIsNone(inspected["official_release_runtime_observation"])
             self.assertGreater(inspected["release_ahead_by"], 0)
             self.assertGreater(inspected["release_behind_by"], 0)
             self.assertFalse(inspected["release_contains_fix_verified"])
@@ -650,6 +673,9 @@ class P9IntegratedProductTests(unittest.TestCase):
             "3d1b66933d26f5e55632184e0981c67771c4d853")
         self.assertFalse(preview["rows"][2][
             "pinned_public_revision_review"]["release_contains_fix_verified"])
+        self.assertTrue(preview["rows"][2]["pinned_public_revision_review"][
+            "official_release_runtime_observation"]["actual_release_binary_executed"])
+        self.assertFalse(preview["rows"][2]["export_allowed"])
         self.assertFalse(preview["all_required_evidence_accepted"])
         self.assertTrue(all(
             row["repository_license_observed_in_pinned_review"]

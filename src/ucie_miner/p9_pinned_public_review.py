@@ -66,6 +66,23 @@ _PINNED = (
             "fix_helper_found_in_tag_source": False,
             "old_condition_found_in_tag_source": True,
         },
+        # One REAL official released binary on a disposable Linux CI host.
+        # Source observation and runtime observation are separate claims.
+        "official_release_runtime_observation": {
+            "ci_run_id": 40994655459,
+            "ci_job_id": 123864860275,
+            "ci_verified_head_sha": "c8cf6335cd1cbb9b10d9ff39a405d64ced9c39cd",
+            "artifact": "powershell-7.6.6-linux-x64.tar.gz",
+            "archive_sha256": "ddbc4a2d113bbd46d283cfedcbcd117a70caefd7673f41f2b4e0000badf103bc",
+            "release_binary_sha256": "3c6e4d629571429cf6cc86db94278e2ce17349edbbfe0a0de007bb6bccdbc208",
+            "runtime_version": "7.6.6",
+            "platform": "Ubuntu 24.04.5 LTS",
+            "target_arch": "linux-x64",
+            "dot_prefix_cases_matching_expected": 0,
+            "native_behavior": "DOT_PREFIX_BUG_OBSERVED_ON_RUNNER",
+            "baseline_case_passed": True,
+            "guarded_cases_passed": True,
+        },
     },
 )
 
@@ -102,6 +119,20 @@ def lookup_pinned_review(*, source_id: str, public_url: str,
             raise ValueError("invalid pinned divergence evidence")
         license_url = (f"https://github.com/{repo}/blob/"
                        f"{merge_sha}/{pinned['license_file']}")
+        observed_runtime = pinned.get("official_release_runtime_observation")
+        if observed_runtime is not None:
+            # No automatic extrapolation from one Linux release to Windows,
+            # all platforms or alternate backport implementations.
+            if (observed_runtime["runtime_version"] != "7.6.6"
+                    or observed_runtime["target_arch"] != "linux-x64"
+                    or observed_runtime["native_behavior"] !=
+                       "DOT_PREFIX_BUG_OBSERVED_ON_RUNNER"
+                    or observed_runtime["dot_prefix_cases_matching_expected"] != 0
+                    or observed_runtime["baseline_case_passed"] is not True
+                    or observed_runtime["guarded_cases_passed"] is not True
+                    or len(observed_runtime["archive_sha256"]) != 64
+                    or len(observed_runtime["release_binary_sha256"]) != 64):
+                raise ValueError("invalid pinned release runtime receipt")
         inspection = pinned.get("tag_source_comparison")
         if inspection is not None:
             if (inspection["fix_commit_blob_git_sha1"]
@@ -125,11 +156,31 @@ def lookup_pinned_review(*, source_id: str, public_url: str,
                     "pre_fix_condition_present_in_tag": True,
                     "equivalent_backport_excluded": False,
                     "all_alternate_fix_paths_reviewed": False,
-                    "runtime_bug_reproduced_for_tag": False,
+                    "runtime_bug_reproduced_for_tag":
+                        observed_runtime is not None,
+                    "runtime_bug_reproduction_scope": (
+                        "ONE_OFFICIAL_LINUX_X64_7_6_6_RELEASE_BINARY"
+                        if observed_runtime is not None else None),
                     "runtime_fix_coverage_verified": False,
-                    "release_artifact_binaries_examined": False,
+                    "release_artifact_binaries_examined":
+                        observed_runtime is not None,
                     "source_was_executed": False,
                 } if inspection is not None else None
+            ),
+            "official_release_runtime_observation": (
+                {
+                    "status": "PINNED_RELEASE_LINUX_X64_BUG_REPRODUCED_NO_GO",
+                    **observed_runtime,
+                    "ci_job_url": "https://github.com/tmdrkdtn1-project/UCIE/actions/runs/40994655459/job/123864860275",
+                    "archive_sha256_verified_against_published_release": True,
+                    "actual_release_binary_executed": True,
+                    "windows_release_binary_tested": False,
+                    "same_behavior_on_all_platforms_verified": False,
+                    "equivalent_backports_excluded": False,
+                    "independent_qa_completed": False,
+                    "production_approved": False,
+                    "auto_promoted": False,
+                } if observed_runtime is not None else None
             ),
             "schema": SCHEMA,
             "status": "PINNED_REPOSITORY_LICENSE_AND_DIVERGENT_RELEASE_OBSERVED_NO_GO",
