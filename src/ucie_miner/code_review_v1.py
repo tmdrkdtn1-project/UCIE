@@ -11,6 +11,7 @@ import argparse
 from hashlib import sha256
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -20,6 +21,9 @@ from .existing_rule_inspection import inspect_existing_python, InspectionError
 from .static_rule_bridge import _check_receipt, SOURCE_BINDINGS
 from .patterns import PatternError
 from .p9_pinned_public_review import lookup_pinned_review
+from .library_search import search_existing_public_library, LibrarySearchError
+from .public_discovery import DiscoveryError
+from .source_registry import get_source, SourceRegistryError
 
 SCHEMA = "UCIE_V1_MANUAL_CODE_REVIEW_V1"
 MAX_BYTES = 16384
@@ -125,6 +129,125 @@ def _version_evidence(rule_id: str, source_url: str) -> dict | None:
     }
 
 
+_PUBLIC_PR = re.compile(
+    r"https://github[.]com/(python/cpython|PowerShell/PowerShell|git/git|"
+    r"modelcontextprotocol/python-sdk|actions/runner-images)/pull/([1-9][0-9]*)\Z"
+)
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_SHA40 = re.compile(r"[0-9a-f]{40}\Z")
+
+
+def _linked_library_for_finding(root: Path, public_url: str) -> dict:
+    """Match exact public PR identity using existing W04 source-linked readers.
+
+    A public PR match is NOT an assertion that the static rule, runtime
+    applicability, signed status, license or production fix has been approved.
+    """
+    found = _PUBLIC_PR.fullmatch(public_url)
+    if found is None:
+        raise CodeReviewError("UNAPPROVED_PUBLIC_EVIDENCE_REFERENCE")
+    source_id = "repo:" + found.group(1)
+    runtime = root / "runtime"
+    if runtime.is_symlink() or (runtime.exists() and not runtime.is_dir()):
+        raise CodeReviewError("PUBLIC_RUNTIME_DIR_UNSAFE")
+    # A clean checkout is valid input for manual code review. Missing UCIE
+    # runtime is a transparent NO_GO, not an integrity error or a reason to
+    # create a ledger/directories during read-only inspection.
+    if not runtime.is_dir():
+        return {
+            "status": "PUBLIC_SOURCE_LEDGER_INCOMPLETE_NO_GO",
+            "exact_public_pr_url": public_url,
+            "matched_public_evidence_count": 0,
+            "source_linkage_checked": False,
+            "items": [], "truncated": False,
+            "rule_verification": False,
+            "approved_or_exportable": False,
+        }
+    try:
+        source = get_source(source_id)
+        if (source["status"] != "ACTIVE_APPROVED"
+                or source["source_kind"] != "INDEPENDENT_PUBLIC_REPOSITORY"):
+            raise CodeReviewError("PUBLIC_SOURCE_NOT_ACTIVE")
+        # The W04 index searches source reference text, not necessarily its
+        # normalized public_url. Use a bounded SOURCE window and compare
+        # returned canonical PR URLs *exactly*; do not claim full coverage
+        # when W04 omits rows beyond the bounded window.
+        result = search_existing_public_library(
+            root, query="", source_id=source_id,
+            limit=20, group_revisions=True)
+    except (LibrarySearchError, DiscoveryError, SourceRegistryError,
+            OSError, ValueError, KeyError) as exc:
+        raise CodeReviewError("PUBLIC_LIBRARY_INTEGRITY_CHECK_FAILED") from exc
+    status = result["status"]
+    if status == "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
+        if result["returned_count"] != 0 or result["items"]:
+            raise CodeReviewError("PUBLIC_LIBRARY_INCOMPLETE_RESULT_INVALID")
+        return {
+            "status": "PUBLIC_SOURCE_LEDGER_INCOMPLETE_NO_GO",
+            "exact_public_pr_url": public_url,
+            "matched_public_evidence_count": 0,
+            "source_linkage_checked": False,
+            "items": [], "truncated": False,
+            "rule_verification": False,
+            "approved_or_exportable": False,
+        }
+    if (status != "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"
+            or result["approved_or_exportable_items"] != 0
+            or result["operating_database_writes"] != 0
+            or result["network_requests"] != 0
+            or type(result["returned_count"]) is not int
+            or type(result["total_matches"]) is not int
+            or result["returned_count"] != len(result["items"])
+            or result["total_matches"] < result["returned_count"]
+            or type(result["omitted_count"]) is not int
+            or result["omitted_count"] != (result["total_matches"]-
+                                           result["returned_count"])):
+        raise CodeReviewError("PUBLIC_LIBRARY_READ_RECEIPT_INVALID")
+    linked = []
+    for row in result["items"]:
+        if (row["source_id"] != source_id
+                or row["lifecycle"] != "UNVERIFIED_CANDIDATE_ONLY"
+                or row["signature_status"] != "NOT_ATTESTED_BY_THIS_SEARCH"
+                or row["human_approved"] is not False
+                or row["export_allowed"] is not False
+                or not _SHA256.fullmatch(row["library_item_id"])
+                or not _SHA256.fullmatch(row["evidence_sha256"])
+                or not _SHA40.fullmatch(row["revision_hint"])):
+            raise CodeReviewError("PUBLIC_LIBRARY_SOURCE_ROW_INVALID")
+        if row["public_url"] != public_url:
+            # Other *approved-public* PRs on the same source are not evidence
+            # for the user's finding. Ignore their records after validation.
+            continue
+        linked.append({
+            "library_item_id": row["library_item_id"],
+            "source_id": source_id,
+            "public_url": public_url,
+            "evidence_sha256": row["evidence_sha256"],
+            "source_revision_hint": row["revision_hint"],
+            "purpose_code": row["purpose_code"],
+            "source_candidate_kind": row["kind"],
+            "rule_fix_independently_verified": False,
+            "source_version_applicability_verified": False,
+            "rights_for_export_verified": False,
+            "human_approved": False,
+            "export_allowed": False,
+        })
+    return {
+        "status": ("EXACT_PUBLIC_PR_SOURCE_LINKED_UNVERIFIED" if linked
+                   else "NO_EXACT_PUBLIC_PR_IN_BOUNDED_SOURCE_WINDOW"
+                   if result["omitted_count"] else
+                   "NO_EXACT_PUBLIC_PR_IN_CURRENT_LINKED_LEDGER"),
+        "exact_public_pr_url": public_url,
+        "matched_public_evidence_count": len(linked),
+        "total_public_source_records_in_window": result["total_matches"],
+        "source_linkage_checked": True,
+        "items": linked,
+        "truncated": result["omitted_count"] > 0,
+        "rule_verification": False,
+        "approved_or_exportable": False,
+    }
+
+
 def review_code(source: str, *, language: str, root: Path) -> dict:
     """Return practical findings by reusing existing scanners, no new rules."""
     base = _ucie_root(root)
@@ -187,6 +310,14 @@ def review_code(source: str, *, language: str, root: Path) -> dict:
             "auto_fix_applied": False,
         })
     findings.sort(key=lambda row: (row["line"], row["column"], row["rule_id"]))
+    # One read-only W04 lookup per distinct approved public PR, not per line.
+    # Empty or missing ledgers are explicitly NO_GO, never silent PASS.
+    library_cache = {}
+    for item in findings:
+        url = item["public_evidence"]
+        if url not in library_cache:
+            library_cache[url] = _linked_library_for_finding(base, url)
+        item["public_library"] = library_cache[url]
     return {
         "schema": SCHEMA,
         "status": ("REVIEW_FINDINGS_UNVERIFIED" if findings
@@ -195,6 +326,11 @@ def review_code(source: str, *, language: str, root: Path) -> dict:
         "source_sha256": digest,
         "findings": findings,
         "finding_count": len(findings),
+        "public_library_exact_pr_lookups": len(library_cache),
+        "public_library_linked_findings": sum(
+            item["public_library"]["status"] ==
+            "EXACT_PUBLIC_PR_SOURCE_LINKED_UNVERIFIED" for item in findings),
+        "public_library_no_approval_inferred": True,
         "covered_scanners": (
             "EXISTING_FOUR_PYTHON_STATIC_SCANNERS" if language == "python"
             else "EXISTING_POWERSHELL_AST_STATIC_SCANNER"),

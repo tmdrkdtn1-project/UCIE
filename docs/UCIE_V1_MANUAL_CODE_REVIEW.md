@@ -45,3 +45,18 @@ PowerShell: original `scripts/ucie_powershell_static_candidates.ps1`, passed ine
 Exact known-version evidence: `p9_pinned_public_review.lookup_pinned_review`.
 
 The CLI and real PowerShell AST tests run on the existing GitHub Windows/Ubuntu Python 3.13/3.15 CI matrix. Only the final exact head CI may justify a merge.
+
+
+## Integrated Virtual Library evidence (automatic, no extra command)
+
+Each detected finding now includes `public_library`. UCIE reuses the original W04 read-only Stage10/12/15 source-linked public ledger reader, searching by the exact approved public PR URL and source repository, without network calls or private-project access.
+
+- `EXACT_PUBLIC_PR_SOURCE_LINKED_UNVERIFIED`: exact public PR identity matched a source-validated UCIE ledger row. Returned library ID, source revision hint and evidence SHA-256 are still unverified.
+- `PUBLIC_SOURCE_LEDGER_INCOMPLETE_NO_GO`: local Stage12 ledger missing or source linkage incomplete; no assertion is made.
+- `NO_EXACT_PUBLIC_PR_IN_CURRENT_LINKED_LEDGER`: a fully returned source window has no exact public PR row; UCIE will not substitute another PR.
+- `NO_EXACT_PUBLIC_PR_IN_BOUNDED_SOURCE_WINDOW`: a partial 20-row source window has no exact PR row; later rows may still exist, so this is not proof of absence.
+- Corrupt/forged provenance fails closed rather than inheriting approvals or release coverage.
+
+The query is performed once per distinct PR in the inspected snippet. Top-level metrics `public_library_exact_pr_lookups` and `public_library_linked_findings` describe this bounded source lookup. A match is **public source identity**, not proof the rule fixes input code, licensing, independent QA, or export approval. A partial 20-record window reports `truncated`.
+
+The same single command and both languages remain unchanged. No new miner, API collection, DB writes, source execution, automatic rule approval, package release or V1 acceptance.

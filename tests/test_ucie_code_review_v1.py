@@ -12,12 +12,18 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
 from ucie_miner.code_review_v1 import (
-    CodeReviewError, review_code, SCHEMA, MAX_BYTES,
+    CodeReviewError, review_code, _linked_library_for_finding, SCHEMA, MAX_BYTES,
 )
+from ucie_miner.library_search import search_existing_public_library
+from ucie_miner.public_candidate_staging import stage_public_candidates, DB_NAME
+from ucie_miner.public_candidate_learning import (
+    OPT_IN_FILENAME, OPT_IN_TOKEN, optional_hourly_review_learning)
+from test_ucie_stage11_hourly_stage import fixture_batch
 
 ROOT = Path(__file__).resolve().parents[1]
 SCANDIR = """import os
@@ -53,9 +59,17 @@ class UnifiedCodeReviewV1Tests(unittest.TestCase):
         self.assertFalse(result["auto_applied"])
         self.assertFalse(result["production_approved"])
         self.assertEqual(result["database_writes"], 0)
+        self.assertEqual(result["public_library_exact_pr_lookups"], 1)
+        self.assertIn(result["findings"][0]["public_library"]["status"], (
+            "PUBLIC_SOURCE_LEDGER_INCOMPLETE_NO_GO",
+            "NO_EXACT_PUBLIC_PR_IN_CURRENT_LINKED_LEDGER",
+            "EXACT_PUBLIC_PR_SOURCE_LINKED_UNVERIFIED",
+        ))
+        self.assertFalse(result["findings"][0]["public_library"]["approved_or_exportable"])
         empty = review_code("pass\n", language="python", root=ROOT)
         self.assertEqual(empty["status"], "NO_KNOWN_PATTERN_NOT_SAFETY_PASS")
         self.assertFalse(empty["full_code_safety_verified"])
+        self.assertEqual(empty["public_library_exact_pr_lookups"], 0)
 
     @unittest.skipUnless(
         shutil.which("pwsh") or shutil.which("pwsh.exe")
@@ -93,6 +107,127 @@ class UnifiedCodeReviewV1Tests(unittest.TestCase):
         self.assertEqual(safe["status"], "NO_KNOWN_PATTERN_NOT_SAFETY_PASS")
         with self.assertRaises(CodeReviewError):
             review_code("if (", language="powershell", root=ROOT)
+
+    def test_real_source_linked_public_ledger_is_read_once_and_never_mutated(self):
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work) / "UCIE"
+            runtime = root / "runtime"
+            runtime.mkdir(parents=True)
+            batch = fixture_batch(
+                root=root, sources=(
+                    "python/cpython", "PowerShell/PowerShell", "git/git",
+                    "modelcontextprotocol/python-sdk",
+                    "actions/runner-images"),
+                max_enrich=1, include_git_commits=True,
+                include_docs=False, include_advisories=False,
+                backfill_pages=1)
+            stage_public_candidates(batch, root=root, allow_disk_write=True)
+            (runtime / OPT_IN_FILENAME).write_text(OPT_IN_TOKEN,
+                                                  encoding="ascii")
+            self.assertEqual(optional_hourly_review_learning(root)[
+                "new_review_proposals"], 2)
+            from_ledger = search_existing_public_library(
+                root, query="", limit=20, group_revisions=True)
+            selected = [row for row in from_ledger["items"]
+                        if "/pull/" in row["public_url"]]
+            self.assertGreater(len(selected), 0)
+            row = selected[0]
+            originals = [
+                runtime / DB_NAME, runtime / "stage12_unverified_review.sqlite3"
+            ]
+            before = [p.read_bytes() for p in originals]
+            with patch("urllib.request.urlopen",
+                       side_effect=AssertionError("review must not fetch")):
+                result = _linked_library_for_finding(root, row["public_url"])
+            self.assertEqual([p.read_bytes() for p in originals], before)
+            self.assertEqual(result["status"],
+                             "EXACT_PUBLIC_PR_SOURCE_LINKED_UNVERIFIED")
+            self.assertTrue(result["source_linkage_checked"])
+            self.assertTrue(any(
+                entry["library_item_id"] == row["library_item_id"]
+                and entry["evidence_sha256"] == row["evidence_sha256"]
+                and not entry["rule_fix_independently_verified"]
+                and not entry["rights_for_export_verified"]
+                for entry in result["items"]))
+            self.assertFalse(result["approved_or_exportable"])
+            # No cross-PR evidence inheriting: a different *allowed* PR is
+            # not automatically linked to the source-backed library rows.
+            different = ("https://github.com/python/cpython/pull/153462"
+                         if "153462" not in row["public_url"] else
+                         "https://github.com/python/cpython/pull/999999")
+            unlinked = _linked_library_for_finding(root, different)
+            self.assertEqual(unlinked["matched_public_evidence_count"], 0)
+            self.assertEqual(unlinked["items"], [])
+            self.assertEqual([p.read_bytes() for p in originals], before)
+
+    def test_library_forged_evidence_and_empty_local_ledger_fail_closed(self):
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work) / "UCIE"
+            (root / "runtime").mkdir(parents=True)
+            url = "https://github.com/python/cpython/pull/153462"
+            absent = _linked_library_for_finding(root, url)
+            self.assertEqual(absent["status"],
+                             "PUBLIC_SOURCE_LEDGER_INCOMPLETE_NO_GO")
+            self.assertFalse(absent["source_linkage_checked"])
+            self.assertFalse(absent["approved_or_exportable"])
+            for bad in (url + "/files",
+                        "https://github.com/unapproved/private/pull/10"):
+                with self.subTest(url=bad):
+                    with self.assertRaisesRegex(
+                            CodeReviewError,
+                            "UNAPPROVED_PUBLIC_EVIDENCE_REFERENCE"):
+                        _linked_library_for_finding(root, bad)
+            row = {
+                "library_item_id": "a" * 64,
+                "source_id": "repo:python/cpython",
+                "public_url": url,
+                "evidence_sha256": "b" * 64,
+                "revision_hint": "c" * 40,
+                "purpose_code": "API_CONTRACT",
+                "kind": "PUBLIC_TECHNICAL_EVIDENCE",
+                "lifecycle": "UNVERIFIED_CANDIDATE_ONLY",
+                "signature_status": "NOT_ATTESTED_BY_THIS_SEARCH",
+                "human_approved": False,
+                "export_allowed": False,
+            }
+            base = {
+                "status": "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
+                "items": [row], "returned_count": 1,
+                "total_matches": 1, "omitted_count": 0,
+                "approved_or_exportable_items": 0,
+                "operating_database_writes": 0, "network_requests": 0,
+            }
+            with patch("ucie_miner.code_review_v1.search_existing_public_library",
+                       return_value=base) as search:
+                output = _linked_library_for_finding(root, url)
+            self.assertEqual(output["status"],
+                             "EXACT_PUBLIC_PR_SOURCE_LINKED_UNVERIFIED")
+            search.assert_called_once()
+            self.assertFalse(output["items"][0]["rule_fix_independently_verified"])
+            # A different *unverified but otherwise valid* PR from the same
+            # allowed repository is skipped, not incorrectly inherited.
+            other = {**base, "items": [{
+                **row,
+                "public_url": "https://github.com/python/cpython/pull/9999",
+            }]}
+            with patch("ucie_miner.code_review_v1.search_existing_public_library",
+                       return_value=other):
+                unrelated = _linked_library_for_finding(root, url)
+            self.assertEqual(unrelated["status"],
+                             "NO_EXACT_PUBLIC_PR_IN_CURRENT_LINKED_LEDGER")
+            self.assertEqual(unrelated["items"], [])
+            for modify in (
+                {"source_id": "repo:PowerShell/PowerShell"},
+                {"human_approved": True}, {"export_allowed": True},
+                {"signature_status": "APPROVED"},
+                {"evidence_sha256": "garbage"},
+            ):
+                with self.subTest(modify=modify):
+                    corrupt = {**base, "items": [{**row, **modify}]}
+                    with patch("ucie_miner.code_review_v1.search_existing_public_library",
+                               return_value=corrupt):
+                        with self.assertRaises(CodeReviewError):
+                            _linked_library_for_finding(root, url)
 
     def test_bounded_input_and_no_shell_fail_closed(self):
         for source, language in (("", "python"),
