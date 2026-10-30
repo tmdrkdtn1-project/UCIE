@@ -55,6 +55,9 @@ class UnifiedCodeReviewV1Tests(unittest.TestCase):
         self.assertEqual(item["authorization"],
                          "UNVERIFIED_STATIC_CANDIDATE_ONLY")
         self.assertFalse(item["source_runtime_bug_confirmed"])
+        self.assertEqual(result["related_public_pr_candidates_in_loaded_windows"], 0)
+        self.assertTrue(result["related_public_evidence_not_fix_equivalence"])
+        self.assertEqual(result["approved_reusable_artifacts_from_this_lookup"], 0)
         self.assertFalse(result["source_executed"])
         self.assertFalse(result["auto_applied"])
         self.assertFalse(result["production_approved"])
@@ -230,6 +233,10 @@ class UnifiedCodeReviewV1Tests(unittest.TestCase):
                 and not entry["rights_for_export_verified"]
                 for entry in result["items"]))
             self.assertFalse(result["approved_or_exportable"])
+            self.assertFalse(result["related_public_evidence"]
+                             ["approved_or_exportable"])
+            self.assertFalse(result["related_public_evidence"]
+                             ["fix_equivalence_verified"])
             # No cross-PR evidence inheriting: a different *allowed* PR is
             # not automatically linked to the source-backed library rows.
             different = ("https://github.com/python/cpython/pull/153462"
@@ -250,6 +257,8 @@ class UnifiedCodeReviewV1Tests(unittest.TestCase):
                              "PUBLIC_SOURCE_LEDGER_INCOMPLETE_NO_GO")
             self.assertFalse(absent["source_linkage_checked"])
             self.assertFalse(absent["approved_or_exportable"])
+            self.assertEqual(absent["related_public_evidence"]["status"],
+                             "NO_EXACT_ANCHOR_NO_COMPARISON")
             for bad in (url + "/files",
                         "https://github.com/unapproved/private/pull/10"):
                 with self.subTest(url=bad):
