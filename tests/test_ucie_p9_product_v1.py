@@ -287,6 +287,10 @@ class P9IntegratedProductTests(unittest.TestCase):
                    side_effect=AssertionError("unified search cannot fetch")):
             out = product.integrated_product_preview(
                 self.root, query="API_CONTRACT", limit=5)
+            # A specific W04 query may match no portable PRs. Verify the
+            # actual complete bounded Stage12 window as a separate handoff.
+            all_out = product.integrated_product_preview(
+                self.root, query="", limit=5)
         after = {
             p.name: p.read_bytes() for p in (
                 runtime / DB_NAME,
@@ -312,7 +316,8 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertEqual(view["network_requests"], 0)
         self.assertEqual(view["operating_database_writes"], 0)
         self.assertFalse(view["v1_accepted"])
-        handoff = out["source_linked_portable_handoff"]
+        self.assertFalse(out["source_linked_portable_handoff"]["v1_accepted"])
+        handoff = all_out["source_linked_portable_handoff"]
         self.assertEqual(handoff["schema"],
                          "UCIE_P9_SOURCE_LINKED_PORTABLE_HANDOFF_V1")
         self.assertEqual(handoff["status"],
@@ -328,7 +333,7 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertEqual(
             {row["library_item_id"] for row in payload["items"]},
             {row["library_item_id"] for row in
-             out["public_candidate_library"]["items"]
+             all_out["public_candidate_library"]["items"]
              if "/pull/" in row["public_url"]})
         self.assertTrue(all(not row["export_allowed"] and
                             not row["human_approved"] for row in payload["items"]))
