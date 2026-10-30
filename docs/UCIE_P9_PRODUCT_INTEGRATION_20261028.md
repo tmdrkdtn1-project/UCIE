@@ -61,6 +61,23 @@ $env:PYTHONPATH = Join-Path $root 'src'
 
 이 조회는 기존 검증된 Rulepack **참조 가능성**만 보여주며 패키지 복사·서명·재배포·다른 프로젝트 스캔은 실행하지 않는다. 전체 UCIE V1 제품 수용 상태는 여전히 `v1_accepted=false`.
 
+## V1 선택 항목 → 기존 W09 소비자 참조 결속 (2026-10-30)
+
+기존 `ucie_miner.product_v1`의 **정확한 항목 선택**을 기존 `signed_rule_library.build_existing_pack_consumer_descriptor`에 연결했다. 별도 재사용/서명 시스템이나 신규 ZIP·API·외부 프로젝트 연계는 없다.
+
+```powershell
+# 아래 변수에는 이미 분리·검증된 UCIE 전용 checkout, Python 실행 파일,
+# 기존 UCIE Serial4 서명팩, 공개 trust 키, 앞선 조회의 64자리 항목 ID를 사용.
+$env:PYTHONPATH = Join-Path $root 'src'
+& $py -B -m ucie_miner.product_v1 --ucie-root $root --limit 20 --serial4-pack $serial4 --owner-public-trust $publicTrust --select-item $libraryItemId --consumer-reference
+```
+
+요구조건: 선택 항목이 현재 제한된 검색창의 `SIGNED_MANUAL_RULE`이고, 원래 W07 서명·만료·범위·부모 SHA 검증을 통과한 *소유자 위험 인수 수동 규칙*이어야 한다. 이번 소비 참조 생성 시 **기존 W09 검증기를 한 번 더 호출**해 실제 원본 파일 서명과 만료를 재확인한다. W09의 정규 JSON `descriptor_sha256`, 선택한 정확한 `item_id`/규칙 ID/팩 serial/원본 SHA와 명시된 수동 사용 범위를 대조한다. 서명팩을 교체했거나 선택이 달라지면 실패한다.
+
+반환 키 `selected_existing_w09_consumer_reference`는 **선택된 1개 기존 규칙**의 원본 W09 SHA-256 기반 참조 자료이며, 독립 소비자는 **각 실제 사용 시 원래 서명팩·만료·공개 trust·Serial5 부모 결속을 다시 검증**해야 한다. 단순 JSON 영수증만으로 사용 승인을 주장할 수 없다. 공개 후보·미승인 기술·합성 학습 기록, 다른 검색창의 ID 또는 서명팩/키 부재에서 `--consumer-reference`는 `P9_PRODUCT_FAIL_CLOSED`(종료코드 2)로 실패한다.
+
+새 파일 출력·서명·배포·코드 실행·자동 규칙 승격·운영 DB 쓰기는 전혀 없다. 이는 **독립 소비자의 참조 계약을 기존 서명 검증기에 연결**한 것이지 새 범용 패키징이나 소비자 측 실제 실행·서명 재검증까지 완료했다는 뜻이 아니다. 일반 외부 배포/라이선스·독립 QA 승인, UCIE 제품 전체 `v1_accepted`는 여전히 불충족이다.
+
 ## 완료 방향
 
 새 PR을 무한히 늘리지 않는다. **새 통합 진입점과 독립 소비 실기의 Windows/Ubuntu 3.13/3.15 CI를 먼저 완료**, 로컬 D:\UCIE에는 **신규 Python 모듈 두 개만** 원자적으로 반영(기존 dirty 수정 불변). 사용자 PC 실호스트 위 세 명령 결과에서 실제 수집기/도서관/경험 계보의 자료를 확인하고, 실행되는 명확한 blocker만 보수. 정식 릴리스·권리·신뢰 서명은 허가/근거가 없으면 NO_GO로 별도 표시.
