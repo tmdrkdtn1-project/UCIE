@@ -312,6 +312,10 @@ class W07W09SignedLibraryTests(unittest.TestCase):
         self.assertEqual(child, consumed)
         self.assertNotIn(str(self.root), process.stdout)
         self.assertEqual(self.serial4.read_bytes(), original)
+        # Windows PowerShell 5.1 may BOM-prefix stdin even for ASCII JSON.
+        bom_process = run_consumer("\ufeff" + payload)
+        self.assertEqual(bom_process.returncode, 0, bom_process.stderr[-500:])
+        self.assertEqual(json.loads(bom_process.stdout), consumed)
 
         # Every replayed/forged version and approval flag must fail closed.
         changes = (
