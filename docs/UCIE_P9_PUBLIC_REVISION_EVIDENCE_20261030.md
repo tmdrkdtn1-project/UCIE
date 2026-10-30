@@ -30,3 +30,21 @@
 `src/ucie_miner/p9_pinned_public_review.py`는 정확한 `source_id + PR URL + merge SHA`가 모두 맞을 때만 관측 근거를 반환한다. P9의 기존 `source_version_rights_qa_readiness.rows`에 `pinned_public_revision_review`를 추가하지만 원장의 `UNVERIFIED_CANDIDATE_ONLY` 및 `NOT_ATTESTED_PER_REVISION`을 유지한다.
 
 이 기록은 **일부 공개 증거 확인의 제한된 첫 단계**이다. 새 출처 허용, 자동 법률 판단, 독립 QA 완료, 운영 데이터 변경, 자동 승격, 패키지 배포, V1 인수 승인이 아니다.
+
+
+## PR #28087 — 출시 태그의 실제 수정 대상 파일 비교 (추가 확인)
+
+단순 Git merge 계보가 아니라 **같은 파일의 두 고정 커밋 원문**을 읽어 비교했다.
+
+- 수정 PR: [ResolvePathCommand.cs @ merge 373f6a7](https://github.com/PowerShell/PowerShell/blob/373f6a7b7972a0a4b73bfd9737a0d768d28b347e/src/Microsoft.PowerShell.Commands.Management/commands/management/ResolvePathCommand.cs)
+  - Git blob ID `e6a89e2a11732dfc0ed36af8194432155265486c`
+  - `StartsWithRelativePathToken` 도우미 함수와 새 조건 호출 **있음**
+- 출시 태그: [ResolvePathCommand.cs @ 7.6.6 tag commit f260eb9](https://github.com/PowerShell/PowerShell/blob/f260eb9c31ec72c5282f98e5ea24d9be4f8d7536/src/Microsoft.PowerShell.Commands.Management/commands/management/ResolvePathCommand.cs)
+  - Git blob ID `3d1b66933d26f5e55632184e0981c67771c4d853`
+  - `StartsWithRelativePathToken` 도우미 함수 **없음**, 이전의 `!adjustedPath.StartsWith('.')` 조건 **있음**
+
+**허용되는 결론:** PR #28087의 *특정 소스 구현*은 검사한 PowerShell 7.6.6 태그 소스 파일에 포함되지 않았다.
+
+**허용되지 않는 결론:** 다른 백포트 구현이나 대체 수정이 전혀 없다 / 7.6.6 바이너리에서 결함이 반드시 재현된다 / 수정이 포함된 첫 릴리스가 무엇이다 / 해당 PR의 코드 반출이 승인됐다. 해당 항목은 별도 공개 소스 및 재현 근거가 필요하다. 외부 소스 코드는 UCIE에 복사하지 않았으며 위 비교는 코드 실행이 아니다.
+
+제품 조회에서는 정확한 `source_id=repo:PowerShell/PowerShell`, `PR URL=#28087`, `merge SHA=373f6a7...`가 모두 일치할 때에만 이 한정 판정을 표시한다. 원장/패키지/승인 상태는 변경하지 않는다.
