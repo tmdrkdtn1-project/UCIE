@@ -2,14 +2,26 @@
 
 **Result:** One explicitly supplied UCIE-owned synthetic or approved-public code snippet → JSON with known static pattern, line/column, source-linked public PR, safe manual correction guidance, and narrowly verified release version. Reuses existing scanners; not a new Stage or miner.
 
-## Run
+## Run — isolated clone (do not change your operating UCIE checkout)
 
-In a clean UCIE-only checkout, with that checkout's Python environment:
+This example is a **preparation runbook**, not a claim the owner's computer was changed or verified. Use only an empty, separately named directory and the approved public UCIE repository. Existing working-tree modifications and local runtime databases remain untouched.
 
 ```powershell
-$root = 'D:\UCIE_RELEASE\UCIE'
-$py = 'D:\UCIE\.venv\Scripts\python.exe'
-$env:PYTHONPATH = "$root\src"
+$root = Join-Path $env:TEMP 'UCIE_V1_VERIFY\UCIE'
+if (Test-Path -LiteralPath $root) { throw 'Choose a NEW isolated folder; never overwrite' }
+git clone --depth 1 --branch main https://github.com/tmdrkdtn1-project/UCIE.git $root
+if ($LASTEXITCODE -ne 0) { throw 'Isolated checkout failed' }
+$basePython = (Get-Command python -ErrorAction Stop).Source
+& $basePython -m venv (Join-Path $root '.venv')
+if ($LASTEXITCODE -ne 0) { throw 'Isolated venv failed' }
+$py = Join-Path $root '.venv\Scripts\python.exe'
+& $py -m pip install -r (Join-Path $root 'requirements.txt')
+if ($LASTEXITCODE -ne 0) { throw 'Isolated requirements failed' }
+
+# Critical for native pipes on Windows PowerShell 5.1 and PowerShell 7:
+$OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$env:PYTHONPATH = Join-Path $root 'src'
+$commit = git -C $root rev-parse HEAD
 $source = @'
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -21,12 +33,14 @@ def work(folder, callback):
 $source | & $py -B -m ucie_miner.code_review_v1 --ucie-root $root --language python
 ```
 
-For PowerShell, installed PowerShell is needed but the same unified command is used:
+For PowerShell source, use the *same isolated interpreter*, explicit UTF-8 pipe and CLI:
 
 ```powershell
-$source = "Resolve-Path -Relative '.directory'"
+$source = "# UCIE 자체 합성 예제" + [char]10 + "Resolve-Path -Relative '.directory'"
 $source | & $py -B -m ucie_miner.code_review_v1 --ucie-root $root --language powershell
 ```
+
+**Do not** combine the live `D:\UCIE` virtual environment with a different source checkout. A clean isolated clone's Python environment must be used only with that clone. This is an optional manual host follow-up; CI performs its own separate clean-checkout test without accessing the owner's PC.
 
 Input must be explicitly supplied UCIE-authored synthetic or authorized approved-public source. **Do not scan unrelated/private project code or other user files.** Never executes source, scans files, fetches a network resource, writes runtime DB, applies fixes, signs or promotes rules.
 
@@ -64,3 +78,10 @@ The same single command and both languages remain unchanged. No new miner, API c
 ## UTF-8 input integrity
 
 PowerShell code review preserves the original strict UTF-8 bytes, including Korean comments, emoji and CRLF line endings, through the UCIE-owned stdin adapter. It does not rely on the machine's console codepage (including Windows PowerShell 5.1). The adapter rejects malformed UTF-8 and inputs over 16 KiB, and verifies the original source digest. Inputs are still parsed as inert AST data, never executed or echoed. CI exercises the real CLI and both available PowerShell engines with first-party synthetic Unicode samples; this does not grant new source permissions or product approval.
+
+
+## V1 manual CLI acceptance verdict (bounded)
+
+The clean GitHub Windows Python 3.15 job executes `tests/runtime_ucie_v1_real_shell_acceptance.ps1` through both native **Windows PowerShell 5.1** (`powershell.exe`) and **PowerShell 7** (`pwsh`). This replays the *documented native PowerShell pipe* with explicit UTF-8, two different Unicode source comments, Python and PowerShell positive findings, correct line numbers, source-linked evidence remaining unapproved, empty clean control, invalid syntax fail-closed, and elapsed milliseconds. It prints an inspectable `UCIE_V1_DUAL_WINDOWS_SHELL_ACCEPTANCE` receipt in GitHub Actions. Ubuntu/Windows Python 3.13/3.15 existing full tests still run.
+
+A green bounded shell test means **manual CLI GO in isolated CI**, not the UCIE V1 project GO. User-host deployment, operating hourly schedule, independent QA/license review, approved export and autonomous learning/promotion remain separate and unverified by this job. It does not execute arbitrary caller source or read private code. Never report a local host PASS without a separate actual local receipt.
