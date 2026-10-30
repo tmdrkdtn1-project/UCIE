@@ -1,6 +1,7 @@
 """Host P8 targeted source sync with backups, rollback and source trust tests."""
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
 import os
 import sqlite3
@@ -52,10 +53,11 @@ class P8HostSyncTests(unittest.TestCase):
         self.patch2.start()
         self.addCleanup(self.patch1.stop)
         self.addCleanup(self.patch2.stop)
-        with sqlite3.connect(
+        with closing(sqlite3.connect(
                 self.live / "runtime" / "ucie_internal_pending_queue_v1.sqlite3"
-        ) as db:
+        )) as db:
             db.execute("CREATE TABLE jobs(status TEXT)")
+            db.commit()
         (self.live / "runtime" / "do_not_touch.txt").write_text("KEEP")
         (self.live / "src" / "ucie_miner" / "local_only.py").write_text(
             "# LOCAL OWNED DO NOT TOUCH\n")
@@ -117,8 +119,9 @@ class P8HostSyncTests(unittest.TestCase):
 
     def test_active_worker_blocks_change_no_partial_install(self):
         db = self.live / "runtime" / "ucie_internal_pending_queue_v1.sqlite3"
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn:
             conn.execute("INSERT INTO jobs(status) VALUES('RUNNING')")
+            conn.commit()
         with self.assertRaisesRegex(s.P8SyncError, "RUNNING_JOBS"):
             s.sync(self.release, self.live, apply=True, allow_test_root=True)
         self.assertFalse((self.live / s.FILES[0]).exists())
