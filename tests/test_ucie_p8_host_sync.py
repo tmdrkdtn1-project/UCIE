@@ -158,6 +158,12 @@ class P8HostSyncTests(unittest.TestCase):
         for rel in s.FILES[1:]:
             (self.live / rel).write_bytes(
                 self.originals[rel].replace(b"\n", b"\r\n"))
+        # Refresh only the synthetic test Git index after changing the
+        # checkout's core.autocrlf setting. Git can report an M until the
+        # index stat cache is refreshed even if the canonical blob is equal.
+        self.run_git("add", "-u")
+        self.assertEqual(
+            self.run_git("diff", "--cached", "--name-only"), b"")
         self.assertEqual(
             self.run_git("status", "--porcelain", "--untracked-files=all"),
             b"")
@@ -187,6 +193,9 @@ class P8HostSyncTests(unittest.TestCase):
             source_bytes = self.new[rel].replace(b"\n", b"\r\n")
             (self.release / rel).write_bytes(source_bytes)
             (self.live / rel).write_bytes(source_bytes)
+        self.run_git("add", "-u")
+        self.assertEqual(
+            self.run_git("diff", "--cached", "--name-only"), b"")
         self.assertEqual(
             self.run_git("status", "--porcelain", "--untracked-files=all"),
             b"")
