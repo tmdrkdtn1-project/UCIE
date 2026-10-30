@@ -190,7 +190,8 @@ def main() -> int:
         raw = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
         if not raw or len(raw) > MAX_INPUT_BYTES:
             raise ManualConsumerError("bounded reference JSON required")
-        ref = json.loads(raw.decode("utf-8", errors="strict"),
+        ref = json.loads(raw.decode("utf-8-sig" if raw.startswith(b"\xef\xbb\xbf")
+                                    else "utf-8", errors="strict"),
                          object_pairs_hook=_unique_pairs,
                          parse_constant=_invalid_constant)
         receipt = consume_existing_manual_reference(
