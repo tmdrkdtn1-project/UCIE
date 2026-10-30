@@ -28,7 +28,7 @@ class MergedP11OwnerQuietAndFeedbackTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "UCIE"
-        (self.root / "runtime").mkdir()
+        (self.root / "runtime").mkdir(parents=True)
         pending_queue.initialize_queue(self.root)
         p11.activate(self.root)
 
