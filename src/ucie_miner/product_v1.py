@@ -15,6 +15,7 @@ from hashlib import sha256
 import io
 import json
 import os
+import re
 from pathlib import Path
 import tempfile
 from zipfile import ZipFile, ZIP_DEFLATED, ZipInfo
@@ -376,6 +377,142 @@ def _bounded_catalog_view(*, query: str, domain: str | None, limit: int,
         "network_requests": 0, "operating_database_writes": 0,
         "new_approvals": 0, "new_signatures_created": 0,
         "full_library_implemented": False, "v1_accepted": False,
+    }
+
+
+REUSE_ITEM_ID = re.compile(r"[0-9a-f]{64}\\Z")
+
+
+def _reuse_eligibility(*, catalog: dict, signed: dict | None,
+                       selected_item_id: str | None) -> dict:
+    """Read-only item selection using the already checked catalog + W07.
+
+    This never promotes public metadata and never issues a new package.
+    Manual references to pre-existing, freshly verified owner Rulepacks
+    are distinct from approval for generic export.
+    """
+    if selected_item_id is not None and (
+            type(selected_item_id) is not str
+            or REUSE_ITEM_ID.fullmatch(selected_item_id) is None):
+        raise ProductIntegrationError("invalid exact library item selection")
+    if (catalog["status"] != "READ_ONLY_BOUNDED_MULTI_SHELF_SEARCH_NO_GO"
+            or type(catalog["items"]) is not list
+            or type(catalog["returned_count"]) is not int
+            or len(catalog["items"]) != catalog["returned_count"]):
+        raise ProductIntegrationError("unverified unified catalog eligibility source")
+    verified = {}
+    if signed is not None:
+        if (signed.get("status") !=
+                "EXISTING_OWNER_SIGNED_RULEPACKS_VERIFIED_READ_ONLY"
+                or type(signed.get("items")) is not list
+                or signed.get("signed_rule_count") != len(signed["items"])
+                or signed.get("new_release_approved") is not False
+                or signed.get("network_requests") != 0
+                or signed.get("database_writes") != 0):
+            raise ProductIntegrationError("original signed pack verifier required")
+        for record in signed["items"]:
+            if (record["verification"] !=
+                    "OWNER_SIGNED_VERIFIED_AT_INSPECTION_TIME"
+                    or record["approval_basis"] != "OWNER_RISK_ACCEPTED_CI_ONLY"
+                    or record["independent_qa_approved"] is not False
+                    or record["license_signoff"] is not False
+                    or record["new_package_export_allowed"] is not False
+                    or record["unattended_execution_allowed"] is not False
+                    or REUSE_ITEM_ID.fullmatch(record["item_id"]) is None
+                    or REUSE_ITEM_ID.fullmatch(record["source_package_sha256"])
+                       is None
+                    or record["item_id"] in verified):
+                raise ProductIntegrationError("untrusted signed item eligibility")
+            verified[record["item_id"]] = record
+    choices = []
+    ids = set()
+    for row in catalog["items"]:
+        item_id = row["library_item_id"]
+        shelf = row["shelf"]
+        if (type(item_id) is not str or REUSE_ITEM_ID.fullmatch(item_id) is None
+                or item_id in ids):
+            raise ProductIntegrationError("invalid or duplicate catalog item ID")
+        ids.add(item_id)
+        manual = shelf == "SIGNED_MANUAL_RULE"
+        if manual:
+            proof = verified.get(item_id)
+            if (proof is None or row["verification"] != proof["verification"]
+                    or row["pack_serial"] != proof["pack_serial"]
+                    or row["rule_id"] != proof["rule_id"]
+                    or row["source_package_sha256"] !=
+                    proof["source_package_sha256"]
+                    or row["independent_qa_approved"] is not False
+                    or row["export_allowed"] is not False):
+                raise ProductIntegrationError(
+                    "unverified signed item in bounded catalog")
+            reasons = [
+                "EXISTING_OWNER_SIGNED_PACK_MANUAL_SCOPE_ONLY",
+                "INDEPENDENT_QA_NOT_ATTESTED",
+                "LEGAL_LICENSE_SIGNOFF_NOT_ATTESTED",
+                "NEW_GENERIC_EXPORT_NOT_APPROVED",
+            ]
+            action = "REFERENCE_EXISTING_VERIFIED_PACK_MANUALLY"
+        else:
+            if row.get("export_allowed") is not False:
+                raise ProductIntegrationError("unapproved catalog item export claim")
+            reasons = [
+                "NO_VERIFIED_APPROVED_REUSABLE_ARTIFACT",
+                "VERSION_APPLICABILITY_NOT_CONFIRMED",
+                "PER_REVISION_DISTRIBUTION_RIGHTS_NOT_CONFIRMED",
+            ]
+            action = "EVIDENCE_REVIEW_ONLY"
+        choice = {
+            "library_item_id": item_id, "shelf": shelf,
+            "selection_status": (
+                "EXISTING_OWNER_SIGNED_MANUAL_REFERENCE_ONLY"
+                if manual else "CANDIDATE_OR_EXPERIENCE_REUSE_BLOCKED"),
+            "permitted_action": action,
+            "manual_reference_to_existing_pack_allowed": manual,
+            "new_generic_package_export_allowed": False,
+            "production_auto_apply_allowed": False,
+            "review_blockers": reasons,
+        }
+        if manual:
+            choice["pack_serial"] = proof["pack_serial"]
+            choice["source_package_sha256"] = proof["source_package_sha256"]
+            choice["signed_scope"] = proof["signed_pack_manual_scope"]
+            choice["current_signature_verification"] = proof["verification"]
+            choice["approval_basis"] = proof["approval_basis"]
+        else:
+            choice["observed_verification"] = row["verification"]
+        choices.append(choice)
+    selection = None
+    if selected_item_id is not None:
+        selection = next((x for x in choices
+                          if x["library_item_id"] == selected_item_id), None)
+        if selection is None:
+            selection = {
+                "library_item_id": selected_item_id,
+                "selection_status": "NOT_IN_CURRENT_BOUNDED_QUERY_WINDOW_NO_GO",
+                "permitted_action": "REFINE_QUERY_OR_BOUNDED_LIMIT",
+                "manual_reference_to_existing_pack_allowed": False,
+                "new_generic_package_export_allowed": False,
+                "production_auto_apply_allowed": False,
+                "not_found_in_full_catalog_proven": False,
+            }
+    return {
+        "schema": "UCIE_V1_BOUNDED_REUSE_ELIGIBILITY_V1",
+        "status": "INSPECTED_BOUNDED_ELIGIBILITY_NO_GENERIC_EXPORT",
+        "items": choices,
+        "returned_count": len(choices),
+        "manual_reference_count_in_loaded_window": sum(
+            x["manual_reference_to_existing_pack_allowed"] for x in choices),
+        "new_generic_package_exportable_count": 0,
+        "selected_item": selection,
+        "catalog_window_truncated": bool(
+            catalog["source_window_truncated"]
+            or catalog["omitted_from_loaded_windows"] > 0),
+        "full_catalog_inspected": False,
+        "original_signed_verifier_used": signed is not None,
+        "no_implicit_owner_approval_inferred": True,
+        "network_requests": 0, "operating_database_writes": 0,
+        "new_signatures_created": 0, "new_package_released": False,
+        "v1_accepted": False,
     }
 
 
@@ -753,7 +890,8 @@ def integrated_product_preview(root: Path, *, query: str = "",
                                include_demo: bool = False,
                                signed_serial4: Path | None = None,
                                owner_public_trust: Path | None = None,
-                               signed_serial5: Path | None = None) -> dict:
+                               signed_serial5: Path | None = None,
+                               select_item_id: str | None = None) -> dict:
     """Read all UCIE-owned shelves without assuming any one shelf is V1 PASS."""
     _root(root)
     if type(include_demo) is not bool:
@@ -808,6 +946,8 @@ def integrated_product_preview(root: Path, *, query: str = "",
                 item["library_item_id"])
     evidence_readiness = _evidence_readiness(
         sources=sources, public=public, official=official, limit=limit)
+    reuse = _reuse_eligibility(
+        catalog=catalog, signed=signed, selected_item_id=select_item_id)
     public_ok = public["status"] == "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"
     official_ok = official["status"] == "STAGE14_OFFICIAL_METADATA_READ_ONLY_UNVERIFIED_NO_GO"
     # A missing local official ledger remains a transparent blocker, never a
@@ -835,6 +975,7 @@ def integrated_product_preview(root: Path, *, query: str = "",
             "source_allowlist_changed": False,
         },
         "unified_catalog_search": catalog,
+        "reuse_eligibility": reuse,
         "source_version_rights_qa_readiness": evidence_readiness,
         "source_linked_portable_handoff": portable_handoff,
         "capability_experience_comparison": comparison,
@@ -1034,6 +1175,8 @@ def main() -> int:
     parser.add_argument("--serial4-pack", type=Path)
     parser.add_argument("--owner-public-trust", type=Path)
     parser.add_argument("--serial5-pack", type=Path)
+    parser.add_argument("--select-item", dest="select_item_id",
+                        help="Exact 64-char library ID in the bounded query window")
     parser.add_argument("--export-draft", action="store_true",
                         help="Explicitly write ONE UCIE-only draft zip (not a release)")
     parser.add_argument("--verify-draft", action="store_true",
@@ -1043,7 +1186,8 @@ def main() -> int:
         if args.export_draft or args.verify_draft:
             if (args.export_draft and args.verify_draft or
                     args.query or args.domain or args.demo or args.serial4_pack or
-                    args.owner_public_trust or args.serial5_pack or args.limit != 5):
+                    args.owner_public_trust or args.serial5_pack
+                    or args.select_item_id is not None or args.limit != 5):
                 raise ProductIntegrationError("draft operation cannot combine other flags")
             out = (explicitly_export_draft(args.ucie_root) if args.export_draft
                    else verify_existing_draft(args.ucie_root))
@@ -1053,7 +1197,8 @@ def main() -> int:
                 limit=args.limit, include_demo=args.demo,
                 signed_serial4=args.serial4_pack,
                 owner_public_trust=args.owner_public_trust,
-                signed_serial5=args.serial5_pack)
+                signed_serial5=args.serial5_pack,
+                select_item_id=args.select_item_id)
     except (ValueError, OSError) as exc:
         print(json.dumps({
             "schema": SCHEMA, "status": "P9_PRODUCT_FAIL_CLOSED",
