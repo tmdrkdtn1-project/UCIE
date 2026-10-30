@@ -172,6 +172,25 @@ def sync(source: Path, root: Path, *, apply: bool = False,
         # Check installed files are exactly source-pinned; rollback otherwise.
         if any(path.read_bytes() != target for _, path, _, target in pieces):
             raise P8SyncError("postflight source mismatch")
+        audit = {
+            "schema": STATUS,
+            "status": "P8_HOST_PINNED_CODE_APPLIED_NOT_LIVE_WORKER_ATTESTED",
+            "source_main_commit": PIN,
+            "changed_files": [rel for rel, _, before, after
+                              in pieces if before != after],
+            "backup_dir": str(receipt),
+            "new_p11_learning_events_not_yet_observed": True,
+            "task_registration_changed": False,
+            "public_miner_modified": False,
+            "production_code_auto_promoted": False,
+            "existing_p11_experiences_rewritten": False,
+            "existing_operating_miner_database_changed": False,
+            "p8_source_sha256s": {rel: _hex(target)
+                                  for rel, _, _, target in pieces},
+        }
+        (receipt / "receipt.json").write_text(
+            json.dumps(audit, sort_keys=True, ensure_ascii=True) + "\n",
+            encoding="utf-8")
     except BaseException:
         for path, original in reversed(updated):
             if original is None:
@@ -188,25 +207,7 @@ def sync(source: Path, root: Path, *, apply: bool = False,
                 finally:
                     Path(temporary).unlink(missing_ok=True)
         raise
-    audit = {
-        "schema": STATUS,
-        "status": "P8_HOST_PINNED_CODE_APPLIED_NOT_LIVE_WORKER_ATTESTED",
-        "source_main_commit": PIN,
-        "changed_files": [rel for rel, _, before, after
-                          in pieces if before != after],
-        "backup_dir": str(receipt),
-        "new_p11_learning_events_not_yet_observed": True,
-        "task_registration_changed": False,
-        "public_miner_modified": False,
-        "production_code_auto_promoted": False,
-        "existing_p11_experiences_rewritten": False,
-        "existing_operating_miner_database_changed": False,
-        "p8_source_sha256s": {rel: _hex(target)
-                              for rel, _, _, target in pieces},
-    }
-    (receipt / "receipt.json").write_text(
-        json.dumps(audit, sort_keys=True, ensure_ascii=True) + "\n",
-        encoding="utf-8")
+
     return audit
 
 
