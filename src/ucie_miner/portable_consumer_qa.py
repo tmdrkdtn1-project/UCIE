@@ -22,7 +22,7 @@ from .portable_exact import (
 )
 from .product_v1 import (
     ProductIntegrationError, _root, _demo_input,
-    _portable_public_ledger_handoff, _portable_source,
+    _portable_public_ledger_handoff, _portable_source, _portable_cli_source,
     build_draft_package_bytes, PACK_SCHEMA,
 )
 
@@ -49,12 +49,16 @@ def _validated_draft_bytes(payload: bytes, expected: bytes, expected_manifest: d
     try:
         with ZipFile(io.BytesIO(payload)) as pack:
             if pack.namelist() != [
-                    "portable_exact.py", "MANIFEST.json", "README.txt"]:
+                    "portable_exact.py", "__main__.py",
+                    "MANIFEST.json", "README.txt"]:
                 raise ProductIntegrationError("portable package contents changed")
             source = pack.read("portable_exact.py")
+            cli = pack.read("__main__.py")
             manifest_raw = pack.read("MANIFEST.json")
             if (source != _portable_source()
+                    or cli != _portable_cli_source()
                     or sha256(source).hexdigest() != expected_manifest["code_sha256"]
+                    or sha256(cli).hexdigest() != expected_manifest["standalone_cli_sha256"]
                     or manifest_raw != json.dumps(
                         expected_manifest, sort_keys=True,
                         separators=(",", ":")).encode("ascii")):
@@ -66,6 +70,10 @@ def _validated_draft_bytes(payload: bytes, expected: bytes, expected_manifest: d
             or manifest.get("version") != LOOKUP_VERSION
             or manifest.get("consumer_api_version") != LOOKUP_VERSION
             or manifest.get("code_file") != "portable_exact.py"
+            or manifest.get("standalone_cli_file") != "__main__.py"
+            or manifest.get("version") != "1.2.0"
+            or manifest.get("standalone_command") !=
+            "python -I -B <existing-verified-draft.zip>"
             or manifest.get("runtime_dependency") != "PYTHON_STANDARD_LIBRARY_ONLY"
             or manifest.get("status") !=
             "DRAFT_FIRST_PARTY_CONSUMER_NOT_APPROVED_FOR_DISTRIBUTION"
@@ -191,6 +199,35 @@ def check_portable_engine_qa(root: Path, *, draft_bytes: bytes | None = None,
             actual = json.loads(run.stdout.decode("ascii"))
         except (ValueError, UnicodeError) as exc:
             raise ProductIntegrationError("consumer did not return bounded JSON") from exc
+        # A genuine executable ZIP has to run without any installed UCIE code
+        # or extracted source directory. The only bytes exposed to it are the
+        # canonical UCIE-authored draft and bounded unapproved metadata.
+        zip_file = place / "ucie_portable_exact_DRAFT.zip"
+        zip_file.write_bytes(actual_zip)
+        standalone = []
+        for case in cases:
+            case_raw = json.dumps(
+                case, ensure_ascii=True, sort_keys=True,
+                separators=(",", ":")).encode("ascii")
+            if len(case_raw) > MAX_INPUT_BYTES:
+                raise ProductIntegrationError("standalone QA case too large")
+            try:
+                child = subprocess.run(
+                    [sys.executable, "-I", "-B", str(zip_file)],
+                    input=case_raw, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, timeout=30, cwd=place, check=False)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                raise ProductIntegrationError(
+                    "standalone ZIP consumer unavailable") from exc
+            if (child.returncode != 0 or len(child.stdout) > MAX_OUTPUT_BYTES
+                    or child.stderr or len(child.stdout) == 0):
+                raise ProductIntegrationError(
+                    "standalone ZIP consumer failed or printed diagnostics")
+            try:
+                standalone.append(json.loads(child.stdout.decode("ascii")))
+            except (ValueError, UnicodeError) as exc:
+                raise ProductIntegrationError(
+                    "standalone ZIP consumer output invalid") from exc
     if (type(actual) is not list or actual != anticipated
             or any(x.get("schema") != LOOKUP_SCHEMA
                    or x.get("approved_or_exportable_items") != 0
@@ -200,6 +237,23 @@ def check_portable_engine_qa(root: Path, *, draft_bytes: bytes | None = None,
                    or x.get("original_upstream_code_executed") is not False
                    for x in actual)):
         raise ProductIntegrationError("isolated consumer output diverged or authorized")
+    if (len(standalone) != len(anticipated)
+            or any(type(record) is not dict
+                   or record.get("schema") !=
+                   "UCIE_STANDALONE_DRAFT_PUBLIC_METADATA_CLI_V1"
+                   or record.get("status") !=
+                   "UNVERIFIED_PUBLIC_METADATA_QUERY_DRAFT_NOT_RELEASED"
+                   or record.get("engine_version") != LOOKUP_VERSION
+                   or record.get("result") != expected
+                   or record.get("new_public_candidate_approvals") != 0
+                   or record.get("owner_release_approved") is not False
+                   or record.get("third_party_code_executed") is not False
+                   or record.get("network_requests") != 0
+                   or record.get("database_writes") != 0
+                   or record.get("package_released") is not False
+                   for record, expected in zip(standalone, anticipated))):
+        raise ProductIntegrationError(
+            "standalone executable ZIP result or approval boundary mismatch")
     return {
         "schema": SCHEMA,
         "status": "FIRST_PARTY_ISOLATED_CONSUMER_QA_PASS_NOT_RELEASED",
@@ -208,6 +262,10 @@ def check_portable_engine_qa(root: Path, *, draft_bytes: bytes | None = None,
         "package_sha256": sha256(actual_zip).hexdigest(),
         "first_party_source_sha256": manifest["code_sha256"],
         "independent_python_process_executed": True,
+        "standalone_zip_without_ucie_install_executed": True,
+        "standalone_zip_exact_parity_cases": len(standalone),
+        "standalone_zip_entrypoint": "__main__.py",
+        "standalone_zip_external_qa_attested": False,
         "portable_source_exact_byte_match": True,
         "bounded_query_cases_verified": len(cases),
         "exact_result_parity_verified": True,
