@@ -192,7 +192,7 @@ class P9IntegratedProductTests(unittest.TestCase):
         self.assertFalse(manifest["independent_qa_signed_off"])
         self.assertFalse(manifest["source_license_signoff"])
         self.assertFalse(manifest["upstream_public_code_included"])
-        self.assertEqual(manifest["version"], "1.1.0")
+        self.assertEqual(manifest["version"], "1.2.0")
         self.assertEqual(manifest["consumer_api_version"], "1.1.0")
         self.assertEqual(manifest["supported_unverified_metadata_kinds"],
                          sorted(portable.KINDS))
@@ -201,12 +201,20 @@ class P9IntegratedProductTests(unittest.TestCase):
             f.write_bytes(a)
             with ZipFile(f) as z:
                 self.assertEqual(z.namelist(),
-                                 ["portable_exact.py", "MANIFEST.json", "README.txt"])
+                                 ["portable_exact.py", "__main__.py", "MANIFEST.json", "README.txt"])
                 self.assertEqual(z.read("MANIFEST.json"),
                                  json.dumps(manifest, sort_keys=True,
                                             separators=(",", ":")).encode("ascii"))
                 self.assertEqual(z.read("portable_exact.py"),
                                  Path(portable.__file__).read_bytes())
+                self.assertEqual(z.read("__main__.py"),
+                                 Path(product.__file__).with_name(
+                                     "portable_zip_main.py").read_bytes())
+                self.assertEqual(manifest["standalone_cli_file"], "__main__.py")
+                self.assertEqual(manifest["standalone_cli_sha256"],
+                                 __import__("hashlib").sha256(
+                                     z.read("__main__.py")).hexdigest())
+                self.assertFalse(manifest["signed"])
                 self.assertNotIn(b"upstream PR contents", z.read("portable_exact.py"))
 
     def test_portable_unverified_engine_skill_learning_kinds_and_strict_pr_identity(self):
