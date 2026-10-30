@@ -504,6 +504,56 @@ def review(folder, callback):
         self.assertEqual(json.loads(replay.stdout)["status"],
                          "MANUAL_CONSUMER_FAIL_CLOSED")
 
+    def test_real_signed_fixture_in_one_shot_host_observer_no_operating_writes(self):
+        from hashlib import sha256
+        from ucie_miner.v1_host_readiness import observe_ucie_host
+        self._publish_serial4()
+        (self.root / "runtime").mkdir(exist_ok=True)
+        original = sha256(self.serial4.read_bytes()).hexdigest()
+        with patch("urllib.request.urlopen",
+                   side_effect=AssertionError("host observer may not GET")):
+            result = observe_ucie_host(
+                self.root, serial4_pack=self.serial4,
+                owner_public_trust=self.trust)
+        signed = result["signed_manual"]
+        self.assertEqual(signed["status"],
+                         "CURRENT_PACK_VERIFIED_ON_UCIE_SYNTHETIC_INPUT_ONLY")
+        self.assertEqual(signed["verified_rule_count"], 4)
+        self.assertEqual(signed["synthetic_signed_scan_matches"], 1)
+        self.assertFalse(signed["real_user_source_scanned"])
+        self.assertFalse(signed["production_version_applicability_verified"])
+        self.assertEqual(signed["pack_sha256s"]["serial4"], original)
+        self.assertEqual(sha256(self.serial4.read_bytes()).hexdigest(),
+                         original)
+        self.assertEqual(result["status"],
+                         "UCIE_V1_LOCAL_OBSERVATIONS_NO_GO")
+        self.assertFalse(result["real_host_v1_accepted"])
+        self.assertEqual(result["scheduler_actions_this_command"], 0)
+        self.assertEqual(result["network_requests_this_command"], 0)
+        self.assertEqual(result["rule_promotion_actions_this_command"], 0)
+        self.assertIn("APPROVED_GENERIC_PACKAGE_EXPORT_NOT_EVIDENCED",
+                      result["blockers"])
+
+        # After a previously passing observer receipt, tamper or changed trust
+        # cannot be reused to create a real host PASS.
+        other_private, other_trust = generate_keys(
+            self.root / "other-observer-trust", purpose="production")
+        self.assertTrue(other_private.is_file())
+        altered = observe_ucie_host(
+            self.root, serial4_pack=self.serial4,
+            owner_public_trust=other_trust)
+        self.assertEqual(
+            altered["signed_manual"]["status"],
+            "COMPONENT_READONLY_CHECK_FAILED_NO_GO")
+        self.serial4.write_bytes(b"ALTERED_AFTER_REAL_SIGNED_HOST_OBSERVATION")
+        replay = observe_ucie_host(
+            self.root, serial4_pack=self.serial4,
+            owner_public_trust=self.trust)
+        self.assertEqual(
+            replay["signed_manual"]["status"],
+            "COMPONENT_READONLY_CHECK_FAILED_NO_GO")
+        self.assertFalse(replay["real_host_v1_accepted"])
+
     def test_w09_descriptor_is_bound_to_same_genuine_signed_pack(self):
         self._publish_serial4()
         original = self.serial4.read_bytes()
