@@ -134,10 +134,10 @@ def sync(source: Path, root: Path, *, apply: bool = False,
     pieces, report = plan(source, root, allow_test_root=allow_test_root)
     if not apply:
         return report
-    if _running(root):
-        raise P8SyncError("P10_RUNNING_JOBS_RETRY_WHEN_IDLE_NO_CHANGE")
     if all(current == target for _, _, current, target in pieces):
         return {**report, "status": "P8_HOST_ALREADY_PINNED_NO_CHANGE"}
+    if _running(root):
+        raise P8SyncError("P10_RUNNING_JOBS_RETRY_WHEN_IDLE_NO_CHANGE")
     # Read-only preflight before creating anything: source and all three
     # original files must still match the exact pinned bytes.
     for _, path, current, _ in pieces:
