@@ -36,7 +36,7 @@ class HostAcceptanceError(ValueError):
 
 
 def _root(root: Path) -> tuple[Path, Path]:
-    if (type(root) is not Path or root.name.casefold() != "ucie"
+    if (not isinstance(root, Path) or root.name.casefold() != "ucie"
             or root.is_symlink() or not root.is_dir()):
         raise HostAcceptanceError("DEDICATED_UCIE_ROOT_REQUIRED")
     runtime = root / "runtime"
