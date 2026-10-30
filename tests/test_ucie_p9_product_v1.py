@@ -35,6 +35,8 @@ class P9IntegratedProductTests(unittest.TestCase):
         item = {
             "shelf": "PUBLIC_CANDIDATE", "library_item_id": "a" * 64,
             "verification": "UNVERIFIED_CANDIDATE_ONLY",
+            "version_scope": "UNDETERMINED",
+            "source_license_status": "NOT_ATTESTED_PER_REVISION",
             "export_allowed": False,
         }
         catalog = {
@@ -77,6 +79,15 @@ class P9IntegratedProductTests(unittest.TestCase):
         with self.assertRaises(product.ProductIntegrationError):
             product._reuse_eligibility(
                 catalog=forged, signed=None, selected_item_id=None)
+        for forged_claim in (
+            {"version_scope": "3.15.0"},
+            {"source_license_status": "LICENSE_APPROVED"},
+        ):
+            with self.subTest(forged_claim=forged_claim):
+                with self.assertRaises(product.ProductIntegrationError):
+                    product._reuse_eligibility(
+                        catalog={**catalog, "items": [{**item, **forged_claim}]},
+                        signed=None, selected_item_id=None)
         signed_claim = {**catalog, "items": [{
             "shelf": "SIGNED_MANUAL_RULE", "library_item_id": "a" * 64,
             "verification": "OWNER_SIGNED_VERIFIED_AT_INSPECTION_TIME",
