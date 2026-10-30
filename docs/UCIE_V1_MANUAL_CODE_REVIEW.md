@@ -75,6 +75,20 @@ The query is performed once per distinct PR in the inspected snippet. Top-level 
 
 The same single command and both languages remain unchanged. No new miner, API collection, DB writes, source execution, automatic rule approval, package release or V1 acceptance.
 
+## Same-source public evidence comparison (in the same command)
+
+When a finding has an **exact PR-linked** public candidate in the already loaded W04 Stage10/12/15 window, `findings[].public_library.related_public_evidence` also shows up to **three other PR candidates** with the same approved source, candidate kind and purpose code. It reuses the *same source-filtered W04 result* already read for the finding: no second query, network call, change to the runtime ledgers, scanner rewrite or new Stage. Repeated findings tied to one PR reuse the one lookup.
+
+The comparison is deliberately narrow:
+
+- `match_basis=SAME_APPROVED_SOURCE_KIND_AND_PURPOSE_ONLY` is a **metadata classification match**, **not** equivalent behavior, a proven fix, a source revision's operating-version compatibility, or independent QA.
+- Each related result has public PR URL, original library item ID, revision hint and evidence SHA-256; `human_approved=false`, `export_allowed=false`, `rule_fix_equivalence_verified=false` and `rights_for_export_verified=false`. It is **not a selectable approved artifact**.
+- A missing exact PR anchor returns `NO_EXACT_ANCHOR_NO_COMPARISON`. A clean checkout without UCIE Stage12 ledger yields the same explicitly incomplete result. Zero candidates in a bounded window does not prove that no related public source exists elsewhere.
+- The existing source page is limited to 20 entries and the comparison is limited to three distinct other PR URLs. `related_candidate_count_in_loaded_window` and `comparison_truncated` disclose truncation; `full_source_coverage_verified=false` always. Different versions of one PR do not fill all comparison slots.
+- The top-level `related_public_pr_candidates_in_loaded_windows` is a bounded presented-item count across distinct examined PRs, **not** total library coverage. `approved_reusable_artifacts_from_this_lookup=0` means a real authorization-and-export flow is still required before reuse.
+
+This closes the narrow *finding → exact source → nearby review leads* navigation without pretending to complete V1 selection, general engine/skill export, external rights review or auto-learning. An authorized reusable artifact requires its separate existing approval/signed-package process.
+
 ## UTF-8 input integrity
 
 PowerShell code review preserves the original strict UTF-8 bytes, including Korean comments, emoji and CRLF line endings, through the UCIE-owned stdin adapter. It does not rely on the machine's console codepage (including Windows PowerShell 5.1). The adapter rejects malformed UTF-8 and inputs over 16 KiB, and verifies the original source digest. For UTF-8 BOM-prefixed stdin (which can occur in Windows PowerShell 5.1 native pipelines), the CLI accepts and parses the input, reports `source_sha256` over the complete original raw bytes including the BOM, and separately reports `parsed_source_sha256` over the BOM-stripped parser input. `source_byte_encoding` explicitly distinguishes `UTF8_BOM_PARSED_WITH_RAW_HASH` from `UTF8_NO_BOM`. This avoids both a misleading source hash and a regression of the existing documented Windows shell pipeline. Inputs are still parsed as inert AST data, never executed or echoed. CI exercises the real CLI and both available PowerShell engines with first-party synthetic Unicode samples; this does not grant new source permissions or product approval.
