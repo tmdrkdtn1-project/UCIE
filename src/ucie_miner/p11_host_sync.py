@@ -7,6 +7,7 @@ public network requests, signing, approval, or other project traversal.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
@@ -65,7 +66,9 @@ def _running(root: Path) -> int:
         raise P8SyncError("P10 queue absent: no deployment proof")
     try:
         uri = target.as_uri() + "?mode=ro"
-        with sqlite3.connect(uri, uri=True, timeout=2) as conn:
+        # sqlite3.Connection context manager commits/rolls back but does
+        # NOT close the OS handle. Closing is essential for Windows P10.
+        with closing(sqlite3.connect(uri, uri=True, timeout=2)) as conn:
             conn.execute("PRAGMA query_only=ON")
             rows = conn.execute(
                 "SELECT COUNT(*) FROM jobs WHERE status='RUNNING'").fetchone()
