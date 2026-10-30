@@ -1,6 +1,7 @@
 """UCIE-owned host readiness tests. Disposable UCIE root, never a real host DB."""
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
@@ -26,7 +27,8 @@ class UCIEV1HostReadinessTests(unittest.TestCase):
     def _miner_db(self, *, age_minutes: int = 30, state: str =
                   "UNVERIFIED_CANDIDATE_ONLY", source: str = "python/cpython"):
         db = self.runtime / "public_miner.sqlite3"
-        with sqlite3.connect(db) as c:
+        # sqlite3.Connection.__exit__ commits but does NOT close on Windows.
+        with closing(sqlite3.connect(db)) as c, c:
             c.execute("CREATE TABLE candidates("
                       "source TEXT,pr_number INTEGER,public_url TEXT,"
                       "merged_at TEXT,evidence_sha256 TEXT,tags_json TEXT,"
