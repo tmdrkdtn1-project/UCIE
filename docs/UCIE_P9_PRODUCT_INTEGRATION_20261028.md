@@ -39,6 +39,28 @@ $py = 'D:\UCIE\.venv\Scripts\python.exe'
 - W05 외부 "양성 기술" 후보는 300건 중 제목 단서0, **실제 업스트림 엔진·스킬 구현/성능 검증 없음**. 이 0건을 이유로 UCIE 자체 P9 엔진 연동을 더 미루지 않는다.
 - P9 V1 인수 조건(독립 QA, 버전/라이선스, 서명 승인, 실제 소유자 PC end-to-end, 운영 V1 소유자 인수)이 증명되기 전에는 `v1_accepted=false`. 이 코드는 임의 생산 배포/자동 승격/스케줄러 등록을 하지 않으며, 정확히 불충족 조건을 출력한다.
 
+## V1 재사용 적격성 조회 / 항목 선택 (2026-10-30 추가)
+
+기존 `ucie_miner.product_v1` 명령의 `reuse_eligibility` 항목에서 읽기 전용으로 **공개 후보/합성 경험**과 **실제로 원본 서명 검증기를 통과한 기존 Serial4/5 Rulepack**을 구분한다. 별도 저장소 접근, 승인 체계, 파일 출력, 운영 원장 변경이나 추가 수집은 없다.
+
+- `PUBLIC_CANDIDATE`: 소스 레지스트리 근거는 있어도 정확한 실행 버전과 개정별 배포 사용권이 검증되지 않았다. `selection_status=CANDIDATE_OR_EXPERIENCE_REUSE_BLOCKED`, 반출 불가.
+- `SIGNED_MANUAL_RULE`: 사용자가 UCIE 내부의 **실제 Serial4 팩+공개 신뢰키** (선택적으로 Serial5)를 정확히 지정하고 기존 암호학적 원본 검증기가 현재 시점에 통과한 경우에만 `EXISTING_OWNER_SIGNED_MANUAL_REFERENCE_ONLY`. 원래 승인된 소유자 위험 인수/수동 사용 범위만 가리키며, **새로운 범용 반출·독립 QA/법적 사용권 승인·자동 적용을 의미하지 않는다.** 기존 패키지의 SHA-256이 고정된 참조 대상이다.
+- `--select-item`에는 첫 조회에서 받은 정확한 64자리 `library_item_id`만 지정한다. 현 `--query`·`--domain`·`--limit`의 **표시된 제한 창** 안에서만 선택한다. 창에 없으면 `NOT_IN_CURRENT_BOUNDED_QUERY_WINDOW_NO_GO`이며 전체 도서관에 없다는 뜻이 아니다.
+- `version_evidence_status`와 `rights_verification_status`를 각 항목에 표시한다. `new_generic_package_exportable_count=0`은 현재 구현이 새 범용 패키지의 배포를 승인하거나 실행하지 않음을 뜻한다.
+
+읽기 전용 명령 예시 (이미 격리하여 준비한 UCIE checkout과 **그 checkout 전용 Python 환경** 사용):
+
+```powershell
+$env:PYTHONPATH = Join-Path $root 'src'
+& $py -B -m ucie_miner.product_v1 --ucie-root $root --limit 20
+# 서명팩이 실제 존재하고 UCIE 내부에 있을 때만, 기존 소유자 검증을 선택적으로 추가:
+& $py -B -m ucie_miner.product_v1 --ucie-root $root --limit 20 --serial4-pack $serial4 --owner-public-trust $publicTrust
+# 위 JSON의 reuse_eligibility.items에서 확인한 정확한 ID만 선택:
+& $py -B -m ucie_miner.product_v1 --ucie-root $root --limit 20 --serial4-pack $serial4 --owner-public-trust $publicTrust --select-item $libraryItemId
+```
+
+이 조회는 기존 검증된 Rulepack **참조 가능성**만 보여주며 패키지 복사·서명·재배포·다른 프로젝트 스캔은 실행하지 않는다. 전체 UCIE V1 제품 수용 상태는 여전히 `v1_accepted=false`.
+
 ## 완료 방향
 
 새 PR을 무한히 늘리지 않는다. **새 통합 진입점과 독립 소비 실기의 Windows/Ubuntu 3.13/3.15 CI를 먼저 완료**, 로컬 D:\UCIE에는 **신규 Python 모듈 두 개만** 원자적으로 반영(기존 dirty 수정 불변). 사용자 PC 실호스트 위 세 명령 결과에서 실제 수집기/도서관/경험 계보의 자료를 확인하고, 실행되는 명확한 blocker만 보수. 정식 릴리스·권리·신뢰 서명은 허가/근거가 없으면 NO_GO로 별도 표시.
