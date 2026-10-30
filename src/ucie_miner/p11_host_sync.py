@@ -216,7 +216,12 @@ def plan(source: Path, root: Path, *, allow_test_root: bool = False) -> tuple[li
         if (rel.endswith("p11_closed_loop.py") and current is not None
                 and not _same_python_source(current, upstream)
                 and not _same_python_source(current, base)):
-            owner_quiet = _legacy_owner_quiet_source(base)
+            try:
+                owner_quiet = _legacy_owner_quiet_source(base)
+            except P8SyncError:
+                # An unexpected historical base cannot be reinterpreted as
+                # owner quiet source. Continue to the ordinary drift-denial.
+                owner_quiet = None
         if (current is not None and
                 not _same_python_source(current, upstream) and
                 not (base is not None and _same_python_source(current, base)) and
