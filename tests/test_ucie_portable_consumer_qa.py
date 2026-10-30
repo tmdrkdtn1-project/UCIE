@@ -173,7 +173,7 @@ class PortableIndependentConsumerQATests(unittest.TestCase):
         self.assertFalse(record["third_party_code_executed"])
         self.assertEqual(sha256(package.read_bytes()).hexdigest(),
                          sha256(payload).hexdigest())
-        self.assertEqual(manifest["version"], "1.2.0")
+        self.assertEqual(manifest["version"], "1.3.0")
         self.assertEqual(sorted(self.root.rglob("*")), root_files)
 
         invalid = (
@@ -200,6 +200,26 @@ class PortableIndependentConsumerQATests(unittest.TestCase):
                 self.assertEqual(rejected["status"], "STANDALONE_DRAFT_FAIL_CLOSED")
                 self.assertFalse(rejected["owner_release_approved"])
                 self.assertFalse(rejected["package_released"])
+        # Response size expands with repeated exact queries even with a
+        # bounded <=32KiB input. Hard fail instead of emitting oversized data.
+        base_row = product._demo_input()[0]
+        many_rows = [{
+            **base_row,
+            "library_item_id": f"{i+1:064x}",
+            "public_url": f"https://github.com/python/cpython/pull/{i+1}",
+            "evidence_sha256": f"{i+200:064x}",
+        } for i in range(20)]
+        amplified = json.dumps({
+            "items": many_rows, "queries": [key] * 32, "limit": 20,
+        }, sort_keys=True).encode("ascii")
+        self.assertLess(len(amplified), 32768)
+        overflow = invoke(amplified)
+        self.assertEqual(overflow.returncode, 2, overflow.stderr[-500:])
+        self.assertFalse(overflow.stderr)
+        self.assertEqual(json.loads(overflow.stdout)["status"],
+                         "STANDALONE_DRAFT_FAIL_CLOSED")
+        self.assertLess(len(overflow.stdout), 1024)
+
         denied = invoke(original, "--export", "external")
         self.assertEqual(denied.returncode, 2)
         self.assertEqual(json.loads(denied.stdout)["status"],
