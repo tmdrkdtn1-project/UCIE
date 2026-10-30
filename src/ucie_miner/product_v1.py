@@ -1000,6 +1000,156 @@ def _evidence_readiness(*, sources: dict, public: dict,
     }
 
 
+
+def _selected_public_release_rights_review(*, selection: dict | None,
+                                           evidence: dict) -> dict | None:
+    """Version/rights triage for an exact *selected* W04 library item.
+
+    A pinned repository LICENSE file is not a per-file redistribution grant.
+    Runtime reproduction of one bug is not a release's full fix coverage.
+    Public metadata/observations are never executable release permissions.
+    """
+    if selection is None or selection.get("shelf") != "PUBLIC_CANDIDATE":
+        return None
+    if (selection.get("selection_status") !=
+            "CANDIDATE_OR_EXPERIENCE_REUSE_BLOCKED"
+            or selection.get("new_generic_package_export_allowed") is not False
+            or selection.get("production_auto_apply_allowed") is not False
+            or selection.get("version_scope") != "UNDETERMINED"
+            or selection.get("source_license_status") !=
+            "NOT_ATTESTED_PER_REVISION"):
+        raise ProductIntegrationError("unverified public selection claim changed")
+    if (evidence.get("schema") != "UCIE_P9_SOURCE_VERSION_RIGHTS_QA_READINESS_V1"
+            or evidence.get("status") !=
+            "INSPECTED_EVIDENCE_PENDING_REVIEW_NO_GO"
+            or evidence.get("all_required_evidence_accepted") is not False
+            or type(evidence.get("rows")) is not list):
+        raise ProductIntegrationError("untrusted W04 source version/rights evidence")
+    matches = [
+        row for row in evidence["rows"]
+        if row.get("shelf") == "W04_PUBLIC_CANDIDATE"
+        and row.get("library_item_id") == selection["library_item_id"]
+    ]
+    if len(matches) != 1:
+        raise ProductIntegrationError("selected W04 item has no exact evidence row")
+    row = matches[0]
+    if (row.get("local_source_linkage_checked") is not True
+            or row.get("version_scope_claim") != "UNDETERMINED"
+            or row.get("source_license_status") != "NOT_ATTESTED_PER_REVISION"
+            or row.get("runtime_version_applicability_verified") is not False
+            or row.get("source_rights_for_export_verified") is not False
+            or row.get("independent_qa_verified") is not False
+            or row.get("export_allowed") is not False):
+        raise ProductIntegrationError("W04 selected evidence cannot be authorized")
+    source_id, url, merge = (
+        row["source_id"], row["public_url"], row["revision_hint"])
+    if (type(source_id) is not str or type(url) is not str
+            or type(merge) is not str or
+            re.fullmatch(r"[0-9a-f]{40}", merge) is None
+            or type(row.get("evidence_sha256")) is not str
+            or REUSE_ITEM_ID.fullmatch(row["evidence_sha256"]) is None):
+        raise ProductIntegrationError("W04 selected revision is not source pinned")
+    # Requery the same immutable UCIE-owned three-record evidence set:
+    # never accept forged or differently selected runtime/license claims.
+    pinned = lookup_pinned_review(
+        source_id=source_id, public_url=url, merge_sha=merge)
+    if pinned != row.get("pinned_public_revision_review"):
+        raise ProductIntegrationError("selected version/rights review pin drift")
+    checked_releases = []
+    if pinned is not None:
+        if (pinned.get("source_id") != source_id
+                or pinned.get("public_pr_url") != url
+                or pinned.get("merge_sha") != merge
+                or pinned.get("repo_license_observed_at_merge_sha") is not True
+                or pinned.get("per_file_third_party_license_cleared") is not False
+                or pinned.get("legal_signoff_completed") is not False
+                or pinned.get("independent_qa_completed") is not False
+                or pinned.get("release_contains_fix_verified") is not False
+                or pinned.get("absence_of_backport_verified") is not False
+                or pinned.get("affected_runtime_version_verified") is not False
+                or pinned.get("approved_or_exportable") is not False
+                or pinned.get("compare_status") != "diverged"):
+            raise ProductIntegrationError("pinned review cannot grant export or version")
+        for key, scope, expected_status in (
+            ("official_windows_release_runtime_observation", "windows-x64",
+             "PINNED_RELEASE_WINDOWS_X64_BUG_REPRODUCED_NO_GO"),
+            ("official_release_runtime_observation", "linux-x64",
+             "PINNED_RELEASE_LINUX_X64_BUG_REPRODUCED_NO_GO"),
+        ):
+            observation = pinned.get(key)
+            if observation is None:
+                continue
+            if (type(observation) is not dict
+                    or observation.get("status") != expected_status
+                    or observation.get("target_arch") != scope
+                    or observation.get("runtime_version") != "7.6.6"
+                    or observation.get("native_behavior") !=
+                    "DOT_PREFIX_BUG_OBSERVED_ON_RUNNER"
+                    or observation.get("archive_sha256_verified_against_published_release")
+                       is not True
+                    or observation.get("actual_release_binary_executed") is not True
+                    or observation.get("independent_qa_completed") is not False
+                    or observation.get("production_approved") is not False
+                    or type(observation.get("ci_job_url")) is not str
+                    or not observation["ci_job_url"].startswith(
+                        "https://github.com/tmdrkdtn1-project/UCIE/actions/runs/")
+                    or type(observation.get("archive_sha256")) is not str
+                    or REUSE_ITEM_ID.fullmatch(observation["archive_sha256"]) is None):
+                raise ProductIntegrationError("single-release observation invalid")
+            checked_releases.append({
+                "specific_binary_runtime": "7.6.6",
+                "platform": scope,
+                "observed_behavior": "DOT_PREFIX_BUG_REPRODUCED_ONLY",
+                "official_archive_sha256": observation["archive_sha256"],
+                "observed_ci_job_url": observation["ci_job_url"],
+                "fix_available_in_version_verified": False,
+                "all_platforms_covered": False,
+                "authorizes_package_distribution": False,
+            })
+    return {
+        "schema": "UCIE_V1_SELECTED_W04_RELEASE_RIGHTS_REVIEW_V1",
+        "status": (
+            "EXACT_RELEASE_BUG_REPRODUCED_MANUAL_REVIEW_NO_GO"
+            if checked_releases else
+            "MERGE_LICENSE_PINNED_RUNTIME_APPLICABILITY_UNKNOWN_NO_GO"
+            if pinned is not None else
+            "UNPINNED_PUBLIC_MERGE_NEEDS_MANUAL_REVIEW_NO_GO"
+        ),
+        "library_item_id": selection["library_item_id"],
+        "source_id": source_id, "public_url": url,
+        "merge_sha": merge, "evidence_sha256": row["evidence_sha256"],
+        "pinned_repository_review_found": pinned is not None,
+        "repository_license_observed": pinned is not None,
+        "repository_license_family_observed": (
+            pinned["repository_license_family_observed"]
+            if pinned is not None else None),
+        "repository_license_blob_git_sha1": (
+            pinned["repository_license_blob_sha"]
+            if pinned is not None else None),
+        "repository_license_review_url": (
+            pinned["repository_license_url"]
+            if pinned is not None else None),
+        "examined_release_tag": (
+            pinned["upstream_release_tag"] if pinned is not None else None),
+        "merge_ancestor_of_examined_release_proven": False,
+        "equivalent_backports_excluded": False,
+        "reproduced_one_release_binary_scopes": checked_releases,
+        "reproduced_release_binary_scope_count": len(checked_releases),
+        "source_window_truncated": evidence.get(
+            "source_window_truncated", False),
+        "full_public_universe_inspected": False,
+        "exact_runtime_fix_coverage_verified": False,
+        "all_runtime_versions_supported_verified": False,
+        "per_revision_redistribution_rights_cleared": False,
+        "per_file_license_and_notices_review_completed": False,
+        "external_independent_qa_attested": False,
+        "candidate_source_executed_here": False,
+        "network_requests": 0, "operating_database_writes": 0,
+        "auto_promoted": False, "new_package_export_allowed": False,
+        "package_released": False, "v1_accepted": False,
+    }
+
+
 def integrated_product_preview(root: Path, *, query: str = "",
                                domain: str | None = None,
                                limit: int = 5,
@@ -1072,6 +1222,8 @@ def integrated_product_preview(root: Path, *, query: str = "",
         sources=sources, public=public, official=official, limit=limit)
     reuse = _reuse_eligibility(
         catalog=catalog, signed=signed, selected_item_id=select_item_id)
+    selected_public_release_review = _selected_public_release_rights_review(
+        selection=reuse["selected_item"], evidence=evidence_readiness)
     consumer_reference = None
     if include_consumer_reference:
         consumer_reference = _selected_w09_manual_consumer_reference(
@@ -1109,6 +1261,7 @@ def integrated_product_preview(root: Path, *, query: str = "",
         "reuse_eligibility": reuse,
         "selected_existing_w09_consumer_reference": consumer_reference,
         "source_version_rights_qa_readiness": evidence_readiness,
+        "selected_public_release_rights_review": selected_public_release_review,
         "source_linked_portable_handoff": portable_handoff,
         "capability_experience_comparison": comparison,
         "library_revision_review_queue": revision_review,
