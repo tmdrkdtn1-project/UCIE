@@ -1315,17 +1315,23 @@ def main() -> int:
                         help="Explicitly write ONE UCIE-only draft zip (not a release)")
     parser.add_argument("--verify-draft", action="store_true",
                         help="Verify existing local draft against exact current UCIE source; no writes")
+    parser.add_argument("--qa-portable", action="store_true",
+                        help="Isolated first-party portable engine QA on W04 metadata; no export")
     args = parser.parse_args()
     try:
-        if args.export_draft or args.verify_draft:
-            if (args.export_draft and args.verify_draft or
+        if args.export_draft or args.verify_draft or args.qa_portable:
+            if (sum((args.export_draft, args.verify_draft, args.qa_portable)) != 1 or
                     args.query or args.domain or args.demo or args.serial4_pack or
                     args.owner_public_trust or args.serial5_pack
                     or args.select_item_id is not None
                     or args.consumer_reference or args.limit != 5):
                 raise ProductIntegrationError("draft operation cannot combine other flags")
-            out = (explicitly_export_draft(args.ucie_root) if args.export_draft
-                   else verify_existing_draft(args.ucie_root))
+            if args.qa_portable:
+                from .portable_consumer_qa import check_portable_engine_qa
+                out = check_portable_engine_qa(args.ucie_root)
+            else:
+                out = (explicitly_export_draft(args.ucie_root) if args.export_draft
+                       else verify_existing_draft(args.ucie_root))
         else:
             out = integrated_product_preview(
                 args.ucie_root, query=args.query, domain=args.domain,
