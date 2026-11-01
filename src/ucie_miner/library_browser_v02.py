@@ -52,7 +52,7 @@ def read_filters(qs: str) -> dict:
     if (source is not None and source not in APPROVED_SOURCES
             or not limit.isascii() or not limit.isdecimal() or limit not in ("5", "10", "20")
             or not page.isascii() or not page.isdecimal() or len(page) > 3
-            or not 1 <= int(page) <= 100):
+            or not 1 <= int(page) <= 200):
         raise UIError("out-of-scope search selection")
     try:
         _filters(query=q, source_id=source, domain=domain,
