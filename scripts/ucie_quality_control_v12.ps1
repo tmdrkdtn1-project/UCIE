@@ -13,6 +13,13 @@ $runtime = Join-Path $root 'runtime'
 if (-not (Test-Path -LiteralPath $runtime -PathType Container)) {
     throw 'UCIE_RUNTIME_NOT_FOUND'
 }
+foreach ($directory in @($root, $runtime)) {
+    $entry = Get-Item -LiteralPath $directory -Force -ErrorAction Stop
+    if (-not $entry.PSIsContainer -or
+        ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'UCIE_OWNER_DIRECTORY_REPARSE_POINT_NOT_ALLOWED'
+    }
+}
 $marker = Join-Path $runtime 'stage17_quality_opt_in.txt'
 $token = 'UCIE_STAGE17_HOURLY_LIBRARY_QUALITY_OPT_IN_V1'
 $stage10 = Join-Path $runtime 'stage10_hourly_opt_in.txt'
