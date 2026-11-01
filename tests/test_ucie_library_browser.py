@@ -147,15 +147,16 @@ class UCIEBrowserTests(unittest.TestCase):
             self.assertEqual(exc.exception.code, 403)
             self.assertEqual(calls, [])
 
-    def test_empty_default_query_is_valid(self):
+    def test_new_browser_tab_renders_form_without_reading_any_ledger(self):
         filters = parse_request_filters("")
         self.assertEqual(filters["query"], "")
         self.assertEqual(filters["limit"], 10)
         self.assertIsNone(filters["source_id"])
         self.assertIsNone(filters["kind"])
+        called = []
 
         def searcher(root, **received):
-            self.assertEqual(received, filters)
+            called.append(received)
             return SAMPLE
 
         with local_only(searcher) as url:
@@ -163,7 +164,13 @@ class UCIEBrowserTests(unittest.TestCase):
                 self.assertEqual(response.status, 200)
                 page = response.read().decode("utf-8")
                 self.assertNotIn("검색 조건 오류", page)
-                self.assertIn("공개 근거 열기", page)
+                self.assertNotIn("공개 근거 열기", page)
+                self.assertIn("승인된 공개 근거 원장을 조회합니다", page)
+            # An explicitly submitted empty form *does* invoke original W04.
+            with urlopen(url + "/?q=&domain=&kind=&source=&limit=10", timeout=5) as response:
+                self.assertEqual(response.status, 200)
+                self.assertIn("공개 근거 열기", response.read().decode("utf-8"))
+        self.assertEqual(called, [filters])
 
     def test_valid_search_rejects_invalid_source_ledger_without_blame_or_leak(self):
         cases = (
