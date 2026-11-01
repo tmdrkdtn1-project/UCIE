@@ -45,7 +45,7 @@ in conversation and remains an acceptance item.
 
 ## Test and install
 
-Only these seven NEW files after PR is merged and each SHA is checked:
+Only these eight NEW files after PR is merged and each SHA is checked:
 - src/ucie_miner/library_release_ancestry_v11.py
 - src/ucie_miner/library_upstream_review_v11.py
 - src/ucie_miner/library_browser_v11.py
@@ -55,7 +55,7 @@ Only these seven NEW files after PR is merged and each SHA is checked:
 - tests/test_ucie_release_review_v11.py
 - docs/UCIE_V11_RELEASE_REGRESSION_REVIEW_20261101.md
 
-There are **eight** new paths including the documentation file. Keep
+There are eight new paths including the documentation file. Keep
 previous V0.1–V1.0 code and local review/source data unchanged.
 Do not use git reset --hard, git clean, broad checkout or blanket git pull.
 
