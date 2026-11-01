@@ -59,7 +59,7 @@ function Get-WinEvent {
             $idField = if ($eventId -in @(100,102)) { 'InstanceId' } else { 'TaskInstanceId' }
             $code = if ($eventId -eq 201) { if ($script:mockBadEventCode) { '2' } else { '0' } } else { '' }
             $action = Join-Path $root '.venv\\Scripts\\python.exe'
-            $xml = "<Event><EventData><Data Name='TaskName'>\\UCIE-PublicMiner-Hourly</Data><Data Name='$idField'>$eventGuid</Data><Data Name='ActionName'>$action</Data><Data Name='ResultCode'>$code</Data></EventData></Event>"
+            $xml = "<Event><EventData><Data Name='TaskName'>\UCIE-PublicMiner-Hourly</Data><Data Name='$idField'>$eventGuid</Data><Data Name='ActionName'>$action</Data><Data Name='ResultCode'>$code</Data></EventData></Event>"
             $evt = [pscustomobject]@{ Id=$eventId; TimeCreated=$when; Xml=$xml }
             $evt | Add-Member -MemberType ScriptMethod -Name ToXml -Value { return $this.Xml }
             $out += $evt
@@ -141,7 +141,7 @@ try {
         -not $report.last_scheduled_run_matches_receipt -or
         $report.candidates_auto_approved -ne 0 -or
         $report.database_modified -ne $false) {
-        throw 'UCIE_HOURLY_RATE_BUDGET_STATE_NO_GO'
+        throw ('UCIE_HOURLY_RATE_BUDGET_STATE_NO_GO REPORT=' + ($report | ConvertTo-Json -Compress -Depth 5))
     }
     Write-SyntheticReceipts -LastStage 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO'
     $normal = (& $evaluator | ConvertFrom-Json)
