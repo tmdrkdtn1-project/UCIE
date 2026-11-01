@@ -6,10 +6,12 @@ operating database edits or rules promotion.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from html import unescape
 from http.server import HTTPServer
 from pathlib import Path
 from threading import Thread
 import json
+import re
 import unittest
 from urllib.error import HTTPError
 from urllib.parse import urlencode
@@ -21,7 +23,8 @@ from ucie_miner.library_compare import (
 )
 from ucie_miner.library_explore import explore_linked_public_candidates
 from ucie_miner.library_browser_v03 import (
-    SCHEMA, make_handler, parse_compare, render_search, render_comparison,
+    SCHEMA, make_handler, parse_compare, parse_compare_request,
+    parse_search_request, render_search, render_comparison,
 )
 from ucie_miner.library_browser_v02 import read_filters
 from ucie_public.policy import PolicyError
@@ -189,6 +192,91 @@ class CompareProofTests(unittest.TestCase):
                 urlopen(Request(base + "/", headers={"Host": "bad.example"}),
                         timeout=5)
             self.assertEqual(caught.exception.code, 403)
+
+
+    def test_compare_return_exact_filtered_page_with_checked_ids(self):
+        h = fixture()
+        filters = read_filters("q=Python&domain=Python&kind=&source=&limit=5&page=2")
+        second = explore_linked_public_candidates(h, **filters)
+        self.assertEqual(second["page"], 2)
+        self.assertEqual(second["total_pages"], 2)
+        self.assertEqual(len(second["items"]), 4)
+        chosen = tuple(row["library_item_id"] for row in second["items"][:2])
+        page = render_search(filters, second)
+        for key in ("q", "source", "domain", "kind", "limit", "page"):
+            self.assertIn('type="hidden" name="' + key + '"', page)
+        self.assertIn('name="page" value="2"', page)
+        self.assertIn('name="q" value="Python"', page)
+        self.assertNotIn('type="checkbox" name="item" value="' + chosen[0] +
+                         '" checked', page)
+
+        submitted = urlencode(
+            [("item", ident) for ident in chosen] +
+            [("q", "Python"), ("source", ""), ("domain", "Python"),
+             ("kind", ""), ("limit", "5"), ("page", "2")])
+        parsed_ids, parsed_context = parse_compare_request(submitted)
+        self.assertEqual(parsed_ids, chosen)
+        self.assertEqual(parsed_context, filters)
+        with local_ui(h) as base:
+            with urlopen(base + "/compare?" + submitted, timeout=5) as response:
+                html = response.read().decode("utf-8")
+                self.assertEqual(response.status, 200)
+                self.assertIn("선택했던 검색 결과로 돌아가기", html)
+                href = re.search(
+                    r'<a href="([^"]+)">선택했던 검색 결과로 돌아가기</a>',
+                    html).group(1)
+            url = unescape(href)
+            self.assertTrue(url.startswith("/?q=Python&"))
+            self.assertIn("page=2", url)
+            self.assertIn("domain=Python", url)
+            self.assertEqual(url.count("selected="), 2)
+            with urlopen(base + url, timeout=5) as response:
+                returned = response.read().decode("utf-8")
+                self.assertEqual(response.status, 200)
+                self.assertIn("검색된 후보 9건", returned)
+                self.assertIn("2/2", returned)
+                self.assertIn('value="Python"', returned)
+                self.assertIn('<option value="Python" selected>', returned)
+                for ident in chosen:
+                    self.assertIn(
+                        'name="item" value="' + ident + '" checked', returned)
+                self.assertEqual(returned.count(
+                    'type="checkbox" name="item"'), 4)
+                self.assertEqual(returned.count(' checked>비교 선택'), 2)
+
+    def test_return_query_disallows_unknown_duplicate_or_unbounded_state(self):
+        h = fixture()
+        chosen = ids_for(h, 2)
+        bare = urlencode([("item", ident) for ident in chosen])
+        ids, context = parse_compare_request(bare)
+        self.assertEqual(ids, chosen)
+        self.assertIsNone(context)
+        for qs in (
+            bare + "&foo=private",
+            bare + "&q=Python",
+            bare + "&q=Python&q=Git&source=&domain=&kind=&limit=5&page=2",
+            bare + "&q=%3Cscript%3E&source=&domain=&kind=&limit=5&page=2",
+            bare + "&q=Python&source=&domain=&kind=&limit=5&page=201",
+            bare + "&q=Python&source=&domain=&kind=&limit=5&page=2&next=https://evil.test",
+        ):
+            with self.subTest(qs=qs), self.assertRaises(CompareError):
+                parse_compare_request(qs)
+        for qs in (
+            "q=Python&selected=nothex",
+            "q=Python&selected=" + chosen[0],
+            "q=Python&selected=" + chosen[0] + "&selected=" + chosen[0],
+            "q=Python&selected=" + chosen[0] + "&selected=" + chosen[1] + "&junk=1",
+            "q=Python&q=Git",
+        ):
+            with self.subTest(qs=qs), self.assertRaises(ValueError):
+                parse_search_request(qs)
+        with local_ui(h) as base:
+            with self.assertRaises(HTTPError) as err:
+                urlopen(base + "/?q=Python&selected=bad", timeout=5)
+            self.assertEqual(err.exception.code, 400)
+            with self.assertRaises(HTTPError) as err:
+                urlopen(base + "/compare?" + bare + "&return=https://evil.test", timeout=5)
+            self.assertEqual(err.exception.code, 400)
 
     def test_forged_approval_is_503_no_comparison(self):
         h = fixture()
