@@ -51,7 +51,7 @@ This is one bundled milestone, **not** two separate deployments:
 ## Owner install and smoke QA
 
 Keep all prior V0.1–V0.5 code and data unchanged. After PR merge and
-SHA-pinned review, install only the **five new files** below:
+SHA-pinned review, install only the **six new files** below:
 
 - src/ucie_miner/library_proof_assessment_v06.py
 - src/ucie_miner/library_audit_v07.py
@@ -60,9 +60,6 @@ SHA-pinned review, install only the **five new files** below:
 - scripts/ucie_audit_v07.ps1
 - tests/test_ucie_library_v07.py
 
-(There are six new files including the regression test; this instruction
-block is authoritative, do not omit the test. This description is
-deliberately kept explicit to avoid version confusion.)
 
 Do not use blanket git pull, reset --hard, clean or checkout over owner
 worktree changes.
