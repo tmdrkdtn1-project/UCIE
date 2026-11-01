@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 
 from .core import NoRedirect, MiningError
 from .library_review_records_v05 import (
-    CLAIM_ONLY, PUBLIC_DOC_HOSTS, _public_evidence_url,
+    CLAIM_ONLY, PUBLIC_DOC_HOSTS, ClaimError, _public_evidence_url,
 )
 from .public_discovery import SOURCES
 
@@ -207,8 +207,11 @@ def inspect_claimed_official_document(receipt: dict, row: dict, *,
             or type(receipt.get("claimed_document_sha256")) is not str
             or HEX64.fullmatch(receipt["claimed_document_sha256"]) is None):
         raise ProbeError("official document receipt not bound to current UCIE source")
-    url = _public_evidence_url(
-        receipt.get("public_evidence_url"), source_id=row["source_id"])
+    try:
+        url = _public_evidence_url(
+            receipt.get("public_evidence_url"), source_id=row["source_id"])
+    except ClaimError as exc:
+        raise ProbeError("unapproved or malformed public evidence claim URL") from exc
     if urlsplit(url).hostname not in PUBLIC_DOC_HOSTS:
         raise ProbeError("only approved official document routes eligible for byte probe")
     fetch = _get_document_bytes if fetch_bytes is None else fetch_bytes
