@@ -44,7 +44,7 @@ function Get-WinEvent {
         $FilterXPath -notmatch 'UCIE-PublicMiner-Hourly' -or $MaxEvents -gt 64) {
         throw 'UCIE_UNBOUNDED_EVENT_QUERY'
     }
-    $receipts = @(Get-Content -LiteralPath (Join-Path $root 'runtime\\run_history.jsonl') |
+    $receipts = @(Get-Content -LiteralPath (Join-Path $root 'runtime\run_history.jsonl') |
         ForEach-Object { $_ | ConvertFrom-Json })
     $out = @()
     foreach ($receipt in $receipts) {
@@ -58,7 +58,7 @@ function Get-WinEvent {
             $eventGuid = if ($script:mockWrongGuid -and $eventId -eq 102) { [guid]::NewGuid().ToString('B') } else { $id }
             $idField = if ($eventId -in @(100,102)) { 'InstanceId' } else { 'TaskInstanceId' }
             $code = if ($eventId -eq 201) { if ($script:mockBadEventCode) { '2' } else { '0' } } else { '' }
-            $action = Join-Path $root '.venv\\Scripts\\python.exe'
+            $action = Join-Path $root '.venv\Scripts\python.exe'
             $xml = "<Event><EventData><Data Name='TaskName'>\UCIE-PublicMiner-Hourly</Data><Data Name='$idField'>$eventGuid</Data><Data Name='ActionName'>$action</Data><Data Name='ResultCode'>$code</Data></EventData></Event>"
             $evt = [pscustomobject]@{ Id=$eventId; TimeCreated=$when; Xml=$xml }
             $evt | Add-Member -MemberType ScriptMethod -Name ToXml -Value { return $this.Xml }
