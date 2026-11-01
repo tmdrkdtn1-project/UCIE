@@ -206,7 +206,7 @@ class CompareProofTests(unittest.TestCase):
         for key in ("q", "source", "domain", "kind", "limit", "page"):
             self.assertIn('type="hidden" name="' + key + '"', page)
         self.assertIn('name="page" value="2"', page)
-        self.assertIn('name="q" value="python"', page)
+        self.assertIn('name="q" value="Python"', page)
         self.assertNotIn('type="checkbox" name="item" value="' + chosen[0] +
                          '" checked', page)
 
@@ -226,7 +226,7 @@ class CompareProofTests(unittest.TestCase):
                     r'<a href="([^"]+)">선택했던 검색 결과로 돌아가기</a>',
                     html).group(1)
             url = unescape(href)
-            self.assertTrue(url.startswith("/?q=python&"))
+            self.assertTrue(url.startswith("/?q=Python&"))
             self.assertIn("page=2", url)
             self.assertIn("domain=Python", url)
             self.assertEqual(url.count("selected="), 2)
@@ -235,7 +235,7 @@ class CompareProofTests(unittest.TestCase):
                 self.assertEqual(response.status, 200)
                 self.assertIn("검색된 후보 9건", returned)
                 self.assertIn("2/2", returned)
-                self.assertIn('value="python"', returned)
+                self.assertIn('value="Python"', returned)
                 self.assertIn('<option value="Python" selected>', returned)
                 for ident in chosen:
                     self.assertIn(
