@@ -103,6 +103,8 @@ if ($Evidence) {
     }
     $twoCyclesOk = $false
     $taskReceiptBound = $false
+    $eventLogReadable = $false
+    $eventProofCount = 0
     $priorStage13 = 'UNOBSERVED'
     $lastFinishedUtc = $null
     $stage13 = 'UNOBSERVED'
@@ -124,16 +126,82 @@ if ($Evidence) {
                 $cEnd = [DateTimeOffset]::Parse([string]$latest.finished_utc)
                 $lastFinishedUtc = $cEnd.ToUniversalTime().ToString('o')
                 $gapMinutes = [Math]::Round(($cStart - $pStart).TotalMinutes, 2)
-                if ($null -ne $lastTaskUtc) {
-                    # A successful scheduler exit alone may be stale or belong
-                    # to a skipped run. Bind it to the newest persisted cycle.
-                    $taskReceiptBound = (
-                        # A scheduled action cannot cause a receipt begun earlier.
-                        $lastTaskUtc -le $cStart -and
-                        ($cStart.ToUniversalTime() - $lastTaskUtc).TotalMinutes -le 10 -and
-                        $lastTaskUtc -ge $now.AddMinutes(-90) -and
-                        $lastTaskUtc -le $now.AddMinutes(5)
+                # LastRunTime is informational only: on the owner host it can
+                # differ from the actual start by 27 seconds. Never relax
+                # receipt chronology or grant a PASS solely from that field.
+                # Filter at the Windows event service for this ONE UCIE task;
+                # do not enumerate or inspect other projects' task events.
+                $eventInstances = @{}
+                try {
+                    $eventXPath = "*[System[(EventID=100 or EventID=102 or EventID=200 or EventID=201) and TimeCreated[timediff(@SystemTime) <= 10800000]] and EventData[Data[@Name='TaskName']='\UCIE-PublicMiner-Hourly']]"
+                    $events = @(Get-WinEvent -LogName 'Microsoft-Windows-TaskScheduler/Operational' -FilterXPath $eventXPath -MaxEvents 64 -ErrorAction Stop)
+                    $eventLogReadable = $true
+                    foreach ($event in $events) {
+                        if ($event.Id -notin @(100, 102, 200, 201)) { continue }
+                        [xml]$xml = $event.ToXml()
+                        $eventData = $xml.SelectSingleNode("/*[local-name()='Event']/*[local-name()='EventData']")
+                        if ($null -eq $eventData) { continue }
+                        $taskNode = $eventData.SelectSingleNode("./*[local-name()='Data' and @Name='TaskName']")
+                        if ($null -eq $taskNode -or $taskNode.InnerText -cne '\UCIE-PublicMiner-Hourly') { continue }
+                        $idField = if ($event.Id -in @(100, 102)) { 'InstanceId' } else { 'TaskInstanceId' }
+                        $instanceNode = $eventData.SelectSingleNode("./*[local-name()='Data' and @Name='$idField']")
+                        $guid = [guid]::Empty
+                        if ($null -eq $instanceNode -or
+                            -not [guid]::TryParse([string]$instanceNode.InnerText, [ref]$guid)) { continue }
+                        $key = $guid.ToString('D')
+                        if (-not $eventInstances.ContainsKey($key)) { $eventInstances[$key] = @{} }
+                        $instance = $eventInstances[$key]
+                        $eventKind = [string]$event.Id
+                        # Duplicate records for one event type are ambiguous.
+                        if ($instance.ContainsKey($eventKind)) { $instance['duplicate'] = $true; continue }
+                        $actionNode = $eventData.SelectSingleNode("./*[local-name()='Data' and @Name='ActionName']")
+                        $codeNode = $eventData.SelectSingleNode("./*[local-name()='Data' and @Name='ResultCode']")
+                        $instance[$eventKind] = [pscustomobject]@{
+                            utc = ([DateTimeOffset]$event.TimeCreated).ToUniversalTime()
+                            action = if ($null -eq $actionNode) { '' } else { [string]$actionNode.InnerText }
+                            result = if ($null -eq $codeNode) { '' } else { [string]$codeNode.InnerText }
+                        }
+                    }
+                } catch {
+                    # No event history / access denied / malformed evidence:
+                    # fail closed; never fall back to LastRunTime heuristics.
+                    $eventLogReadable = $false
+                    $eventInstances = @{}
+                }
+                if ($eventLogReadable) {
+                    $expectedAction = Join-Path $root '.venv\Scripts\python.exe'
+                    $pairs = @(
+                        [pscustomobject]@{ start = $pStart; finish = $pEnd },
+                        [pscustomobject]@{ start = $cStart; finish = $cEnd }
                     )
+                    foreach ($pair in $pairs) {
+                        $matched = 0
+                        foreach ($instance in $eventInstances.Values) {
+                            if ($instance.Count -ne 4 -or
+                                -not ($instance.ContainsKey('100') -and $instance.ContainsKey('102') -and
+                                      $instance.ContainsKey('200') -and $instance.ContainsKey('201'))) { continue }
+                            $t100 = $instance['100'].utc
+                            $t200 = $instance['200'].utc
+                            $t201 = $instance['201'].utc
+                            $t102 = $instance['102'].utc
+                            if (-not ([string]::Equals($instance['200'].action, $expectedAction, [StringComparison]::OrdinalIgnoreCase) -and
+                                      [string]::Equals($instance['201'].action, $expectedAction, [StringComparison]::OrdinalIgnoreCase) -and
+                                      $instance['201'].result -ceq '0')) { continue }
+                            if ($t100 -gt $t200 -or $t200 -gt $t201 -or $t201 -gt $t102 -or
+                                ($t200 - $t100).TotalSeconds -gt 10 -or
+                                ($t102 - $t201).TotalSeconds -gt 10 -or
+                                ($t102 - $t100).TotalMinutes -gt 10) { continue }
+                            # Actual worker receipt must start with this action
+                            # and finish before its successful completion.
+                            # Only two seconds of timestamp-rounding slack.
+                            if ($pair.start -ge $t100.AddSeconds(-2) -and
+                                $pair.start -le $t200.AddSeconds(10) -and
+                                $pair.finish -ge $t201.AddSeconds(-10) -and
+                                $pair.finish -le $t102.AddSeconds(2)) { $matched++ }
+                        }
+                        if ($matched -eq 1) { $eventProofCount++ }
+                    }
+                    $taskReceiptBound = ($eventProofCount -eq 2)
                 }
                 $twoCyclesOk = (
                     $previous.schema -ceq 'UCIE_MINER_CYCLE_V1' -and
@@ -164,6 +232,7 @@ if ($Evidence) {
                   elseif (-not $actionOk -or -not $principalOk -or -not $cadenceConfigured) { 'TASK_IDENTITY_OR_CADENCE_NO_GO' }
                   elseif (-not $lastResultOk) { 'LAST_TASK_RESULT_NO_GO' }
                   elseif (-not $historyReadable -or -not $twoCyclesOk) { 'TWO_RECENT_HOURLY_CYCLES_NOT_PROVEN_NO_GO' }
+                  elseif (-not $eventLogReadable) { 'TASK_SCHEDULER_EVENT_LOG_UNAVAILABLE_NO_GO' }
                   elseif (-not $taskReceiptBound) { 'LAST_SCHEDULED_RUN_RECEIPT_MISMATCH_NO_GO' }
                   elseif ($pauseThenResumed) { 'TWO_CYCLE_BASE_COLLECTOR_OBSERVED_STAGE13_RESUMED' }
                   elseif ($stage13 -ceq 'EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO') { 'TWO_CYCLE_BASE_COLLECTOR_OBSERVED_STAGE13_RATE_PAUSED' }
@@ -184,6 +253,10 @@ if ($Evidence) {
         last_task_result_zero = $lastResultOk
         last_scheduled_run_utc = if ($null -eq $lastTaskUtc) { $null } else { $lastTaskUtc.ToString('o') }
         last_scheduled_run_matches_receipt = $taskReceiptBound
+        scheduler_event_log_readable = $eventLogReadable
+        scheduler_event_instance_receipts_verified = $eventProofCount
+        scheduler_binding_method = 'INSTANCE_GUID_EVENTS_100_200_201_102'
+        task_info_last_run_time_used_for_binding = $false
         next_scheduled_utc = $scheduleNextUtc
         last_cycle_finished_utc = $lastFinishedUtc
         last_cycle_status = $lastStatus
