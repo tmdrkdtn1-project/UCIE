@@ -18,7 +18,7 @@ from .verification_handoff import prepare_verification_handoff
 SCHEMA = "UCIE_W04_PUBLIC_LIBRARY_EXPLORE_V02"
 READY = "READ_ONLY_UNVERIFIED_LIBRARY_EXPLORE_NO_GO"
 INCOMPLETE = "SOURCE_LINKAGE_INCOMPLETE_NO_GO"
-MAX_PAGE = 100
+MAX_PAGE = 200
 SHA = re.compile(r"[0-9a-f]{64}\Z")
 
 # These are UCIE-authored explanations of classification codes, NOT claims
