@@ -40,9 +40,17 @@ border-radius:12px;padding:18px;margin:12px 0}
 
 
 def _brand(html: str) -> str:
-    text = (html.replace("V0.7 ·", "V0.9 ·")
-            .replace("V0.8 ·", "V0.9 ·")
-            .replace(v07.SCHEMA, SCHEMA))
+    text = html
+    for previous in ("V0.2 ·", "V0.3 ·", "V0.4 ·",
+                     "V0.5 ·", "V0.7 ·", "V0.8 ·"):
+        text = text.replace(previous, "V0.9 ·")
+    for old in (
+            "UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V02",
+            "UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V03",
+            "UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V04",
+            "UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V05",
+            v07.SCHEMA):
+        text = text.replace(old, SCHEMA)
     if STYLE not in text:
         text = text.replace("</head>", STYLE + "</head>")
     return text
