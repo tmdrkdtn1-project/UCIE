@@ -261,6 +261,14 @@ def make_handler(root: Path, *, searcher=None):
             if parsed.path != "/" or parsed.fragment:
                 self._reply(404, b"UCIE_ROUTE_NOT_FOUND", "text/plain; charset=utf-8")
                 return
+            # A new browser tab is not a user-initiated search. Display the
+            # empty form immediately; only explicit GET parameters touch the
+            # W04 source-linked ledgers. Clicking Search with empty filters
+            # still executes a real, verified read-only query.
+            if not parsed.query:
+                html = render_page(parse_request_filters(""))
+                self._reply(200, html.encode("utf-8"), "text/html; charset=utf-8")
+                return
             try:
                 filters = parse_request_filters(parsed.query)
             except BrowserError:
