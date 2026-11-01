@@ -12,10 +12,12 @@ from hashlib import sha256
 import json
 from pathlib import Path
 import re
-from urllib.parse import quote
+import urllib.error
+import urllib.request
+from .core import NoRedirect, MiningError
 
 from .library_explore import _candidate_rows
-from .library_public_probe_v08 import _get_json, _identity_preflight, ProbeError
+from .library_public_probe_v08 import _identity_preflight, ProbeError
 from .library_observation_receipts_v10 import _root, _source_index, replay_observations
 from .public_discovery import SOURCES
 from .verification_handoff import prepare_verification_handoff
@@ -41,6 +43,53 @@ def _canonical(value: dict) -> bytes:
 
 def _sha(value: dict) -> str:
     return sha256(_canonical(value)).hexdigest()
+
+
+def _official_release_json(url: str) -> dict:
+    """No redirects, proxies or credentials; ONLY the exact approved paths."""
+    if type(url) is not str or len(url) > 230:
+        raise ReleaseEvidenceError("unapproved official release endpoint")
+    allowed = re.fullmatch(
+        r"https://api\.github\.com/repos/([^/?#]+/[^/?#]+)/"
+        r"(?:releases/tags/[A-Za-z0-9][A-Za-z0-9._-]{0,42}|"
+        r"compare/[0-9a-f]{40}\.\.\.[A-Za-z0-9][A-Za-z0-9._-]{0,42})",
+        url)
+    if allowed is None or allowed.group(1) not in SOURCES:
+        raise ReleaseEvidenceError("API path outside five approved public repos")
+    request = urllib.request.Request(
+        url, method="GET", headers={
+            "Accept": "application/vnd.github+json",
+            "Accept-Encoding": "identity",
+            "User-Agent": "UCIE-PUBLIC-RELEASE-CHECK/1.1",
+        })
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), NoRedirect)
+    try:
+        with opener.open(request, timeout=10) as response:
+            if response.status != 200:
+                raise ReleaseEvidenceError("unexpected release response status")
+            mime = response.headers.get("Content-Type", "").split(";", 1)[0].lower().strip()
+            if (mime not in ("application/json", "application/vnd.github+json")
+                    or response.headers.get("Content-Encoding", "identity") != "identity"):
+                raise ReleaseEvidenceError("non-JSON or compressed release data")
+            length = response.headers.get("Content-Length")
+            if (length is not None and
+                    (not length.isascii() or not length.isdecimal()
+                     or int(length) > 262144)):
+                raise ReleaseEvidenceError("release metadata body too large")
+            raw = response.read(262145)
+    except (OSError, TimeoutError, urllib.error.URLError,
+            MiningError) as exc:
+        raise ReleaseEvidenceError("approved release endpoint unreachable") from exc
+    if len(raw) > 262144:
+        raise ReleaseEvidenceError("public release response size exceeded")
+    try:
+        obj = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeError) as exc:
+        raise ReleaseEvidenceError("malformed public release metadata") from exc
+    if type(obj) is not dict:
+        raise ReleaseEvidenceError("unexpected release object")
+    return obj
 
 
 def _date(value: object) -> bool:
@@ -97,7 +146,7 @@ def inspect_release_ancestry(row: dict, *, release_tag: str,
     base = "https://api.github.com/repos/" + repo
     release_url = base + "/releases/tags/" + release_tag
     compare_url = base + "/compare/" + commit + "..." + release_tag
-    fetch = _get_json if fetch_json is None else fetch_json
+    fetch = _official_release_json if fetch_json is None else fetch_json
     status = "PUBLIC_RELEASE_ANCESTRY_UNAVAILABLE_NO_GO"
     observed = False
     ancestry = False
@@ -143,7 +192,7 @@ def inspect_release_ancestry(row: dict, *, release_tag: str,
         ancestry = bool(graph_ok)
         status = ("RELEASE_TAG_CONTAINS_SOURCE_COMMIT_NOT_FIX_VERIFIED"
                   if ancestry else "RELEASE_TAG_NOT_PROVEN_TO_CONTAIN_COMMIT_NO_GO")
-    except (ProbeError, OSError, ValueError, TypeError, KeyError):
+    except (ProbeError, OSError, ValueError, TypeError, KeyError, ReleaseEvidenceError):
         status = "PUBLIC_RELEASE_ANCESTRY_UNAVAILABLE_NO_GO"
     return _result(row, release_tag, status=status, observed=observed,
                    ancestry=ancestry, release_id=release_id,
