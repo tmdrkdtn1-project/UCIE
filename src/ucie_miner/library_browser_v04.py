@@ -164,7 +164,7 @@ def make_handler(root: Path, *, explorer=None, comparer=None, reviewer=None):
                 return super().do_GET()
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
                 return self.reply(403, "LOOPBACK_ONLY", "text/plain; charset=utf-8")
-            if len(self.path) > v03.MAX_URL + 80 or parts.fragment:
+            if len(self.path) > v03.MAX_RETURN_URL + 100 or parts.fragment:
                 return self.reply(400, "BOUNDED_URL_ONLY", "text/plain; charset=utf-8")
             identity = parts.path.removeprefix("/review/")
             if HEX64.fullmatch(identity) is None:
