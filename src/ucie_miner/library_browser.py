@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from pathlib import Path
 import re
+import sqlite3
 from urllib.parse import parse_qs, urlsplit
 
 from .library_search import (
@@ -92,19 +93,26 @@ def _options(values: tuple[str, ...], current: str | None, blank: str) -> str:
 
 
 def render_page(filters: dict, result: dict | None = None,
-                *, error: bool = False) -> str:
+                *, error: bool = False,
+                source_status: str | None = None) -> str:
     """Escape all untrusted fields and never mark unverified as usable."""
     if result is not None and (
         type(result) is not dict or type(result.get("items")) is not list
         or type(result.get("status")) is not str
     ):
         raise BrowserError("invalid search result shape")
-    message = (
-        "입력 조건이 유효하지 않습니다. 승인된 공개 출처와 제한된 검색어만 사용하세요."
-        if error else
-        "검색 전용 · 결과는 미검증 공개 기술 근거 후보입니다. "
-        "규칙 적용·서명·패키지 내보내기·자동 승격은 제공하지 않습니다."
-    )
+    # A valid empty-form search can fail because the *source ledger* is
+    # unavailable or fails validation. Never blame the user for that failure,
+    # and never expose raw SQLite or untrusted provenance error text.
+    if error:
+        message = ("검색 입력값이 허용 범위를 벗어났습니다. "
+                   "승인된 공개 출처와 제한된 검색어만 사용하세요.")
+    elif source_status is not None:
+        message = ("입력값은 유효하지만 UCIE 공개 근거 원장 조회/검증에 "
+                   "실패했습니다. 운영 DB와 원본 근거는 변경되지 않았습니다.")
+    else:
+        message = ("검색 전용 · 결과는 미검증 공개 기술 근거 후보입니다. "
+                   "규칙 적용·서명·패키지 내보내기·자동 승격은 제공하지 않습니다.")
     rows = []
     if result is not None and result.get("status") == "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO":
         items = result["items"][:20]
@@ -129,6 +137,9 @@ def render_page(filters: dict, result: dict | None = None,
             )
     if error:
         count = "검색 조건 오류 · 결과 없음"
+    elif source_status is not None:
+        # Only one of our fixed, non-sensitive status tokens is displayed.
+        count = "원장 조회 차단 · " + source_status
     elif result is None:
         count = "승인된 공개 근거 원장을 조회합니다."
     elif result.get("status") == "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
@@ -250,14 +261,33 @@ def make_handler(root: Path, *, searcher=None):
             if parsed.path != "/" or parsed.fragment:
                 self._reply(404, b"UCIE_ROUTE_NOT_FOUND", "text/plain; charset=utf-8")
                 return
+            # A new browser tab is not a user-initiated search. Display the
+            # empty form immediately; only explicit GET parameters touch the
+            # W04 source-linked ledgers. Clicking Search with empty filters
+            # still executes a real, verified read-only query.
+            if not parsed.query:
+                html = render_page(parse_request_filters(""))
+                self._reply(200, html.encode("utf-8"), "text/html; charset=utf-8")
+                return
             try:
                 filters = parse_request_filters(parsed.query)
-                result = searcher(root, **filters)
-                html = render_page(filters, result)
-            except (BrowserError, LibrarySearchError, DiscoveryError, ValueError):
+            except BrowserError:
                 defaults = parse_request_filters("")
                 html = render_page(defaults, error=True)
                 self._reply(400, html.encode("utf-8"), "text/html; charset=utf-8")
+                return
+            try:
+                # The existing W04 handoff is still mandatory. Never skip
+                # a malformed row just to make the UI appear successful.
+                result = searcher(root, **filters)
+                html = render_page(filters, result)
+            except (LibrarySearchError, DiscoveryError, ValueError, TypeError, KeyError):
+                html = render_page(filters, source_status="SOURCE_VALIDATION_FAILED_NO_GO")
+                self._reply(503, html.encode("utf-8"), "text/html; charset=utf-8")
+                return
+            except (sqlite3.DatabaseError, OSError):
+                html = render_page(filters, source_status="SOURCE_STORAGE_UNAVAILABLE_NO_GO")
+                self._reply(503, html.encode("utf-8"), "text/html; charset=utf-8")
                 return
             self._reply(200, html.encode("utf-8"), "text/html; charset=utf-8")
 
