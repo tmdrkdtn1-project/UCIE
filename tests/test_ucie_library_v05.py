@@ -43,7 +43,19 @@ def owner_synthetic_root():
     with tempfile.TemporaryDirectory(prefix="ucie-v05-only-") as td:
         root = Path(td) / "UCIE"
         root.mkdir()
-        yield root
+
+        def isolated_test_path(value):
+            path = Path(value)
+            if path != root or not path.is_dir() or path.is_symlink():
+                raise ClaimError("synthetic test cannot leave private UCIE fixture")
+            return path
+
+        # On real Windows the production helper MUST enforce D:/UCIE.
+        # Only this fixture overrides that check, with an exact temporary
+        # test root bound to the current test's lifetime.
+        with patch("ucie_miner.library_review_records_v05._root",
+                   side_effect=isolated_test_path):
+            yield root
 
 
 def store_one(root, dossier, **overrides):
