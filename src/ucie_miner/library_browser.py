@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from pathlib import Path
 import re
-from urllib.parse import parse_qs, quote, urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from .library_search import (
     ALLOWED_DOMAINS, ALLOWED_KINDS, LibrarySearchError, _filters,
@@ -285,8 +285,11 @@ def main() -> int:
                 "scheduler_changes": 0, "production_approved": False,
             }, ensure_ascii=True), flush=True)
             server.serve_forever(poll_interval=0.5)
-    except (OSError, KeyboardInterrupt):
+    except KeyboardInterrupt:
         return 0
+    except OSError:
+        print(json.dumps({"schema": SCHEMA, "status": "LOCAL_BIND_FAILED_NO_GO"}), flush=True)
+        return 2
     return 0
 
 
