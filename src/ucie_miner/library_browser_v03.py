@@ -14,11 +14,11 @@ import os
 from pathlib import Path
 import re
 import sqlite3
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from .library_browser_v02 import (
     MAX_URL, UIError, _head, _foot, _t, _public_link,
-    read_filters, render_results,
+    read_filters, render_results, _url,
 )
 from .library_explore import (
     ExploreError, READY as EXPLORE_READY, explore_existing_public_library,
@@ -34,7 +34,9 @@ SCHEMA = "UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V03"
 CARD_START = '<article class="item">'
 ITEMS_START = '<section class="items">'
 ITEMS_END = '</section>'
-MAX_COMPARE_QUERY = 210
+MAX_COMPARE_QUERY = 700
+SEARCH_KEYS = ("q", "source", "domain", "kind", "limit", "page")
+MAX_RETURN_URL = MAX_URL + 80
 COMPARE_CSS = """
 <style>
 .items .compare-grid{display:grid;grid-column:1/-1;
@@ -63,7 +65,8 @@ def _branding(html: str) -> str:
 
 
 def render_search(filters: dict, result: dict | None = None,
-                  *, error: str | None = None) -> str:
+                  *, error: str | None = None,
+                  selected: tuple[str, ...] = ()) -> str:
     """Reuse verified V0.2 UI; add a bounded GET-only compare selection form."""
     base = _branding(render_results(filters, result, error=error))
     if result is None or result.get("status") != EXPLORE_READY or not result.get("items"):
@@ -84,36 +87,113 @@ def render_search(filters: dict, result: dict | None = None,
         ids.append(identity)
     # Every card originates exclusively from the validated W04 result, and
     # each rendered checkbox belongs to its exact source-linked row.
+    if selected:
+        validate_ids(selected)
     if cards.count(CARD_START) != len(ids):
         raise UIError("result-card identities do not match source ledger")
     i = iter(ids)
     def label(_):
         identity = next(i)
+        checked = " checked" if identity in selected else ""
         return (CARD_START + '<label><input type="checkbox" name="item" value="'
-                + identity + '">비교 선택</label>')
+                + identity + '"' + checked + '>비교 선택</label>')
     cards = re.sub(re.escape(CARD_START), label, cards)
+    # Carry only validated, bounded filter values; never save search state
+    # outside the URL and never use an arbitrary client-provided return URL.
+    hidden = "".join(
+        '<input type="hidden" name="' + key + '" value="' + _t(value, 160) + '">'
+        for key, value in (
+            ("q", filters["query"]),
+            ("source", filters["source_id"] or ""),
+            ("domain", filters["domain"] or ""),
+            ("kind", filters["kind"] or ""),
+            ("limit", str(filters["limit"])),
+            ("page", str(filters["page"])),
+        )
+    )
     form = ('<form class="compare-grid" action="/compare" method="get">'
-            + cards + '<div class="compare-actions">'
+            + hidden + cards + '<div class="compare-actions">'
             '<button type="submit">선택한 후보 비교</button>'
             '<span>현재 페이지에서 2~3개를 선택 · 미검증 후보</span>'
             '</div></form>')
     return before + ITEMS_START + form + ITEMS_END + after
 
 
-def parse_compare(qs: str) -> tuple[str, ...]:
+def parse_compare_request(qs: str) -> tuple[tuple[str, ...], dict | None]:
+    """Comparison IDs with optional exact, locally validated search context.
+
+    Legacy compare URLs carrying only item= still work, but their return
+    link points to the initial screen because no context was supplied.
+    """
     if type(qs) is not str or not qs or len(qs) > MAX_COMPARE_QUERY:
         raise CompareError("invalid compare request length")
     try:
         params = parse_qs(qs, keep_blank_values=True, strict_parsing=True,
-                          max_num_fields=3, encoding="utf-8", errors="strict")
+                          max_num_fields=9, encoding="utf-8", errors="strict")
     except (ValueError, UnicodeError) as exc:
         raise CompareError("invalid compare request") from exc
-    if set(params) != {"item"}:
-        raise CompareError("only exact public item identities may be compared")
-    return validate_ids(tuple(params["item"]))
+    if "item" not in params or not set(params).issubset(
+            set(SEARCH_KEYS) | {"item"}):
+        raise CompareError("unknown compare parameters")
+    ids = validate_ids(tuple(params["item"]))
+    present = set(params) - {"item"}
+    if not present:
+        return ids, None
+    if present != set(SEARCH_KEYS) or any(
+            len(params[key]) != 1 for key in SEARCH_KEYS):
+        raise CompareError("incomplete or duplicated search context")
+    try:
+        context = read_filters(urlencode({
+            key: params[key][0] for key in SEARCH_KEYS
+        }))
+    except UIError as exc:
+        raise CompareError("invalid search context") from exc
+    return ids, context
 
 
-def render_comparison(result: dict) -> str:
+def parse_compare(qs: str) -> tuple[str, ...]:
+    """Backward-compatible exact-ID parser for existing V0.3 callers."""
+    return parse_compare_request(qs)[0]
+
+
+def parse_search_request(qs: str) -> tuple[dict, tuple[str, ...]]:
+    """Restore prior filters, page and checked boxes without stored sessions."""
+    if type(qs) is not str or len(qs) > MAX_RETURN_URL:
+        raise UIError("invalid return request length")
+    try:
+        params = parse_qs(qs, keep_blank_values=True, strict_parsing=True,
+                          max_num_fields=9, encoding="utf-8", errors="strict")
+    except (ValueError, UnicodeError) as exc:
+        raise UIError("invalid return request") from exc
+    if not set(params).issubset(set(SEARCH_KEYS) | {"selected"}):
+        raise UIError("unknown return query parameter")
+    marked = tuple(params.pop("selected", ()))
+    if marked:
+        try:
+            validate_ids(marked)
+        except CompareError as exc:
+            raise UIError("invalid compare selection state") from exc
+    if any(len(values) != 1 for values in params.values()):
+        raise UIError("duplicated search parameters")
+    filters = read_filters(urlencode({
+        key: values[0] for key, values in params.items()
+    }))
+    return filters, marked
+
+
+def _return_href(filters: dict | None, ids: tuple[str, ...]) -> str:
+    if filters is None:
+        return "/"
+    target = _url(filters)
+    target += "".join("&selected=" + identity for identity in ids)
+    if len(target) > MAX_RETURN_URL:
+        raise CompareError("search context exceeds bounded return URL")
+    # URL is relative and formed solely from validated filters and hex IDs.
+    return target
+
+
+def render_comparison(result: dict, *,
+                      filters: dict | None = None) -> str:
     if (type(result) is not dict or result.get("status") != COMPARE_READY
             or type(result.get("items")) is not list
             or len(result["items"]) not in (2, 3)):
@@ -140,8 +220,11 @@ def render_comparison(result: dict) -> str:
         ("안전 검토 가이드", "safe_review_guidance"),
         ("승인·내보내기", "status"),
     )
+    back = _return_href(filters, tuple(
+        item["library_item_id"] for item in rows))
     head = (_branding(_head("공개 근거 후보 비교"))
-            + '<p><a href="/">검색으로 돌아가기</a></p>'
+            + '<p><a href="' + _t(back, MAX_RETURN_URL)
+            + '">선택했던 검색 결과로 돌아가기</a></p>'
             '<div class="note">후보 2~3개의 공개 메타데이터 비교입니다. '
             '우열·수정 완료·취약점 증명·검증 통과·실제 적용 가능성을 뜻하지 않습니다.</div>')
     table = ['<div class="compare-table"><table><thead><tr><th scope="col">항목</th>']
@@ -215,13 +298,14 @@ def make_handler(root: Path, *, explorer=None, comparer=None):
                 return self.reply(200, render_search(read_filters("")))
             if parts.path == "/":
                 try:
-                    filters = read_filters(parts.query)
+                    filters, selected = parse_search_request(parts.query)
                 except UIError:
                     return self.reply(400, render_search(
                         read_filters(""), error="INPUT_NO_GO"))
                 try:
                     result = explorer(root, **filters)
-                    return self.reply(200, render_search(filters, result))
+                    return self.reply(200, render_search(
+                        filters, result, selected=selected))
                 except (LibrarySearchError, ExploreError, DiscoveryError,
                         ValueError, TypeError, KeyError):
                     return self.reply(503, render_search(filters,
@@ -231,7 +315,7 @@ def make_handler(root: Path, *, explorer=None, comparer=None):
                         error="SOURCE_STORAGE_UNAVAILABLE_NO_GO"))
             if parts.path == "/compare":
                 try:
-                    ids = parse_compare(parts.query)
+                    ids, context = parse_compare_request(parts.query)
                 except CompareError:
                     return self.reply(400, "TWO_OR_THREE_DISTINCT_CANDIDATES_REQUIRED",
                                       "text/plain; charset=utf-8")
@@ -240,7 +324,8 @@ def make_handler(root: Path, *, explorer=None, comparer=None):
                     if result.get("status") != COMPARE_READY:
                         return self.reply(404, "UNLINKED_CANDIDATES_NO_GO",
                                           "text/plain; charset=utf-8")
-                    return self.reply(200, render_comparison(result))
+                    return self.reply(200, render_comparison(
+                        result, filters=context))
                 except (CompareError, LibrarySearchError, ExploreError,
                         DiscoveryError, ValueError, TypeError, KeyError):
                     return self.reply(503, "SOURCE_VALIDATION_FAILED_NO_GO",
