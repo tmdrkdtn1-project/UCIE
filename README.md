@@ -4,6 +4,13 @@
 
 UCIE is being developed as an independent public-source coding intelligence system. The intended future flow is approved third-party public documentation and open-source bug fixes → provenance review → independent tests → versioned general-purpose guidance.
 
+
+## Permanent product mission: SkillBooks and reusable technical knowledge
+
+UCIE's four equal product goals include coding-error prevention; development/maintenance engine, reusable-skill and learning-logic discovery/improvement; a classified Virtual Library that **reprocesses approved public evidence into human-readable SkillBooks and separately reviewed machine-readable reusable capabilities**; and continual library evolution using only UCIE-owned authorized experiments. Mere collection, summarization, tagging and PR indexing do not satisfy the SkillBook goal. See [canonical SkillBook contract](docs/UCIE_SKILLBOOK_PRODUCT_MISSION_V1_20261102.md), [four-pillar roadmap](docs/ROADMAP.md) and [repository guidance](AGENTS.md).
+
+The current `ucie_miner.skillbook_blueprint` builds **non-exportable, unverified metadata-only blueprints**, not finished SkillBooks. It does not authorize new sources, run external code, modify schedules, retrain models, grant licenses, publish packages or change the operating DB.
+
 ## Hard security boundaries
 
 1. The global collector must not access any user project repository, code, database, logs, conversation, credentials, model memory, or project metadata — including publicly visible user projects.
