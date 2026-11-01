@@ -166,8 +166,26 @@ def optional_public_skill_staging(root: Path, *, batch_builder=None,
                 "STAGE16_SAFE_QA_FAILED_NO_GO",
             }):
         _reject_phase("STAGE16_SAFE_QA", "invalid Stage16 unverified QA outcome")
+    # An explicitly opted-in Stage17 quality check joins the existing hourly
+    # worker OS-held lock. Without its OWN marker this is a no-read/no-write
+    # operation. It never trains model weights or promotes any public rule.
+    from .library_quality_loop_v12 import optional_hourly_library_quality
+    quality = _phase_call("STAGE17_QUALITY", optional_hourly_library_quality,
+        root, stage12_status=learning["status"],
+        stage16_status=safe_qa["status"])
+    if (quality.get("status") not in (
+            "STAGE17_QUALITY_DISABLED",
+            "STAGE17_QUALITY_OBSERVED_UNVERIFIED_NO_GO",
+            "STAGE17_QUALITY_REVIEW_REQUIRED_NO_GO")
+            or quality.get("approved_rules_added") != 0
+            or quality.get("production_approved") is not False):
+        _reject_phase("STAGE17_QUALITY", "invalid source-only quality outcome")
     return {
         "status": STATUS_PARTIAL if (history_failed or fix_failed) else STATUS_STAGED,
+        "stage17_quality_status": quality["status"],
+        "stage17_quality_candidate_count": quality.get(
+            "public_unverified_candidates", 0),
+        "stage17_quality_candidate_delta": quality.get("candidate_delta", 0),
         "operator_opted_in": True,
         "stage15_fix_evidence_status": fix_review["status"],
         "stage15_failure_source": (
