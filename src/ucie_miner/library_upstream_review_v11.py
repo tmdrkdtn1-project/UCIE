@@ -117,7 +117,15 @@ def assemble_review_bundle(audit: dict, observations: dict, guard: dict, *,
                 or HEX40.fullmatch(release_result["source_commit_sha"]) is None
                 or release_result.get("rule_approved") is not False
                 or release_result.get("runtime_version_fix_verified") is not False
-                or release_result.get("auto_promoted") is not False):
+                or release_result.get("auto_promoted") is not False
+                or release_result.get("result_sha256") != sha256(json.dumps(
+                    {k: v for k, v in release_result.items()
+                     if k != "result_sha256"}, sort_keys=True, ensure_ascii=True,
+                    separators=(",", ":")).encode("ascii")).hexdigest()
+                or not any(
+                    entry["identity_matched"] is True
+                    and entry["source_revision_sha"] ==
+                    release_result["source_commit_sha"] for entry in linked)):
             raise ReviewBundleError("unbound release observation or forged approval")
         # A separate release observation is displayed only, never promoted.
         release_summary = {
