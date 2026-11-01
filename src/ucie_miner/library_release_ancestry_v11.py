@@ -52,7 +52,7 @@ def _official_release_json(url: str) -> dict:
     allowed = re.fullmatch(
         r"https://api\.github\.com/repos/([^/?#]+/[^/?#]+)/"
         r"(?:releases/tags/[A-Za-z0-9][A-Za-z0-9._-]{0,42}|"
-        r"compare/[0-9a-f]{40}\.\.\.[A-Za-z0-9][A-Za-z0-9._-]{0,42})",
+        r"compare/[0-9a-f]{40}\.\.\.tags/[A-Za-z0-9][A-Za-z0-9._-]{0,42})",
         url)
     if allowed is None or allowed.group(1) not in SOURCES:
         raise ReleaseEvidenceError("API path outside five approved public repos")
@@ -145,7 +145,7 @@ def inspect_release_ancestry(row: dict, *, release_tag: str,
         raise ReleaseEvidenceError("source not bound to approved commit")
     base = "https://api.github.com/repos/" + repo
     release_url = base + "/releases/tags/" + release_tag
-    compare_url = base + "/compare/" + commit + "..." + release_tag
+    compare_url = base + "/compare/" + commit + "...tags/" + release_tag
     fetch = _official_release_json if fetch_json is None else fetch_json
     status = "PUBLIC_RELEASE_ANCESTRY_UNAVAILABLE_NO_GO"
     observed = False
