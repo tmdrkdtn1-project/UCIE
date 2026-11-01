@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 
 from .library_explore import _candidate_rows, describe_purpose
+from .library_proof_assessment_v06 import inspect_public_claim_shape
 from .library_review_records_v05 import (
     CLAIM_ONLY, GATES, _location, _read_all, _root,
 )
@@ -69,6 +70,8 @@ def _report_root(complete: bool) -> dict:
         "per_domain": {},
         "per_source": {},
         "per_gate_claim_counts": {gate: 0 for gate in sorted(GATES)},
+        "citation_shape_counts": {},
+        "evidence_review_class_counts": {},
         "candidates": [],
         "approved_candidates": 0,
         "independently_verified_fixes": 0,
@@ -146,6 +149,8 @@ def audit_handoff_receipts(handoff: object, receipts: object) -> dict:
             continue
         assigned[row["library_item_id"]].append(receipt)
     claims_by_gate = Counter()
+    citation_shapes = Counter()
+    review_classes = Counter()
     conflicts = 0
     candidate_conflicts = 0
     summaries = []
@@ -158,10 +163,17 @@ def audit_handoff_receipts(handoff: object, receipts: object) -> dict:
         groups = defaultdict(set)
         version_by_gate = defaultdict(set)
         receipts_by_gate = Counter()
+        per_item_review_classes = Counter()
         for claim in linked:
             gate = claim["gate"]
             claims_by_gate[gate] += 1
             receipts_by_gate[gate] += 1
+            inspection = inspect_public_claim_shape(
+                claim, source_id=row["source_id"],
+                source_sha256=claim["source_sha256"])
+            citation_shapes[inspection["citation_shape"]] += 1
+            review_classes[inspection["review_classification"]] += 1
+            per_item_review_classes[inspection["review_classification"]] += 1
             groups[(gate, claim["public_evidence_url"])].add(
                 claim["claimed_document_sha256"])
             if claim["version_hint"] != "UNDETERMINED":
@@ -211,6 +223,7 @@ def audit_handoff_receipts(handoff: object, receipts: object) -> dict:
             "evidence_revision_count": row["evidence_revision_count"],
             "claim_count": len(linked),
             "claim_conflicts": per_item_conflicts,
+            "evidence_review_class_counts": dict(sorted(per_item_review_classes.items())),
             "status": ("RECEIPT_CONFLICT_REVIEW_REQUIRED_NO_GO"
                        if per_item_conflicts else "NOT_VERIFIED"),
             "gates": gates,
@@ -233,6 +246,8 @@ def audit_handoff_receipts(handoff: object, receipts: object) -> dict:
         "per_domain": dict(sorted(per_domain.items())),
         "per_source": dict(sorted(per_source.items())),
         "per_gate_claim_counts": {key: claims_by_gate[key] for key in sorted(GATES)},
+        "citation_shape_counts": dict(sorted(citation_shapes.items())),
+        "evidence_review_class_counts": dict(sorted(review_classes.items())),
         "candidates": summaries,
         "status": CONFLICT if source_conflict or conflicts or orphan else STATUS,
     })
@@ -263,7 +278,8 @@ def summarize_audit(report: dict, *, limit: int = 10) -> dict:
         "source_sha_conflicts", "conflicted_candidate_count",
         "conflicting_claim_groups", "candidate_count_with_claims",
         "candidate_count_without_claims", "per_source", "per_domain",
-        "per_gate_claim_counts", "approved_candidates",
+        "per_gate_claim_counts", "citation_shape_counts",
+        "evidence_review_class_counts", "approved_candidates",
         "independently_verified_fixes", "license_signoffs",
         "regression_passed_candidates", "owner_signatures", "exportable_rules",
         "auto_promoted", "operating_database_writes",
