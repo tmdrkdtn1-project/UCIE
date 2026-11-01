@@ -22,6 +22,17 @@ verified software fix, licensing opinion, Rulepack promotion, or V1 release.
   operating SQLite writes, new scheduler registration or package export.
 - Search, pages, facets and detail continue to use existing V0.2 functions.
   Original V0.1/V0.2 files and launchers remain unchanged.
+- Compare form carries original bounded search term, kind, domain, source,
+  page number and page size as hidden GET fields. The comparison page's
+  **선택했던 검색 결과로 돌아가기** link restores that exact filtered page
+  and re-checks the two or three previously selected candidate checkboxes
+  if they are still present in the freshly source-validated results.
+- The return URL is locally constructed from validated fields and SHA-256
+  identities. No stored session, arbitrary redirect URL, JavaScript,
+  operating DB write or scheduler changes. Old item-only comparison deep
+  links still work; with no incoming context, their return link goes to
+  the initial form.
+
 
 ## Owner Windows installation
 
