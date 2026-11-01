@@ -120,7 +120,7 @@ class UcieOfficialPublicReleaseTests(unittest.TestCase):
         self.assertEqual(out["status"],
                          "RELEASE_TAG_CONTAINS_SOURCE_COMMIT_NOT_FIX_VERIFIED")
         self.assertEqual(len(calls), 2)
-        self.assertIn("/compare/" + row["revision_hint"] + "...v1.2.3", calls[1])
+        self.assertIn("/compare/" + row["revision_hint"] + "...tags/v1.2.3", calls[1])
         self.assertEqual(out["gates"]["UPSTREAM_FIX_REGRESSION"], "NOT_VERIFIED")
         self.assertFalse(out["runtime_version_fix_verified"])
         self.assertFalse(out["rule_approved"])
@@ -171,7 +171,7 @@ class UcieOfficialPublicReleaseTests(unittest.TestCase):
             "https://api.github.com/repos/private/unknown/releases/tags/v1",
             "https://api.github.com/repos/python/cpython/releases/latest",
             "https://127.0.0.1/repos/python/cpython/releases/tags/v1",
-            "https://api.github.com/repos/python/cpython/compare/abc...v1",
+            "https://api.github.com/repos/python/cpython/compare/abc...tags/v1",
             "https://api.github.com/repos/python/cpython/releases/tags/v1?redirect=x",
         ):
             with self.subTest(url=url), self.assertRaises(ReleaseEvidenceError):
