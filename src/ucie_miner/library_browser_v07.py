@@ -42,14 +42,19 @@ STYLE = """<style>
 
 
 def _brand(html: str) -> str:
-    # Avoid modifying the original V0.5 implementation and preserve its
-    # existing source-bound cards and HTML escaping rules.
-    return (html.replace("V0.2 ·", "V0.7 ·")
-            .replace("V0.3 ·", "V0.7 ·")
-            .replace("V0.4 ·", "V0.7 ·")
-            .replace("V0.5 ·", "V0.7 ·")
-            .replace(v05.SCHEMA, SCHEMA)
-            .replace("</head>", STYLE + "</head>"))
+    # Normalize the full inherited v0.2-v0.5 chain before its send hooks
+    # run, so the owner-facing footer accurately reports the V0.7 schema.
+    for previous in ("V0.2 ·", "V0.3 ·", "V0.4 ·", "V0.5 ·"):
+        html = html.replace(previous, "V0.7 ·")
+    for old in (
+            "UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V02",
+            "UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V03",
+            "UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V04",
+            v05.SCHEMA):
+        html = html.replace(old, SCHEMA)
+    if STYLE not in html:
+        html = html.replace("</head>", STYLE + "</head>")
+    return html
 
 
 def _chrome(html: str) -> str:
