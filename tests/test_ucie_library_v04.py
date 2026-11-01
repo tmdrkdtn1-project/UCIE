@@ -100,7 +100,15 @@ class DossierTests(unittest.TestCase):
         h = fixture()
         h["tasks"][0]["blocking_reasons"].append("UNTRUSTED_NEW_BLOCKER_PRIVATE")
         h["tasks"][0]["safe_guidance_for_review"] = "UPSTREAM_EXECUTE_THIS_TEXT"
-        d = dossier_from_linked_handoff(h, item_id=first_item(h))
+        # Select the actual candidate whose synthetic review blockers changed.
+        # Balanced search order is not the review-ledger insertion order.
+        chosen = next(
+            row["library_item_id"]
+            for row in explore_linked_public_candidates(h, limit=20)["items"]
+            if h["tasks"][0]["candidate_id_sha256"]
+            in row["review_candidate_sha256s"]
+        )
+        d = dossier_from_linked_handoff(h, item_id=chosen)
         html = render_review(d)
         self.assertNotIn("UNTRUSTED_NEW_BLOCKER_PRIVATE", html)
         self.assertNotIn("UPSTREAM_EXECUTE_THIS_TEXT", html)
