@@ -107,9 +107,14 @@ def make_handler(root: Path, *, explorer=None, comparer=None,
     class Handler(base):
         def reply(self, status, content, mime="text/html; charset=utf-8"):
             if status == 200 and mime == "text/html; charset=utf-8":
+                # V0.4's inherited reply performs its own branding *after*
+                # this override. Normalize the V0.2/0.3 base first, then
+                # stamp V0.5. Keep V0.4 reply for trusted review-link insertion.
+                content = v04._branding(content)
                 content = (content.replace("V0.4 ·", "V0.5 ·")
-                          .replace(v04.SCHEMA, SCHEMA)
-                          .replace("</head>", RECEIPT_CSS + "</head>"))
+                          .replace(v04.SCHEMA, SCHEMA))
+                if RECEIPT_CSS not in content:
+                    content = content.replace("</head>", RECEIPT_CSS + "</head>")
             return super().reply(status, content, mime)
 
         def do_GET(self):
