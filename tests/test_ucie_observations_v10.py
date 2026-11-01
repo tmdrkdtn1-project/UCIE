@@ -167,9 +167,18 @@ class ObservationReceiptsTests(unittest.TestCase):
                 replay_observations(root, handoff_factory=lambda root: h)
             unknown.unlink()
             drifting = fixture()
-            drifting["tasks"] = drifting["tasks"][1:]
-            # Removing a task makes handoff incomplete, which must fail closed.
-            with self.assertRaises(Exception):
+            # Remove precisely the recorded candidate's source revisions, not
+            # an unrelated task in the source-balanced search ordering.
+            from ucie_miner.library_explore import _candidate_rows
+            target = next(row for row in _candidate_rows(h)[1]
+                          if row["library_item_id"] == item["library_item_id"])
+            removed = set(target["review_candidate_sha256s"])
+            drifting["tasks"] = [
+                task for task in drifting["tasks"]
+                if task["candidate_id_sha256"] not in removed
+            ]
+            self.assertLess(len(drifting["tasks"]), len(h["tasks"]))
+            with self.assertRaises(ObservationError):
                 replay_observations(root, handoff_factory=lambda root: drifting)
             self.assertEqual(replay_observations(
                 root, handoff_factory=lambda root: h)[
