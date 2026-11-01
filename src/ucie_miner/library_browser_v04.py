@@ -174,6 +174,10 @@ def make_handler(root: Path, *, explorer=None, comparer=None, reviewer=None):
                 selected = ()
                 if parts.query:
                     context, selected = v03.parse_search_request(parts.query)
+            except v03.UIError:
+                return self.reply(400, "INVALID_REVIEW_QUERY",
+                                  "text/plain; charset=utf-8")
+            try:
                 receipt = reviewer(root, item_id=identity)
                 if receipt.get("status") != READY:
                     return self.reply(404, "SOURCE_LINKAGE_OR_ITEM_NO_GO",
