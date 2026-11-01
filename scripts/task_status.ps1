@@ -133,7 +133,7 @@ if ($Evidence) {
                 # do not enumerate or inspect other projects' task events.
                 $eventInstances = @{}
                 try {
-                    $eventXPath = "*[System[(EventID=100 or EventID=102 or EventID=200 or EventID=201) and TimeCreated[timediff(@SystemTime) <= 10800000]] and EventData[Data[@Name='TaskName']='\\UCIE-PublicMiner-Hourly']]"
+                    $eventXPath = "*[System[(EventID=100 or EventID=102 or EventID=200 or EventID=201) and TimeCreated[timediff(@SystemTime) <= 10800000]] and EventData[Data[@Name='TaskName']='\UCIE-PublicMiner-Hourly']]"
                     $events = @(Get-WinEvent -LogName 'Microsoft-Windows-TaskScheduler/Operational' -FilterXPath $eventXPath -MaxEvents 64 -ErrorAction Stop)
                     $eventLogReadable = $true
                     foreach ($event in $events) {
@@ -142,7 +142,7 @@ if ($Evidence) {
                         $eventData = $xml.SelectSingleNode("/*[local-name()='Event']/*[local-name()='EventData']")
                         if ($null -eq $eventData) { continue }
                         $taskNode = $eventData.SelectSingleNode("./*[local-name()='Data' and @Name='TaskName']")
-                        if ($null -eq $taskNode -or $taskNode.InnerText -cne '\\UCIE-PublicMiner-Hourly') { continue }
+                        if ($null -eq $taskNode -or $taskNode.InnerText -cne '\UCIE-PublicMiner-Hourly') { continue }
                         $idField = if ($event.Id -in @(100, 102)) { 'InstanceId' } else { 'TaskInstanceId' }
                         $instanceNode = $eventData.SelectSingleNode("./*[local-name()='Data' and @Name='$idField']")
                         $guid = [guid]::Empty
