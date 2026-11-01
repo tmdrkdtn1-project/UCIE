@@ -21,6 +21,44 @@ PILLARS = (
     ("G3", "CATEGORIZED_REUSABLE_VIRTUAL_KNOWLEDGE_LIBRARY"),
     ("G4", "UCIE_EXPERIENCE_DRIVEN_CONTINUAL_LIBRARY_EVOLUTION"),
 )
+
+# Permanent evidence-to-SkillBook product contract; INERT, not a release gate.
+# Do not simplify the product to a scraper or static-error index.
+SKILLBOOK_PIPELINE = (
+    "APPROVED_PUBLIC_EVIDENCE_INTAKE",
+    "REPROCESS_AND_GENERALIZE_TECHNICAL_PRINCIPLES",
+    "RECLASSIFY_AND_COMPOSE_SKILLBOOK_CHAPTERS",
+    "CREATE_HUMAN_AND_MACHINE_READABLE_ASSETS",
+    "SAFE_FIRST_PARTY_AND_INDEPENDENT_VERIFICATION",
+    "HUMAN_RIGHTS_SECURITY_AND_RELEASE_APPROVAL",
+    "VERSION_PINNED_REUSABLE_DISTRIBUTION",
+    "UCIE_OWNED_FEEDBACK_AND_REVISION",
+)
+SKILLBOOK_DELIVERABLES = (
+    "HUMAN_READABLE_SKILLBOOK",
+    "MACHINE_READABLE_SKILL_CONTRACT",
+    "EVIDENCE_VERSION_RIGHTS_MANIFEST",
+    "POSITIVE_NEGATIVE_TEST_RECIPE",
+    "UCIE_OWNED_REVISION_HISTORY",
+)
+_SKILLBOOK_PIPELINE_REQUIRED = (
+    "APPROVED_PUBLIC_EVIDENCE_INTAKE",
+    "REPROCESS_AND_GENERALIZE_TECHNICAL_PRINCIPLES",
+    "RECLASSIFY_AND_COMPOSE_SKILLBOOK_CHAPTERS",
+    "CREATE_HUMAN_AND_MACHINE_READABLE_ASSETS",
+    "SAFE_FIRST_PARTY_AND_INDEPENDENT_VERIFICATION",
+    "HUMAN_RIGHTS_SECURITY_AND_RELEASE_APPROVAL",
+    "VERSION_PINNED_REUSABLE_DISTRIBUTION",
+    "UCIE_OWNED_FEEDBACK_AND_REVISION",
+)
+_SKILLBOOK_DELIVERABLES_REQUIRED = (
+    "HUMAN_READABLE_SKILLBOOK",
+    "MACHINE_READABLE_SKILL_CONTRACT",
+    "EVIDENCE_VERSION_RIGHTS_MANIFEST",
+    "POSITIVE_NEGATIVE_TEST_RECIPE",
+    "UCIE_OWNED_REVISION_HISTORY",
+)
+
 FOUNDATIONS = ("APPROVED_PUBLIC_SOURCE_SELECTION", "MODULAR_AUTOMATIC_PUBLIC_ACQUISITION")
 APPROVED_REPOSITORIES = (
     "python/cpython",
@@ -102,6 +140,10 @@ def validate_product_plan() -> bool:
         raise ValueError("four equally ranked UCIE goals required")
     if len(set(name for _, name in PILLARS)) != 4:
         raise ValueError("duplicate UCIE product goal")
+    if SKILLBOOK_PIPELINE != _SKILLBOOK_PIPELINE_REQUIRED:
+        raise ValueError("SkillBook production pipeline cannot be removed or reordered")
+    if SKILLBOOK_DELIVERABLES != _SKILLBOOK_DELIVERABLES_REQUIRED:
+        raise ValueError("human and machine SkillBook deliverables are mandatory")
     if len(FOUNDATIONS) != 2:
         raise ValueError("two acquisition foundations required")
     if set(APPROVED_REPOSITORIES) != {
@@ -140,6 +182,17 @@ def preview_next_work() -> dict:
         "current_phase": CURRENT_PHASE,
         "pillars": [{"id": x, "goal": y} for x, y in PILLARS],
         "foundations": list(FOUNDATIONS),
+        "skillbook_mission": {
+            "status": "PRODUCT_MISSION_FIXED_IMPLEMENTATION_INCOMPLETE",
+            "state": "PLANNED_NOT_ACCEPTED",
+            "pipeline": list(SKILLBOOK_PIPELINE),
+            "required_deliverables": list(SKILLBOOK_DELIVERABLES),
+            "verified_skillbooks_produced": 0,
+            "generalized_skillbook_engine_implemented": False,
+            "independent_skill_efficacy_verified": False,
+            "paid_demand_verified": False,
+            "automatic_release_allowed": False,
+        },
         "milestones": [
             {"id": x, "goal": y, "planning_state": status, "acceptance": acceptance}
             for x, y, status, acceptance in MILESTONES
