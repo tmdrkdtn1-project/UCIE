@@ -142,7 +142,7 @@ class UcieOfficialPublicReleaseTests(unittest.TestCase):
             {"draft":True},
             {"graph":"diverged"},
             {"graph":"behind"},
-            {"merge_base":"a"*40},
+            {"merge_base":("f"*40 if row["revision_hint"] != "f"*40 else "e"*40)},
         ):
             with self.subTest(fake_kwargs=fake_kwargs):
                 fake,_ = fake_github(row, **fake_kwargs)
