@@ -32,6 +32,41 @@ $script:mockOwnerAsSid = $false
 $script:mockLastRunSecondsOffset = -2
 $script:mockExit = 0
 $script:mockLastRunMinutesAgo = 5
+$script:mockNoEvents = $false
+$script:mockBadEventCode = $false
+$script:mockWrongGuid = $false
+$script:mockStaleEvents = $false
+$script:mockMissingEvent = $false
+function Get-WinEvent {
+    param($LogName, $FilterXPath, $MaxEvents, $ErrorAction)
+    if ($script:mockNoEvents) { throw 'UCIE_SYNTHETIC_EVENT_LOG_UNAVAILABLE' }
+    if ($LogName -cne 'Microsoft-Windows-TaskScheduler/Operational' -or
+        $FilterXPath -notmatch 'UCIE-PublicMiner-Hourly' -or $MaxEvents -gt 64) {
+        throw 'UCIE_UNBOUNDED_EVENT_QUERY'
+    }
+    $receipts = @(Get-Content -LiteralPath (Join-Path $root 'runtime\\run_history.jsonl') |
+        ForEach-Object { $_ | ConvertFrom-Json })
+    $out = @()
+    foreach ($receipt in $receipts) {
+        $id = [guid]::NewGuid().ToString('B')
+        $begin = ([datetimeoffset]::Parse($receipt.started_utc)).ToLocalTime().DateTime
+        $finish = ([datetimeoffset]::Parse($receipt.finished_utc)).ToLocalTime().DateTime
+        if ($script:mockStaleEvents) { $begin = $begin.AddMinutes(-25); $finish = $finish.AddMinutes(-25) }
+        foreach ($eventId in @(100,200,201,102)) {
+            if ($script:mockMissingEvent -and $eventId -eq 201) { continue }
+            $when = if ($eventId -in @(100,200)) { $begin } else { $finish }
+            $eventGuid = if ($script:mockWrongGuid -and $eventId -eq 102) { [guid]::NewGuid().ToString('B') } else { $id }
+            $idField = if ($eventId -in @(100,102)) { 'InstanceId' } else { 'TaskInstanceId' }
+            $code = if ($eventId -eq 201) { if ($script:mockBadEventCode) { '2' } else { '0' } } else { '' }
+            $action = Join-Path $root '.venv\\Scripts\\python.exe'
+            $xml = "<Event><EventData><Data Name='TaskName'>\\UCIE-PublicMiner-Hourly</Data><Data Name='$idField'>$eventGuid</Data><Data Name='ActionName'>$action</Data><Data Name='ResultCode'>$code</Data></EventData></Event>"
+            $evt = [pscustomobject]@{ Id=$eventId; TimeCreated=$when; Xml=$xml }
+            $evt | Add-Member -MemberType ScriptMethod -Name ToXml -Value { return $this.Xml }
+            $out += $evt
+        }
+    }
+    return $out
+}
 function Get-ScheduledTask {
     param($TaskPath, $TaskName, $ErrorAction)
     $python = Join-Path $root '.venv\Scripts\python.exe'
@@ -121,20 +156,43 @@ try {
         throw 'UCIE_HOURLY_RESUME_EVIDENCE_NO_GO'
     }
     Write-SyntheticReceipts -LastStage 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO'
-    $script:mockLastRunMinutesAgo = 25
-    $stale = (& $evaluator | ConvertFrom-Json)
-    if ($stale.status -cne 'LAST_SCHEDULED_RUN_RECEIPT_MISMATCH_NO_GO' -or
-        $stale.two_recent_hourly_successes -ne $false) {
-        throw 'UCIE_HOURLY_STALE_SCHEDULER_RESULT_ACCEPTED'
-    }
+    # Observed owner Windows bug: LastRunTime can be 27s after an actual
+    # scheduler start even while events 100/200/201/102 match the receipt.
     $script:mockLastRunMinutesAgo = 5
     $script:mockLastRunSecondsOffset = 20
     Write-SyntheticReceipts -LastStage 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO'
-    $outOfOrder = (& $evaluator | ConvertFrom-Json)
-    if ($outOfOrder.status -cne 'LAST_SCHEDULED_RUN_RECEIPT_MISMATCH_NO_GO' -or
-        $outOfOrder.last_scheduled_run_matches_receipt -ne $false) {
-        throw 'UCIE_SCHEDULED_TASK_AFTER_COLLECTION_ACCEPTED'
+    $delayed = (& $evaluator | ConvertFrom-Json)
+    if ($delayed.status -cne 'TWO_CYCLE_BASE_COLLECTOR_OBSERVED' -or
+        -not $delayed.last_scheduled_run_matches_receipt -or
+        $delayed.scheduler_event_instance_receipts_verified -ne 2 -or
+        $delayed.task_info_last_run_time_used_for_binding -ne $false) {
+        throw 'UCIE_DELAYED_LASTRUNTIME_FALSE_FAILURE'
     }
+    $script:mockStaleEvents = $true
+    if ((& $evaluator | ConvertFrom-Json).status -cne 'LAST_SCHEDULED_RUN_RECEIPT_MISMATCH_NO_GO') {
+        throw 'UCIE_STALE_EVENT_HISTORY_ACCEPTED'
+    }
+    $script:mockStaleEvents = $false
+    $script:mockBadEventCode = $true
+    if ((& $evaluator | ConvertFrom-Json).status -cne 'LAST_SCHEDULED_RUN_RECEIPT_MISMATCH_NO_GO') {
+        throw 'UCIE_BAD_EVENT_EXIT_ACCEPTED'
+    }
+    $script:mockBadEventCode = $false
+    $script:mockWrongGuid = $true
+    if ((& $evaluator | ConvertFrom-Json).status -cne 'LAST_SCHEDULED_RUN_RECEIPT_MISMATCH_NO_GO') {
+        throw 'UCIE_WRONG_TASK_INSTANCE_ACCEPTED'
+    }
+    $script:mockWrongGuid = $false
+    $script:mockMissingEvent = $true
+    if ((& $evaluator | ConvertFrom-Json).status -cne 'LAST_SCHEDULED_RUN_RECEIPT_MISMATCH_NO_GO') {
+        throw 'UCIE_MISSING_TASK_EVENT_ACCEPTED'
+    }
+    $script:mockMissingEvent = $false
+    $script:mockNoEvents = $true
+    if ((& $evaluator | ConvertFrom-Json).status -cne 'TASK_SCHEDULER_EVENT_LOG_UNAVAILABLE_NO_GO') {
+        throw 'UCIE_EVENT_LOG_FAILURE_ACCEPTED'
+    }
+    $script:mockNoEvents = $false
     $script:mockLastRunSecondsOffset = -2
     Write-SyntheticReceipts -LastStage 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO' -LastStatus 'COLLECTION_FAILED'
     $failed = (& $evaluator | ConvertFrom-Json)
