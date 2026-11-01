@@ -240,6 +240,82 @@ class HourlyQualityTests(unittest.TestCase):
                 auditor=lambda root:current, clock=NOW+timedelta(hours=1))
         self.assertEqual(json.loads(output.read_text())["approved_rule_count"],1)
 
+    def test_actual_existing_hourly_stage_calls_quality_after_review_and_qa(self):
+        # Synthetic original collector stages: assert Stage17 is chained to
+        # Stage10 under the same original caller, not a new task or service.
+        from ucie_miner.public_hourly_staging import (
+            optional_public_skill_staging, OPT_IN_FILENAME, OPT_IN_TOKEN,
+        )
+        from ucie_miner.public_discovery import SOURCES
+        call_order = []
+        def capture(phase, result):
+            def inner(*args, **kwargs):
+                call_order.append(phase)
+                return result
+            return inner
+        batch = {
+            "sources_fetched": list(SOURCES), "overall_gets_upper_bound": 0,
+            "enriched_count": 0, "production_approved": False,
+        }
+        staged = {
+            "status": "UNVERIFIED_CANDIDATES_STAGED_NO_GO",
+            "mode": "OPT_IN_SEPARATE_DISK", "approved_rules_added": 0,
+            "production_approved": False, "new_identities": 0,
+            "evidence_revisions": 0, "git_commit_new_identities": 0,
+            "git_commit_evidence_revisions": 0,
+        }
+        history = {"status": "STAGE13_EXTERNAL_HISTORY_DISABLED"}
+        official = {"status": "STAGE14_OFFICIAL_DISABLED"}
+        fix = {"status": "STAGE15_FIX_EVIDENCE_DISABLED"}
+        learning = {"status": "STAGE12_REVIEW_DISABLED"}
+        qa = {"status": "STAGE16_SAFE_QA_DISABLED",
+              "public_gets_upper_bound": 0,
+              "approved_rules_added": 0, "production_approved": False}
+        quality = {"status": OBSERVED, "public_unverified_candidates": 26,
+                   "candidate_delta": 2, "approved_rules_added": 0,
+                   "production_approved": False}
+        with patch(
+            "ucie_miner.library_quality_loop_v12.optional_hourly_library_quality",
+            side_effect=capture("quality", quality)
+        ) as quality_call:
+            disabled = optional_public_skill_staging(
+                self.root, batch_builder=capture("batch", batch),
+                stage_candidate_batch=capture("stage", staged))
+            self.assertEqual(disabled["status"], "STAGE10_HOURLY_DISABLED")
+            quality_call.assert_not_called()
+        (self.runtime/OPT_IN_FILENAME).write_text(OPT_IN_TOKEN, encoding="utf-8")
+        with (
+            patch("ucie_miner.public_external_history.optional_external_history_backfill",
+                  side_effect=capture("history", history)),
+            patch("ucie_miner.public_official_evidence.optional_official_evidence_cycle",
+                  side_effect=capture("official", official)),
+            patch("ucie_miner.public_fix_evidence.optional_fix_evidence_enrichment",
+                  side_effect=capture("fix", fix)),
+            patch("ucie_miner.public_candidate_learning.optional_hourly_review_learning",
+                  side_effect=capture("learning", learning)),
+            patch("ucie_miner.public_safe_qa_cycle.optional_pinned_public_qa",
+                  side_effect=capture("qa", qa)),
+            patch("ucie_miner.library_quality_loop_v12.optional_hourly_library_quality",
+                  side_effect=capture("quality", quality)) as quality_call
+        ):
+            result = optional_public_skill_staging(
+                self.root, batch_builder=capture("batch", batch),
+                stage_candidate_batch=capture("stage", staged))
+            self.assertEqual(result["status"], "STAGE10_UNVERIFIED_STAGED_NO_GO")
+            self.assertEqual(result["stage17_quality_status"], OBSERVED)
+            self.assertEqual(result["stage17_quality_candidate_count"], 26)
+            self.assertEqual(result["stage17_quality_candidate_delta"], 2)
+            self.assertEqual(result["approved_rules_added"], 0)
+            self.assertEqual(call_order, [
+                "batch", "stage", "history", "official", "fix",
+                "learning", "qa", "quality",
+            ])
+            quality_call.assert_called_once()
+            self.assertEqual(quality_call.call_args.kwargs["stage12_status"],
+                             "STAGE12_REVIEW_DISABLED")
+            self.assertEqual(quality_call.call_args.kwargs["stage16_status"],
+                             "STAGE16_SAFE_QA_DISABLED")
+
     def test_worker_receipt_writes_only_vetted_quality_fields(self):
         # Test worker validates Stage17 status/counters independently.
         def report(root):
