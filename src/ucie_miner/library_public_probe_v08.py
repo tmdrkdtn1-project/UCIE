@@ -19,7 +19,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-from .core import NoRedirect
+from .core import NoRedirect, MiningError
 from .library_review_records_v05 import (
     CLAIM_ONLY, PUBLIC_DOC_HOSTS, _public_evidence_url,
 )
@@ -87,7 +87,7 @@ def _public_get(url: str, *, max_bytes: int, json_only: bool) -> bytes:
                     or int(claimed_len) > max_bytes):
                 raise ProbeError("public content length exceeds limit")
             raw = response.read(max_bytes + 1)
-    except (urllib.error.URLError, urllib.error.HTTPError, OSError, TimeoutError) as exc:
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError, TimeoutError, MiningError) as exc:
         raise ProbeError("approved public endpoint unavailable") from exc
     if len(raw) > max_bytes:
         raise ProbeError("public response exceeded byte bound")
