@@ -160,6 +160,17 @@ def make_handler(root: Path, *, explorer=None, comparer=None, reviewer=None):
 
         def do_GET(self):
             parts = urlsplit(self.path)
+            # The V0.4 process must identify itself truthfully; do not return
+            # the inherited V0.3 health schema under a new launcher.
+            if parts.path == "/health" and not parts.query and not parts.fragment:
+                if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
+                    return self.reply(403, "LOOPBACK_ONLY",
+                                      "text/plain; charset=utf-8")
+                return self.reply(200, json.dumps({
+                    "schema": SCHEMA, "status": "LOCAL_READ_ONLY_UI_READY",
+                    "db_writes": 0, "scheduler_changes": 0,
+                    "auto_promoted": False, "production_approved": False,
+                }), "application/json; charset=utf-8")
             if not parts.path.startswith("/review/"):
                 return super().do_GET()
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
