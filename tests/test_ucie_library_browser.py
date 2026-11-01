@@ -12,6 +12,9 @@ from pathlib import Path
 from threading import Thread
 import unittest
 from urllib.error import HTTPError
+
+from ucie_miner.public_discovery import DiscoveryError
+from ucie_miner.library_search import LibrarySearchError
 from urllib.request import Request, urlopen
 
 from ucie_miner.library_browser import (
@@ -143,6 +146,67 @@ class UCIEBrowserTests(unittest.TestCase):
                         timeout=5)
             self.assertEqual(exc.exception.code, 403)
             self.assertEqual(calls, [])
+
+    def test_empty_default_query_is_valid(self):
+        filters = parse_request_filters("")
+        self.assertEqual(filters["query"], "")
+        self.assertEqual(filters["limit"], 10)
+        self.assertIsNone(filters["source_id"])
+        self.assertIsNone(filters["kind"])
+
+        def searcher(root, **received):
+            self.assertEqual(received, filters)
+            return SAMPLE
+
+        with local_only(searcher) as url:
+            with urlopen(url + "/", timeout=5) as response:
+                self.assertEqual(response.status, 200)
+                page = response.read().decode("utf-8")
+                self.assertNotIn("검색 조건 오류", page)
+                self.assertIn("공개 근거 열기", page)
+
+    def test_valid_search_rejects_invalid_source_ledger_without_blame_or_leak(self):
+        cases = (
+            (DiscoveryError, "SOURCE_VALIDATION_FAILED_NO_GO"),
+            (LibrarySearchError, "SOURCE_VALIDATION_FAILED_NO_GO"),
+            (ValueError, "SOURCE_VALIDATION_FAILED_NO_GO"),
+            (OSError, "SOURCE_STORAGE_UNAVAILABLE_NO_GO"),
+        )
+        for exc_type, code in cases:
+            with self.subTest(error=exc_type.__name__):
+                private_message = "UNTRUSTED_SECRET_STRING_NOT_FOR_HTML"
+
+                def broken_searcher(root, **filters):
+                    raise exc_type(private_message)
+
+                with local_only(broken_searcher) as url:
+                    with self.assertRaises(HTTPError) as response:
+                        urlopen(url + "/?q=Python&limit=5", timeout=5)
+                    self.assertEqual(response.exception.code, 503)
+                    html = response.exception.read().decode("utf-8")
+                    self.assertIn(code, html)
+                    self.assertIn("원장 조회/검증", html)
+                    self.assertNotIn("검색 입력값이", html)
+                    self.assertNotIn("검색 조건 오류", html)
+                    self.assertNotIn(private_message, html)
+                    self.assertNotIn("공개 근거 열기", html)
+                    self.assertIn('value="Python"', html)
+
+    def test_malformed_query_still_400_without_calling_searcher(self):
+        invoked = []
+
+        def must_not_call(root, **filters):
+            invoked.append(True)
+            return SAMPLE
+
+        with local_only(must_not_call) as url:
+            with self.assertRaises(HTTPError) as response:
+                urlopen(url + "/?q=bad%0Aquery", timeout=5)
+            self.assertEqual(response.exception.code, 400)
+            html = response.exception.read().decode("utf-8")
+            self.assertIn("검색 조건 오류", html)
+            self.assertNotIn("원장 조회 차단", html)
+        self.assertEqual(invoked, [])
 
     def test_unexpected_library_status_does_not_display_rows(self):
         fake = dict(SAMPLE, status="PUBLISH_READY")
