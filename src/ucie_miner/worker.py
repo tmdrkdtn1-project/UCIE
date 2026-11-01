@@ -291,6 +291,29 @@ def run_cycle(
                     receipt["stage16_safe_qa_status"] = stage16
                     receipt["stage16_safe_qa_templates"] = templates
                     receipt["stage16_safe_qa_gets_upper_bound"] = gets
+                # Stage17 quality feedback is observational and unverified.
+                # It has no rule-approval field and must never change the
+                # original miner's stable public-source candidate counters.
+                quality_status = optional_stage.get("stage17_quality_status")
+                if quality_status is not None:
+                    if quality_status not in (
+                        "STAGE17_QUALITY_DISABLED",
+                        "STAGE17_QUALITY_OBSERVED_UNVERIFIED_NO_GO",
+                        "STAGE17_QUALITY_REVIEW_REQUIRED_NO_GO"):
+                        raise ValueError("unknown Stage17 quality status")
+                    quality_count = optional_stage.get(
+                        "stage17_quality_candidate_count", 0)
+                    quality_delta = optional_stage.get(
+                        "stage17_quality_candidate_delta", 0)
+                    if (type(quality_count) is not int or not 0 <= quality_count <= 1000
+                            or type(quality_delta) is not int
+                            or not -1000 <= quality_delta <= 1000
+                            or (quality_status == "STAGE17_QUALITY_DISABLED"
+                                and (quality_count != 0 or quality_delta != 0))):
+                        raise ValueError("invalid Stage17 quality counters")
+                    receipt["stage17_quality_status"] = quality_status
+                    receipt["stage17_quality_candidate_count"] = quality_count
+                    receipt["stage17_quality_candidate_delta"] = quality_delta
                 if optional_stage["status"] == "STAGE10_HOURLY_FAILED_NO_GO":
                     # Preserve error CLASS only, never exception text or data
                     # from public sources. No extra file or new observer.
