@@ -139,18 +139,29 @@ def optional_hourly_library_quality(
         root: Path, *, stage12_status: str, stage16_status: str,
         auditor=None, clock=None) -> dict:
     """One bounded opt-in QA pass within the original hourly collector lock."""
-    root = _root(root)
+    root = Path(root)
+    if (root.name.casefold() != "ucie" or not root.is_dir()
+            or root.is_symlink()):
+        raise QualityError("dedicated UCIE-only checkout required")
     runtime = root / "runtime"
+    if not runtime.is_dir() or runtime.is_symlink():
+        raise QualityError("unsafe UCIE-only runtime directory")
     marker = runtime / OPT_IN_FILENAME
     if marker.is_symlink():
         raise QualityError("unsafe quality opt-in marker")
     if not marker.exists():
+        # Critical non-regression: missing owner marker does ZERO Stage17
+        # source reads/writes and keeps the already-supported Windows
+        # synthetic original hourly stage functional on a temporary root.
+        # The strict D:/UCIE owner validation is needed ONLY for the
+        # separately opted-in real Stage17 audit and snapshot writes.
         return {"status": DISABLED, "operator_opted_in": False,
                 "approved_rules_added": 0, "production_approved": False,
                 "quality_snapshot_written": False}
     if (not marker.is_file() or marker.stat().st_size > 100
             or marker.read_text("utf-8").strip() != OPT_IN_TOKEN):
         raise QualityError("invalid Stage17 marker")
+    root = _root(root)
     if stage12_status not in STAGE12 or stage16_status not in STAGE16:
         raise QualityError("unrecognized hourly review or QA status")
     read = audit_existing_public_library if auditor is None else auditor
