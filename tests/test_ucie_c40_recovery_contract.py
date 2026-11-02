@@ -85,6 +85,16 @@ class C40RecoveryContractTests(unittest.TestCase):
         self.assertIn("UCIE_C40_TASK_PRINCIPAL_UNRESOLVED", self.source)
         self.assertNotIn("$identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name", self.source)
 
+    def test_supervisor_emits_only_bounded_ucie_health_codes(self):
+        self.assertIn("c40_supervisor_health_v1.json", self.source)
+        self.assertIn("Save-C40SupervisorReceipt -Stage 'PROCESS_STARTED'", self.source)
+        self.assertIn("Save-C40SupervisorReceipt -Stage 'TASK_IDENTITY_FAILED'", self.source)
+        self.assertIn("Save-C40SupervisorReceipt -Stage 'CYCLE_OK'", self.source)
+        self.assertIn("Save-C40SupervisorReceipt -Stage 'CYCLE_FAILED'", self.source)
+        self.assertIn("NON_UCIE_EXCEPTION", self.source)
+        self.assertNotIn("$_.ScriptStackTrace", self.source)
+        self.assertNotIn("Write-EventLog", self.source)
+
     def test_only_child_process_receives_legacy_guard(self):
         self.assertIn("$oldApproval = $env:UCIE_MCP_OWNER_APPROVAL", self.source)
         self.assertIn("$env:UCIE_MCP_OWNER_APPROVAL = $oldApproval", self.source)
