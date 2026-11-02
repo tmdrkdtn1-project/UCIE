@@ -29,7 +29,20 @@ $ErrorActionPreference = 'Stop'
 $task = Get-ScheduledTask -TaskName 'UCIE-C40-Recover' -ErrorAction Stop
 $info = Get-ScheduledTaskInfo -TaskName 'UCIE-C40-Recover' -ErrorAction Stop
 $actions = @($task.Actions)
-$owner = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+$ownerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$principalId = [string]$task.Principal.UserId
+try {
+    if ($principalId -match '^S-1-[0-9]+(?:-[0-9]+)+$') {
+        $registeredSid = $principalId
+    }
+    else {
+        $registeredSid = ([Security.Principal.NTAccount]::new($principalId)).Translate(
+            [Security.Principal.SecurityIdentifier]).Value
+    }
+}
+catch {
+    $registeredSid = ''
+}
 $exe = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $expectedScript = 'D:\UCIE\scripts\ucie_c40_recover.ps1'
 $actionValid = (
@@ -40,7 +53,7 @@ $actionValid = (
     ([string]$actions[0].Arguments).Contains('-EnableAdminTools')
 )
 $ownerValid = [string]::Equals(
-    [string]$task.Principal.UserId, $owner, [StringComparison]::OrdinalIgnoreCase
+    $registeredSid, $ownerSid, [StringComparison]::OrdinalIgnoreCase
 )
 $logon = @($task.Triggers | Where-Object { 
     $_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger'
