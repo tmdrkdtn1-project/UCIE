@@ -102,6 +102,18 @@ $clients = @(Get-CimInstance Win32_Process -Filter "Name = 'tunnel-client.exe' A
             data=json.loads(run.stdout.strip())
         except json.JSONDecodeError as exc:
             raise AssertionError("no UCIE C40 structured diagnostic output") from exc
+        health_path = Path(r"D:\UCIE\.ucie_bridge_state\c40_supervisor_health_v1.json")
+        if health_path.is_file() and not health_path.is_symlink():
+            if health_path.stat().st_size <= 2048:
+                try:
+                    health = json.loads(health_path.read_text(encoding="utf-8-sig"))
+                    if (type(health) is dict and health.get("schema") ==
+                            "UCIE_C40_SUPERVISOR_HEALTH_V1"):
+                        data["supervisor_health"] = {
+                            k: health.get(k) for k in ("stage", "code", "client_count", "utc")
+                        }
+                except (OSError, UnicodeError, ValueError):
+                    data["supervisor_health"] = {"status": "INVALID"}
         print("UCIE_C40_READONLY_DIAGNOSTIC="+json.dumps(data,sort_keys=True))
         self.assertEqual(data["schema"],"UCIE_C40_TASK_FAILURE_READONLY_V1")
         self.assertTrue(data["pinned_script_sha_matches"])
