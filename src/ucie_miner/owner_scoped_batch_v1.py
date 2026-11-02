@@ -23,6 +23,7 @@ REPO = "tmdrkdtn1-project/UCIE"
 WORKFLOW = ".github/workflows/stage1-offline-tests.yml"
 GRANT_FILE = "grant.json"
 CONSENT = "AUTHORIZE_UCIE_SCOPED_DEV_QA_ONLY"
+REVOKE = "REVOKE_UCIE_SCOPED_DEV_QA_ONLY"
 SHA = re.compile(r"[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 SOURCE = re.compile(r"src/ucie_miner/[a-z][a-z0-9_]{2,60}\.py\Z")
@@ -257,7 +258,8 @@ def enroll(root: Path, hub: Path, *, consent: str, now: datetime | None = None,
     return grant
 
 
-def _grant(hub: Path, *, now: datetime | None = None) -> tuple[Path, dict]:
+def _grant_record(hub: Path) -> tuple[Path, dict]:
+    """Read strict stored record even when expired, exhausted or revoked."""
     path = _grant_path(hub)
     try:
         grant = json.loads(_read_exact(path, 2048))
@@ -266,19 +268,77 @@ def _grant(hub: Path, *, now: datetime | None = None) -> tuple[Path, dict]:
     required = {"schema", "status", "repo", "start_utc", "expires_utc",
                 "max_batches", "used_batches", "revoked", "allowed_class"}
     if (type(grant) is not dict or set(grant) != required or grant["schema"] != SCHEMA
-            or grant["repo"] != REPO or grant["status"] != "SCOPED_CONSENT_LOCAL_ONLY_NOT_IDENTITY_PROOF"
+            or grant["repo"] != REPO
+            or grant["status"] != "SCOPED_CONSENT_LOCAL_ONLY_NOT_IDENTITY_PROOF"
             or grant["allowed_class"] != "ONLY_SRC_AND_TESTS_BOUNDED_GITHUB_CI"
             or type(grant["max_batches"]) is not int or grant["max_batches"] != 12
-            or type(grant["used_batches"]) is not int or not 0 <= grant["used_batches"] < 12
-            or type(grant["revoked"]) is not bool or grant["revoked"]):
-        raise ScopeError("grant denied, exhausted or forged")
-    current = now or _now()
-    if not _date(grant["start_utc"]) <= current < _date(grant["expires_utc"]):
-        raise ScopeError("grant not currently valid")
-    if _date(grant["expires_utc"]) - _date(grant["start_utc"]) > timedelta(days=14):
-        raise ScopeError("grant extended beyond fixed window")
+            or type(grant["used_batches"]) is not int
+            or not 0 <= grant["used_batches"] <= 12
+            or type(grant["revoked"]) is not bool):
+        raise ScopeError("invalid grant record")
+    start = _date(grant["start_utc"])
+    expires = _date(grant["expires_utc"])
+    if not timedelta(0) < expires - start <= timedelta(days=14):
+        raise ScopeError("grant lifetime invalid")
     return path, grant
 
+
+def _grant(hub: Path, *, now: datetime | None = None) -> tuple[Path, dict]:
+    path, grant = _grant_record(hub)
+    current = now or _now()
+    if (grant["revoked"] or grant["used_batches"] >= grant["max_batches"]
+            or not _date(grant["start_utc"]) <= current < _date(grant["expires_utc"])):
+        raise ScopeError("grant inactive, expired or exhausted")
+    return path, grant
+
+
+def inspect_scope(root: Path, hub: Path, *, now: datetime | None = None,
+                  test_mode: bool = False) -> dict:
+    """Read-only scope status; not identity verification or approval."""
+    if not test_mode:
+        _host_paths(root, hub)
+    path = _grant_path(hub)
+    if path.is_symlink():
+        raise ScopeError("unsafe grant symlink")
+    if not path.exists():
+        return {"schema": SCHEMA, "status": "NOT_ENROLLED",
+                "active": False, "owner_identity_attested": False}
+    _, grant = _grant_record(hub)
+    current = now or _now()
+    if grant["revoked"]:
+        state = "REVOKED"
+    elif grant["used_batches"] >= grant["max_batches"]:
+        state = "EXHAUSTED"
+    elif not _date(grant["start_utc"]) <= current < _date(grant["expires_utc"]):
+        state = "OUTSIDE_GRANT_WINDOW"
+    else:
+        state = "SCOPED_GRANT_ACTIVE_NOT_IDENTITY_PROOF"
+    return {"schema": SCHEMA, "status": state,
+            "active": state == "SCOPED_GRANT_ACTIVE_NOT_IDENTITY_PROOF",
+            "used_batches": grant["used_batches"],
+            "remaining_batches": grant["max_batches"] - grant["used_batches"],
+            "expires_utc": grant["expires_utc"],
+            "owner_identity_attested": False}
+
+
+def revoke_scope(root: Path, hub: Path, *, confirmation: str,
+                 test_mode: bool = False) -> dict:
+    """Revoke under the batch lock; trusted UCIE owner bridge only."""
+    if not test_mode:
+        _host_paths(root, hub)
+    if confirmation != REVOKE:
+        raise ScopeError("exact scoped revocation confirmation required")
+    with _exclusive_scope_lock(hub):
+        path, grant = _grant_record(hub)
+        if grant["revoked"]:
+            state = "ALREADY_REVOKED"
+        else:
+            grant["revoked"] = True
+            _atomic(path, _json_bytes(grant) + b"\n")
+            state = "SCOPED_GRANT_REVOKED"
+    return {"schema": SCHEMA, "status": state, "active": False,
+            "owner_identity_attested": False, "scheduler_changed": False,
+            "operating_db_modified": False}
 
 @contextmanager
 def _exclusive_scope_lock(hub: Path):
@@ -337,6 +397,8 @@ def _apply_locked(root: Path, hub: Path, bundle: dict,
         raise ScopeError("batch already attempted: manual receipt review required")
     backup_dir.mkdir()
     written = []
+    grant_original = _json_bytes(grant) + b"\n"
+    grant_updated = False
     # For recovery after a host crash: copies and manifest are durable before any writes.
     for i, (target, before, data) in enumerate(current):
         if before is not None:
@@ -353,6 +415,7 @@ def _apply_locked(root: Path, hub: Path, bundle: dict,
                 raise OSError("injected rollback test")
         grant["used_batches"] += 1
         _atomic(gp, _json_bytes(grant) + b"\n")
+        grant_updated = True
         manifest["state"] = "APPLIED_UNAPPROVED_CODE_ONLY"
         _atomic(backup_dir / "journal.json", _json_bytes(manifest) + b"\n")
     except Exception:
@@ -363,6 +426,8 @@ def _apply_locked(root: Path, hub: Path, bundle: dict,
                 target.unlink()
             else:
                 _atomic(target, before)
+        if grant_updated:
+            _atomic(gp, grant_original)
         manifest["state"] = "ROLLED_BACK_AFTER_EXCEPTION"
         _atomic(backup_dir / "journal.json", _json_bytes(manifest) + b"\n")
         raise
