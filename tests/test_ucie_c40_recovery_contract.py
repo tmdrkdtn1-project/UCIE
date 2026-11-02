@@ -78,6 +78,13 @@ class C40RecoveryContractTests(unittest.TestCase):
         self.assertRegex(self.source, r"if \(\$Mode -eq 'Once'\) \{\s+\$task = Assert-ApprovedRecoveryTask")
         self.assertRegex(self.source, r"if \(\$Mode -eq 'Supervise'\) \{\s+\$task = Assert-ApprovedRecoveryTask")
 
+    def test_task_owner_is_resolved_via_sid_not_account_name(self):
+        self.assertIn("GetCurrent().User.Value", self.source)
+        self.assertIn("Security.Principal.NTAccount", self.source)
+        self.assertIn("Security.Principal.SecurityIdentifier", self.source)
+        self.assertIn("UCIE_C40_TASK_PRINCIPAL_UNRESOLVED", self.source)
+        self.assertNotIn("$identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name", self.source)
+
     def test_only_child_process_receives_legacy_guard(self):
         self.assertIn("$oldApproval = $env:UCIE_MCP_OWNER_APPROVAL", self.source)
         self.assertIn("$env:UCIE_MCP_OWNER_APPROVAL = $oldApproval", self.source)
