@@ -377,6 +377,8 @@ def _apply_locked(root: Path, hub: Path, bundle: dict,
     """
     if not test_mode:
         _host_paths(root, hub)
+        if verify_ci_and_sources is not verify_github_ci_and_source_blobs:
+            raise ScopeError("trusted CI and source verifier is mandatory on owner host")
     commit, files = validate_bundle(bundle)
     gp, grant = _grant(hub, now=now)
     current = []
