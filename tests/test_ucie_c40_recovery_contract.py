@@ -76,7 +76,10 @@ class C40RecoveryContractTests(unittest.TestCase):
         self.assertIn("UCIE_C40_TASK_OWNER_OR_ACTION_MISMATCH", self.source)
         self.assertIn("UCIE_C40_ADMIN_MODE_MISMATCH", self.source)
         self.assertRegex(self.source, r"if \(\$Mode -eq 'Once'\) \{\s+\$task = Assert-ApprovedRecoveryTask")
-        self.assertRegex(self.source, r"if \(\$Mode -eq 'Supervise'\) \{\s+\$task = Assert-ApprovedRecoveryTask")
+        self.assertIn("if ($Mode -eq 'Supervise') {", self.source)
+        self.assertIn("Save-C40SupervisorReceipt -Stage 'PROCESS_STARTED'", self.source)
+        self.assertIn("$task = Assert-ApprovedRecoveryTask", self.source)
+        self.assertIn("Save-C40SupervisorReceipt -Stage 'TASK_IDENTITY_OK'", self.source)
 
     def test_task_owner_is_resolved_via_sid_not_account_name(self):
         self.assertIn("GetCurrent().User.Value", self.source)
