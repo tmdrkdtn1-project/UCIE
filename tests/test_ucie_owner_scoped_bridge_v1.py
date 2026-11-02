@@ -129,7 +129,7 @@ class UCIEOwnerBridgeContractTests(unittest.TestCase):
 
     def test_oversized_envelope_denied(self):
         with self.assertRaises(b.BridgeContractError):
-            self.bridge.handle(payload("status", extra="x" * b.MAX_REQUEST_BYTES))
+            self.bridge.handle(payload("enroll", consent="x" * b.MAX_REQUEST_BYTES))
 
     def test_unserializable_object_denied(self):
         with self.assertRaises(b.BridgeContractError):
@@ -148,6 +148,42 @@ class UCIEOwnerBridgeContractTests(unittest.TestCase):
                          "TRUSTED_UCIE_BRIDGE_INTEGRATION_REQUIRED")
         self.assertFalse(result["host_changed"])
         self.assertFalse(result["identity_attested"])
+
+
+    def test_request_snapshot_is_independent_of_caller_mutation(self):
+        request = payload("apply", bundle={"schema": "FIRST"})
+        seen = []
+        def authorize(op):
+            self.assertEqual(op, "apply")
+            request["bundle"]["schema"] = "MODIFIED_AFTER_VALIDATION"
+            return True
+        bridge = b.UCIEOwnerBridgeBoundary(
+            authenticated_session_action=authorize)
+        with patch.object(b.engine, "validate_bundle",
+                          side_effect=lambda bundle: seen.append(bundle["schema"])):
+            with patch.object(b.engine, "apply_verified_batch",
+                              return_value={"status": "PASS"}) as apply:
+                result = bridge.handle(request)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(seen, ["FIRST"])
+        self.assertEqual(apply.call_args.args[2], {"schema": "FIRST"})
+        self.assertEqual(request["bundle"], {"schema": "MODIFIED_AFTER_VALIDATION"})
+
+    def test_valid_request_is_snapshot_not_same_object(self):
+        value = payload("enroll", consent=b.engine.CONSENT)
+        op, frozen = b._request(value)
+        self.assertEqual(op, "enroll")
+        self.assertEqual(frozen, value)
+        self.assertIsNot(frozen, value)
+        value["consent"] = "MODIFIED"
+        self.assertEqual(frozen["consent"], b.engine.CONSENT)
+
+    def test_serialization_cannot_inject_untrusted_object(self):
+        class Untrusted:
+            pass
+        with self.assertRaises(b.BridgeContractError):
+            self.bridge.handle(payload("apply", bundle=Untrusted()))
+        self.allow.assert_not_called()
 
 
 if __name__ == "__main__":
