@@ -102,92 +102,11 @@ function Assert-ApprovedRecoveryTask {
         throw 'UCIE_C40_REGISTERED_TASK_REQUIRED'
     }
     $action = $task.Actions[0]
-    # Task Scheduler commonly returns a SID while GetCurrent().Name is DOMAIN\user.
-    # Compare canonical SIDs; never print either the account or SID.
+    # Compare canonical SIDs, not a Task Scheduler SID with a DOMAIN\\user name.
     $identitySid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $principalId = [string]$task.Principal.UserId
     try {
-        if ($principalId -match '^S-1-[0-9]+(?:-[0-9]+)+
-        -not [string]::Equals([string]$action.Execute,$psExe,[StringComparison]::OrdinalIgnoreCase) -or
-        ([string]$action.Arguments).IndexOf($scriptPath,[StringComparison]::OrdinalIgnoreCase) -lt 0 -or
-        ([string]$action.Arguments).IndexOf('-Mode Supervise',[StringComparison]::OrdinalIgnoreCase) -lt 0) {
-        throw 'UCIE_C40_TASK_OWNER_OR_ACTION_MISMATCH'
-    }
-    $registeredAdmin = ([string]$action.Arguments).Contains('-EnableAdminTools')
-    if ([bool]$EnableAdminTools -ne $registeredAdmin) {
-        throw 'UCIE_C40_ADMIN_MODE_MISMATCH'
-    }
-    return $task
-}
-if ($Mode -eq 'Status') {
-    $task = Get-C40Task
-    $items = @(Find-C40)
-    [pscustomobject]@{
-        status='UCIE_C40_RECOVERY_STATUS_READONLY'
-        task_registered=($null -ne $task)
-        task_state=$(if($null -ne $task){[string]$task.State}else{'ABSENT'})
-        c40_client_count=$items.Count
-        admin_mode_not_inferred=$true
-        db_changed=$false
-    } | ConvertTo-Json -Compress
-    return
-}
-if ($Mode -eq 'Install') {
-    if (-not $OwnerOnlyConfirmed) { throw 'UCIE_OWNER_ONLY_SCOPE_REQUIRED' }
-    if ($null -ne (Get-C40Task)) { throw 'UCIE_C40_TASK_EXISTS_NO_OVERWRITE' }
-    $id = Verify-C40Inputs
-    $id = $null
-    $active = @(Find-C40)
-    $decision = Read-Host 'UCIE C40 logon recovery registration: type APPROVE'
-    if ($decision -cne 'APPROVE') { throw 'UCIE_C40_INSTALL_NOT_APPROVED' }
-    $self = Get-Item -LiteralPath $scriptPath
-    if (($self.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw 'UCIE_C40_RECOVERY_SCRIPT_LINK_DENIED'
-    }
-    $args = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File "' +
-        $scriptPath + '" -Mode Supervise'
-    if ($EnableAdminTools) { $args += ' -EnableAdminTools' }
-    $action = New-ScheduledTaskAction -Execute $psExe -Argument $args -WorkingDirectory 'D:\UCIE'
-    $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
-    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $principal.UserId
-    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-    Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Trigger $trigger -Settings $settings -Description 'UCIE-only existing C40 at owner logon and every five minutes' -ErrorAction Stop | Out-Null
-    Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
-    [pscustomobject]@{status='UCIE_C40_RECOVERY_TASK_REGISTERED';task=$taskName;
-        trigger='OWNER_LOGON';check_interval_seconds=300;admin_enabled=[bool]$EnableAdminTools;
-        existing_c40_count=$active.Count;other_tasks_modified=$false;operating_db_modified=$false} | ConvertTo-Json -Compress
-    return
-}
-if ($Mode -eq 'Remove') {
-    if (-not $OwnerOnlyConfirmed) { throw 'UCIE_OWNER_ONLY_SCOPE_REQUIRED' }
-    $decision = Read-Host 'Remove ONLY UCIE-C40-Recover task: type REMOVE'
-    if ($decision -cne 'REMOVE') { throw 'UCIE_C40_REMOVAL_NOT_APPROVED' }
-    if ($null -eq (Get-C40Task)) { throw 'UCIE_C40_TASK_NOT_PRESENT' }
-    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
-    [pscustomobject]@{status='UCIE_C40_RECOVERY_TASK_REMOVED';
-        running_c40_not_terminated=$true;other_tasks_modified=$false} | ConvertTo-Json -Compress
-    return
-}
-if ($Mode -eq 'Once') {
-    $task = Assert-ApprovedRecoveryTask
-    $r = One-C40Check -StartMissing
-    $r | ConvertTo-Json -Compress
-    return
-}
-if ($Mode -eq 'Supervise') {
-    $task = Assert-ApprovedRecoveryTask
-    while ($true) {
-        try {
-            $r = One-C40Check -StartMissing
-            $r | ConvertTo-Json -Compress
-        }
-        catch { throw 'UCIE_C40_SUPERVISOR_NEEDS_OWNER_REVIEW' }
-        Start-Sleep -Seconds 300
-    }
-}
-throw 'UCIE_C40_INVALID_MODE'
-) {
+        if ($principalId -match '^S-1-[0-9]+(?:-[0-9]+)+$') {
             $taskSid = $principalId
         }
         else {
@@ -196,7 +115,7 @@ throw 'UCIE_C40_INVALID_MODE'
         }
     }
     catch {
-        throw 'UCIE_C40_REGISTERED_TASK_PRINCIPAL_UNRESOLVED'
+        throw 'UCIE_C40_TASK_PRINCIPAL_UNRESOLVED'
     }
     if (-not [string]::Equals($taskSid,$identitySid,[StringComparison]::OrdinalIgnoreCase) -or
         -not [string]::Equals([string]$action.Execute,$psExe,[StringComparison]::OrdinalIgnoreCase) -or
