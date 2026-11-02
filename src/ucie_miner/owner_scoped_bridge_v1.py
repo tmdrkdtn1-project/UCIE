@@ -43,13 +43,17 @@ def _request(payload: object) -> tuple[str, dict]:
         raise BridgeContractError("invalid UCIE bridge request data") from exc
     if len(encoded) > MAX_REQUEST_BYTES:
         raise BridgeContractError("UCIE bridge request too large")
-    if op == "enroll" and payload["consent"] != engine.CONSENT:
+    # Freeze the entire request before authentication. The caller's dict may
+    # be mutated while the trusted backend checks the session; never apply a
+    # payload different from the one that passed allowlist/size validation.
+    request = json.loads(encoded)
+    if op == "enroll" and request["consent"] != engine.CONSENT:
         raise BridgeContractError("local scoped consent missing")
-    if op == "revoke" and payload["confirmation"] != engine.REVOKE:
+    if op == "revoke" and request["confirmation"] != engine.REVOKE:
         raise BridgeContractError("exact revocation confirmation missing")
     if op == "apply":
-        engine.validate_bundle(payload["bundle"])
-    return op, payload
+        engine.validate_bundle(request["bundle"])
+    return op, request
 
 
 class UCIEOwnerBridgeBoundary:
