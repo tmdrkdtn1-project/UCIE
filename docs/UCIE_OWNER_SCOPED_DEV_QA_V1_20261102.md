@@ -23,6 +23,23 @@ This focused offline regression has 47 cases for strict scope, SHA and commit, o
 
 The existing `.github/workflows/stage1-offline-tests.yml` already runs the full offline test suite on Windows/Ubuntu with Python 3.13/3.15 for every PR. Its exact-head CI must be checked separately before merge.
 
+## UCIE-only bridge adapter (code delivered; host not activated)
+
+`src/ucie_miner/owner_scoped_bridge_v1.py` defines four allowlisted bridge calls:
+`status`, `enroll`, `revoke`, `apply`. The only accepted request fields
+are the fixed schema, operation and its exact operation-specific payload.
+A trusted UCIE host bridge must supply an independently authenticated
+server-owned session authorizer: a caller-provided string, grant or identity
+boolean cannot establish owner identity. The adapter fixes all host roots,
+rejects remote `test_mode`, root overrides and alternate CI callbacks, and
+binds the existing exact-commit GitHub source/CI verifier.
+
+The adapter freezes validated JSON request data before the session check,
+preventing a mutable caller object from changing the bundle mid-authorization.
+The adapter does not create a network listener or register an MCP tool.
+Focused first-party adapter regressions: 21 cases. A green GitHub matrix
+does not prove ACL/identity trust or host deployment.
+
 ## Current integration gates
 
 1. **GitHub PR/CI**: branch review and exact-head CI; this does not require a Windows user download.
