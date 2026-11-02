@@ -330,5 +330,82 @@ class ScopedUnitTests(unittest.TestCase):
         self.assertNotIn("sqlite3.connect", text)
 
 
+    def test_scope_status_without_enrollment_is_inactive(self):
+        status = s.inspect_scope(self.root, self.hub, now=NOW, test_mode=True)
+        self.assertEqual(status["status"], "NOT_ENROLLED")
+        self.assertFalse(status["active"])
+
+    def test_scope_status_active_without_identity_assertion(self):
+        self.enroll()
+        status = s.inspect_scope(self.root, self.hub, now=NOW, test_mode=True)
+        self.assertTrue(status["active"])
+        self.assertEqual(status["remaining_batches"], 12)
+        self.assertFalse(status["owner_identity_attested"])
+
+    def test_scope_status_expired_and_no_extension(self):
+        self.enroll()
+        status = s.inspect_scope(self.root, self.hub, now=NOW + timedelta(days=15), test_mode=True)
+        self.assertFalse(status["active"])
+        self.assertEqual(status["status"], "OUTSIDE_GRANT_WINDOW")
+
+    def test_revoke_requires_exact_confirmation(self):
+        self.enroll()
+        with self.assertRaises(s.ScopeError):
+            s.revoke_scope(self.root, self.hub, confirmation="yes", test_mode=True)
+        self.assertTrue(s.inspect_scope(self.root, self.hub, now=NOW, test_mode=True)["active"])
+
+    def test_revoke_is_idempotent_and_blocks_application(self):
+        self.enroll()
+        first = s.revoke_scope(self.root, self.hub, confirmation=s.REVOKE, test_mode=True)
+        self.assertEqual(first["status"], "SCOPED_GRANT_REVOKED")
+        second = s.revoke_scope(self.root, self.hub, confirmation=s.REVOKE, test_mode=True)
+        self.assertEqual(second["status"], "ALREADY_REVOKED")
+        status = s.inspect_scope(self.root, self.hub, now=NOW, test_mode=True)
+        self.assertEqual(status["status"], "REVOKED")
+        self.assertFalse(status["active"])
+        with self.assertRaises(s.ScopeError):
+            self.apply(bundle())
+
+    def test_revoke_blocked_during_batch_lock(self):
+        self.enroll()
+        with s._exclusive_scope_lock(self.hub):
+            with self.assertRaises(s.ScopeError):
+                s.revoke_scope(self.root, self.hub, confirmation=s.REVOKE, test_mode=True)
+        self.assertTrue(s.inspect_scope(self.root, self.hub, now=NOW, test_mode=True)["active"])
+
+    def test_exhausted_grant_status_is_readable(self):
+        self.enroll()
+        path = s._grant_path(self.hub)
+        grant = json.loads(path.read_bytes())
+        grant["used_batches"] = 12
+        path.write_bytes(s._json_bytes(grant))
+        status = s.inspect_scope(self.root, self.hub, now=NOW, test_mode=True)
+        self.assertEqual(status["status"], "EXHAUSTED")
+        self.assertFalse(status["active"])
+
+    def test_final_journal_failure_reverts_grant_count(self):
+        self.enroll()
+        previous = s._atomic
+        failed = [False]
+        def fail_final_once(path, data):
+            if not failed[0] and path.name == "journal.json" and b"APPLIED_UNAPPROVED_CODE_ONLY" in data:
+                failed[0] = True
+                raise OSError("simulated final journal write failure")
+            return previous(path, data)
+        with patch.object(s, "_atomic", side_effect=fail_final_once):
+            with self.assertRaises(OSError):
+                self.apply(bundle())
+        self.assertTrue(failed[0])
+        _, grant = s._grant(self.hub, now=NOW)
+        self.assertEqual(grant["used_batches"], 0)
+        self.assertFalse((self.root / "src/ucie_miner/scoped_example_v1.py").exists())
+
+    def test_revoke_outside_scope_no_runtimes_changed(self):
+        self.enroll()
+        res = s.revoke_scope(self.root, self.hub, confirmation=s.REVOKE, test_mode=True)
+        self.assertFalse(res["scheduler_changed"])
+        self.assertFalse(res["operating_db_modified"])
+
+
 if __name__ == "__main__":
     unittest.main()
