@@ -129,6 +129,26 @@ function Assert-ApprovedRecoveryTask {
     }
     return $task
 }
+# Bounded UCIE-only supervisor heartbeat. No raw error messages, tokens or IDs.
+function Save-C40SupervisorReceipt {
+    param([string]$Stage,[string]$Code='NONE',[int]$Count=-1)
+    $folder = 'D:\UCIE\.ucie_bridge_state'
+    if (-not (Test-Path -LiteralPath $folder -PathType Container)) { return }
+    $output = Join-Path $folder 'c40_supervisor_health_v1.json'
+    $entry = [pscustomobject]@{
+        schema='UCIE_C40_SUPERVISOR_HEALTH_V1'
+        stage=$Stage
+        code=$Code
+        client_count=$Count
+        utc=[DateTime]::UtcNow.ToString('o')
+        another_task_modified=$false
+        operating_db_modified=$false
+    }
+    try {
+        $json = $entry | ConvertTo-Json -Compress -Depth 3
+        [IO.File]::WriteAllText($output,$json,[Text.Encoding]::UTF8)
+    } catch { }
+}
 if ($Mode -eq 'Status') {
     $task = Get-C40Task
     $items = @(Find-C40)
@@ -186,13 +206,29 @@ if ($Mode -eq 'Once') {
     return
 }
 if ($Mode -eq 'Supervise') {
-    $task = Assert-ApprovedRecoveryTask
+    Save-C40SupervisorReceipt -Stage 'PROCESS_STARTED'
+    try {
+        $task = Assert-ApprovedRecoveryTask
+        Save-C40SupervisorReceipt -Stage 'TASK_IDENTITY_OK'
+    }
+    catch {
+        $reason = [string]$_.Exception.Message
+        if ($reason -notmatch '^UCIE_C40_[A-Z0-9_]+$') { $reason = 'NON_UCIE_EXCEPTION' }
+        Save-C40SupervisorReceipt -Stage 'TASK_IDENTITY_FAILED' -Code $reason
+        throw 'UCIE_C40_SUPERVISOR_TASK_IDENTITY_FAILED'
+    }
     while ($true) {
         try {
             $r = One-C40Check -StartMissing
+            Save-C40SupervisorReceipt -Stage 'CYCLE_OK' -Code ([string]$r.status) -Count ([int]$r.tunnel_clients)
             $r | ConvertTo-Json -Compress
         }
-        catch { throw 'UCIE_C40_SUPERVISOR_NEEDS_OWNER_REVIEW' }
+        catch {
+            $reason = [string]$_.Exception.Message
+            if ($reason -notmatch '^UCIE_C40_[A-Z0-9_]+$') { $reason = 'NON_UCIE_EXCEPTION' }
+            Save-C40SupervisorReceipt -Stage 'CYCLE_FAILED' -Code $reason
+            throw 'UCIE_C40_SUPERVISOR_NEEDS_OWNER_REVIEW'
+        }
         Start-Sleep -Seconds 300
     }
 }
