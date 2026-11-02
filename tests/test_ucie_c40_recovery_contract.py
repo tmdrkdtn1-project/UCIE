@@ -98,6 +98,47 @@ class C40RecoveryContractTests(unittest.TestCase):
         self.assertNotIn("$_.ScriptStackTrace", self.source)
         self.assertNotIn("Write-EventLog", self.source)
 
+    def test_startmissing_requires_switch_parameter(self):
+        self.assertIn("param([switch]$StartMissing)", self.source)
+        self.assertNotIn("param([bool]$StartMissing", self.source)
+        self.assertEqual(self.source.count("One-C40Check -StartMissing"), 2)
+
+    def test_supervisor_one_cycle_switch_runtime_no_tunnel(self):
+        shell = shutil.which("pwsh") or shutil.which("powershell.exe")
+        if not shell:
+            self.skipTest("PowerShell unavailable")
+        scriptpath = str(SCRIPT).replace("'", "''")
+        ps = r'''
+$ErrorActionPreference = 'Stop'
+$tok = $null; $errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    'SCRIPT_PATH', [ref]$tok, [ref]$errors)
+if ($errors.Count -gt 0) { throw 'UCIE_C40_SCRIPT_PARSE_FAILURE' }
+$fun = @($ast.FindAll({
+    param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $a.Name -eq 'One-C40Check'
+}, $true))
+if ($fun.Count -ne 1) { throw 'UCIE_C40_EXACT_FUNCTION_NOT_FOUND' }
+Invoke-Expression $fun[0].Extent.Text
+# Synthetic UCIE process only: no real CIM calls, tunnel starts, tasks or DB.
+function Find-C40 {
+    return @([pscustomobject]@{ ProcessId=111; CommandLine='ucie-private-c40' })
+}
+$present = One-C40Check -StartMissing
+$inactive = One-C40Check -StartMissing:$false
+if ($present.status -ne 'UCIE_C40_ALREADY_RUNNING' -or
+    $present.tunnel_clients -ne 1 -or
+    $inactive.status -ne 'UCIE_C40_ALREADY_RUNNING' -or
+    $inactive.tunnel_clients -ne 1) {
+    throw 'UCIE_C40_SWITCH_BEHAVIOR_FAILED'
+}
+'''
+        ps = ps.replace("SCRIPT_PATH", scriptpath)
+        result = subprocess.run(
+            [shell, "-NoProfile", "-NonInteractive", "-Command", ps],
+            capture_output=True, text=True, timeout=25, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_only_child_process_receives_legacy_guard(self):
         self.assertIn("$oldApproval = $env:UCIE_MCP_OWNER_APPROVAL", self.source)
         self.assertIn("$env:UCIE_MCP_OWNER_APPROVAL = $oldApproval", self.source)
