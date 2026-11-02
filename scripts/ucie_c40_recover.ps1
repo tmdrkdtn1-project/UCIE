@@ -57,7 +57,8 @@ function Verify-C40Inputs {
     return $ids[0]
 }
 function One-C40Check {
-    param([bool]$StartMissing = $false)
+    # PowerShell bare -StartMissing is valid only for [switch], not [bool].
+    param([switch]$StartMissing)
     $items = @(Find-C40)
     if ($items.Count -eq 1) {
         return [pscustomobject]@{status='UCIE_C40_ALREADY_RUNNING';started=$false;tunnel_clients=1}
