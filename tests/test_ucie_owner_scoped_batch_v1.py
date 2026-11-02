@@ -92,7 +92,8 @@ class ScopedUnitTests(unittest.TestCase):
     def test_path_traversal_rejected(self):
         for name in ("../secrets.py", "src/ucie_miner/../worker.py",
                      "/src/ucie_miner/x.py", "src\\ucie_miner\\bad.py",
-                     "src/ucie_miner/worker.py", "scripts/new_task.py",
+                     "src/ucie_miner/worker.py", "src/ucie_miner/owner_scoped_batch_v1.py",
+                     "scripts/new_task.py",
                      "runtime/something.py", ".github/workflows/anything.yml",
                      "tests/test_other.py"):
             with self.subTest(name=name), self.assertRaises(s.ScopeError):
