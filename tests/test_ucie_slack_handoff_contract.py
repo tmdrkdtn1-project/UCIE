@@ -57,7 +57,18 @@ class UCIESlackHandoffDocumentationTests(unittest.TestCase):
         self.assertTrue(mapping["ACCEPTANCE"].strip())
         self.assertTrue(mapping["NO_GO"].strip())
         if mapping["ACK_STATE"] == "NOT_RECEIVED":
-            self.assertNotIn("RECEIVED", mapping["STATUS"].replace("NOT_RECEIVED", ""))
+            self.assertIn("NOT_RECEIVED", mapping["STATUS"])
+        if mapping["SLACK_POST_STATE"] == "SLACK_POST_CONFIRMED":
+            self.assertRegex(
+                mapping["CURRENT_SLACK"],
+                r"^https://kangsoolnc[.]slack[.]com/archives/C0CA4AW06BH/p[0-9]+$",
+            )
+            self.assertRegex(text, r"SLACK_MESSAGE_TS=[0-9]{10}[.][0-9]{6}")
+            self.assertRegex(
+                text,
+                r"SLACK_POST_KST=20[0-9]{2}-[0-9]{2}-[0-9]{2} "
+                r"[0-9]{2}:[0-9]{2}:[0-9]{2} KST",
+            )
 
     def test_status_claims_not_promoted_by_document_presence(self):
         proto = (ROOT / PROTO).read_text(encoding="utf-8")
