@@ -28,7 +28,8 @@ COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 SOURCE = re.compile(r"src/ucie_miner/[a-z][a-z0-9_]{2,60}\.py\Z")
 TEST = re.compile(r"tests/test_ucie_[a-z0-9_]{3,60}\.py\Z")
 PROTECTED = {"__init__.py", "__main__.py", "worker.py", "core.py",
-             "runtime_pipeline.py", "pending_queue.py", "source_registry.py"}
+             "runtime_pipeline.py", "pending_queue.py", "source_registry.py",
+             "owner_scoped_batch_v1.py"}
 JOBS = {f"Offline test / {osname} / Python {ver}"
         for osname in ("ubuntu-latest", "windows-latest")
         for ver in ("3.13", "3.15")}
