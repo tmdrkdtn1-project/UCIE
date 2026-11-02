@@ -407,5 +407,14 @@ class ScopedUnitTests(unittest.TestCase):
         self.assertFalse(res["operating_db_modified"])
 
 
+    def test_production_rejects_injected_success_callback(self):
+        self.enroll()
+        with patch.object(s, "_host_paths", return_value=None):
+            with self.assertRaises(s.ScopeError):
+                s.apply_verified_batch(self.root, self.hub, bundle(),
+                    verify_ci_and_sources=lambda *_: True, now=NOW, test_mode=False)
+        self.assertFalse((self.root / "src/ucie_miner/scoped_example_v1.py").exists())
+
+
 if __name__ == "__main__":
     unittest.main()
