@@ -8,7 +8,7 @@ HANDOFF_ID=UCIE-HO-20261102-LOCAL-FIRST-01
 RECORD_TYPE=HANDOFF_REQUIRED
 FROM_WORKROOM=UCIE사업방
 TO_WORKROOM=UCIE통합개발방
-STATUS=HANDOFF_PREPARED_NOT_RECEIVED
+STATUS=HANDOFF_SENT_NOT_RECEIVED
 BASE_MAIN_SHA=b2941dbe8bb447dec2dd8a179b4b7ea61b9e28dc
 DECISION_DOC=docs/UCIE_LOCAL_FIRST_SKILLBOOK_EXECUTION_PLAN_20261102.md
 ACTIVE_PRS=#173 OPEN_NOT_MERGED; #174 OPEN_NOT_MERGED
@@ -16,14 +16,16 @@ CI_STATE=#173 Windows/Python3.15 1/4 failure; other 3/4 success; exact-head rech
 OWNER_HOST_STATE=NOT_CURRENTLY_OBSERVED_TUNNEL_OFFLINE; last owner-reported evidence is historical only
 APPROVAL_STATE=NO_NEW_OWNER_APPROVAL_FOR_WORKER_SCHEDULER_OR_RELEASE
 RELEASE_STATE=SKILLBOOK_NOT_IMPLEMENTED_NOT_PUBLISHED
-SLACK_POST_STATE=PENDING_FOR_THIS_HANDOFF
+SLACK_POST_STATE=SLACK_POST_CONFIRMED
 ACK_STATE=NOT_RECEIVED
 NEXT_OWNER=UCIE통합개발방
 NEXT_ACTION=1) confirm actual UCIE main/PR heads and CI; 2) fix/retest #173 Windows/Python3.15 CI, 3) implement safe UCIE-only heavy-job resource controls; 4) verify owner-host read-only preflight when available, 5) build one actual source-anchored SkillBook+portable recipe
 ACCEPTANCE=exact-head CI 4/4 + owner-host resource limit/isolated regression + first real SkillBook and independent test receipts; gates independent
 NO_GO=private project/customer data collection; new public source; new scheduler; automatic rule approval/signing/publishing; model training; replacing dirty owner files; local runtime PASS without receipts
 PREVIOUS_SLACK=https://kangsoolnc.slack.com/archives/C0CA4AW06BH/p1793589567055009
-CURRENT_SLACK=PENDING_POST_CONFIRMATION
+CURRENT_SLACK=https://kangsoolnc.slack.com/archives/C0CA4AW06BH/p1793589812236619
+SLACK_MESSAGE_TS=1793589812.236619
+SLACK_POST_KST=2026-11-02 12:23:32 KST
 ```
 
 ## 중요 확정 결정과 증거
@@ -49,3 +51,9 @@ CURRENT_SLACK=PENDING_POST_CONFIRMATION
 - BUSINESS_REVIEW_OWNER: **UCIE사업방** — 사업/원가/고객 기여 권리 가설, 새 기능 상업화 판단.
 - OWNER-HOST EVIDENCE: 오직 실제 UCIE Windows 호스트에서 발급된 기록이나 사용자가 제공한 동등한 진짜 증거로만 판단.
 - RECEIVER_ACK: **아직 없음**; Slack 송신 성공과 별개.
+
+## 이번 발송 확인 기록
+
+- Slack 메시지: https://kangsoolnc.slack.com/archives/C0CA4AW06BH/p1793589812236619
+- Slack 발급 시각: `1793589812.236619` / **2026-11-02 12:23:32 KST**
+- 상태: **HANDOFF_SENT_NOT_RECEIVED** — 실제 수신측 UCIE 통합개발방이 기록과 최신 CI/운영 근거를 재조회하고 원본 Slack 스레드에 답글을 남기기 전에는 인계 완료를 선언하지 않는다.
