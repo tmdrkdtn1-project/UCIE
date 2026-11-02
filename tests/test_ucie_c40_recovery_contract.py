@@ -105,5 +105,25 @@ class C40RecoveryContractTests(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
 
 
+    def test_real_ucie_host_status_readonly_when_available(self):
+        if os.name != "nt" or not Path(
+            r"D:\UCIE_DATA\mcp_tunnel_profiles\ucie-private-c40.yaml"
+        ).is_file():
+            self.skipTest("Owner UCIE host not present; no non-UCIE probing")
+        shell = shutil.which("powershell.exe")
+        if not shell:
+            self.skipTest("Windows PowerShell not found")
+        p = subprocess.run(
+            [shell, "-NoProfile", "-NonInteractive", "-File", str(SCRIPT),
+             "-Mode", "Status"],
+            capture_output=True, text=True, timeout=25, check=False)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        import json
+        obj = json.loads(p.stdout)
+        self.assertEqual(obj["status"], "UCIE_C40_RECOVERY_STATUS_READONLY")
+        self.assertIs(obj["db_changed"], False)
+        self.assertGreaterEqual(obj["c40_client_count"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
