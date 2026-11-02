@@ -96,13 +96,32 @@ function One-C40Check {
 function Get-C40Task {
     return (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)
 }
+function Assert-ApprovedRecoveryTask {
+    $task = Get-C40Task
+    if ($null -eq $task -or @($task.Actions).Count -ne 1) {
+        throw 'UCIE_C40_REGISTERED_TASK_REQUIRED'
+    }
+    $action = $task.Actions[0]
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    if (-not [string]::Equals([string]$task.Principal.UserId,$identity,[StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals([string]$action.Execute,$psExe,[StringComparison]::OrdinalIgnoreCase) -or
+        ([string]$action.Arguments).IndexOf($scriptPath,[StringComparison]::OrdinalIgnoreCase) -lt 0 -or
+        ([string]$action.Arguments).IndexOf('-Mode Supervise',[StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        throw 'UCIE_C40_TASK_OWNER_OR_ACTION_MISMATCH'
+    }
+    $registeredAdmin = ([string]$action.Arguments).Contains('-EnableAdminTools')
+    if ([bool]$EnableAdminTools -ne $registeredAdmin) {
+        throw 'UCIE_C40_ADMIN_MODE_MISMATCH'
+    }
+    return $task
+}
 if ($Mode -eq 'Status') {
     $task = Get-C40Task
     $items = @(Find-C40)
     [pscustomobject]@{
         status='UCIE_C40_RECOVERY_STATUS_READONLY'
         task_registered=($null -ne $task)
-        task_state=if($null -ne $task){[string]$task.State}else{'ABSENT'}
+        task_state=$(if($null -ne $task){[string]$task.State}else{'ABSENT'})
         c40_client_count=$items.Count
         admin_mode_not_inferred=$true
         db_changed=$false
@@ -147,17 +166,13 @@ if ($Mode -eq 'Remove') {
     return
 }
 if ($Mode -eq 'Once') {
+    $task = Assert-ApprovedRecoveryTask
     $r = One-C40Check -StartMissing
     $r | ConvertTo-Json -Compress
     return
 }
 if ($Mode -eq 'Supervise') {
-    $task = Get-C40Task
-    if ($null -eq $task -or @($task.Actions).Count -ne 1 -or
-        $task.Actions[0].Execute -ne $psExe -or
-        ([string]$task.Actions[0].Arguments).IndexOf($scriptPath,[StringComparison]::OrdinalIgnoreCase) -lt 0) {
-        throw 'UCIE_C40_SUPERVISOR_TASK_IDENTITY_MISMATCH'
-    }
+    $task = Assert-ApprovedRecoveryTask
     while ($true) {
         try {
             $r = One-C40Check -StartMissing
