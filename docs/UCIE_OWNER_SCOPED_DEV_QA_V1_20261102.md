@@ -11,13 +11,15 @@
 - Existing files require exact previous SHA-256; missing files require `ABSENT`. Refuse symlinks, unknown source, malformed grant, duplicate/replayed batch, concurrent transaction, stale/signed-off scope and unsupported paths.
 - The host code writes backup copies and a fail-closed journal before applying source bytes, restores modified files on Python exception, and uses short atomic replacements. **Power loss/process death can leave a recovery-required journal**; no false claim of transactional crash recovery.
 - Host sync is **code-copy only**: never execute downloaded code on the host. No scheduler changes, operational DB writes, model training, rule promotion, signatures, package publishing or external project access.
+- An explicit read-only `inspect_scope` reports NOT_ENROLLED/ACTIVE/EXPIRED/EXHAUSTED/REVOKED without modifying the scope. The trusted bridge-only `revoke_scope` requires exact confirmation, serializes under the same batch lock, and permanently refuses further batch application. Both functions remain **unwired** until trusted UCIE owner bridge identity checks are implemented.
+- After a successful source write, a final journal-write failure must roll back both changed files **and the grant's used-batch counter**; never report an applied batch with an incomplete journal.
 - The local consent JSON is **not proof of human identity or a secure OS principal**. Only the trusted UCIE owner bridge/OS policy may call `enroll()` and `apply_verified_batch()`, and future integrated tools must preserve the identity/ACL boundary.
 
 ## Acceptance accomplished in this branch
 
 `PYTHONPATH=src python -B -m unittest discover -s tests -p test_ucie_owner_scoped_batch_v1.py -v`
 
-This focused offline regression has 37 cases for strict scope, SHA and commit, one-time grant lifetime/budget, exact CI job/source checks with mocked API, collision and symlink defense, exception rollback, and no accidental source execution. **Synthetic tests do not prove owner Windows host acceptance.**
+This focused offline regression has 46 cases for strict scope, SHA and commit, one-time grant lifetime/budget, exact CI job/source checks with mocked API, collision and symlink defense, exception rollback, and no accidental source execution. **Synthetic tests do not prove owner Windows host acceptance.**
 
 The existing `.github/workflows/stage1-offline-tests.yml` already runs the full offline test suite on Windows/Ubuntu with Python 3.13/3.15 for every PR. Its exact-head CI must be checked separately before merge.
 
@@ -25,7 +27,7 @@ The existing `.github/workflows/stage1-offline-tests.yml` already runs the full 
 
 1. **GitHub PR/CI**: branch review and exact-head CI; this does not require a Windows user download.
 2. **UCIE bridge**: currently reports `Tunnel-client has not been seen for 300 seconds`. Need the existing UCIE-only tunnel reconnected; do not access any unrelated system to fix it.
-3. **Scoped bridge wiring**: provide one trusted, bounded `enroll/status/revoke/apply_verified_batch` bridge operation. This module's CLI deliberately exposes only `--status`; there is **no independent local auto-execution endpoint** and no grant has been created.
+3. **Scoped bridge wiring**: connect the implemented `enroll`, `inspect_scope`, `revoke_scope`, and `apply_verified_batch` functions through a trusted, authenticated UCIE-only bridge; never expose `test_mode` or arbitrary callback/file-path arguments to remote callers. This module's CLI deliberately exposes only `--status`; there is **no independent local auto-execution endpoint** and no grant has been created.
 4. **Live host acceptance**: verify owner Windows path restrictions, protected grant ACLs, atomic backup/recovery handling, batch safety and real GitHub CI API receipts. Do not infer PASS from PR CI.
 5. **Unattended host delivery**: separately bind to an already-authorized UCIE-only event/connector; do not silently register a new scheduled task or accept self-asserted owner approval.
 
