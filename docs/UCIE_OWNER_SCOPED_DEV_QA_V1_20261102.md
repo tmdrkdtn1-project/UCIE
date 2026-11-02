@@ -19,7 +19,7 @@
 
 `PYTHONPATH=src python -B -m unittest discover -s tests -p test_ucie_owner_scoped_batch_v1.py -v`
 
-This focused offline regression has 46 cases for strict scope, SHA and commit, one-time grant lifetime/budget, exact CI job/source checks with mocked API, collision and symlink defense, exception rollback, and no accidental source execution. **Synthetic tests do not prove owner Windows host acceptance.**
+This focused offline regression has 47 cases for strict scope, SHA and commit, one-time grant lifetime/budget, exact CI job/source checks with mocked API, collision and symlink defense, exception rollback, and no accidental source execution. **Synthetic tests do not prove owner Windows host acceptance.**
 
 The existing `.github/workflows/stage1-offline-tests.yml` already runs the full offline test suite on Windows/Ubuntu with Python 3.13/3.15 for every PR. Its exact-head CI must be checked separately before merge.
 
