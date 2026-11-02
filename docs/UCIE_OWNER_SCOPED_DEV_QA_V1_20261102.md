@@ -51,3 +51,50 @@ does not prove ACL/identity trust or host deployment.
 **Until gates 2–5 complete: `SCOPED_DEV_QA_CODE_IMPLEMENTED_HOST_NOT_ACTIVATED`.** GitHub PR CI reduces manual verification now; true no-download no-touch host deployment requires connected trusted bridge.
 
 No other project or private source is part of this proposal.
+
+
+## C40 automatic recovery at owner logon (opt-in)
+
+The new UCIE-only script scripts/ucie_c40_recover.ps1 registers exactly one
+Windows task (UCIE-C40-Recover) under the current owner interactive account.
+Its supervised PowerShell process checks the existing pinned UCIE C40 client
+every 300 seconds. If the existing C40 process is present, it does nothing;
+if absent, it starts the SAME approved tunnel-client and profile only.
+It never replaces a profile, creates another tunnel ID, changes other scheduled
+tasks, or handles other projects. It runs only after owner logon.
+
+After the file is installed into D:\UCIE\scripts and the owner confirms the
+existing UCIE ChatGPT MCP admin app is OWNER-ONLY, register it once:
+
+    & 'D:\UCIE\scripts\ucie_c40_recover.ps1' -Mode Status
+    & 'D:\UCIE\scripts\ucie_c40_recover.ps1' -Mode Install -OwnerOnlyConfirmed -EnableAdminTools
+
+Enter APPROVE once at the local prompt. It does not prompt again at the next
+owner logon. It refuses to overwrite an existing same-name task. Optional
+Remove mode requires -OwnerOnlyConfirmed and explicit REMOVE and unregisters
+only UCIE-C40-Recover, leaving the live C40 client alone.
+The original PR #78 manual launcher is preserved as a fallback.
+
+This is an owner-approved C40 transport recovery task, not automatic Rulepack
+approval or a scope-grant enrollment. The recovery task still needs an actual
+Windows registration receipt and reboot/logon test. GitHub CI only checks
+static scope and PowerShell syntax. This does not promise recovery when a
+disconnected control plane keeps the C40 process alive.
+
+## Owner-scoped FastMCP registration (code only)
+
+The new src/ucie_miner/owner_scoped_mcp_tools_v1.py exposes an explicit
+register_ucie_owner_scope_tools() function, with four allowlisted functions:
+ucie_owner_scope_status, ucie_owner_scope_enroll, ucie_owner_scope_revoke and
+ucie_owner_scope_apply. Existing legacy public search and nine administrator
+functions are not replaced or modified. Tests use fake FastMCP registration,
+and reject absent or false session authorization.
+
+The new module DOES NOT self-register or start a new MCP listener. A trusted
+owner-only C40 server startup hook must supply the authenticated session
+callback, under a host-controlled principal. No static identity boolean, user
+argument or unverified token may grant source-write permission. Existing owner
+approvals in the PR #78 launcher do not by themselves prove the required
+protected directory D:\UCIE_HUB\04_MIGRATION\UCIE_OWNER_SCOPED_QA_V1 exists
+or has sufficient ACL protection. Real one-batch apply and rollback on this
+Windows host are still NO_GO pending explicit host wiring and acceptance.
