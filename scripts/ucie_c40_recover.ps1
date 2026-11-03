@@ -185,6 +185,11 @@ if ($Mode -eq 'Status') {
 if ($Mode -eq 'Install') {
     if (-not $OwnerOnlyConfirmed) { throw 'UCIE_OWNER_ONLY_SCOPE_REQUIRED' }
     if ($null -ne (Get-C40Task)) { throw 'UCIE_C40_TASK_EXISTS_NO_OVERWRITE' }
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw 'UCIE_C40_ELEVATED_OWNER_REQUIRED_FOR_INSTALL'
+    }
     $id = Verify-C40Inputs
     $id = $null
     $active = @(Find-C40)
@@ -198,7 +203,7 @@ if ($Mode -eq 'Install') {
         $scriptPath + '" -Mode Supervise'
     if ($EnableAdminTools) { $args += ' -EnableAdminTools' }
     $action = New-ScheduledTaskAction -Execute $psExe -Argument $args -WorkingDirectory 'D:\UCIE'
-    $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
+    $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Highest
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $principal.UserId
     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Trigger $trigger -Settings $settings -Description 'UCIE-only existing C40 at owner logon and every five minutes' -ErrorAction Stop | Out-Null
