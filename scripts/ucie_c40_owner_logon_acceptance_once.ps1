@@ -14,7 +14,7 @@ $source='D:\UCIE\scripts\ucie_c40_recover.ps1'
 $sourceSha='23dcb08524b32c611b43c1136a444286d7dc776598a739a7152a651a5244e66f'
 $folder='D:\UCIE\.ucie_bridge_state'
 $marker=Join-Path $folder 'c40_owner_logon_acceptance_v1.json'
-$health=Join-Path $folder 'c40_supervisor_health_v1.json'
+$healthReceiptPath=Join-Path $folder 'c40_supervisor_health_v1.json'
 $clientExe='D:\UCIE_DATA\tools\tunnel-client-v0.0.16\tunnel-client.exe'
 $taskName='UCIE-C40-Recover'
 
@@ -74,7 +74,7 @@ function Get-C40OwnerSnapshot {
       ([datetime]$c.CreationDate).ToUniversalTime()).TotalSeconds) -gt 2) {
     throw 'UCIE_C40_LOGON_CLIENT_IDENTITY_MISMATCH'
   }
-  $h=Get-GuardedReceipt -Path $health -MaxBytes 2048
+  $h=Get-GuardedReceipt -Path $healthReceiptPath -MaxBytes 2048
   $now=[DateTime]::UtcNow
   $hUtc=Convert-ExactUtc -Value ([string]$h.utc)
   $age=($now-$hUtc).TotalSeconds

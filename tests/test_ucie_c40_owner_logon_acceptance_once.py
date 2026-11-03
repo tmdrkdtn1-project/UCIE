@@ -28,6 +28,13 @@ class OwnerLogonProbeContract(unittest.TestCase):
         ):
             self.assertIn(snippet,self.code)
 
+    def test_status_source_scope_cannot_shadow_receipt_path(self):
+        # The sourced recovery Status script defines '$health' as a URL file.
+        # The owner logon receipt must not reuse that variable.
+        self.assertIn("$healthReceiptPath=Join-Path $folder",self.code)
+        self.assertIn("Get-GuardedReceipt -Path $healthReceiptPath",self.code)
+        self.assertNotIn("Get-GuardedReceipt -Path $health -MaxBytes",self.code)
+
     def test_only_pinned_existing_ucie_c40_used(self):
         for snippet in (
             "23dcb08524b32c611b43c1136a444286d7dc776598a739a7152a651a5244e66f",
