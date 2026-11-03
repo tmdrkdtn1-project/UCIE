@@ -80,7 +80,7 @@ class UCIEC40RunlevelOwnerApprovalTests(unittest.TestCase):
              "[pscustomobject]@{state=[string]$t.State;runlevel=[string]$t.Principal.RunLevel}"
              "| ConvertTo-Json -Compress"],
             capture_output=True,text=True,errors="replace",timeout=25,check=False)
-        self.assertEqual(inspect.returncode,0,"UCIE task state inspection failed")
+        self.assertEqual(inspect.returncode,0,"UCIE task state inspection failed: "+(inspect.stderr or "")[:360])
         task=json.loads(inspect.stdout.strip().splitlines()[-1])
         if task["state"] == "Running":
             self.assertEqual(task["runlevel"],"Highest")
