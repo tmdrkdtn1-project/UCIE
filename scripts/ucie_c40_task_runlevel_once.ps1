@@ -12,7 +12,7 @@ function Resolve-UCIESid([string]$account) {
     return ([Security.Principal.NTAccount]::new($account)).Translate([Security.Principal.SecurityIdentifier]).Value
 }
 function Read-UCIEOnlyTask {
-    $task=Get-ScheduledTask -TaskName $name -ErrorAction Stop
+    $task=Get-ScheduledTask -TaskPath '\' -TaskName $name -ErrorAction Stop
     if ([string]$task.State -ne 'Disabled') { throw 'UCIE_C40_TASK_MUST_REMAIN_DISABLED' }
     $actions=@($task.Actions)
     if ($actions.Count -ne 1) { throw 'UCIE_C40_ACTION_COUNT_MISMATCH' }
@@ -56,13 +56,13 @@ if (-not $admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $decision=Read-Host 'Change ONLY Disabled UCIE-C40-Recover RunLevel to Highest: type APPROVE'
 if ($decision -cne 'APPROVE') { throw 'UCIE_C40_OWNER_APPROVAL_DENIED' }
 $backupPrincipal=$task.Principal
-Set-ScheduledTask -TaskName $name -Principal $candidate -ErrorAction Stop | Out-Null
+Set-ScheduledTask -TaskPath '\' -TaskName $name -Principal $candidate -ErrorAction Stop | Out-Null
 try {
     $after=Read-UCIEOnlyTask
     if ([string]$after.Principal.RunLevel -ne 'Highest') { throw 'UCIE_C40_RUNLEVEL_POSTCHECK_FAILED' }
 }
 catch {
-    Set-ScheduledTask -TaskName $name -Principal $backupPrincipal -ErrorAction Stop | Out-Null
+    Set-ScheduledTask -TaskPath '\' -TaskName $name -Principal $backupPrincipal -ErrorAction Stop | Out-Null
     throw 'UCIE_C40_RUNLEVEL_CHANGE_ROLLED_BACK'
 }
 [pscustomobject]@{status='UCIE_C40_RUNLEVEL_HIGHEST_REGISTERED_DISABLED';task=$name;
