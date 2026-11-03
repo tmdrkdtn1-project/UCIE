@@ -32,6 +32,16 @@ def inventory(path: Path) -> dict:
         "auth_candidate_function_names":[],
         "ucie_registration_function_names":[],
         "ucie_owner_module_imported":False,
+        "framework": {
+            "mcpserver_or_fastmcp_class_symbol":False,
+            "lowlevel_server_constructor_symbol":False,
+            "v1_lowlevel_list_tools_decorator":False,
+            "v1_lowlevel_call_tool_decorator":False,
+            "v2_lowlevel_constructor_handlers":False,
+            "stdio_transport_symbol":False,
+            "tool_object_constructor_symbol":False,
+            "mcp_tool_method_decorator":False,
+        },
     }
     if not path.is_file() or path.is_symlink():
         return result
@@ -52,7 +62,27 @@ def inventory(path: Path) -> dict:
           "get_current_user","authenticated_session_action","auth_context")
     )
     result["static_owner_marker_symbol_present"]="UCIE_MCP_OWNER_APPROVAL" in source
+    sym=result["framework"]
+    sym["mcpserver_or_fastmcp_class_symbol"]=(
+        "MCPServer" in source or "FastMCP" in source)
+    sym["lowlevel_server_constructor_symbol"]=(
+        "Server(" in source and "FastMCP(" not in source)
+    sym["stdio_transport_symbol"]=(
+        "stdio_server" in source or "run_stdio_async" in source)
+    sym["tool_object_constructor_symbol"]=(
+        "Tool(" in source or "types.Tool(" in source)
+    sym["v2_lowlevel_constructor_handlers"]=(
+        "on_list_tools" in source and "on_call_tool" in source)
     for node in ast.walk(tree):
+        if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+            for deco in node.decorator_list:
+                if isinstance(deco,ast.Call) and isinstance(deco.func,ast.Attribute):
+                    if deco.func.attr=="list_tools":
+                        sym["v1_lowlevel_list_tools_decorator"]=True
+                    if deco.func.attr=="call_tool":
+                        sym["v1_lowlevel_call_tool_decorator"]=True
+                    if deco.func.attr=="tool":
+                        sym["mcp_tool_method_decorator"]=True
         if isinstance(node,(ast.Import,ast.ImportFrom)):
             module=(node.module or "") if isinstance(node,ast.ImportFrom) else ""
             full=[module] if module else []
