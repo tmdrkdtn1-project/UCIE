@@ -95,8 +95,7 @@ $actionOK=($actions.Count -eq 1 -and
     ([string]$actions[0].Arguments).Contains('-Mode Supervise') -and
     ([string]$actions[0].Arguments).Contains('-EnableAdminTools'))
 $clientExe='D:\UCIE_DATA\tools\tunnel-client-v0.0.16\tunnel-client.exe'
-$rows=@(Get-CimInstance Win32_Process -Filter
-    "Name = 'tunnel-client.exe' AND ExecutablePath LIKE '%UCIE_DATA%'" -ErrorAction Stop |
+$rows=@(Get-CimInstance Win32_Process -Filter "Name = 'tunnel-client.exe' AND ExecutablePath LIKE '%UCIE_DATA%'" -ErrorAction Stop |
     Where-Object {
         [string]::Equals([string]$_.ExecutablePath,$clientExe,
            [StringComparison]::OrdinalIgnoreCase)
@@ -137,7 +136,9 @@ if($rows.Count -eq 1){
             [shell, "-NoProfile", "-NonInteractive", "-Command", ps],
             capture_output=True, text=True, errors="replace", timeout=40, check=False
         )
-        self.assertEqual(result.returncode, 0, "UCIE exact live owner query failed")
+        self.assertEqual(result.returncode, 0,
+                         "UCIE exact live owner query failed: " +
+                         (result.stderr or "NO_POWERSHELL_STDERR")[:900])
         rows = result.stdout.strip().splitlines()
         self.assertTrue(rows, "UCIE owner query returned no JSON")
         live = json.loads(rows[-1])
