@@ -12,6 +12,7 @@ from typing import Callable
 
 from . import owner_scoped_batch_v1 as engine
 from . import ucie_admin_history_verdict_v1 as historical_gate
+from . import ucie_slack_history_adapter_v1 as slack_adapter
 
 SCHEMA = "UCIE_OWNER_SCOPED_BRIDGE_CONTRACT_V1"
 ROOT = Path(r"D:\UCIE")
@@ -94,12 +95,21 @@ class UCIEOwnerBridgeBoundary:
         raise BridgeContractError("operation not allowlisted")
 
 
-def classify_admin_deploy_absence(*, search_provider=None) -> dict:
-    """A negative UCIE Admin deployment judgment MUST re-search prior Slack.
+def classify_admin_deploy_absence(*, search_provider=None,
+                                 read_history_page=None) -> dict:
+    """Historical absence judgment: a fresh, UCIE-channel-only Slack recheck.
 
-    Never interpret an unavailable adapter as evidence that PR #78 or the
-    owner-installed nine UCIE admin tools did not exist.
+    read_history_page is a server-owned authenticated Slack history callback,
+    not an MCP argument. No reader means fail-closed; no credential is saved.
+    A search_provider is retained for existing trusted host integrations.
     """
+    if read_history_page is not None and search_provider is not None:
+        raise BridgeContractError("choose exactly one UCIE Slack provider")
+    if read_history_page is not None:
+        return slack_adapter.history_verdict_from_trusted_reader(
+            "ADMIN_DEPLOYMENT_PATH_ABSENT",
+            read_history_page=read_history_page,
+        )
     return historical_gate.judge_negative_ucie_admin_claim(
         "ADMIN_DEPLOYMENT_PATH_ABSENT", search_provider=search_provider
     )
