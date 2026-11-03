@@ -62,7 +62,7 @@ class UCIEC40RunlevelOwnerApprovalTests(unittest.TestCase):
         run=subprocess.run(
             [shell,"-NoProfile","-NonInteractive","-Command",
              f"$t=$null;$e=$null;[void][System.Management.Automation.Language.Parser]::ParseFile('{p}',[ref]$t,[ref]$e);if($e.Count){{$e|% {{$_.Message}};exit 2}}"],
-            capture_output=True,text=True,timeout=25,check=False)
+            capture_output=True,text=True,errors="replace",timeout=25,check=False)
         self.assertEqual(run.returncode,0,run.stdout+run.stderr)
 
     def test_live_owner_preview_only(self):
@@ -73,8 +73,8 @@ class UCIEC40RunlevelOwnerApprovalTests(unittest.TestCase):
             self.skipTest("Windows PowerShell absent")
         result=subprocess.run(
             [shell,"-NoProfile","-NonInteractive","-File",str(SCRIPT),"-Mode","Preview"],
-            capture_output=True,text=True,timeout=25,check=False)
-        self.assertEqual(result.returncode,0,"UCIE task preview failed: "+result.stderr[:160])
+            capture_output=True,text=True,errors="replace",timeout=25,check=False)
+        self.assertEqual(result.returncode,0,"UCIE task preview failed: "+(result.stderr or "")[:160])
         data=json.loads(result.stdout.strip().splitlines()[-1])
         print("UCIE_C40_OWNER_TASK_PREVIEW="+json.dumps(data,sort_keys=True))
         self.assertEqual(data["status"],"UCIE_C40_RUNLEVEL_PREVIEW_ONLY")
