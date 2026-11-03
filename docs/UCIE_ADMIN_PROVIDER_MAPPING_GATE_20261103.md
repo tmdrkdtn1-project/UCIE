@@ -1,5 +1,23 @@
 # UCIE 관리자 MCP 실제 제공 경로 구분 (2026-11-03)
 
+> **정정(2026-11-03 / 과거 Slack 전수 재검토):** 이 문서의 34개
+> `D:\UCIE_DATA\library_app` Python 파일 검색에서 관리자 정의를
+> 못 찾았다는 사실은 **기존 관리자 배포 경로가 없다는 증거가 아니다.**
+> 기존 관리자 구현은 2026-10-23 PR #78의
+> `src/ucie_admin/mcp_registration.py`이며 승인형 소유자 실행기는
+> `scripts/ucie_owner_admin_mcp_launch.ps1`; Windows staging source는
+> `D:\UCIE_PREVIEW\UCIE_ADMIN\src`로 별도 구성돼 있었다.
+> 2026-10-25 소유자 실제 `APPROVE` 후 9개 관리도구/검색 검증:
+> https://kangsoolnc.slack.com/archives/C0CA4AW06BH/p1792896036978529
+> 2026-10-25 별도 보호 루트 생성 영수증:
+> https://kangsoolnc.slack.com/archives/C0CA4AW06BH/p1792899889147509
+> 따라서 `OWNER_NOT_FOUND`/`DEPLOY_PATH_ABSENT`를 이 검사로
+> 확정하는 것은 금지된다. 현재 플러그인 백엔드 소유권·신규 4개
+> 도구 등록·원격 요청별 인증은 별도 실증 대상이다.
+> **강제 게이트:** `src/ucie_miner/ucie_admin_history_verdict_v1.py`
+> (외부 Slack 검색 adapter가 없으면 판단 차단).
+
+
 ## 최소 범위 결론
 
 기존 UCIE Admin 플러그인은 정상이며, `ucie_admin_write_text`(SHA-256 임대,
