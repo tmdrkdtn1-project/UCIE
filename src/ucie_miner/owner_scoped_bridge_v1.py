@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import owner_scoped_batch_v1 as engine
+from . import ucie_admin_history_verdict_v1 as historical_gate
 
 SCHEMA = "UCIE_OWNER_SCOPED_BRIDGE_CONTRACT_V1"
 ROOT = Path(r"D:\UCIE")
@@ -93,10 +94,24 @@ class UCIEOwnerBridgeBoundary:
         raise BridgeContractError("operation not allowlisted")
 
 
+def classify_admin_deploy_absence(*, search_provider=None) -> dict:
+    """A negative UCIE Admin deployment judgment MUST re-search prior Slack.
+
+    Never interpret an unavailable adapter as evidence that PR #78 or the
+    owner-installed nine UCIE admin tools did not exist.
+    """
+    return historical_gate.judge_negative_ucie_admin_claim(
+        "ADMIN_DEPLOYMENT_PATH_ABSENT", search_provider=search_provider
+    )
+
+
 def main() -> int:
     """Inert status only: no local trusted bridge enrollment is claimed."""
+    prior = classify_admin_deploy_absence()
     print(json.dumps({"schema": SCHEMA,
                       "status": "TRUSTED_UCIE_BRIDGE_INTEGRATION_REQUIRED",
+                      "admin_deployment_absence_gate": prior["status"],
+                      "admin_deployment_absence_verdict_allowed": False,
                       "operations": sorted(ALLOWED),
                       "host_changed": False,
                       "identity_attested": False,
