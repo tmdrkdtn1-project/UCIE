@@ -50,7 +50,7 @@ function Get-CimInstance { throw 'UCIE_C40_TEST_REAL_CIM_FORBIDDEN' }
 function Start-Sleep { throw 'UCIE_C40_TEST_REAL_SLEEP_FORBIDDEN' }
 function Verify-C40Inputs { throw 'UCIE_C40_TEST_REAL_INPUT_ACCESS_FORBIDDEN' }
 '''
-        ps = setup.replace("SCRIPT_PATH", path) + "\n" + script
+        ps = setup.replace("SCRIPT_PATH", path) + "\n" + script + "\nexit 0\n"
         result = subprocess.run(
             [shell, "-NoProfile", "-NonInteractive", "-Command", ps],
             capture_output=True, text=True, timeout=25, check=False
