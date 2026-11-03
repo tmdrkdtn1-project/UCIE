@@ -68,6 +68,17 @@ if ($consent -cne 'STOP_UCIE_53556') { throw 'UCIE_C40_OWNER_CLEANUP_NOT_APPROVE
 # Recheck both identities immediately before any termination to reject PID reuse.
 $null=Assert-C40Identity $originalPid $originalStart
 $null=Assert-C40Identity $extraPid $extraStart
+$finalTask=Get-ScheduledTask -TaskPath '\' -TaskName $taskName -ErrorAction Stop
+if ([string]$finalTask.State -ne 'Disabled' -or
+    [string]$finalTask.Principal.RunLevel -ne 'Highest') {
+    throw 'UCIE_C40_TASK_CHANGED_AFTER_OWNER_CONSENT'
+}
+$finalClients=@(Get-CimInstance Win32_Process -Filter "Name = 'tunnel-client.exe' AND ExecutablePath LIKE '%UCIE_DATA%'" -ErrorAction Stop |
+    Where-Object { [string]::Equals([string]$_.ExecutablePath,$expectedExe,[StringComparison]::OrdinalIgnoreCase) })
+if ($finalClients.Count -ne 2 -or
+    (@($finalClients | Where-Object { @($originalPid,$extraPid) -contains [int]$_.ProcessId }).Count -ne 2)) {
+    throw 'UCIE_C40_CLIENT_CENSUS_CHANGED_AFTER_OWNER_CONSENT'
+}
 Stop-Process -Id $extraPid -ErrorAction Stop
 Start-Sleep -Seconds 2
 $still=@(Get-CimInstance Win32_Process -Filter "ProcessId = $extraPid" -ErrorAction Stop)
