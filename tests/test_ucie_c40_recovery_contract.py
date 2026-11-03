@@ -59,7 +59,7 @@ class C40RecoveryContractTests(unittest.TestCase):
 
     def test_task_is_owner_logon_only_with_no_password_storage(self):
         self.assertIn("New-ScheduledTaskPrincipal -UserId", self.source)
-        self.assertIn("-LogonType Interactive -RunLevel Limited", self.source)
+        self.assertIn("-LogonType Interactive -RunLevel Highest", self.source)
         self.assertIn("New-ScheduledTaskTrigger -AtLogOn", self.source)
         self.assertNotIn("-Password", self.source)
         self.assertNotIn("-AtStartup", self.source)
@@ -138,6 +138,15 @@ if ($present.status -ne 'UCIE_C40_ALREADY_RUNNING' -or
             [shell, "-NoProfile", "-NonInteractive", "-Command", ps],
             capture_output=True, text=True, timeout=25, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_missing_c40_launch_requires_highest_running_owner(self):
+        self.assertIn("function Assert-C40LaunchAuthority", self.source)
+        self.assertIn("UCIE_C40_LAUNCH_REQUIRES_RUNNING_HIGHEST_TASK", self.source)
+        self.assertIn("UCIE_C40_ELEVATED_OWNER_REQUIRED_FOR_LAUNCH", self.source)
+        self.assertIn("UCIE_C40_CLIENT_APPEARED_ABORT_LAUNCH", self.source)
+        self.assertIn("Assert-C40LaunchAuthority", self.source)
+        self.assertIn("UCIE_C40_ELEVATED_OWNER_REQUIRED_FOR_INSTALL", self.source)
+        self.assertIn("-LogonType Interactive -RunLevel Highest", self.source)
 
     def test_only_child_process_receives_legacy_guard(self):
         self.assertIn("$oldApproval = $env:UCIE_MCP_OWNER_APPROVAL", self.source)
