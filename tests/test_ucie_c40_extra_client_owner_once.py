@@ -60,6 +60,8 @@ class UCIEC40PinnedCleanupContract(unittest.TestCase):
         self.assertIn("UCIE_C40_EXPLICIT_OWNER_SCOPE_REQUIRED",self.source)
         self.assertIn("if ($consent -cne 'STOP_UCIE_53556')",self.source)
         self.assertIn("UCIE_C40_CLIENT_CENSUS_NOT_EXACTLY_TWO",self.source)
+        self.assertIn("UCIE_C40_TASK_CHANGED_AFTER_OWNER_CONSENT",self.source)
+        self.assertIn("UCIE_C40_CLIENT_CENSUS_CHANGED_AFTER_OWNER_CONSENT",self.source)
         self.assertIn("Assert-C40Identity $originalPid $originalStart",self.source)
         self.assertIn("Assert-C40Identity $extraPid $extraStart",self.source)
 
