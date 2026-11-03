@@ -102,9 +102,25 @@ class UCIEC40ActivationOneShotTests(unittest.TestCase):
         self.assertEqual(probe.returncode,0,"UCIE owner privilege check failed")
         if probe.stdout.strip().lower()!="true":
             self.skipTest("UCIE owner test session not elevated")
+        # Activation-only Preview cannot be rerun against a Running task.
+        # Observe exact root task without changing its state or PID.
+        state_probe=subprocess.run(
+            [shell,"-NoProfile","-NonInteractive","-Command",
+             "$ErrorActionPreference='Stop';"
+             "$t=@(Get-ScheduledTask -TaskName 'UCIE-C40-Recover' -ErrorAction Stop | "
+             "Where-Object { $_.TaskPath -eq [string][char]92 });"
+             "if($t.Count -ne 1){throw 'UCIE_C40_ROOT_TASK_NOT_UNIQUE'};"
+             "[string]$t[0].State"],
+            text=True,errors="replace",capture_output=True,check=False,timeout=20)
+        self.assertEqual(state_probe.returncode,0,"UCIE task state preflight failed")
+        observed=state_probe.stdout.strip().splitlines()
+        self.assertTrue(observed,"UCIE task state missing")
+        if observed[-1]=="Running":
+            self.skipTest("Activation Preview requires Disabled; Running is checked separately")
+        self.assertEqual(observed[-1],"Disabled","Unexpected UCIE task state")
         result=subprocess.run([shell,"-NoProfile","-NonInteractive",
                                "-File",str(SCRIPT),"-Mode","Preview"],
-                              text=True,capture_output=True,timeout=30,check=False)
+                              text=True,errors="replace",capture_output=True,timeout=30,check=False)
         self.assertEqual(result.returncode,0,"Read-only UCIE preview failed")
         d=json.loads(result.stdout.strip().splitlines()[-1])
         print("UCIE_C40_ACTIVATION_PREFLIGHT="+json.dumps(d,sort_keys=True))
