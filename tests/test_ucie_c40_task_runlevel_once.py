@@ -76,8 +76,10 @@ class UCIEC40RunlevelOwnerApprovalTests(unittest.TestCase):
         # an independent, read-only task query instead of treating it as error.
         inspect=subprocess.run(
             [shell,"-NoProfile","-NonInteractive","-Command",
-             "$t=Get-ScheduledTask -TaskPath '\' -TaskName 'UCIE-C40-Recover' -ErrorAction Stop;"
-             "[pscustomobject]@{state=[string]$t.State;runlevel=[string]$t.Principal.RunLevel}"
+             "$matches=@(Get-ScheduledTask -TaskName 'UCIE-C40-Recover' -ErrorAction Stop "
+             "|Where-Object { [string]$_.TaskPath -eq [string][char]92 });"
+             "if($matches.Count -ne 1){throw 'UCIE_C40_EXACT_ROOT_TASK_REQUIRED'};"
+             "[pscustomobject]@{state=[string]$matches[0].State;runlevel=[string]$matches[0].Principal.RunLevel}"
              "| ConvertTo-Json -Compress"],
             capture_output=True,text=True,errors="replace",timeout=25,check=False)
         self.assertEqual(inspect.returncode,0,"UCIE task state inspection failed: "+(inspect.stderr or "")[:360])
