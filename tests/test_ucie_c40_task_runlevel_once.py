@@ -26,8 +26,8 @@ class UCIEC40RunlevelOwnerApprovalTests(unittest.TestCase):
 
     def test_only_existing_exact_task(self):
         self.assertIn("$name='UCIE-C40-Recover'",self.script)
-        self.assertIn("Get-ScheduledTask -TaskName $name",self.script)
-        self.assertIn("Set-ScheduledTask -TaskName $name",self.script)
+        self.assertIn("Get-ScheduledTask -TaskPath '\\' -TaskName $name",self.script)
+        self.assertIn("Set-ScheduledTask -TaskPath '\\' -TaskName $name",self.script)
         self.assertIn("UCIE_C40_ACTION_COUNT_MISMATCH",self.script)
         self.assertIn("UCIE_C40_TASK_ACTION_MISMATCH",self.script)
         for forbidden in (
