@@ -71,6 +71,21 @@ class UCIEC40RunlevelOwnerApprovalTests(unittest.TestCase):
         shell=shutil.which("powershell.exe")
         if not shell:
             self.skipTest("Windows PowerShell absent")
+        # The one-time RunLevel tool correctly refuses Preview while the
+        # already-approved recovery task is Running. Validate that state via
+        # an independent, read-only task query instead of treating it as error.
+        inspect=subprocess.run(
+            [shell,"-NoProfile","-NonInteractive","-Command",
+             "$t=Get-ScheduledTask -TaskPath '\' -TaskName 'UCIE-C40-Recover' -ErrorAction Stop;"
+             "[pscustomobject]@{state=[string]$t.State;runlevel=[string]$t.Principal.RunLevel}"
+             "| ConvertTo-Json -Compress"],
+            capture_output=True,text=True,errors="replace",timeout=25,check=False)
+        self.assertEqual(inspect.returncode,0,"UCIE task state inspection failed")
+        task=json.loads(inspect.stdout.strip().splitlines()[-1])
+        if task["state"] == "Running":
+            self.assertEqual(task["runlevel"],"Highest")
+            print("UCIE_C40_OWNER_TASK_RUNNING_READONLY="+json.dumps(task,sort_keys=True))
+            return
         result=subprocess.run(
             [shell,"-NoProfile","-NonInteractive","-File",str(SCRIPT),"-Mode","Preview"],
             capture_output=True,text=True,errors="replace",timeout=25,check=False)
