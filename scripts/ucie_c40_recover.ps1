@@ -66,7 +66,12 @@ function One-C40Check {
     if (-not $StartMissing) {
         return [pscustomobject]@{status='UCIE_C40_NOT_RUNNING';started=$false;tunnel_clients=0}
     }
+    # Fail closed when a non-elevated caller cannot inspect an elevated C40.
+    # The only launch authority is the original owner's Running Highest task.
+    Assert-C40LaunchAuthority
     $id = Verify-C40Inputs
+    # Reject a C40 appearing after the first process census, before launch.
+    if (@(Find-C40).Count -ne 0) { throw 'UCIE_C40_CLIENT_APPEARED_ABORT_LAUNCH' }
     $oldApproval = $env:UCIE_MCP_OWNER_APPROVAL
     $oldId = $env:UCIE_MCP_TUNNEL_ID
     $oldFlag = $env:UCIE_ADMIN_TOOLS_ENABLED
@@ -129,6 +134,20 @@ function Assert-ApprovedRecoveryTask {
         throw 'UCIE_C40_ADMIN_MODE_MISMATCH'
     }
     return $task
+}
+# Limited callers cannot reliably inspect the elevated original tunnel.
+function Assert-C40LaunchAuthority {
+    $task = Assert-ApprovedRecoveryTask
+    if ([string]$task.State -ne 'Running' -or
+        [string]$task.Principal.RunLevel -ne 'Highest' -or
+        [string]$task.Principal.LogonType -ne 'Interactive') {
+        throw 'UCIE_C40_LAUNCH_REQUIRES_RUNNING_HIGHEST_TASK'
+    }
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw 'UCIE_C40_ELEVATED_OWNER_REQUIRED_FOR_LAUNCH'
+    }
 }
 # Bounded UCIE-only supervisor heartbeat. No raw error messages, tokens or IDs.
 function Save-C40SupervisorReceipt {
