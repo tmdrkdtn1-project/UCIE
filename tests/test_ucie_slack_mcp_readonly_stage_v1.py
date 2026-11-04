@@ -25,7 +25,12 @@ spec.loader.exec_module(stage)
 
 
 def minimal_registration():
-    lines = ["def register_ucie_local_admin_tools(fastmcp, bridge=None):"]
+    lines = [
+        "def register_ucie_local_admin_tools(fastmcp, bridge=None):",
+        '    """Synthetic owner-approved registration."""',
+        "    if bridge is None:",
+        "        bridge = object()",
+    ]
     for name in sorted(stage.EXPECTED_TOOLS):
         lines.extend([
             f"    @fastmcp.tool(name={name!r})",
