@@ -13,7 +13,7 @@ foreach ($name in @(
     'ucie_miner\skillbook_scandir_recipe_v01.py',
     'ucie_miner\skillbook_product_v01.py',
     'ucie_miner\library_browser_skillbook_v01.py',
-    'ucie_miner\library_browser_v09.py'
+    'ucie_miner\library_browser_v11.py'
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $src $name) -PathType Leaf)) {
         throw 'UCIE_SKILLBOOK_SOURCE_MISSING'
