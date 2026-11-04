@@ -30,7 +30,9 @@
 **기본 Preview, `--apply`는 별도 소유자 로컬 대화형 승인**
 방식이다. PR #78의 관리자 등록 소스 원본 Git blob
 `8516baa69e768f2589d5df305200ebcd99b76e0d`를
-검증한 경우에만 단일 UCIE staging 폴더
+및 2026-11-04 실호스트에서 독립 확인한 **기존 9도구 보존 등록본**
+Git blob `c26be40528d421bf384acbccd1501a1c522cc666` 중
+하나와 정확히 일치하는 경우에만 단일 UCIE staging 폴더
 `D:\UCIE_PREVIEW\UCIE_ADMIN\src\ucie_admin`에 두 파일을
 배치한다.
 

@@ -18,6 +18,9 @@ import tempfile
 
 SCHEMA = "UCIE_SLACK_MCP_READONLY_OWNER_STAGE_V1"
 PR78_GIT_BLOB = "8516baa69e768f2589d5df305200ebcd99b76e0d"
+LIVE_OWNER_STAGE_GIT_BLOB = "c26be40528d421bf384acbccd1501a1c522cc666"
+# Both are exact source versions observed and independently pinned.
+ALLOWED_BASE_BLOBS = frozenset({PR78_GIT_BLOB, LIVE_OWNER_STAGE_GIT_BLOB})
 MARKER = "# UCIE_SLACK_READONLY_ADMIN_MCP_V1"
 CONFIRM = "UCIE_SLACK_MCP_READONLY_STAGE_ONLY"
 ROOT = Path(r"D:\UCIE")
@@ -72,6 +75,16 @@ def patch_registration(source: str) -> str:
     if len(defs) != 1:
         raise UCIEStageError("UCIE_ADMIN_REGISTRATION_FUNCTION_AMBIGUOUS")
     fn = defs[0]
+    names = set()
+    # Reject surprise executable statements while keeping PR78 docstrings,
+    # original bridge initialization, nine handler defs, and return only.
+    non_tools = [node for node in fn.body
+                 if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    if (len(non_tools) != 3 or
+            not isinstance(non_tools[0], ast.Expr) or
+            not isinstance(non_tools[1], ast.If) or
+            not isinstance(non_tools[2], ast.Return)):
+        raise UCIEStageError("UCIE_ADMIN_REGISTRATION_UNEXPECTED_STATEMENTS")
     names = set()
     for sub in fn.body:
         if not isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -129,7 +142,7 @@ def prepare(source_file: Path = SOURCE, registration: Path = REGISTER,
         raise UCIEStageError("UCIE_OWNER_STAGE_ALREADY_PRESENT")
     content = source_file.read_bytes()
     original = registration.read_bytes()
-    if not content or len(content) > MAX_SOURCE or _git_blob(original) != PR78_GIT_BLOB:
+    if not content or len(content) > MAX_SOURCE or _git_blob(original) not in ALLOWED_BASE_BLOBS:
         raise UCIEStageError("UCIE_OWNER_STAGE_SOURCE_BLOB_MISMATCH")
     try:
         compile(content.decode("utf-8"), "slack_history_readonly_mcp_v1.py", "exec")

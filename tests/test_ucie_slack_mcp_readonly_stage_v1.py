@@ -97,6 +97,13 @@ class UCIESlackReadOnlyMCPStageTests(unittest.TestCase):
         self.assertEqual(fake.names["ucie_slack_history_verify_readonly"](),
                          {"status": "READONLY"})
 
+    def test_exact_pr78_and_live_stage_versions_pinned(self):
+        self.assertEqual(len(stage.ALLOWED_BASE_BLOBS), 2)
+        self.assertIn("8516baa69e768f2589d5df305200ebcd99b76e0d",
+                      stage.ALLOWED_BASE_BLOBS)
+        self.assertIn("c26be40528d421bf384acbccd1501a1c522cc666",
+                      stage.ALLOWED_BASE_BLOBS)
+
     def test_duplicate_install_and_extra_admin_tools_denied(self):
         src = minimal_registration()
         with self.assertRaises(stage.UCIEStageError):
