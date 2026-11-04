@@ -61,7 +61,8 @@ class UCIESkillBookUITests(unittest.TestCase):
                         with urlopen(req, timeout=5) as response:
                             return response.status, response.read().decode("utf-8")
                     except HTTPError as error:
-                        return error.code, error.read().decode("utf-8")
+                        with error:
+                            return error.code, error.read().decode("utf-8")
                 status, html = read("/skillbooks?q=Python&language=Python")
                 self.assertEqual(status, 200)
                 self.assertIn("실물 SkillBook", html)
