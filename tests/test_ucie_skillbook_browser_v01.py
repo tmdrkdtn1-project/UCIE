@@ -95,8 +95,9 @@ class UCIESkillBookUITests(unittest.TestCase):
                 th.join(timeout=3)
 
     def test_original_v09_is_inherited_unchanged(self):
-        self.assertTrue(issubclass(ui.make_handler(Path("/synthetic/ucie")),
-                                   ui.previous.make_handler(Path("/synthetic/ucie")).__bases__[0]))
+        handler = ui.make_handler(Path("/synthetic/ucie"))
+        self.assertEqual(handler.__bases__[0].__module__, ui.previous.__name__)
+        self.assertEqual(handler.__bases__[0].__name__, "Handler")
         self.assertIn('href="/skillbooks"', ui.NAVIGATION)
 
     def test_powershell_launch_is_owner_only(self):
