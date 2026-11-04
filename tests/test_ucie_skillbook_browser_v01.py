@@ -94,11 +94,12 @@ class UCIESkillBookUITests(unittest.TestCase):
                 srv.shutdown()
                 th.join(timeout=3)
 
-    def test_original_v09_is_inherited_unchanged(self):
+    def test_latest_v11_and_all_legacy_browsers_inherited(self):
         handler = ui.make_handler(Path("/synthetic/ucie"))
         self.assertEqual(handler.__bases__[0].__module__, ui.previous.__name__)
         self.assertEqual(handler.__bases__[0].__name__, "Handler")
         self.assertIn('href="/skillbooks"', ui.NAVIGATION)
+        self.assertIn("library_browser_v11", ui.previous.__name__)
 
     def test_powershell_launch_is_owner_only(self):
         script = (Path(__file__).resolve().parents[1] /
