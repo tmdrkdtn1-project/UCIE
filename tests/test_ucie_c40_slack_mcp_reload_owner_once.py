@@ -52,10 +52,11 @@ class C40SlackMCPReloadOwnerSafety(unittest.TestCase):
         self.assertIn("$process.WaitForExit(5000)",self.src)
         self.assertIn("Assert-Ready",self.src)
         self.assertIn("UCIE_C40_MCP_RELOAD_PROCESS_CHANGED_AFTER_APPROVAL",self.src)
-        self.assertIn("UCIE_C40_MCP_RELOAD_CLIENT_RETURNED_WITHOUT_ATTRIBUTED_RESTART_RECEIPT",self.src)
+        self.assertIn("UCIE_C40_MCP_RELOAD_AUTO_RESTART_ATTRIBUTION_NOT_PROVEN",self.src)
         self.assertIn("UCIE_C40_MCP_RELOAD_AUTO_RESTART_NOT_PROVEN_USE_OWNER_MANUAL_RECOVERY",self.src)
         self.assertIn("new_mcp_tool_discovery_verified = $false",self.src)
         self.assertIn("restored_by_existing_supervisor = $true",self.src)
+        self.assertIn("UCIE_C40_MCP_CLIENT_RESTARTED_ONE",self.src)
 
     def test_exact_ucie_source_pins(self):
         for pinned in (

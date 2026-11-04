@@ -236,7 +236,7 @@ for ($step=0; $step -lt 90; $step++) {
         [int]$h.client_count -eq 1 -and $hTime -ge $faultUtc.AddSeconds(-3)) {
         Save-DrillReceipt -Status 'SINGLE_CLIENT_RESTART_RECEIPT_OBSERVED' -FaultUtc $faultUtc -OldProcess ([int]$current.ProcessId) -NewProcess ([int]$new.ProcessId)
         [pscustomobject]@{
-            status = 'UCIE_C40_MCP_RELOAD_AUTO_RESTART_OBSERVED'
+            status = 'UCIE_C40_MCP_CLIENT_RESTARTED_ONE'
             new_client_count = 1
             new_client_pid = [int]$new.ProcessId
             bridge_reconnect_still_requires_independent_check = $true
