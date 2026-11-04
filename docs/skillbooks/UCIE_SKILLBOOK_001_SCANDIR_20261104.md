@@ -1,11 +1,11 @@
 # UCIE SkillBook 001 — Python os.scandir 자원 수명과 제한된 열거
 
-- 자산 ID: \`UCIE-SKILLBOOK-PY-SCANDIR-001\`
-- 상태: **UCIE가 작성한 재사용 레시피 초안** — \`FIRST_PARTY_DRAFT_NOT_APPROVED\`
+- 자산 ID: `UCIE-SKILLBOOK-PY-SCANDIR-001`
+- 상태: **UCIE가 작성한 재사용 레시피 초안** — `FIRST_PARTY_DRAFT_NOT_APPROVED`
 - 발행 예정: 없음 (미서명, 미승인, 외부 배포 불가)
 - 기준일: 2026-11-04 KST
 - 기술 분야: Python 3.13/3.15 대상 UCIE 자체 합성 시험 (별도 CI 필요)
-- 소스 범위: 승인된 공식 문서와 독립 소유 저장소 \`python/cpython\`만
+- 소스 범위: 승인된 공식 문서와 독립 소유 저장소 `python/cpython`만
 
 ## 1. 이 기술이 해결하려는 문제
 
@@ -19,26 +19,26 @@
 
 **공식 Python 문서가 명시한 사실**
 
-- \`os.scandir()\`는 순서가 보장되지 않는 \`os.DirEntry\` 반복자를
+- `os.scandir()`는 순서가 보장되지 않는 `os.DirEntry` 반복자를
   돌려준다. 디렉터리가 열거 도중 변하면 어떤 항목이 포함되는지도
   보장되지 않는다.
-- \`scandir()\` 반복자는 \`close()\`와 \`with\` 컨텍스트 관리자를
+- `scandir()` 반복자는 `close()`와 `with` 컨텍스트 관리자를
   지원한다. 일찍 중단하거나 오류가 발생할 수 있는 경우에는
-  명시적으로 닫거나 \`with\`를 쓰는 것이 권장된다.
-- \`DirEntry\`의 타입·메타데이터는 파일시스템 변경 후 오래된 값이
+  명시적으로 닫거나 `with`를 쓰는 것이 권장된다.
+- `DirEntry`의 타입·메타데이터는 파일시스템 변경 후 오래된 값이
   될 수 있다. 독립 보안 경계나 원자적 스냅샷을 뜻하지 않는다.
 
-**고정된 공개 소스** (UCIE 기존 Source Registry \`doc:python/cpython\`):
+**고정된 공개 소스** (UCIE 기존 Source Registry `doc:python/cpython`):
 
 | 근거 속성 | 고정 값 |
 |---|---|
 | 공식 문서 | https://docs.python.org/3/library/os.html |
 | 공개 저장소 | https://github.com/python/cpython |
-| 검증 기준 태그 | \`v3.15.0\` |
-| 태그가 가리키는 커밋 | \`d220409a13b77de7a6c30abe16ea90db01528edc\` |
-| 문서 소스 | \`Doc/library/os.rst\` |
-| Git blob SHA-1 | \`74419ee7f3588f1baec83c85b05716e6388719e3\` |
-| 문서 소스 전체 SHA-256 | \`9d78f43c4d521c1adfe339731628feadc834728ff09112c29e63ebc09406c45a\` |
+| 검증 기준 태그 | `v3.15.0` |
+| 태그가 가리키는 커밋 | `d220409a13b77de7a6c30abe16ea90db01528edc` |
+| 문서 소스 | `Doc/library/os.rst` |
+| Git blob SHA-1 | `74419ee7f3588f1baec83c85b05716e6388719e3` |
+| 문서 소스 전체 SHA-256 | `9d78f43c4d521c1adfe339731628feadc834728ff09112c29e63ebc09406c45a` |
 
 위 Git SHA-1과 SHA-256은 서로 다른 종류의 지문이며,
 SHA-256은 *해당 Git 커밋의 문서 소스 전체 UTF-8 바이트*에 대한
@@ -55,11 +55,11 @@ SHA-256은 *해당 Git 커밋의 문서 소스 전체 UTF-8 바이트*에 대한
    파일·심볼릭 링크·정션 디렉터리 입력을 차단한다.
 2. 총 엔트리 수 1–128개를 포함하는 예산을 둔다. 일반 파일뿐 아니라
    디렉터리·링크를 포함해 모두 센다. 예산 초과는 실패로 판정한다.
-3. \`with os.scandir(directory) as entries:\`를 사용해 정상 종료와
+3. `with os.scandir(directory) as entries:`를 사용해 정상 종료와
    예외 시 반복자를 닫는다.
 4. 링크를 따라가거나 재귀 탐색하지 않고, 정규 파일의 **이름**만
    반환한다. 파일 내용·ACL·환경변수·외부 프로젝트 데이터는 읽지 않는다.
-5. 결과는 \`tuple(sorted(names))\`으로 반환하여 여러 환경에서의
+5. 결과는 `tuple(sorted(names))`으로 반환하여 여러 환경에서의
    임의 열거 순서와 결과 순서를 분리한다.
 
 ### 실제 호출 예제
@@ -67,7 +67,7 @@ SHA-256은 *해당 Git 커밋의 문서 소스 전체 UTF-8 바이트*에 대한
 다음 코드는 *해당 호출자의 명시적 권한이 있는 파일 경로*에만
 사용해야 한다. UCIE 도서관 조회에서는 실행되지 않는다.
 
-\`\`\`python
+```python
 from pathlib import Path
 from ucie_miner.skillbook_scandir_recipe_v01 import (
     bounded_regular_file_names,
@@ -77,37 +77,35 @@ from ucie_miner.skillbook_scandir_recipe_v01 import (
 approved_directory = Path("/absolute/path/to/authorized/test-fixture")
 try:
     names = bounded_regular_file_names(approved_directory, max_entries=32)
-except BoundedScandirError:
-    names = ()  # Fail closed: do not reinterpret it as an empty success.
-\`\`\`
+except BoundedScandirError as exc:
+    raise RuntimeError("AUTHORIZED_DIRECTORY_SCAN_NOT_VERIFIED") from exc
+```
 
-**주의:** 예제의 예외 블록에서 \`names=()\`로 바꾸면 빈 결과와
-오류를 구분할 수 없다. 제품에서는 \`BoundedScandirError\`를
-별도 상태로 보고하고 실제 성공과 혼합하지 말아야 한다. 위
-호출 예시는 진입점 이해용이며, 권장 운영 구현은 \`except\`
-에서 별도 오류/로그 코드를 반환하는 방식이다.
+**주의:** 오류가 나도 빈 튜플을 성공으로 간주하면 안 됩니다. 실제 제품에서는
+`BoundedScandirError`를 정상의 빈 목록과 구분되는 상태로 반환해야 합니다.
+외부 인가 없는 경로를 UCIE 시험 입력으로 사용하지 않습니다.
 
 ## 3. 기계 판독 계약 / 검색 연결
 
-- 구현 코드: \`src/ucie_miner/skillbook_scandir_recipe_v01.py\`
-- 출처 결속·SkillBook 문서 계약: \`src/ucie_miner/skillbook_product_v01.py\`
-- 기존 W01+W02 \`build_library_entry()\`을 통과해야만 구성된다.
-- \`REUSABLE_SKILL\` 항목 및 \`BOUNDED_SCANDIR_RESOURCE_LIFECYCLE\` 목적 코드
+- 구현 코드: `src/ucie_miner/skillbook_scandir_recipe_v01.py`
+- 출처 결속·SkillBook 문서 계약: `src/ucie_miner/skillbook_product_v01.py`
+- 기존 W01+W02 `build_library_entry()`을 통과해야만 구성된다.
+- `REUSABLE_SKILL` 항목 및 `BOUNDED_SCANDIR_RESOURCE_LIFECYCLE` 목적 코드
   (분야 Python / Python3.15 문서 근거)를 도서관에 보인다.
 - 기존 W04 공개 후보 DB는 건드리지 않는다.
-- \`GET /skillbooks\`, \`GET /skillbooks?q=scandir&language=Python\`,
-  \`GET /skillbooks/<asset-id>\`, \`GET /skillbooks/<asset-id>.json\`
+- `GET /skillbooks`, `GET /skillbooks?q=scandir&language=Python`,
+  `GET /skillbooks/<asset-id>`, `GET /skillbooks/<asset-id>.json`
   은 고정된 UCIE 작성 초안만 보여준다.
-- JSON도 **승인된 배포 패키지가 아니다**. \`export_allowed:false\`,
-  \`published:false\`를 유지한다.
+- JSON도 **승인된 배포 패키지가 아니다**. `export_allowed:false`,
+  `published:false`를 유지한다.
 
 실행 환경:
 
-\`\`\`powershell
+```powershell
 & 'D:\UCIE\scripts\ucie_skillbook_library_v01.ps1'
-\`\`\`
+```
 
-정상 동작 시 출력되는 \`http://127.0.0.1:PORT/skillbooks\`를
+정상 동작 시 출력되는 `http://127.0.0.1:PORT/skillbooks`를
 **같은 Windows PC**에서 연다. 종료는 Ctrl+C이며 예약 작업·서비스
 자동 등록은 하지 않는다. 기존 V0.9 검색/감사는 새 브라우저에서도
 상속하되 구 브라우저 파일은 변경하지 않는다.
@@ -126,11 +124,11 @@ except BoundedScandirError:
 | 0, 129, bool, 부동소수 예산 | 실패 차단 |
 | 검색·상세·JSON·호스트 필터 | 공개 GET 0, 원장/운영 DB 쓰기 0 |
 
-\`\`\`powershell
+```powershell
 $env:PYTHONPATH = 'D:\UCIE\src'
 & 'D:\UCIE\.venv\Scripts\python.exe' -B -m unittest discover -s 'D:\UCIE\tests' -p 'test_ucie_skillbook_product_v01.py' -v
 & 'D:\UCIE\.venv\Scripts\python.exe' -B -m unittest discover -s 'D:\UCIE\tests' -p 'test_ucie_skillbook_browser_v01.py' -v
-\`\`\`
+```
 
 성능 우수성(예: listdir 대비 실제 운영 절감 시간)을 한 번의
 합성 시험으로 주장하지 않는다. 예제의 *자원 정리 여부·출력 경계*
