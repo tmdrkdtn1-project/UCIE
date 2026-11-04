@@ -1,7 +1,7 @@
-"""UCIE local-only SkillBook V0.1 explorer layered over the V0.9 Library.
+"""UCIE local-only SkillBook V0.1 explorer layered over the V1.1 Library.
 
 All /skillbooks routes are first-party, fixed, memory-only and offline.
-Legacy V0.9 evidence search/audit and explicit public check remain unchanged.
+Legacy V1.1 evidence search/audit and explicit public check remain unchanged.
 No background collection, exports, approval or new server/service registration.
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from . import library_browser_v09 as previous
+from . import library_browser_v11 as previous
 from .library_browser_v02 import _head, _foot
 from .skillbook_product_v01 import (
     SKILLBOOK_ID, SkillBookProductError, get_skillbook, search_skillbooks,
