@@ -18,6 +18,10 @@ SOURCE_BLOBS = {
     "skillbook_scandir_recipe_v01.py": "6a26ea59cfebdd8d548fb88fd8a5039c5e16ac38",
     "skillbook_git_porcelain_recipe_v01.py": "aff4375e5fd964edf8e47b46f171e676e768f6b2",
 }
+PRODUCT_BLOBS = {
+    "skillbook_product_v01.py": "666d4c3bd1549b353748f6ada6dc4eb8f9924e98",
+    "skillbook_git_porcelain_product_v01.py": "eb92f23cd6865ca55e11e491d968f10f00220b0f",
+}
 ENTRY_NAMES = ("__main__.py", "skillbook_git_porcelain_recipe_v01.py",
                "skillbook_scandir_recipe_v01.py", "SKILLBOOKS.json",
                "SKILLBOOKS.md", "MANIFEST.json")
@@ -62,6 +66,10 @@ BLOBS = {
 }
 SCHEMA = "UCIE_SKILLBOOK_TWO_RECIPE_DISPOSABLE_DRAFT_V01"
 CONTENT_SCHEMA = "UCIE_TWO_AUTHORED_SKILLBOOKS_V01"
+PRODUCT_BLOBS = {
+    "skillbook_product_v01.py": "666d4c3bd1549b353748f6ada6dc4eb8f9924e98",
+    "skillbook_git_porcelain_product_v01.py": "eb92f23cd6865ca55e11e491d968f10f00220b0f",
+}
 
 
 def _git_blob(raw):
@@ -102,6 +110,7 @@ def _run():
                 or manifest.get("signed") is not False
                 or manifest.get("independent_qa_verified") is not False
                 or manifest.get("sources_git_blob_sha1") != BLOBS
+                or manifest.get("authored_product_git_blob_sha1") != PRODUCT_BLOBS
                 or type(manifest.get("member_sha256")) is not dict
                 or set(manifest["member_sha256"]) != set(names) - {"MANIFEST.json"}):
             raise ValueError("bundle manifest integrity blocked")
@@ -198,6 +207,12 @@ def _authored_book_assets() -> tuple[bytes, bytes, str]:
     from .skillbook_product_v01 import build_skillbook as python_book
     from .skillbook_git_porcelain_product_v01 import build_skillbook as git_book
 
+    root = Path(__file__).resolve().parent
+    for filename, expected_blob in PRODUCT_BLOBS.items():
+        path = root / filename
+        if path.is_symlink() or not path.is_file():
+            raise DraftBundleError("authored chapter source missing or redirected")
+        _canonical_source_bytes(path.read_bytes(), expected_blob)
     books = (python_book(), git_book())
     if {book.get("skillbook_id") for book in books} != set(PINNED_BOOKS):
         raise DraftBundleError("unknown or duplicate SkillBook identity")
@@ -242,6 +257,7 @@ def _authored_book_assets() -> tuple[bytes, bytes, str]:
                        or any(type(v) is not str or not 1 <= len(v) <= 1800
                               for v in ch.values()) for ch in chapters)
                 or type(history) is not list or len(history) != 1
+                or type(history[0]) is not dict
                 or history[0].get("evidence_sha256") != source_sha
                 or history[0].get("published") is not False
                 or history[0].get("independently_verified") is not False):
@@ -276,19 +292,19 @@ def _authored_book_assets() -> tuple[bytes, bytes, str]:
             "출처: " + str(evidence["official_document_url"]),
             " · 공개 근거 태그: " + source_tag,
             "",
-            "출처 SHA-256: \`" + source_sha + "\`",
+            "출처 SHA-256: `" + source_sha + "`",
             "",
         ])
         for chapter in chapters:
             markdown.extend([
                 "### " + chapter["heading"],
                 "",
-                "근거 구분: \`" + chapter["claim_type"] + "\`",
+                "근거 구분: `" + chapter["claim_type"] + "`",
                 "",
                 chapter["text"], "",
             ])
         markdown.extend([
-            "실행 계약: \`" + callable_name + "\`",
+            "실행 계약: `" + callable_name + "`",
             "",
             "승인 상태: NOT_APPROVED / 반출 불가 / 자체 시험 범위 한정",
             "",
@@ -351,6 +367,7 @@ def build_draft_bundle() -> tuple[bytes, dict]:
         "content_schema": CONTENT_SCHEMA, "blueprint_id": blueprint_id,
         "pinned_main_commit": MAIN_COMMIT,
         "sources_git_blob_sha1": SOURCE_BLOBS,
+        "authored_product_git_blob_sha1": PRODUCT_BLOBS,
         "member_sha256": {k: sha256(v).hexdigest() for k, v in sorted(members.items())},
         "skillbook_ids": ["UCIE-SKILLBOOK-PY-SCANDIR-001",
                           "UCIE-SKILLBOOK-GIT-PORCELAIN-002"],
