@@ -207,5 +207,86 @@ class GitPorcelainSkillBook002Tests(unittest.TestCase):
         self.assertFalse(item["consumer_pilot"]["executes_from_browser"])
 
 
+    def test_first_and_second_books_share_search_without_cross_approval(self):
+        from ucie_miner import skillbook_product_v01 as catalog
+        listing = catalog.search_skillbooks(query="")
+        self.assertEqual(listing["total"], 2)
+        self.assertEqual(
+            {x["skillbook_id"] for x in listing["items"]},
+            {catalog.SKILLBOOK_ID, book.SKILLBOOK_ID})
+        self.assertEqual(
+            catalog.search_skillbooks(query="scandir")["total"], 1)
+        self.assertEqual(
+            catalog.search_skillbooks(query="porcelain")["items"][0][
+                "skillbook_id"], book.SKILLBOOK_ID)
+        self.assertEqual(catalog.search_skillbooks(query="Git")["total"], 1)
+        self.assertEqual(catalog.search_skillbooks(query="Python")["total"], 2)
+        self.assertEqual(catalog.get_skillbook(book.SKILLBOOK_ID)["schema"],
+                         book.SCHEMA)
+        self.assertFalse(catalog.get_skillbook(book.SKILLBOOK_ID)["export_allowed"])
+        self.assertFalse(catalog.get_skillbook(catalog.SKILLBOOK_ID)["export_allowed"])
+
+    def test_second_book_reuses_existing_federated_catalog_and_readonly_html(self):
+        from pathlib import Path
+        from ucie_miner import skillbook_catalog_union_v01 as federated
+        from ucie_miner import library_browser_skillbook_v01 as ui
+        from ucie_miner import skillbook_product_v01 as catalog
+
+        def no_w04(*_args, **_kwargs):
+            self.fail("Git SkillBook-only search must not read operating W04")
+        root = Path("/synthetic/ucie")
+        opts = federated.parse_filters("q=Git&shelf=skillbooks")
+        result = federated.search_federated(
+            root, filters=opts, public_reader=no_w04)
+        self.assertEqual(result["public_shelf_status"], "NOT_REQUESTED")
+        self.assertEqual(len(result["skillbooks"]), 1)
+        self.assertEqual(result["skillbooks"][0]["skillbook_id"],
+                         book.SKILLBOOK_ID)
+        self.assertEqual(result["public_evidence_candidates"], [])
+        html = federated.render_federated(result)
+        self.assertIn(
+            'href="/skillbooks/' + book.SKILLBOOK_ID + '"', html)
+        detail = ui.render_chapter(catalog.get_skillbook(book.SKILLBOOK_ID))
+        self.assertIn("공식 Git 문서", detail)
+        self.assertIn(book.SOURCE_DOC_SHA256, detail)
+        self.assertIn("--run-synthetic-demo", detail)
+        self.assertIn(
+            'href="/skillbooks/' + book.SKILLBOOK_ID + '.json"', detail)
+        self.assertIn("외부 패키지 반출 불가", detail)
+        self.assertFalse(result["export_allowed"])
+        self.assertEqual(result["network_requests"], 0)
+        self.assertEqual(result["operating_database_writes"], 0)
+
+    def test_git_domain_filters_do_not_mix_python_book(self):
+        from pathlib import Path
+        from ucie_miner import skillbook_catalog_union_v01 as federated
+        for domain, expected in (("Git", book.SKILLBOOK_ID),
+                                 ("Python", "UCIE-SKILLBOOK-PY-SCANDIR-001")):
+            with self.subTest(domain=domain):
+                filters = federated.parse_filters(
+                    "shelf=skillbooks&kind=REUSABLE_SKILL&domain=" + domain)
+                result = federated.search_federated(
+                    Path("/synthetic/ucie"), filters=filters,
+                    public_reader=lambda *_a, **_k:
+                        self.fail("read W04 not authorized"))
+                self.assertEqual(len(result["skillbooks"]), 1)
+                self.assertEqual(result["skillbooks"][0]["skillbook_id"],
+                                 expected)
+
+    def test_readonly_browser_does_not_execute_git_pilot(self):
+        from ucie_miner import library_browser_skillbook_v01 as ui
+        with patch.object(
+                book, "demonstrate_in_memory_consumer",
+                side_effect=AssertionError("GET must never execute Git demo")):
+            detail = ui.render_chapter(book.build_skillbook())
+        self.assertIn("기계 판독 계약", detail)
+        self.assertIn("Git 기술 자산 초안", detail)
+        altered = book.build_skillbook()
+        altered["proof_gates"]["published"] = True
+        from ucie_miner.skillbook_product_v01 import SkillBookProductError
+        with self.assertRaises(SkillBookProductError):
+            ui.render_chapter(altered)
+
+
 if __name__ == "__main__":
     unittest.main()
