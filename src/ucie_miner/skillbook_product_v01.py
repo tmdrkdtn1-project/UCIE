@@ -194,35 +194,60 @@ def build_skillbook() -> dict:
     }
 
 
+def _draft_products() -> tuple[tuple[dict, tuple[str, ...]], ...]:
+    """Exactly two first-party drafts through the existing W01/W02 model.
+
+    No plugin registration, source fetching, runtime loading or new indexes.
+    Each skill remains independently unapproved and non-exportable.
+    """
+    from . import skillbook_git_porcelain_product_v01 as git002
+
+    products = ((build_skillbook(), SEARCH_TERMS),
+                (git002.build_skillbook(), git002.SEARCH_TERMS))
+    if (len(products) != 2
+            or len({b["skillbook_id"] for b, _ in products}) != 2
+            or any(b.get("status") != "FIRST_PARTY_DRAFT_NOT_APPROVED"
+                   or b.get("export_allowed") is not False
+                   or b["library_entry"].get("approval_status") != "NOT_APPROVED"
+                   or b["proof_gates"].get("independent_test_verified") is not False
+                   or b["proof_gates"].get("published") is not False
+                   for b, _ in products)):
+        raise SkillBookProductError("draft-only two-product invariant failed")
+    return products
+
+
 def search_skillbooks(*, query: str = "", language: str = "",
                       kind: str = "") -> dict:
-    """W04 style in-memory search; never changes the existing candidate index."""
+    """Reuse one in-memory bounded catalog for SkillBook 001 and 002."""
     if (type(query) is not str or QUERY.fullmatch(query) is None
             or type(language) is not str or language not in ("", "Python")
             or type(kind) is not str or kind not in ("", "REUSABLE_SKILL")):
         raise SkillBookProductError("unsafe or unsupported library search filter")
-    book = build_skillbook()
-    terms = tuple(w.casefold() for w in query.strip().split())
-    haystack = " ".join((
-        book["title"], book["topic"], book["kind"], book["language"],
-        " ".join(SEARCH_TERMS),
-    )).casefold()
-    matches = all(term in haystack for term in terms)
-    items = [{
-        "skillbook_id": book["skillbook_id"],
-        "library_item_id": book["library_entry"]["library_item_id"],
-        "title": book["title"],
-        "kind": book["kind"],
-        "domain": book["domain"],
-        "language": book["language"],
-        "source_id": book["library_entry"]["source_id"],
-        "version_scope_claim": book["library_entry"]["version_scope_claim"],
-        "source_document_sha256": SOURCE_DOCUMENT_SHA256,
-        "status": book["status"],
-        "human_approved": False,
-        "export_allowed": False,
-    }] if matches and (not language or language == book["language"]) and (
-        not kind or kind == book["kind"]) else []
+    terms = tuple(word.casefold() for word in query.strip().split())
+    items = []
+    for book, search_terms in _draft_products():
+        haystack = " ".join((
+            book["title"], book["topic"], book["kind"], book["language"],
+            book["domain"], " ".join(search_terms),
+        )).casefold()
+        if ((not language or language == book["language"])
+                and (not kind or kind == book["kind"])
+                and all(term in haystack for term in terms)):
+            items.append({
+                "skillbook_id": book["skillbook_id"],
+                "library_item_id": book["library_entry"]["library_item_id"],
+                "title": book["title"],
+                "kind": book["kind"],
+                "domain": book["domain"],
+                "language": book["language"],
+                "source_id": book["library_entry"]["source_id"],
+                "version_scope_claim": book["library_entry"]["version_scope_claim"],
+                "source_document_sha256":
+                    book["source_evidence"]["source_document_sha256"],
+                "status": book["status"],
+                "human_approved": False,
+                "export_allowed": False,
+            })
     return {
         "schema": CATALOG_SCHEMA,
         "status": "READ_ONLY_FIRST_PARTY_DRAFT_CATALOG",
@@ -236,9 +261,14 @@ def search_skillbooks(*, query: str = "", language: str = "",
 
 
 def get_skillbook(skillbook_id: str) -> dict:
-    if type(skillbook_id) is not str or skillbook_id != SKILLBOOK_ID:
+    if type(skillbook_id) is not str:
         raise SkillBookProductError("unknown fixed SkillBook identity")
-    return build_skillbook()
+    if skillbook_id == SKILLBOOK_ID:
+        return build_skillbook()
+    from . import skillbook_git_porcelain_product_v01 as git002
+    if skillbook_id == git002.SKILLBOOK_ID:
+        return git002.build_skillbook()
+    raise SkillBookProductError("unknown fixed SkillBook identity")
 
 
 def main() -> int:

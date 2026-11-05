@@ -128,15 +128,18 @@ def search_federated(root: Path, *, filters: dict, public_reader=None) -> dict:
         f["query"], f["shelf"], f["kind"], f["domain"], f["limit"])
     books = []
     if (shelf in ("skillbooks", "all") and kind in ("", "REUSABLE_SKILL")
-            and domain in ("", "Python")):
+            and domain in ("", "Python", "Git")):
         found = search_skillbooks(query=q, kind="REUSABLE_SKILL", language="Python")
         if (found.get("status") != "READ_ONLY_FIRST_PARTY_DRAFT_CATALOG"
                 or found.get("approved_reusable_packages") != 0
                 or found.get("network_requests") != 0
                 or found.get("operating_database_writes") != 0):
             raise FederationError("untrusted SkillBook")
-        books = list(found["items"])
-        if (len(books) > 1 or any(
+        books = [
+            row for row in found["items"]
+            if not domain or row["domain"].casefold() == domain.casefold()
+        ]
+        if (len(books) > 2 or any(
                 row.get("human_approved") is not False
                 or row.get("export_allowed") is not False for row in books)):
             raise FederationError("untrusted SkillBook approval")

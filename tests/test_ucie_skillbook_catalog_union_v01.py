@@ -126,7 +126,7 @@ class FederatedReadOnlyTests(unittest.TestCase):
             public_reader=reader)
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["query"], "Python")
-        self.assertEqual(len(result["skillbooks"]), 1)
+        self.assertEqual(len(result["skillbooks"]), 2)
         self.assertEqual(len(result["public_evidence_candidates"]), 1)
         self.assertEqual(result["public_candidate_total"], 1)
         self.assertFalse(result["legacy_sqlite_index_migrated"])
@@ -152,7 +152,7 @@ class FederatedReadOnlyTests(unittest.TestCase):
         result = f.search_federated(
             self.root, filters=self.filters(shelf="all", kind="REUSABLE_SKILL"),
             public_reader=lambda *_a, **_kw: self.fail("unexpected W04 read"))
-        self.assertEqual(len(result["skillbooks"]), 1)
+        self.assertEqual(len(result["skillbooks"]), 2)
         self.assertEqual(result["public_shelf_status"], "NOT_REQUESTED")
         result = f.search_federated(
             self.root, filters=self.filters(shelf="all", kind="PREVENTION_RULE"),
