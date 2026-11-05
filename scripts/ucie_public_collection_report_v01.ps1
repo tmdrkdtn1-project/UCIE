@@ -10,7 +10,7 @@ if (-not [string]::Equals($root, 'D:\UCIE', [StringComparison]::OrdinalIgnoreCas
 }
 $python = Join-Path $root '.venv\Scripts\python.exe'
 $module = Join-Path $root 'src\ucie_miner\public_collection_inventory_v01.py'
-$taskScript = Join-Path $root 'scripts\task_status.ps1'
+$taskScript = Join-Path $root 'scripts\ucie_public_miner_scheduler_diagnostic_v01.ps1'
 if (-not (Test-Path -LiteralPath $python -PathType Leaf) -or
     -not (Test-Path -LiteralPath $module -PathType Leaf) -or
     -not (Test-Path -LiteralPath $taskScript -PathType Leaf)) {
@@ -28,38 +28,41 @@ try {
     }
     $status = 'WINDOWS_TASK_EVENT_PROOF_UNAVAILABLE_NO_GO'
     $eventCount = 0
-    $scheduledFinishedUtc = $null
+    $scheduledFinishedUtc = $inventory.recent_hourly_activity.last_finished_utc
     $schedulerVerified = $false
+    $diagnosis = $null
     try {
-        $rawTask = & $taskScript -Evidence
+        # Exact UCIE task only; see separate fail-closed diagnostic. The
+        # script never starts/stops/registers a task or executes the miner.
+        $rawTask = & $taskScript
         if ($null -ne $rawTask) {
             $task = ($rawTask | Out-String) | ConvertFrom-Json -ErrorAction Stop
-            $allowed = @(
-                'TWO_CYCLE_BASE_COLLECTOR_OBSERVED',
-                'TWO_CYCLE_BASE_COLLECTOR_OBSERVED_STAGE13_RESUMED',
-                'TWO_CYCLE_BASE_COLLECTOR_OBSERVED_STAGE13_RATE_PAUSED'
-            )
-            if ($task.schema -ceq 'UCIE_HOURLY_LOCAL_OPERATIONS_READONLY_V1') {
-                $status = [string]$task.status
-                $eventCount = [int]$task.scheduler_event_instance_receipts_verified
-                $scheduledFinishedUtc = $task.last_cycle_finished_utc
+            if ($task.schema -ceq 'UCIE_PUBLIC_MINER_SCHEDULER_DIAGNOSTIC_V01' -and
+                $task.status -in @(
+                    'PUBLIC_MINER_TWO_CYCLE_SCHEDULED_EVIDENCE_OBSERVED',
+                    'PUBLIC_MINER_SCHEDULER_NOT_ATTESTED_NO_GO'
+                )) {
+                $diagnosis = $task
+                $status = [string]$task.task_evidence_status
+                $eventCount = [int]$task.matched_event_instances
                 $schedulerVerified = (
-                    $task.status -in $allowed -and
-                    $task.scheduler_event_log_readable -ceq $true -and
-                    $task.scheduler_event_instance_receipts_verified -ge 2 -and
-                    $task.two_recent_hourly_successes -ceq $true -and
-                    $task.last_task_result_zero -ceq $true -and
-                    $task.last_scheduled_run_matches_receipt -ceq $true -and
-                    $task.scheduler_changed -ceq $false -and
-                    $task.database_modified -ceq $false
+                    $task.status -ceq 'PUBLIC_MINER_TWO_CYCLE_SCHEDULED_EVIDENCE_OBSERVED' -and
+                    $task.last_task_result_decimal -eq 0 -and
+                    $task.last_task_result_interpretation -ceq 'LAST_TASK_RESULT_ZERO' -and
+                    $task.matched_event_instances -eq 2 -and
+                    @($task.blocker_codes).Count -eq 0 -and
+                    $task.actual_task_mutation -ceq $false -and
+                    $task.operating_database_writes -eq 0
                 )
             }
         }
     } catch {
+        # A failed diagnostic never overrides valid independent DB counts
+        # and cannot be reinterpreted as successful TaskScheduler execution.
         $status = 'WINDOWS_TASK_EVENT_PROOF_UNAVAILABLE_NO_GO'
         $schedulerVerified = $false
         $eventCount = 0
-        $scheduledFinishedUtc = $null
+        $diagnosis = $null
     }
     $countValid = (
         $pythonExit -eq 0 -and
@@ -81,6 +84,12 @@ try {
             exact_task_event_proof_verified = $schedulerVerified
             event_receipts_verified = $eventCount
             last_cycle_finished_utc = $scheduledFinishedUtc
+            task_state = if ($null -eq $diagnosis) { $null } else { $diagnosis.task_state }
+            last_task_result_decimal = if ($null -eq $diagnosis) { $null } else { $diagnosis.last_task_result_decimal }
+            last_task_result_hex = if ($null -eq $diagnosis) { $null } else { $diagnosis.last_task_result_hex }
+            last_task_result_interpretation = if ($null -eq $diagnosis) { 'NOT_OBSERVED_NO_GO' } else { $diagnosis.last_task_result_interpretation }
+            blocker_codes = if ($null -eq $diagnosis) { @('TASK_DIAGNOSTIC_UNAVAILABLE') } else { @($diagnosis.blocker_codes) }
+            diagnostic_validated = ($null -ne $diagnosis)
         }
         report_files_written = 0
         operating_database_writes = 0
