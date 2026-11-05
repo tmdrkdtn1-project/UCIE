@@ -25,6 +25,12 @@ class TwoSkillBookDisposableConsumerTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.path = Path(self.tmp.name) / "UCIE_TWO_BOOKS_DRAFT_ONLY.zip"
         raw, self.receipt = bundle.build_draft_bundle()
+        self.verify_receipt = bundle.verify_draft_bundle_before_execution(
+            raw, self.receipt["archive_sha256"])
+        self.assertEqual(self.verify_receipt["status"],
+                         "PRE_EXECUTION_INTEGRITY_ONLY_NO_RELEASE")
+        self.assertTrue(self.verify_receipt["pre_execution_integrity_check"])
+        self.assertFalse(self.verify_receipt["external_execution_authorized"])
         self.path.write_bytes(raw)
         self.assertEqual(sha256(raw).hexdigest(), self.receipt["archive_sha256"])
 
@@ -214,6 +220,42 @@ class TwoSkillBookDisposableConsumerTests(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
         self.assertEqual(json.loads(r.stdout)["status"],
                          "UCIE_FIRST_PARTY_DRAFT_FAIL_CLOSED")
+
+    def test_pre_execution_verifier_requires_trusted_exact_archive_digest(self):
+        raw, receipt = bundle.build_draft_bundle()
+        verified = bundle.verify_draft_bundle_before_execution(
+            raw, receipt["archive_sha256"])
+        self.assertEqual(verified["verified_member_count"], len(bundle.ENTRY_NAMES))
+        self.assertFalse(verified["signature_verified"])
+        self.assertFalse(verified["owner_release_authorized"])
+        self.assertFalse(verified["export_allowed"])
+        self.assertFalse(verified["independent_qa_verified"])
+        self.assertFalse(verified["external_execution_authorized"])
+        for supplied in ("0" * 64, "bad", "A" * 64, 9, None):
+            with self.subTest(supplied=supplied):
+                with self.assertRaises(bundle.DraftBundleError):
+                    bundle.verify_draft_bundle_before_execution(raw, supplied)
+
+    def test_pre_execution_verifier_rejects_tampered_entrypoint(self):
+        from zipfile import ZIP_STORED
+        with ZipFile(self.path) as original:
+            members = [(name, original.read(name)) for name in original.namelist()]
+        with ZipFile(self.path, "w", compression=ZIP_STORED) as archive:
+            for name, data in members:
+                if name == "__main__.py":
+                    data += b"# changed executable bytes\n"
+                archive.writestr(name, data)
+        raw = self.path.read_bytes()
+        self.assertNotEqual(sha256(raw).hexdigest(), self.receipt["archive_sha256"])
+        with self.assertRaises(bundle.DraftBundleError):
+            bundle.verify_draft_bundle_before_execution(
+                raw, self.receipt["archive_sha256"])
+        # Do NOT execute the tampered ZIP: Python runs __main__ before its self-check.
+
+    def test_pre_execution_verifier_rejects_malformed_binary(self):
+        with self.assertRaises(bundle.DraftBundleError):
+            bundle.verify_draft_bundle_before_execution(
+                b"not-zip", sha256(b"not-zip").hexdigest())
 
     def test_actual_python_isolated_git_consumer(self):
         data = b" M synthetic.txt\x00?? second.txt\x00"
