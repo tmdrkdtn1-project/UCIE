@@ -131,6 +131,38 @@ class FederatedReadOnlyTests(unittest.TestCase):
         self.assertIn("W04 공개", html)
         self.assertIn('href="/item/' + "a" * 64, html)
         self.assertIn('href="/skillbooks/', html)
+        self.assertIn("자료 구분", html)
+        self.assertIn("기존 W04 정렬순, 관련도 순위 아님", html)
+        self.assertIn("후보 ID:", html)
+        self.assertIn("UCIE 제작 초안", html)
+        self.assertIn("미검증 공개 근거 검색 완료", html)
+        self.assertIn(f.SCHEMA, html)
+
+    def test_w04_status_distinguishes_no_read_from_incomplete(self):
+        normal = f.search_federated(
+            self.root, filters=self.filters(query="scandir"),
+            public_reader=lambda *_a, **_kw: self.fail("W04 read without opt-in"))
+        self.assertIn("검색하지 않음", f.render_federated(normal))
+        incomplete = f.search_federated(
+            self.root, filters=self.filters(shelf="public"),
+            public_reader=lambda *_a, **_kw: w04(
+                "SOURCE_LINKAGE_INCOMPLETE_NO_GO"))
+        html = f.render_federated(incomplete)
+        self.assertIn("출처 연결 미완료", html)
+        self.assertNotIn("전체 일치 후보:", html)
+
+    def test_untrusted_w04_metadata_is_html_escaped(self):
+        report = w04()
+        report["items"][0]["purpose_code"] = "<script>alert('x')</script>"
+        report["items"][0]["revision_hint"] = 'pull/1\" onmouseover=\"alert(1)'
+        result = f.search_federated(
+            self.root, filters=self.filters(shelf="public"),
+            public_reader=lambda *_a, **_kw: report)
+        html = f.render_federated(result)
+        self.assertNotIn("<script>", html)
+        self.assertIn("&lt;script&gt;", html)
+        self.assertNotIn('onmouseover="alert', html)
+        self.assertIn("후보 ID:", html)
 
     def test_loopback_http_routes_and_default_no_database(self):
         reads = []
