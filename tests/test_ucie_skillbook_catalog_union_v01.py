@@ -6,12 +6,14 @@ import json
 from pathlib import Path
 import threading
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from ucie_miner import skillbook_catalog_union_v01 as f
 from ucie_miner.library_search import SCHEMA as W04_SCHEMA
+from ucie_miner import skillbook_scandir_qa_v01 as qa
 
 
 def w04(state="READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"):
@@ -216,6 +218,58 @@ class FederatedReadOnlyTests(unittest.TestCase):
             finally:
                 server.shutdown()
                 worker.join(timeout=3)
+
+    def test_qa_plan_is_linked_and_never_runs_evaluation(self):
+        handler = f.make_handler(self.root,
+                                 public_reader=lambda *_a, **_kw:
+                                 self.fail("unsolicited W04 query"))
+        with HTTPServer(("127.0.0.1", 0), handler) as server:
+            thread = threading.Thread(target=server.serve_forever,
+                                      kwargs={"poll_interval": 0.05}, daemon=True)
+            thread.start()
+            prefix = "http://127.0.0.1:" + str(server.server_port)
+            def get(path, *, host=None):
+                headers = {} if host is None else {"Host": host}
+                req = Request(prefix + path, headers=headers)
+                try:
+                    with urlopen(req, timeout=5) as response:
+                        return response.status, response.read().decode("utf-8")
+                except HTTPError as error:
+                    with error:
+                        return error.code, error.read().decode("utf-8")
+            try:
+                with patch.object(
+                        qa, "evaluate_skillbook_scandir",
+                        side_effect=AssertionError("HTTP must not run QA")):
+                    status, homepage = get("/")
+                    self.assertEqual(status, 200)
+                    status, skillbooks = get("/skillbooks")
+                    self.assertEqual(status, 200)
+                    self.assertIn('href="/skillbooks/qa-plan"', skillbooks)
+                    status, chapter = get(
+                        "/skillbooks/UCIE-SKILLBOOK-PY-SCANDIR-001")
+                    self.assertEqual(status, 200)
+                    self.assertIn('href="/skillbooks/qa-plan"', chapter)
+                    status, page = get("/skillbooks/qa-plan")
+                    self.assertEqual(status, 200)
+                    self.assertIn("이 화면에서 미실행", page)
+                    self.assertIn("9개", page)
+                    self.assertNotIn("9/9 PASS", page)
+                    status, raw = get("/skillbooks/qa-plan.json")
+                    self.assertEqual(status, 200)
+                    plan = json.loads(raw)
+                    self.assertEqual(plan["case_count"], 9)
+                    self.assertFalse(plan["qa_receipt_loaded"])
+                    self.assertFalse(plan["browser_executes_tests"])
+                    self.assertFalse(plan["export_allowed"])
+                    self.assertEqual(
+                        get("/skillbooks/qa-plan?test=run")[0], 400)
+                    self.assertEqual(
+                        get("/skillbooks/qa-plan", host="untrusted.invalid")[0],
+                        403)
+            finally:
+                server.shutdown()
+                thread.join(timeout=3)
 
     def test_loopback_http_routes_and_default_no_database(self):
         reads = []
