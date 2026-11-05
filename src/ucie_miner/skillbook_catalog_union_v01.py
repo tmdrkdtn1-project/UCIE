@@ -120,7 +120,7 @@ def search_federated(root: Path, *, filters: dict, public_reader=None) -> dict:
         f["query"], f["shelf"], f["kind"], f["domain"], f["limit"])
     books = []
     if (shelf in ("skillbooks", "all") and kind in ("", "REUSABLE_SKILL")
-            and domain in ("", "PYTHON")):
+            and domain in ("", "Python")):
         found = search_skillbooks(query=q, kind="REUSABLE_SKILL", language="Python")
         if (found.get("status") != "READ_ONLY_FIRST_PARTY_DRAFT_CATALOG"
                 or found.get("approved_reusable_packages") != 0
