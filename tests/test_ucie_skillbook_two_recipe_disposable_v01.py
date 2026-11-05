@@ -144,6 +144,77 @@ class TwoSkillBookDisposableConsumerTests(unittest.TestCase):
                 with self.assertRaises(bundle.DraftBundleError):
                     bundle._canonical_source_bytes(raw, expected_blob)
 
+    def test_cross_source_original_chapter_in_draft_and_versioned_lineage(self):
+        from ucie_miner import skillbook_principle_composer_v01 as composer
+        raw, receipt = bundle.build_draft_bundle()
+        with ZipFile(BytesIO(raw)) as archive:
+            manuscript = json.loads(archive.read("PRINCIPLE.json"))
+            human = archive.read("PRINCIPLE.md").decode("utf-8")
+            manifest = json.loads(archive.read("MANIFEST.json"))
+        canonical = composer.compose_bounded_metadata_principle()
+        self.assertEqual(manuscript, canonical)
+        self.assertEqual(manifest["principle_schema"], composer.SCHEMA)
+        self.assertEqual(manifest["principle_content_sha256"],
+                         canonical["content_sha256"])
+        self.assertEqual(manifest["composer_git_blob_sha1"], bundle.COMPOSER_BLOB)
+        self.assertEqual(receipt["principle_id"], composer.PRINCIPLE_ID)
+        self.assertTrue(receipt["curated_original_cross_source_chapter_included"])
+        self.assertFalse(receipt["semantic_generation_from_arbitrary_evidence"])
+        self.assertEqual(human, composer.render_principle_markdown(canonical))
+        self.assertIn("공통 원리", human)
+        self.assertIn("반례", human)
+        self.assertEqual(len(manuscript["sources"]), 2)
+        self.assertEqual(len(manuscript["chapters"]), 5)
+        self.assertEqual(len(manuscript["revision_history"]), 1)
+        self.assertEqual(manuscript["revision_history"][0]["source_content_sha256"],
+                         manuscript["content_sha256"])
+        for key in ("export_allowed", "owner_approved", "rights_approved",
+                    "independent_qa_verified", "released"):
+            self.assertFalse(manuscript[key], key)
+
+    def test_isolated_two_recipe_cross_source_comparison(self):
+        result = self._run(b'{"action":"principle-synthetic"}')
+        self.assertEqual(result.returncode, 0,
+                         result.stderr.decode(errors="replace"))
+        receipt = json.loads(result.stdout)
+        self.assertEqual(receipt["skillbook_id"], bundle.PRINCIPLE_ID)
+        self.assertEqual(receipt["result"]["scandir_file_count"], 2)
+        self.assertEqual(receipt["result"]["git_entry_count"], 2)
+        self.assertEqual(receipt["result"]["git_counts"]["tracked_changed"], 1)
+        self.assertEqual(receipt["result"]["git_counts"]["untracked"], 1)
+        self.assertTrue(receipt["result"]["synthetic_sources_only"])
+        self.assertFalse(receipt["result"]["scandir_names_exported"])
+        self.assertFalse(receipt["result"]["git_names_exported"])
+        self.assertFalse(receipt["export_approved"])
+        for name in ("alpha.txt", "beta.txt", "fake-a.txt", "fake-b.txt"):
+            self.assertNotIn(name, result.stdout.decode())
+
+    def test_cross_source_input_forbidden_and_principle_tamper_denied(self):
+        for payload in (
+            b'{"action":"principle-synthetic","directory":"D:/UCIE"}',
+            b'{"action":"principle-synthetic","source_id":"repo:else"}',
+            b'{"action":"principle-synthetic","release":true}',
+        ):
+            with self.subTest(payload=payload):
+                r = self._run(payload)
+                self.assertEqual(r.returncode, 2)
+                self.assertEqual(json.loads(r.stdout)["status"],
+                                 "UCIE_FIRST_PARTY_DRAFT_FAIL_CLOSED")
+        with ZipFile(self.path) as archive:
+            original = [(name, archive.read(name))
+                        for name in archive.namelist()]
+        with ZipFile(self.path, "w") as archive:
+            for name, data in original:
+                if name == "PRINCIPLE.json":
+                    self.assertIn(b'"export_allowed":false', data)
+                    data = data.replace(b'"export_allowed":false',
+                                        b'"export_allowed":true', 1)
+                archive.writestr(name, data)
+        r = self._run(b'{"action":"principle-synthetic"}')
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(json.loads(r.stdout)["status"],
+                         "UCIE_FIRST_PARTY_DRAFT_FAIL_CLOSED")
+
     def test_actual_python_isolated_git_consumer(self):
         data = b" M synthetic.txt\x00?? second.txt\x00"
         r = self._run(json.dumps({"action": "git-summary",
