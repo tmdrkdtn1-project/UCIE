@@ -10,7 +10,7 @@ from hashlib import sha1, sha256
 from io import BytesIO
 import json
 from pathlib import Path
-from zipfile import ZIP_STORED, ZipFile, ZipInfo
+from zipfile import BadZipFile, ZIP_STORED, ZipFile, ZipInfo
 
 SCHEMA = "UCIE_SKILLBOOK_TWO_RECIPE_DISPOSABLE_DRAFT_V01"
 MAIN_COMMIT = "c41460cd708ca911b64330ccded603fae5e552f3"
@@ -447,6 +447,7 @@ def build_draft_bundle() -> tuple[bytes, dict]:
     manifest = {
         "schema": SCHEMA, "version": "0.1.0-draft",
         "principle_schema": PRINCIPLE_SCHEMA,
+        "principle_id": PRINCIPLE_ID,
         "principle_content_sha256": principle_digest,
         "composer_git_blob_sha1": COMPOSER_BLOB,
         "content_schema": CONTENT_SCHEMA, "blueprint_id": blueprint_id,
@@ -566,7 +567,7 @@ def verify_draft_bundle_before_execution(raw: bytes, expected_sha256: str) -> di
             for name, blob in SOURCE_BLOBS.items():
                 if _git_blob(archive.read(name)) != blob:
                     raise DraftBundleError("pinned first-party recipe changed")
-    except (OSError, ValueError, KeyError, TypeError, RuntimeError, EOFError) as exc:
+    except (BadZipFile, OSError, ValueError, KeyError, TypeError, RuntimeError, EOFError) as exc:
         raise DraftBundleError("invalid archive or unverifiable release claims") from exc
     return {
         "schema": SCHEMA,
