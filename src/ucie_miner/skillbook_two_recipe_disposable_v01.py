@@ -19,7 +19,23 @@ SOURCE_BLOBS = {
     "skillbook_git_porcelain_recipe_v01.py": "aff4375e5fd964edf8e47b46f171e676e768f6b2",
 }
 ENTRY_NAMES = ("__main__.py", "skillbook_git_porcelain_recipe_v01.py",
-               "skillbook_scandir_recipe_v01.py", "MANIFEST.json")
+               "skillbook_scandir_recipe_v01.py", "SKILLBOOKS.json",
+               "SKILLBOOKS.md", "MANIFEST.json")
+CONTENT_SCHEMA = "UCIE_TWO_AUTHORED_SKILLBOOKS_V01"
+PINNED_BOOKS = {
+    "UCIE-SKILLBOOK-PY-SCANDIR-001": (
+        "doc:python/cpython",
+        "9d78f43c4d521c1adfe339731628feadc834728ff09112c29e63ebc09406c45a",
+        "v3.15.0",
+        "ucie_miner.skillbook_scandir_recipe_v01.bounded_regular_file_names",
+    ),
+    "UCIE-SKILLBOOK-GIT-PORCELAIN-002": (
+        "doc:git/git",
+        "1cdd1c7339dfc64093687b6e072d59feee584b8639c0203ece0a1150ce23d325",
+        "v2.51.0",
+        "ucie_miner.skillbook_git_porcelain_recipe_v01.summarize_porcelain_v1_z",
+    ),
+}
 ZIP_DATE = (2020, 1, 1, 0, 0, 0)
 MAX_SOURCE_BYTES = 16_000
 
@@ -45,6 +61,7 @@ BLOBS = {
     "skillbook_git_porcelain_recipe_v01.py": "aff4375e5fd964edf8e47b46f171e676e768f6b2",
 }
 SCHEMA = "UCIE_SKILLBOOK_TWO_RECIPE_DISPOSABLE_DRAFT_V01"
+CONTENT_SCHEMA = "UCIE_TWO_AUTHORED_SKILLBOOKS_V01"
 
 
 def _git_blob(raw):
@@ -70,23 +87,41 @@ def _run():
     with ZipFile(sys.argv[0], "r") as archive:
         names = archive.namelist()
         if names != ["__main__.py", "skillbook_git_porcelain_recipe_v01.py",
-                     "skillbook_scandir_recipe_v01.py", "MANIFEST.json"]:
+                     "skillbook_scandir_recipe_v01.py", "SKILLBOOKS.json",
+                     "SKILLBOOKS.md", "MANIFEST.json"]:
             raise ValueError("unexpected ZIP entries")
+        if any(i.file_size > 16000 or i.compress_size > 16000
+               for i in archive.infolist()):
+            raise ValueError("oversize archive member")
         manifest = json.loads(archive.read("MANIFEST.json"))
         if (type(manifest) is not dict
                 or manifest.get("schema") != SCHEMA
+                or manifest.get("content_schema") != CONTENT_SCHEMA
                 or manifest.get("released") is not False
                 or manifest.get("export_approved") is not False
                 or manifest.get("signed") is not False
                 or manifest.get("independent_qa_verified") is not False
-                or manifest.get("sources_git_blob_sha1") != BLOBS):
+                or manifest.get("sources_git_blob_sha1") != BLOBS
+                or type(manifest.get("member_sha256")) is not dict
+                or set(manifest["member_sha256"]) != set(names) - {"MANIFEST.json"}):
             raise ValueError("bundle manifest integrity blocked")
         for name, blob in BLOBS.items():
             if _git_blob(archive.read(name)) != blob:
                 raise ValueError("modified first-party module")
         for name, digest in manifest["member_sha256"].items():
-            if name not in names or hashlib.sha256(archive.read(name)).hexdigest() != digest:
+            if (type(digest) is not str or len(digest) != 64
+                    or hashlib.sha256(archive.read(name)).hexdigest() != digest):
                 raise ValueError("modified archive member")
+        books = json.loads(archive.read("SKILLBOOKS.json"))
+        if (type(books) is not dict
+                or books.get("schema") != CONTENT_SCHEMA
+                or books.get("blueprint_id") != manifest.get("blueprint_id")
+                or books.get("export_allowed") is not False
+                or type(books.get("items")) is not list
+                or len(books["items"]) != 2
+                or {b.get("skillbook_id") for b in books["items"]
+                    if type(b) is dict} != set(manifest.get("skillbook_ids", []))):
+            raise ValueError("authored SkillBook contract not attested")
     raw = sys.stdin.buffer.read(32769)
     if len(raw) > 32768:
         raise ValueError("request exceeds byte budget")
@@ -152,6 +187,142 @@ def _canonical_source_bytes(raw: bytes, expected_blob: str) -> bytes:
     return canonical
 
 
+def _authored_book_assets() -> tuple[bytes, bytes, str]:
+    """Compose existing W02/W03 books into human and machine draft artifacts.
+
+    Source facts and separately authored chapter text are preserved as distinct
+    claims. Rebuild the known source Registry blueprint; never trust external
+    chapter claims or promote a candidate to approved/released.
+    """
+    from .skillbook_blueprint import compose_blueprint
+    from .skillbook_product_v01 import build_skillbook as python_book
+    from .skillbook_git_porcelain_product_v01 import build_skillbook as git_book
+
+    books = (python_book(), git_book())
+    if {book.get("skillbook_id") for book in books} != set(PINNED_BOOKS):
+        raise DraftBundleError("unknown or duplicate SkillBook identity")
+    candidates = []
+    rows = []
+    markdown = [
+        "# UCIE 기술 SkillBook 001·002 — 내부 미승인 초안",
+        "",
+        "> 공식 공개 출처의 API 사실과 UCIE 작성 설명·레시피는 서로 다릅니다.",
+        "> 이 파일은 독립 QA·라이선스/권리 검토·소유자 승인·서명·배포를 뜻하지 않습니다.",
+        "",
+    ]
+    for book in books:
+        book_id = book["skillbook_id"]
+        source_id, source_sha, source_tag, callable_name = PINNED_BOOKS[book_id]
+        entry = book.get("library_entry")
+        evidence = book.get("source_evidence")
+        gates = book.get("proof_gates")
+        contract = book.get("machine_skill_contract")
+        chapters = book.get("ucie_authored_chapters")
+        history = book.get("revision_history")
+        if (book.get("status") != "FIRST_PARTY_DRAFT_NOT_APPROVED"
+                or book.get("export_allowed") is not False
+                or type(entry) is not dict
+                or entry.get("source_id") != source_id
+                or entry.get("entry_status") != "UNVERIFIED_CANDIDATE_ONLY"
+                or entry.get("approval_status") != "NOT_APPROVED"
+                or entry.get("export_allowed") is not False
+                or entry.get("evidence_sha256") != source_sha
+                or type(evidence) is not dict
+                or evidence.get("source_document_sha256") != source_sha
+                or evidence.get("source_tag") != source_tag
+                or type(gates) is not dict
+                or any(gates.get(key) is not False for key in (
+                    "independent_test_verified", "license_redistribution_approved",
+                    "security_review_approved", "human_approved", "signed", "published"))
+                or type(contract) is not dict
+                or contract.get("callable") != callable_name
+                or type(chapters) is not tuple or len(chapters) != 4
+                or any(type(ch) is not dict
+                       or set(ch) != {"heading", "claim_type", "text"}
+                       or any(type(v) is not str or not 1 <= len(v) <= 1800
+                              for v in ch.values()) for ch in chapters)
+                or type(history) is not list or len(history) != 1
+                or history[0].get("evidence_sha256") != source_sha
+                or history[0].get("published") is not False
+                or history[0].get("independently_verified") is not False):
+            raise DraftBundleError("unreviewed or forged SkillBook chapter/rights claim")
+        candidates.append({
+            "kind": entry["kind"],
+            "source_id": source_id,
+            "evidence_reference": entry["evidence_reference"],
+            "evidence_sha256": source_sha,
+            "purpose_code": entry["purpose_code"],
+            "version_scope": entry["version_scope_claim"],
+            "dependencies": list(entry["dependencies"]),
+        })
+        rows.append({
+            "skillbook_id": book_id,
+            "title": book["title"],
+            "library_item_id": entry["library_item_id"],
+            "source_id": source_id,
+            "source_tag": source_tag,
+            "source_sha256": source_sha,
+            "source_public_url": evidence["official_document_url"],
+            "source_license_status": entry["source_license_status"],
+            "chapter_claims": list(chapters),
+            "machine_skill_contract": contract,
+            "revision_history": history,
+            "proof_gates": gates,
+            "export_allowed": False,
+        })
+        markdown.extend([
+            "## " + str(book["title"]),
+            "",
+            "출처: " + str(evidence["official_document_url"]),
+            " · 공개 근거 태그: " + source_tag,
+            "",
+            "출처 SHA-256: \`" + source_sha + "\`",
+            "",
+        ])
+        for chapter in chapters:
+            markdown.extend([
+                "### " + chapter["heading"],
+                "",
+                "근거 구분: \`" + chapter["claim_type"] + "\`",
+                "",
+                chapter["text"], "",
+            ])
+        markdown.extend([
+            "실행 계약: \`" + callable_name + "\`",
+            "",
+            "승인 상태: NOT_APPROVED / 반출 불가 / 자체 시험 범위 한정",
+            "",
+        ])
+    blueprint = compose_blueprint("UCIE_TWO_SKILLBOOKS_DRAFT_V01", candidates)
+    if (blueprint.get("status") != "UNVERIFIED_METADATA_ONLY"
+            or blueprint.get("chapter_count") != 2
+            or {item["library_item_id"] for item in blueprint["chapters"]}
+               != {row["library_item_id"] for row in rows}
+            or blueprint.get("export_allowed") is not False):
+        raise DraftBundleError("original public evidence blueprint mismatched")
+    structured = {
+        "schema": CONTENT_SCHEMA,
+        "blueprint_id": blueprint["blueprint_id"],
+        "items": rows,
+        "human_document_kind": "UCIE_AUTHORED_FIRST_PARTY_DRAFT_CHAPTERS",
+        "source_approval_preserved": True,
+        "external_semantic_synthesis_verified": False,
+        "independent_qa_verified": False,
+        "rights_approved": False,
+        "human_approved": False,
+        "signed": False,
+        "export_allowed": False,
+        "released": False,
+        "model_trained": False,
+    }
+    machine = (json.dumps(structured, ensure_ascii=True, sort_keys=True,
+                          separators=(",", ":")) + "\n").encode("ascii")
+    human = ("\n".join(markdown).rstrip() + "\n").encode("utf-8")
+    if max(len(machine), len(human)) > MAX_SOURCE_BYTES:
+        raise DraftBundleError("bounded authored document size exceeded")
+    return machine, human, blueprint["blueprint_id"]
+
+
 def _entry(name: str, raw: bytes) -> tuple[ZipInfo, bytes]:
     info = ZipInfo(name, date_time=ZIP_DATE)
     info.create_system = 3
@@ -172,8 +343,12 @@ def build_draft_bundle() -> tuple[bytes, dict]:
             raise DraftBundleError("first-party source beyond budget")
         raw = path.read_bytes()
         members[name] = _canonical_source_bytes(raw, expected_blob)
+    authored_json, authored_markdown, blueprint_id = _authored_book_assets()
+    members["SKILLBOOKS.json"] = authored_json
+    members["SKILLBOOKS.md"] = authored_markdown
     manifest = {
         "schema": SCHEMA, "version": "0.1.0-draft",
+        "content_schema": CONTENT_SCHEMA, "blueprint_id": blueprint_id,
         "pinned_main_commit": MAIN_COMMIT,
         "sources_git_blob_sha1": SOURCE_BLOBS,
         "member_sha256": {k: sha256(v).hexdigest() for k, v in sorted(members.items())},
@@ -207,6 +382,10 @@ def build_draft_bundle() -> tuple[bytes, dict]:
         "archive_bytes": len(result),
         "entries": list(ENTRY_NAMES),
         "pinned_main_commit": MAIN_COMMIT,
+        "blueprint_id": blueprint_id,
+        "human_skillbook_chapters_included": True,
+        "machine_skill_contracts_included": True,
+        "automatic_semantic_synthesis_claimed": False,
         "release_approved": False,
         "export_allowed": False,
         "independent_qa_verified": False,
