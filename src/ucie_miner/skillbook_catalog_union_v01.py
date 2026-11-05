@@ -1,0 +1,272 @@
+"""UCIE-only read-only search of distinct SkillBook and existing W04 shelves.
+
+A SkillBook official-document SHA and a W04 public PR candidate are NOT
+equivalent evidence. No DB migration, approval, export or background reader.
+"""
+from __future__ import annotations
+
+import argparse
+from html import escape
+from http.server import HTTPServer
+import json
+import os
+from pathlib import Path
+import re
+import sqlite3
+from urllib.parse import parse_qs, urlencode, urlsplit
+
+from . import library_browser_skillbook_v01 as previous
+from .library_search import (
+    ALLOWED_DOMAINS, LibrarySearchError, SCHEMA as W04_SCHEMA,
+    search_existing_public_library,
+)
+from .public_discovery import DiscoveryError
+from .skillbook_product_v01 import SkillBookProductError, search_skillbooks
+from .source_registry import SourceRegistryError, get_source
+
+SCHEMA = "UCIE_SKILLBOOK_W04_FEDERATED_READONLY_V01"
+SHELVES = ("skillbooks", "all", "public")
+KINDS = ("", "REUSABLE_SKILL", "PREVENTION_RULE", "PUBLIC_TECHNICAL_EVIDENCE")
+QUERY = re.compile(r"[\w .-]{0,80}\Z", re.UNICODE)
+HEX64 = re.compile(r"[0-9a-f]{64}\Z")
+
+
+class FederationError(ValueError):
+    pass
+
+
+def parse_filters(raw: str) -> dict:
+    if type(raw) is not str or len(raw) > 280:
+        raise FederationError("invalid URL size")
+    try:
+        args = parse_qs(raw, keep_blank_values=True, strict_parsing=True,
+                        max_num_fields=5, encoding="utf-8", errors="strict") if raw else {}
+    except (ValueError, UnicodeError) as exc:
+        raise FederationError("invalid query encoding") from exc
+    if (set(args) - {"q", "shelf", "kind", "domain", "limit"}
+            or any(len(v) != 1 for v in args.values())):
+        raise FederationError("unknown or duplicate filter")
+    result = {
+        "query": args.get("q", [""])[0],
+        "shelf": args.get("shelf", ["skillbooks"])[0],
+        "kind": args.get("kind", [""])[0],
+        "domain": args.get("domain", [""])[0],
+        "limit": args.get("limit", ["10"])[0],
+    }
+    if (QUERY.fullmatch(result["query"]) is None
+            or result["shelf"] not in SHELVES or result["kind"] not in KINDS
+            or result["domain"] not in ("", *ALLOWED_DOMAINS)
+            or result["limit"] not in ("5", "10", "20")):
+        raise FederationError("filter not allowed")
+    result["limit"] = int(result["limit"])
+    return result
+
+
+def _safe_filters(filters: dict) -> dict:
+    if (type(filters) is not dict
+            or set(filters) != {"query", "shelf", "kind", "domain", "limit"}
+            or type(filters["limit"]) is not int):
+        raise FederationError("invalid internal filters")
+    parsed = parse_filters(urlencode({
+        "q": filters["query"], "shelf": filters["shelf"],
+        "kind": filters["kind"], "domain": filters["domain"],
+        "limit": filters["limit"],
+    }))
+    if parsed != filters:
+        raise FederationError("filter drift")
+    return parsed
+
+
+def _read_public(report: dict, limit: int) -> tuple[str, int | None, list]:
+    if (type(report) is not dict or report.get("schema") != W04_SCHEMA
+            or report.get("network_requests") != 0
+            or report.get("operating_database_writes") != 0
+            or report.get("approved_or_exportable_items") != 0
+            or report.get("auto_promoted") is not False):
+        raise FederationError("untrusted W04 response")
+    status = report.get("status")
+    if status == "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
+        if report.get("items") != []:
+            raise FederationError("incomplete W04 leaked results")
+        return status, None, []
+    if status != "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO":
+        raise FederationError("unexpected W04 status")
+    rows, count = report.get("items"), report.get("total_matches")
+    if (type(rows) is not list or type(count) is not int
+            or count < 0 or len(rows) > min(count, limit)):
+        raise FederationError("invalid W04 result bound")
+    for item in rows:
+        if (type(item) is not dict
+                or type(item.get("library_item_id")) is not str
+                or HEX64.fullmatch(item["library_item_id"]) is None
+                or item.get("kind") not in KINDS[2:]
+                or item.get("lifecycle") != "UNVERIFIED_CANDIDATE_ONLY"
+                or item.get("human_approved") is not False
+                or item.get("export_allowed") is not False):
+            raise FederationError("untrusted W04 item")
+        try:
+            source = get_source(item.get("source_id"))
+        except (SourceRegistryError, TypeError) as exc:
+            raise FederationError("unknown W04 public source") from exc
+        if source["source_kind"] != "INDEPENDENT_PUBLIC_REPOSITORY":
+            raise FederationError("W04 source boundary mismatch")
+    return status, count, list(rows)
+
+
+def search_federated(root: Path, *, filters: dict, public_reader=None) -> dict:
+    """Default SkillBook queries never read SQLite; public shelf is opt-in."""
+    f = _safe_filters(filters)
+    q, shelf, kind, domain, limit = (
+        f["query"], f["shelf"], f["kind"], f["domain"], f["limit"])
+    books = []
+    if (shelf in ("skillbooks", "all") and kind in ("", "REUSABLE_SKILL")
+            and domain in ("", "PYTHON")):
+        found = search_skillbooks(query=q, kind="REUSABLE_SKILL", language="Python")
+        if (found.get("status") != "READ_ONLY_FIRST_PARTY_DRAFT_CATALOG"
+                or found.get("approved_reusable_packages") != 0
+                or found.get("network_requests") != 0
+                or found.get("operating_database_writes") != 0):
+            raise FederationError("untrusted SkillBook")
+        books = list(found["items"])
+        if (len(books) > 1 or any(
+                row.get("human_approved") is not False
+                or row.get("export_allowed") is not False for row in books)):
+            raise FederationError("untrusted SkillBook approval")
+    state, total, candidates = "NOT_REQUESTED", None, []
+    if shelf in ("all", "public") and kind != "REUSABLE_SKILL":
+        if not q.isascii():
+            # W04 rejects non-ASCII queries. Never turn Korean into an
+            # empty W04 query, thereby claiming false result counts.
+            state = "W04_NONASCII_QUERY_NOT_SUPPORTED_NO_SEARCH"
+        else:
+            reader = search_existing_public_library if public_reader is None else public_reader
+            result = reader(root, query=q, kind=kind or None,
+                            domain=domain or None, limit=limit)
+            state, total, candidates = _read_public(result, limit)
+    return {
+        "schema": SCHEMA,
+        "status": "READ_ONLY_TWO_SHELF_DRAFT_NOT_APPROVED",
+        **f,
+        "skillbooks": books, "public_evidence_candidates": candidates,
+        "public_candidate_total": total, "public_shelf_status": state,
+        "distinct_evidence_units_not_joined": True,
+        "legacy_sqlite_index_migrated": False,
+        "human_approved": False, "export_allowed": False,
+        "approved_packages": 0, "operating_database_writes": 0,
+        "network_requests": 0, "rule_promotions": 0,
+    }
+
+
+def render_federated(result: dict) -> str:
+    if (type(result) is not dict or result.get("schema") != SCHEMA
+            or result.get("status") != "READ_ONLY_TWO_SHELF_DRAFT_NOT_APPROVED"
+            or result.get("export_allowed") is not False
+            or result.get("distinct_evidence_units_not_joined") is not True):
+        raise FederationError("unsafe HTML render")
+    e = lambda value: escape(str(value), quote=True)
+    choices = [
+        ("shelf", [("skillbooks", "SkillBook"), ("all", "전체"),
+                   ("public", "W04 후보")]),
+        ("kind", [("", "모든 종류"), ("REUSABLE_SKILL", "재사용 기술"),
+                  ("PREVENTION_RULE", "예방 후보"),
+                  ("PUBLIC_TECHNICAL_EVIDENCE", "공개 후보")]),
+        ("domain", [("", "모든 분야")]
+         + [(x, x) for x in sorted(ALLOWED_DOMAINS)]),
+        ("limit", [("5", "5"), ("10", "10"), ("20", "20")]),
+    ]
+    parts = [
+        "<p>SkillBook 공식문서 근거와 W04 공개 PR 후보는 별도 자산입니다. "
+        "같은 소유자라 하더라도 검증 결과가 같다는 의미는 아닙니다.</p>",
+        '<section class="panel"><form method="get" action="/catalog">',
+        '<label>검색어<input name="q" maxlength="80" value="'
+        + e(result["query"]) + '"></label>',
+    ]
+    for key, opts in choices:
+        parts.append('<label>' + e(key) + '<select name="' + key + '">')
+        for value, label in opts:
+            parts.append('<option value="' + e(value) + '"'
+                         + (' selected' if value == str(result[key]) else "")
+                         + '>' + e(label) + '</option>')
+        parts.append('</select></label>')
+    parts += ['<button type="submit">검색</button></form></section>',
+              '<section class="panel"><h2>SkillBook 초안</h2>']
+    for book in result["skillbooks"]:
+        parts.append('<p><a href="/skillbooks/' + e(book["skillbook_id"])
+                     + '">' + e(book["title"]) + '</a> · '
+                     + e(book["status"]) + ' · 미승인</p>')
+    if not result["skillbooks"]:
+        parts.append("<p>조건에 맞는 SkillBook 없음</p>")
+    parts += ['</section><section class="panel"><h2>W04 공개 근거 후보</h2>',
+              '<p>조회 상태: ' + e(result["public_shelf_status"]) + '</p>']
+    if result["public_candidate_total"] is not None:
+        parts.append('<p>전체 일치 후보: '
+                     + str(result["public_candidate_total"]) + '건</p>')
+    for item in result["public_evidence_candidates"]:
+        parts.append('<p><a href="/item/' + item["library_item_id"]
+                     + '">W04 상세</a> · ' + e(item["source_id"])
+                     + ' · ' + e(item.get("purpose_code", "")) + ' · 미승인</p>')
+    parts += ['</section><p><a href="/">기존 W04 검색</a> · '
+              '<a href="/skillbooks">SkillBook 검색</a> · '
+              '<a href="/catalog.json">JSON 계약</a></p>']
+    template = previous._template("UCIE SkillBook + W04 읽기 전용 검색", "")
+    return template.replace("<footer>", "".join(parts) + "<footer>", 1)
+
+
+def make_handler(root: Path, *, public_reader=None, **legacy_injections):
+    base = previous.make_handler(root, **legacy_injections)
+
+    class Handler(base):
+        def do_GET(self):
+            path = urlsplit(self.path)
+            if path.path not in ("/catalog", "/catalog.json"):
+                return super().do_GET()
+            if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
+                return self.reply(403, "LOOPBACK_ONLY", "text/plain; charset=utf-8")
+            if len(self.path) > 340 or path.fragment:
+                return self.reply(400, "INVALID_CATALOG_ROUTE", "text/plain; charset=utf-8")
+            try:
+                data = search_federated(root, filters=parse_filters(path.query),
+                                        public_reader=public_reader)
+                if path.path == "/catalog.json":
+                    return self.reply(200, json.dumps(data, ensure_ascii=False, sort_keys=True),
+                                      "application/json; charset=utf-8")
+                return self.reply(200, render_federated(data))
+            except (FederationError, SkillBookProductError):
+                return self.reply(400, "CATALOG_INPUT_OR_CONTRACT_NO_GO",
+                                  "text/plain; charset=utf-8")
+            except (LibrarySearchError, DiscoveryError, OSError,
+                    sqlite3.DatabaseError, ValueError, TypeError, KeyError):
+                return self.reply(503, "W04_SOURCE_LINKAGE_UNAVAILABLE_NO_GO",
+                                  "text/plain; charset=utf-8")
+    return Handler
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description="UCIE local read-only federated catalog")
+    p.add_argument("--port", type=int, default=0)
+    args = p.parse_args()
+    root = Path(__file__).resolve().parents[2]
+    if (not 0 <= args.port <= 65535 or root.name.casefold() != "ucie"
+            or root.is_symlink() or not root.is_dir()
+            or (os.name == "nt" and root.resolve() != Path("D:/UCIE").resolve())):
+        print(json.dumps({"schema": SCHEMA, "status": "FAIL_CLOSED"}))
+        return 3
+    try:
+        with HTTPServer(("127.0.0.1", args.port), make_handler(root)) as server:
+            print(json.dumps({
+                "schema": SCHEMA, "status": "LOCAL_DRAFT_CATALOG_LISTENING",
+                "url": "http://127.0.0.1:" + str(server.server_port) + "/catalog",
+                "default_public_db_opened": False, "scheduler_registered": False,
+                "approved_packages": 0, "export_allowed": False,
+            }), flush=True)
+            server.serve_forever(poll_interval=0.5)
+    except KeyboardInterrupt:
+        return 0
+    except OSError:
+        print(json.dumps({"schema": SCHEMA, "status": "LOCAL_BIND_FAILED_NO_GO"}))
+        return 3
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
