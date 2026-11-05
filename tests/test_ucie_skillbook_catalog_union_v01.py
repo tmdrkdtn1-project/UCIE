@@ -126,7 +126,7 @@ class FederatedReadOnlyTests(unittest.TestCase):
             public_reader=reader)
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["query"], "Python")
-        self.assertEqual(len(result["skillbooks"]), 1)
+        self.assertEqual(len(result["skillbooks"]), 2)
         self.assertEqual(len(result["public_evidence_candidates"]), 1)
         self.assertEqual(result["public_candidate_total"], 1)
         self.assertFalse(result["legacy_sqlite_index_migrated"])
