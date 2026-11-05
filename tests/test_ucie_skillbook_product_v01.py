@@ -57,6 +57,26 @@ class UCIESkillBookV01Tests(unittest.TestCase):
         self.assertFalse(p.build_skillbook()["machine_skill_contract"]["runtime_execution_by_catalog"])
         self.assertIn("DRAFT", p.build_skillbook()["machine_skill_contract"]["portable_package_state"])
 
+    def test_consumer_demo_and_revision_are_draft_only(self):
+        book = p.build_skillbook()
+        pilot = book["consumer_pilot"]
+        self.assertEqual(
+            pilot["module"], "ucie_miner.skillbook_consumer_pilot_v01")
+        self.assertEqual(pilot["manual_opt_in"], "--run-synthetic-demo")
+        self.assertTrue(pilot["uses_real_first_party_recipe"])
+        self.assertFalse(pilot["accepts_owner_directory_parameter"])
+        self.assertFalse(pilot["executes_from_browser"])
+        self.assertFalse(pilot["independent_qa_verified"])
+        self.assertFalse(pilot["package_export_allowed"])
+        revisions = book["revision_history"]
+        self.assertEqual(len(revisions), 1)
+        self.assertEqual(revisions[0]["version"], "0.1.0-draft")
+        self.assertEqual(
+            revisions[0]["evidence_sha256"], p.SOURCE_DOCUMENT_SHA256)
+        self.assertFalse(revisions[0]["published"])
+        self.assertFalse(revisions[0]["independently_verified"])
+        self.assertFalse(book["export_allowed"])
+
     def test_source_link_forged_approval_rejected(self):
         with mock.patch.object(p, "build_library_entry", return_value={
             "source_id": "doc:python/cpython",
