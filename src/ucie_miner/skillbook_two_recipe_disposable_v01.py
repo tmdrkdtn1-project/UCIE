@@ -386,6 +386,38 @@ def _authored_book_assets() -> tuple[bytes, bytes, str]:
     return machine, human, blueprint["blueprint_id"]
 
 
+def _principle_assets() -> tuple[bytes, bytes, str]:
+    """Reuse only UCIE's pinned, authored cross-technique principle composer."""
+    root = Path(__file__).resolve().parent
+    path = root / "skillbook_principle_composer_v01.py"
+    if path.is_symlink() or not path.is_file():
+        raise DraftBundleError("curated principle composer missing or redirected")
+    _canonical_source_bytes(path.read_bytes(), COMPOSER_BLOB)
+    from .skillbook_principle_composer_v01 import (
+        compose_bounded_metadata_principle,
+        render_principle_markdown,
+    )
+    value = compose_bounded_metadata_principle()
+    if (value.get("schema") != PRINCIPLE_SCHEMA
+            or value.get("principle_id") != PRINCIPLE_ID
+            or value.get("status")
+               != "UCIE_CURATED_CROSS_SOURCE_CHAPTER_DRAFT_NO_GO"
+            or value.get("human_readable_original_chapter_created") is not True
+            or value.get("export_allowed") is not False
+            or value.get("rights_approved") is not False
+            or value.get("independent_qa_verified") is not False
+            or value.get("released") is not False
+            or {source["skillbook_id"] for source in value["sources"]}
+               != set(PINNED_BOOKS)):
+        raise DraftBundleError("cross-source authored principle not approved input")
+    machine = (json.dumps(value, sort_keys=True, separators=(",", ":"),
+                          ensure_ascii=True) + "\n").encode("ascii")
+    human = render_principle_markdown(value).encode("utf-8")
+    if max(len(machine), len(human)) > MAX_SOURCE_BYTES:
+        raise DraftBundleError("bounded principle product size exceeded")
+    return machine, human, value["content_sha256"]
+
+
 def _entry(name: str, raw: bytes) -> tuple[ZipInfo, bytes]:
     info = ZipInfo(name, date_time=ZIP_DATE)
     info.create_system = 3
@@ -409,8 +441,14 @@ def build_draft_bundle() -> tuple[bytes, dict]:
     authored_json, authored_markdown, blueprint_id = _authored_book_assets()
     members["SKILLBOOKS.json"] = authored_json
     members["SKILLBOOKS.md"] = authored_markdown
+    principle_json, principle_md, principle_digest = _principle_assets()
+    members["PRINCIPLE.json"] = principle_json
+    members["PRINCIPLE.md"] = principle_md
     manifest = {
         "schema": SCHEMA, "version": "0.1.0-draft",
+        "principle_schema": PRINCIPLE_SCHEMA,
+        "principle_content_sha256": principle_digest,
+        "composer_git_blob_sha1": COMPOSER_BLOB,
         "content_schema": CONTENT_SCHEMA, "blueprint_id": blueprint_id,
         "pinned_main_commit": MAIN_COMMIT,
         "sources_git_blob_sha1": SOURCE_BLOBS,
@@ -447,6 +485,9 @@ def build_draft_bundle() -> tuple[bytes, dict]:
         "entries": list(ENTRY_NAMES),
         "pinned_main_commit": MAIN_COMMIT,
         "blueprint_id": blueprint_id,
+        "principle_id": PRINCIPLE_ID,
+        "curated_original_cross_source_chapter_included": True,
+        "semantic_generation_from_arbitrary_evidence": False,
         "human_skillbook_chapters_included": True,
         "machine_skill_contracts_included": True,
         "automatic_semantic_synthesis_claimed": False,
