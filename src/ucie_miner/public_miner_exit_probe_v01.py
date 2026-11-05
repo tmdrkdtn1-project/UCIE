@@ -34,8 +34,14 @@ import tempfile
 from ucie_miner.worker import run_cycle
 
 entrypoint = Path(sys.argv[1])
-module = runpy.run_path(str(entrypoint), run_name="__ucie_exit_probe_only__")
-assert callable(module["main"])
+# Preserve production's D:/UCIE-only Windows main-script source gate.
+# GitHub Windows temporary checkouts may import worker but never the entrypoint.
+entrypoint_imported = False
+if (sys.platform != "win32" or
+        entrypoint.resolve().parents[1] == Path("D:/UCIE").resolve()):
+    module = runpy.run_path(str(entrypoint), run_name="__ucie_exit_probe_only__")
+    assert callable(module["main"])
+    entrypoint_imported = True
 with tempfile.TemporaryDirectory(prefix="UCIE_SYNTHETIC_EXIT_") as base:
     root = Path(base) / "UCIE"
     root.mkdir()
@@ -64,7 +70,7 @@ with tempfile.TemporaryDirectory(prefix="UCIE_SYNTHETIC_EXIT_") as base:
     marker = {"schema": "UCIE_CHILD_SYNTHETIC_CYCLE_EXIT_MARKER_V01",
               "synthetic_receipt_saved": True,
               "synthetic_worker_returned": True,
-              "entrypoint_imported_but_not_executed": True,
+              "entrypoint_imported_but_not_executed": entrypoint_imported,
               "actual_public_collector_invoked": False,
               "operating_ucie_database_accessed": False,
               "real_owner_directory_scanned": False,
@@ -155,7 +161,8 @@ def run_synthetic_exit_probe(*, runner=None) -> dict:
         "schema": "UCIE_CHILD_SYNTHETIC_CYCLE_EXIT_MARKER_V01",
         "synthetic_receipt_saved": True,
         "synthetic_worker_returned": True,
-        "entrypoint_imported_but_not_executed": True,
+        "entrypoint_imported_but_not_executed": not (
+            os.name == "nt" and root.resolve() != Path("D:/UCIE").resolve()),
         "actual_public_collector_invoked": False,
         "operating_ucie_database_accessed": False,
         "real_owner_directory_scanned": False,
@@ -183,7 +190,8 @@ def run_synthetic_exit_probe(*, runner=None) -> dict:
         "synthetic_subprocess_started": True,
         "synthetic_worker_returned": True,
         "synthetic_receipt_written": True,
-        "entrypoint_imported_but_not_executed": True,
+        "entrypoint_imported_but_not_executed": not (
+            os.name == "nt" and root.resolve() != Path("D:/UCIE").resolve()),
         "actual_public_collector_invoked": False,
         "real_owner_directory_scanned": False,
         "real_task_scheduler_events_verified": False,
