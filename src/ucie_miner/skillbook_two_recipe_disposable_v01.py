@@ -501,6 +501,90 @@ def build_draft_bundle() -> tuple[bytes, dict]:
     }
 
 
+def verify_draft_bundle_before_execution(raw: bytes, expected_sha256: str) -> dict:
+    """Trust-bound, read-only ZIP byte verification *before* running __main__.
+
+    The expected archive hash MUST come from a separately trusted first-party
+    build receipt, not a value supplied next to an untrusted ZIP by its sender.
+    A ZIP's own __main__ cannot authenticate itself before being executed.
+    This check proves integrity only; it never approves release or execution.
+    """
+    if (type(raw) is not bytes or not 0 < len(raw) <= 60_000
+            or type(expected_sha256) is not str
+            or len(expected_sha256) != 64
+            or any(ch not in "0123456789abcdef" for ch in expected_sha256)
+            or sha256(raw).hexdigest() != expected_sha256):
+        raise DraftBundleError("untrusted archive bytes or external digest")
+    try:
+        with ZipFile(BytesIO(raw)) as archive:
+            infos = archive.infolist()
+            names = [info.filename for info in infos]
+            if (names != list(ENTRY_NAMES)
+                    or any(info.file_size > MAX_SOURCE_BYTES
+                           or info.compress_size > MAX_SOURCE_BYTES
+                           or info.compress_type != ZIP_STORED
+                           or info.is_dir() for info in infos)):
+                raise DraftBundleError("unknown, oversized or compressed archive member")
+            manifest = json.loads(archive.read("MANIFEST.json"))
+            books = json.loads(archive.read("SKILLBOOKS.json"))
+            principle = json.loads(archive.read("PRINCIPLE.json"))
+            if (type(manifest) is not dict or type(books) is not dict
+                    or type(principle) is not dict
+                    or manifest.get("schema") != SCHEMA
+                    or manifest.get("pinned_main_commit") != MAIN_COMMIT
+                    or manifest.get("sources_git_blob_sha1") != SOURCE_BLOBS
+                    or manifest.get("authored_product_git_blob_sha1") != PRODUCT_BLOBS
+                    or manifest.get("composer_git_blob_sha1") != COMPOSER_BLOB
+                    or manifest.get("content_schema") != CONTENT_SCHEMA
+                    or manifest.get("principle_schema") != PRINCIPLE_SCHEMA
+                    or manifest.get("principle_id") != PRINCIPLE_ID
+                    or manifest.get("released") is not False
+                    or manifest.get("rights_approved") is not False
+                    or manifest.get("signed") is not False
+                    or manifest.get("owner_release_authorized") is not False
+                    or manifest.get("export_approved") is not False
+                    or manifest.get("independent_qa_verified") is not False
+                    or type(manifest.get("member_sha256")) is not dict
+                    or set(manifest["member_sha256"]) != set(ENTRY_NAMES) - {"MANIFEST.json"}
+                    or books.get("schema") != CONTENT_SCHEMA
+                    or books.get("blueprint_id") != manifest.get("blueprint_id")
+                    or books.get("export_allowed") is not False
+                    or principle.get("schema") != PRINCIPLE_SCHEMA
+                    or principle.get("principle_id") != PRINCIPLE_ID
+                    or principle.get("content_sha256")
+                       != manifest.get("principle_content_sha256")
+                    or principle.get("export_allowed") is not False
+                    or principle.get("independent_qa_verified") is not False
+                    or principle.get("owner_approved") is not False
+                    or principle.get("rights_approved") is not False
+                    or principle.get("released") is not False):
+                raise DraftBundleError("archive content or authorization claim drift")
+            for name, expected in manifest["member_sha256"].items():
+                if (type(expected) is not str or len(expected) != 64
+                        or sha256(archive.read(name)).hexdigest() != expected):
+                    raise DraftBundleError("source-authored member digest changed")
+            for name, blob in SOURCE_BLOBS.items():
+                if _git_blob(archive.read(name)) != blob:
+                    raise DraftBundleError("pinned first-party recipe changed")
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, EOFError) as exc:
+        raise DraftBundleError("invalid archive or unverifiable release claims") from exc
+    return {
+        "schema": SCHEMA,
+        "status": "PRE_EXECUTION_INTEGRITY_ONLY_NO_RELEASE",
+        "archive_sha256": expected_sha256,
+        "verified_member_count": len(ENTRY_NAMES),
+        "pre_execution_integrity_check": True,
+        "signature_verified": False,
+        "independent_qa_verified": False,
+        "owner_release_authorized": False,
+        "external_execution_authorized": False,
+        "export_allowed": False,
+        "network_requests": 0,
+        "operating_database_writes": 0,
+        "other_project_access": False,
+    }
+
+
 def main() -> int:
     """No file output; safe preview for owner-only diagnostics."""
     _, receipt = build_draft_bundle()
