@@ -55,6 +55,70 @@ class TwoSkillBookDisposableConsumerTests(unittest.TestCase):
             for name, digest in manifest["member_sha256"].items():
                 self.assertEqual(sha256(archive.read(name)).hexdigest(), digest)
 
+    def test_authored_chapter_provenance_machine_contract_and_revision(self):
+        raw, receipt = bundle.build_draft_bundle()
+        with ZipFile(BytesIO(raw)) as archive:
+            machine = json.loads(archive.read("SKILLBOOKS.json"))
+            human = archive.read("SKILLBOOKS.md").decode("utf-8")
+            manifest = json.loads(archive.read("MANIFEST.json"))
+        self.assertEqual(machine["schema"], bundle.CONTENT_SCHEMA)
+        self.assertEqual(manifest["content_schema"], bundle.CONTENT_SCHEMA)
+        self.assertEqual(machine["blueprint_id"], receipt["blueprint_id"])
+        self.assertEqual(machine["blueprint_id"], manifest["blueprint_id"])
+        self.assertTrue(receipt["human_skillbook_chapters_included"])
+        self.assertTrue(receipt["machine_skill_contracts_included"])
+        self.assertFalse(receipt["automatic_semantic_synthesis_claimed"])
+        self.assertEqual(len(machine["items"]), 2)
+        seen = set()
+        for item in machine["items"]:
+            with self.subTest(book=item["skillbook_id"]):
+                name = item["skillbook_id"]
+                source_id, digest, tag, callable_name = bundle.PINNED_BOOKS[name]
+                self.assertNotIn(name, seen)
+                seen.add(name)
+                self.assertEqual(item["source_id"], source_id)
+                self.assertEqual(item["source_sha256"], digest)
+                self.assertEqual(item["source_tag"], tag)
+                self.assertEqual(item["machine_skill_contract"]["callable"],
+                                 callable_name)
+                self.assertEqual(len(item["chapter_claims"]), 4)
+                self.assertEqual(len(item["revision_history"]), 1)
+                self.assertFalse(item["revision_history"][0]["published"])
+                self.assertFalse(item["export_allowed"])
+                self.assertFalse(item["proof_gates"]["human_approved"])
+                self.assertFalse(item["proof_gates"]["independent_test_verified"])
+                self.assertFalse(item["proof_gates"]["license_redistribution_approved"])
+                self.assertIn(item["title"], human)
+                self.assertIn(digest, human)
+                for chapter in item["chapter_claims"]:
+                    self.assertIn(chapter["heading"], human)
+                    self.assertIn(chapter["text"], human)
+        self.assertEqual(seen, set(bundle.PINNED_BOOKS))
+        self.assertFalse(machine["external_semantic_synthesis_verified"])
+        self.assertFalse(machine["rights_approved"])
+        self.assertFalse(machine["released"])
+
+    def test_modified_authored_chapter_source_refused(self):
+        with patch.dict(bundle.PRODUCT_BLOBS, {"skillbook_product_v01.py": "0" * 40}):
+            with self.assertRaises(bundle.DraftBundleError):
+                bundle.build_draft_bundle()
+
+    def test_modified_authored_json_member_refused_by_consumer(self):
+        from zipfile import ZIP_STORED
+        with ZipFile(self.path) as archive:
+            members = [(name, archive.read(name)) for name in archive.namelist()]
+        with ZipFile(self.path, "w", compression=ZIP_STORED) as archive:
+            for name, data in members:
+                if name == "SKILLBOOKS.json":
+                    self.assertIn(b'"export_allowed":false', data)
+                    data = data.replace(b'"export_allowed":false',
+                                        b'"export_allowed":true', 1)
+                archive.writestr(name, data)
+        r = self._run(b'{"action":"scandir-synthetic"}')
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(json.loads(r.stdout)["status"],
+                         "UCIE_FIRST_PARTY_DRAFT_FAIL_CLOSED")
+
     def test_windows_autocrlf_checkout_reproduces_same_pinned_archive(self):
         root = Path(bundle.__file__).resolve().parent
         for name, expected_blob in bundle.SOURCE_BLOBS.items():
