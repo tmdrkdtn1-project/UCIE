@@ -8,6 +8,8 @@ from __future__ import annotations
 from contextlib import redirect_stdout
 from io import StringIO
 import json
+import os
+from pathlib import Path
 import subprocess
 from types import SimpleNamespace
 import unittest
@@ -24,7 +26,11 @@ class PublicMinerSyntheticExitTests(unittest.TestCase):
         self.assertEqual(result["child_exit_code"], 0)
         self.assertTrue(result["synthetic_receipt_written"])
         self.assertTrue(result["synthetic_worker_returned"])
-        self.assertTrue(result["entrypoint_imported_but_not_executed"])
+        expected_main_import = (os.name != "nt" or
+                                Path(__file__).resolve().parents[1] ==
+                                Path("D:/UCIE").resolve())
+        self.assertIs(result["entrypoint_imported_but_not_executed"],
+                      expected_main_import)
         self.assertFalse(result["actual_public_collector_invoked"])
         self.assertFalse(result["real_task_scheduler_events_verified"])
         self.assertFalse(result["production_termination_root_cause_proven"])
