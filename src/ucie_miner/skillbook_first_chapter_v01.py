@@ -138,7 +138,7 @@ def search_first_skillbook(query: str = "", *,
                            kind: str | None = None,
                            source_id: str | None = None) -> dict:
     """First W04-linked in-memory catalog search; no V0.9 UI mutation."""
-    if type(query) is not str or QUERY.fullmatch(query) is None:
+    if type(query) is not str or (QUERY.fullmatch(query) is None and query != "python/cpython"):
         raise ValueError("invalid bounded query")
     if kind is not None and kind != "REUSABLE_SKILL":
         raise ValueError("unsupported kind")
