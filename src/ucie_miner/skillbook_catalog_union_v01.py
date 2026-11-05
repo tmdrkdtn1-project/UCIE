@@ -137,7 +137,7 @@ def search_federated(root: Path, *, filters: dict, public_reader=None) -> dict:
             raise FederationError("untrusted SkillBook")
         books = [
             row for row in found["items"]
-            if not domain or row["domain"] == domain
+            if not domain or row["domain"].casefold() == domain.casefold()
         ]
         if (len(books) > 2 or any(
                 row.get("human_approved") is not False
