@@ -55,6 +55,31 @@ class TwoSkillBookDisposableConsumerTests(unittest.TestCase):
             for name, digest in manifest["member_sha256"].items():
                 self.assertEqual(sha256(archive.read(name)).hexdigest(), digest)
 
+    def test_windows_autocrlf_checkout_reproduces_same_pinned_archive(self):
+        root = Path(bundle.__file__).resolve().parent
+        for name, expected_blob in bundle.SOURCE_BLOBS.items():
+            with self.subTest(name=name):
+                source = (root / name).read_bytes()
+                canonical = bundle._canonical_source_bytes(source, expected_blob)
+                crlf_checkout = canonical.replace(b"\n", b"\r\n")
+                self.assertEqual(
+                    bundle._canonical_source_bytes(crlf_checkout, expected_blob),
+                    canonical)
+                self.assertEqual(bundle._git_blob(canonical), expected_blob)
+                self.assertNotIn(b"\r", canonical)
+
+    def test_source_canonicalization_rejects_bare_cr_and_mutation(self):
+        root = Path(bundle.__file__).resolve().parent
+        name, expected_blob = next(iter(bundle.SOURCE_BLOBS.items()))
+        canonical = bundle._canonical_source_bytes(
+            (root / name).read_bytes(), expected_blob)
+        for raw in (canonical + b"# changed\n",
+                    canonical.replace(b"\n", b"\r", 1),
+                    b"", b"z" * (bundle.MAX_SOURCE_BYTES + 1)):
+            with self.subTest(length=len(raw)):
+                with self.assertRaises(bundle.DraftBundleError):
+                    bundle._canonical_source_bytes(raw, expected_blob)
+
     def test_actual_python_isolated_git_consumer(self):
         data = b" M synthetic.txt\x00?? second.txt\x00"
         r = self._run(json.dumps({"action": "git-summary",
