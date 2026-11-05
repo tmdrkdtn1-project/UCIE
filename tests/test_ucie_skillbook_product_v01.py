@@ -94,7 +94,8 @@ class UCIESkillBookV01Tests(unittest.TestCase):
             with self.subTest(query=query):
                 result = p.search_skillbooks(query=query, language="Python",
                                              kind="REUSABLE_SKILL")
-                self.assertEqual(result["total"], 1)
+                self.assertEqual(
+                    result["total"], 2 if query in ("", "Python") else 1)
                 self.assertFalse(result["items"][0]["export_allowed"])
                 self.assertEqual(result["approved_reusable_packages"], 0)
         self.assertEqual(p.search_skillbooks(query="rust")["total"], 0)
