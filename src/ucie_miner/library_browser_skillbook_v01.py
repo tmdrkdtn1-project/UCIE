@@ -121,6 +121,23 @@ def render_chapter(book: dict) -> str:
                  + _safe_text(row["heading"]) + '</h2><p>'
                  + _safe_text(row["text"]) + '</p><p><small>'
                  + _safe_text(row["claim_type"]) + '</small></p></section>']
+    pilot = book.get("consumer_pilot")
+    history = book.get("revision_history")
+    if (type(pilot) is not dict
+            or pilot.get("mode") != "UCIE_AUTHORED_DISPOSABLE_EXAMPLE_ONLY"
+            or pilot.get("module") != "ucie_miner.skillbook_consumer_pilot_v01"
+            or pilot.get("manual_opt_in") != "--run-synthetic-demo"
+            or pilot.get("executes_from_browser") is not False
+            or pilot.get("package_export_allowed") is not False
+            or type(history) is not list or len(history) != 1
+            or history[0].get("state") != "FIRST_PARTY_DRAFT_NOT_APPROVED"
+            or history[0].get("published") is not False):
+        raise SkillBookProductError("untrusted manual consumer or revision history")
+    command = (
+        "$env:PYTHONPATH = 'D:\\UCIE\\src'\n"
+        "& 'D:\\UCIE\\.venv\\Scripts\\python.exe' -B -m "
+        "ucie_miner.skillbook_consumer_pilot_v01 --run-synthetic-demo"
+    )
     body += [
         '<section class="skillbook-chapter"><h2>기계 판독 레시피</h2>',
         '<p><code>' + _safe_text(book["machine_skill_contract"]["callable"])
@@ -128,6 +145,20 @@ def render_chapter(book: dict) -> str:
         '파일 이름만 반환합니다. 도서관 조회 중 이 코드는 실행되지 않습니다.</p>',
         '<p><a href="/skillbooks/' + SKILLBOOK_ID
         + '.json">기계 계약(JSON) 읽기 전용 보기</a></p></section>',
+        '<section class="skillbook-chapter"><h2>직접 실행하는 소비자 예제</h2>',
+        '<p>실제 UCIE 작성 레시피를 임시 모의 디렉터리에만 실행합니다. '
+        '외부 파일이나 다른 프로젝트는 탐색하지 않고 기존 도서관 서버에서도 '
+        '이 코드를 실행하지 않습니다. PowerShell에서 명시적으로 실행하세요.</p>',
+        '<pre><code>' + _safe_text(command) + '</code></pre>',
+        '<p>예상 관측: 총 항목 3개(일반 파일 2개, 하위 폴더 1개) 중 '
+        '정렬된 일반 파일명 2개; 예산 2개 제한은 실패, 예산 3개는 통과. '
+        '실제 서비스 성능이나 보안 경계 검증을 뜻하지 않습니다.</p>',
+        '<p>초안 v0.1.0-draft · 독립 QA 미확인 · 권리 미승인 · '
+        '외부 패키지 반출 불가</p></section>',
+        '<section class="skillbook-chapter"><h2>개정 이력</h2>',
+        '<p>' + _safe_text(history[0]["version"]) + ' · '
+        + _safe_text(history[0]["state"]) + ' · '
+        + _safe_text(history[0]["scope"]) + '</p></section>',
         '<section class="skillbook-chapter"><h2>시험 및 출시 게이트</h2>',
         '<p>별도 CI/실호스트 시험 영수증을 확인하십시오. '
         '외부 프로젝트 검증·권리·보안·배포 승인은 현재 전부 미완료입니다.</p>',
