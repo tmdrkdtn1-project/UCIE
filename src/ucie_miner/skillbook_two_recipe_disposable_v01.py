@@ -137,6 +137,21 @@ def _git_blob(raw: bytes) -> str:
     return sha1(b"blob " + str(len(raw)).encode("ascii") + b"\x00" + raw).hexdigest()
 
 
+def _canonical_source_bytes(raw: bytes, expected_blob: str) -> bytes:
+    """Normalize only Windows checkout CRLF, then verify exact pinned Git blob.
+
+    Git autocrlf checkout must not make the same verified source unusable.
+    Lone CR, unrelated source changes, oversized or non-byte input still fail.
+    All ZIPs contain canonical LF source, regardless of checkout OS.
+    """
+    if type(raw) is not bytes or not (0 < len(raw) <= MAX_SOURCE_BYTES):
+        raise DraftBundleError("invalid bounded first-party source")
+    canonical = raw.replace(b"\r\n", b"\n")
+    if b"\r" in canonical or _git_blob(canonical) != expected_blob:
+        raise DraftBundleError("first-party source differs from pinned commit")
+    return canonical
+
+
 def _entry(name: str, raw: bytes) -> tuple[ZipInfo, bytes]:
     info = ZipInfo(name, date_time=ZIP_DATE)
     info.create_system = 3
@@ -156,9 +171,7 @@ def build_draft_bundle() -> tuple[bytes, dict]:
         if path.stat().st_size > MAX_SOURCE_BYTES:
             raise DraftBundleError("first-party source beyond budget")
         raw = path.read_bytes()
-        if _git_blob(raw) != expected_blob:
-            raise DraftBundleError("first-party source differs from pinned commit")
-        members[name] = raw
+        members[name] = _canonical_source_bytes(raw, expected_blob)
     manifest = {
         "schema": SCHEMA, "version": "0.1.0-draft",
         "pinned_main_commit": MAIN_COMMIT,
