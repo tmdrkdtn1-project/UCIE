@@ -151,6 +151,27 @@ def build_skillbook() -> dict:
             "external_code_execution": False,
             "portable_package_state": "DRAFT_SOURCE_ONLY_NOT_APPROVED",
         },
+        "consumer_pilot": {
+            "module": "ucie_miner.skillbook_consumer_pilot_v01",
+            "manual_opt_in": "--run-synthetic-demo",
+            "mode": "UCIE_AUTHORED_DISPOSABLE_EXAMPLE_ONLY",
+            "uses_real_first_party_recipe": True,
+            "accepts_owner_directory_parameter": False,
+            "executes_from_browser": False,
+            "independent_qa_verified": False,
+            "package_export_allowed": False,
+        },
+        "revision_history": [
+            {
+                "version": "0.1.0-draft",
+                "state": "FIRST_PARTY_DRAFT_NOT_APPROVED",
+                "evidence_sha256": SOURCE_DOCUMENT_SHA256,
+                "scope": "SOURCE_LINKED_RECIPE_CHAPTER_AND_CONSUMER_EXAMPLE",
+                "supersedes": None,
+                "independently_verified": False,
+                "published": False,
+            }
+        ],
         "proof_gates": {
             "pinned_upstream_identity_recorded": True,
             "first_party_recipe_implemented": True,
