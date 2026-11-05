@@ -177,12 +177,19 @@ def render_federated(result: dict) -> str:
     parts = [
         "<p>SkillBook 공식문서 근거와 W04 공개 PR 후보는 별도 자산입니다. "
         "같은 소유자라 하더라도 검증 결과가 같다는 의미는 아닙니다.</p>",
+        '<p>검색 결과는 공개 출처와 기술 분류 메타데이터 기준입니다. '
+        '표시 순서는 성능·검증 수준 또는 검색 관련도 순위가 아닙니다.</p>',
         '<section class="panel"><form method="get" action="/catalog">',
         '<label>검색어<input name="q" maxlength="80" value="'
         + e(result["query"]) + '"></label>',
     ]
+    korean_labels = {
+        "shelf": "자료 구분", "kind": "자료 유형",
+        "domain": "기술 분야", "limit": "표시 건수",
+    }
     for key, opts in choices:
-        parts.append('<label>' + e(key) + '<select name="' + key + '">')
+        parts.append('<label>' + e(korean_labels[key])
+                     + '<select name="' + key + '">')
         for value, label in opts:
             parts.append('<option value="' + e(value) + '"'
                          + (' selected' if value == str(result[key]) else "")
@@ -193,22 +200,57 @@ def render_federated(result: dict) -> str:
     for book in result["skillbooks"]:
         parts.append('<p><a href="/skillbooks/' + e(book["skillbook_id"])
                      + '">' + e(book["title"]) + '</a> · '
-                     + e(book["status"]) + ' · 미승인</p>')
+                     + 'UCIE 제작 초안 · 미승인 · 내보내기 불가</p>')
     if not result["skillbooks"]:
         parts.append("<p>조건에 맞는 SkillBook 없음</p>")
-    parts += ['</section><section class="panel"><h2>W04 공개 근거 후보</h2>',
-              '<p>조회 상태: ' + e(result["public_shelf_status"]) + '</p>']
+    public_status_labels = {
+        "NOT_REQUESTED": "검색하지 않음 (SkillBook 전용 검색)",
+        "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO":
+            "미검증 공개 근거 검색 완료 · 승인/배포 불가",
+        "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
+            "공개 근거 출처 연결 미완료 · 결과 표시 차단",
+        "W04_NONASCII_QUERY_NOT_SUPPORTED_NO_SEARCH":
+            "W04는 현재 영문 검색어만 지원 · W04 조회 생략",
+    }
+    public_state = result["public_shelf_status"]
+    if public_state not in public_status_labels:
+        raise FederationError("unrecognized W04 display status")
+    parts += [
+        '</section><section class="panel"><h2>W04 공개 근거 후보</h2>',
+        '<p>조회 상태: ' + e(public_status_labels[public_state]) + '</p>',
+        '<details><summary>기술 상태 코드</summary><code>'
+        + e(public_state) + '</code></details>',
+    ]
     if result["public_candidate_total"] is not None:
-        parts.append('<p>전체 일치 후보: '
-                     + str(result["public_candidate_total"]) + '건</p>')
-    for item in result["public_evidence_candidates"]:
-        parts.append('<p><a href="/item/' + item["library_item_id"]
-                     + '">W04 상세</a> · ' + e(item["source_id"])
-                     + ' · ' + e(item.get("purpose_code", "")) + ' · 미승인</p>')
+        parts.append(
+            '<p>전체 일치 후보: ' + str(result["public_candidate_total"])
+            + '건 · 현재 ' + str(len(result["public_evidence_candidates"]))
+            + '건 표시 (기존 W04 정렬순, 관련도 순위 아님)</p>'
+        )
+    if result["public_evidence_candidates"]:
+        parts.append('<ol aria-label="W04 공개 근거 검색 결과">')
+        for item in result["public_evidence_candidates"]:
+            digest = item["library_item_id"]
+            revision = item.get("revision_hint")
+            revision_label = (revision[:100] if type(revision) is str and revision
+                              else "개정 정보 미확인")
+            parts.append(
+                '<li><strong>분류: ' + e(item.get("purpose_code", ""))
+                + '</strong> · ' + e(item["kind"])
+                + '<p>출처: ' + e(item["source_id"])
+                + ' · 개정: ' + e(revision_label)
+                + ' · 후보 ID: <code>' + e(digest[:12]) + '</code>'
+                + ' · 미승인 · 내보내기 불가</p>'
+                + '<p><a href="/item/' + digest
+                + '">이 후보의 근거·상세 확인</a></p></li>'
+            )
+        parts.append('</ol>')
     parts += ['</section><p><a href="/">기존 W04 검색</a> · '
               '<a href="/skillbooks">SkillBook 검색</a> · '
               '<a href="/catalog.json">JSON 계약</a></p>']
     template = previous._template("UCIE SkillBook + W04 읽기 전용 검색", "")
+    template = template.replace("UCIE_LOCAL_SOURCE_REVIEW_BROWSER_V11", SCHEMA)
+    template = template.replace("UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V02", SCHEMA)
     return template.replace("<footer>", "".join(parts) + "<footer>", 1)
 
 
