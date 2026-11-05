@@ -90,6 +90,19 @@ class FederatedReadOnlyTests(unittest.TestCase):
             public_reader=lambda *_a, **_kw: w04("SOURCE_LINKAGE_INCOMPLETE_NO_GO"))
         self.assertEqual(result["skillbooks"], [])
 
+    def test_python_domain_filter_retains_skillbook(self):
+        result = f.search_federated(
+            self.root, filters=self.filters(
+                shelf="all", domain="Python", kind="REUSABLE_SKILL"),
+            public_reader=lambda *_a, **_kw: self.fail("W04 read for SkillBook"))
+        self.assertEqual(len(result["skillbooks"]), 1)
+        self.assertEqual(result["public_shelf_status"], "NOT_REQUESTED")
+        other = f.search_federated(
+            self.root, filters=self.filters(
+                shelf="all", domain="MCP/API", kind="REUSABLE_SKILL"),
+            public_reader=lambda *_a, **_kw: self.fail("W04 read for SkillBook"))
+        self.assertEqual(other["skillbooks"], [])
+
     def test_bad_query_and_parameter_rejected(self):
         for query in ("q=%3Cscript%3E", "q=a&q=b", "shelf=private",
                       "limit=1000", "kind=PUBLISHED", "domain=UNKNOWN",
