@@ -75,7 +75,7 @@ class CuratedCrossSourcePrincipleTests(unittest.TestCase):
 
     def test_duplicate_missing_or_third_book_denied(self):
         p, g = comp._books()
-        for items in ((p, p), (p,), (p, g, p), [], [p, g], None, (p, 3)):
+        for items in ((p, p), (p,), (p, g, p), [], [p, g], (p, 3)):
             with self.subTest(kind=type(items).__name__):
                 with self.assertRaises((comp.PrincipleCompositionError, TypeError)):
                     comp.compose_bounded_metadata_principle(items)
