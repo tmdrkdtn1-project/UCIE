@@ -21,7 +21,11 @@ from .library_search import (
     search_existing_public_library,
 )
 from .public_discovery import DiscoveryError
-from .skillbook_product_v01 import SkillBookProductError, search_skillbooks
+from .skillbook_product_v01 import (
+    SKILLBOOK_ID, SOURCE_DOCUMENT_SHA256, SkillBookProductError,
+    search_skillbooks,
+)
+from .skillbook_scandir_qa_v01 import CASES as W08_CASES
 from .source_registry import SourceRegistryError, get_source
 
 SCHEMA = "UCIE_SKILLBOOK_W04_FEDERATED_READONLY_V01"
@@ -247,11 +251,77 @@ def render_federated(result: dict) -> str:
         parts.append('</ol>')
     parts += ['</section><p><a href="/">기존 W04 검색</a> · '
               '<a href="/skillbooks">SkillBook 검색</a> · '
+              '<a href="/skillbooks/qa-plan">SkillBook 검증 계획</a> · '
               '<a href="/catalog.json">JSON 계약</a></p>']
     template = previous._template("UCIE SkillBook + W04 읽기 전용 검색", "")
     template = template.replace("UCIE_LOCAL_SOURCE_REVIEW_BROWSER_V11", SCHEMA)
     template = template.replace("UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V02", SCHEMA)
     return template.replace("<footer>", "".join(parts) + "<footer>", 1)
+
+
+QA_PLAN_SCHEMA = "UCIE_W08_SKILLBOOK_QA_PLAN_BROWSER_V01"
+QA_PLAN_STATUS = "MANUAL_SYNTHETIC_QA_NOT_RUN_IN_BROWSER"
+
+
+def preview_skillbook_qa_plan() -> dict:
+    """Static manifest only: NEVER runs synthetic fixtures via HTTP GET."""
+    return {
+        "schema": QA_PLAN_SCHEMA,
+        "status": QA_PLAN_STATUS,
+        "skillbook_id": SKILLBOOK_ID,
+        "source_document_sha256": SOURCE_DOCUMENT_SHA256,
+        "case_ids": [name for name, _ in W08_CASES],
+        "case_count": len(W08_CASES),
+        "runner_module": "ucie_miner.skillbook_scandir_qa_v01",
+        "owner_ps1": r"D:\UCIE\scripts\ucie_skillbook_scandir_qa_v01.ps1",
+        "qa_receipt_loaded": False,
+        "browser_executes_tests": False,
+        "independent_qa_verified": False,
+        "security_review_approved": False,
+        "human_approved": False,
+        "export_allowed": False,
+        "operating_database_writes": 0,
+        "network_requests": 0,
+    }
+
+
+def render_skillbook_qa_plan(plan: dict) -> str:
+    """Explain what's testable without fabricating a PASS or executing it."""
+    if (type(plan) is not dict or plan.get("schema") != QA_PLAN_SCHEMA
+            or plan.get("status") != QA_PLAN_STATUS
+            or plan.get("skillbook_id") != SKILLBOOK_ID
+            or plan.get("browser_executes_tests") is not False
+            or plan.get("qa_receipt_loaded") is not False
+            or plan.get("independent_qa_verified") is not False
+            or plan.get("human_approved") is not False
+            or plan.get("export_allowed") is not False
+            or plan.get("case_count") != 9
+            or plan.get("case_ids") != [name for name, _ in W08_CASES]):
+        raise FederationError("untrusted QA display manifest")
+    e = lambda value: escape(str(value), quote=True)
+    content = [
+        '<p><a href="/catalog">통합 도서관으로 돌아가기</a> · '
+        '<a href="/skillbooks">SkillBook 검색</a></p>',
+        '<section class="panel"><h2>실행하지 않은 QA 계획</h2>',
+        '<p>이 페이지는 검증 항목의 목록만 보여줍니다. '
+        '브라우저 조회만으로 시험을 실행하거나 PASS, 외부 독립 인증, '
+        '보안·라이선스·배포 승인을 부여하지 않습니다.</p>',
+        '<p>검증할 SkillBook: ' + e(plan["skillbook_id"]) + '</p>',
+        '<p>시험 항목 ' + str(plan["case_count"]) + '개</p><ol>',
+    ]
+    for case_id in plan["case_ids"]:
+        content.append("<li>" + e(case_id) + "</li>")
+    content += [
+        '</ol><p>UCIE 소유자 Windows PowerShell에서 독립적으로 실행:</p>',
+        '<pre><code>&amp; &#39;' + e(plan["owner_ps1"]) + '&#39;</code></pre>',
+        '<p>실제 실행한 후 출력되는 JSON 영수증은 소스 SHA와 각 시험 '
+        '결과를 포함합니다. 이 UI는 외부/운영 파일을 스캔하지 않습니다.</p>',
+        '<p>검증 상태: 합성 테스트 실행은 이 화면에서 미실행 · '
+        '독립 QA 미검증 · 승인/내보내기 불가</p></section>',
+    ]
+    page = previous._template("SkillBook 001 · W08 검증 계획", "".join(content))
+    page = page.replace("UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V02", QA_PLAN_SCHEMA)
+    return page
 
 
 def make_handler(root: Path, *, public_reader=None, **legacy_injections):
@@ -275,10 +345,33 @@ def make_handler(root: Path, *, public_reader=None, **legacy_injections):
                     '</nav>'
                 )
                 content = content.replace("</header>", "</header>" + jump, 1)
+            if (status == 200 and mime == "text/html; charset=utf-8"
+                    and type(content) is str
+                    and (route == "/skillbooks"
+                         or route == "/skillbooks/" + SKILLBOOK_ID)
+                    and "</header>" in content
+                    and 'href="/skillbooks/qa-plan"' not in content):
+                content = content.replace(
+                    "</header>",
+                    '</header><nav aria-label="SkillBook 검증 메뉴">'
+                    '<a href="/skillbooks/qa-plan">'
+                    '검증 계획 보기 (9개 합성 시험)</a></nav>', 1)
             return super().reply(status, content, mime)
 
         def do_GET(self):
             path = urlsplit(self.path)
+            if path.path in ("/skillbooks/qa-plan", "/skillbooks/qa-plan.json"):
+                if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
+                    return self.reply(403, "LOOPBACK_ONLY", "text/plain; charset=utf-8")
+                if path.query or path.fragment or len(self.path) > 100:
+                    return self.reply(400, "EXACT_QA_PLAN_ROUTE_ONLY",
+                                      "text/plain; charset=utf-8")
+                plan = preview_skillbook_qa_plan()
+                if path.path.endswith(".json"):
+                    return self.reply(
+                        200, json.dumps(plan, ensure_ascii=True, sort_keys=True),
+                        "application/json; charset=utf-8")
+                return self.reply(200, render_skillbook_qa_plan(plan))
             if path.path not in ("/catalog", "/catalog.json"):
                 return super().do_GET()
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
