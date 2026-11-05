@@ -177,6 +177,46 @@ class FederatedReadOnlyTests(unittest.TestCase):
         self.assertNotIn('onmouseover="alert', html)
         self.assertIn("후보 ID:", html)
 
+    def test_home_to_catalog_navigation_is_clickable(self):
+        # The user must not need to type /catalog into the address bar.
+        handler = f.make_handler(
+            self.root,
+            public_reader=lambda *_a, **_kw:
+            self.fail("navigation attempted an unsolicited W04 read"),
+            public_prober=lambda *_a, **_kw:
+            self.fail("navigation attempted an unsolicited public GET"))
+        with HTTPServer(("127.0.0.1", 0), handler) as server:
+            worker = threading.Thread(
+                target=server.serve_forever,
+                kwargs={"poll_interval": 0.05}, daemon=True)
+            worker.start()
+            try:
+                base = "http://127.0.0.1:" + str(server.server_port)
+
+                def request(path):
+                    with urlopen(base + path, timeout=5) as resp:
+                        return resp.status, resp.read().decode("utf-8")
+
+                for path in ("/", "/skillbooks", "/skillbooks/"
+                             "UCIE-SKILLBOOK-PY-SCANDIR-001"):
+                    with self.subTest(path=path):
+                        status, html = request(path)
+                        self.assertEqual(status, 200)
+                        self.assertEqual(html.count('href="/catalog"'), 1)
+                        self.assertIn("통합 도서관 열기", html)
+                status, catalog = request("/catalog")
+                self.assertEqual(status, 200)
+                self.assertIn('href="/"', catalog)
+                self.assertIn("W04 공개 근거 후보", catalog)
+                status, data = request("/catalog.json")
+                self.assertEqual(status, 200)
+                self.assertEqual(json.loads(data)["public_shelf_status"],
+                                 "NOT_REQUESTED")
+                self.assertNotIn("<nav", data)
+            finally:
+                server.shutdown()
+                worker.join(timeout=3)
+
     def test_loopback_http_routes_and_default_no_database(self):
         reads = []
         def reader(root, **kwargs):
