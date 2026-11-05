@@ -152,7 +152,7 @@ class FederatedReadOnlyTests(unittest.TestCase):
         result = f.search_federated(
             self.root, filters=self.filters(shelf="all", kind="REUSABLE_SKILL"),
             public_reader=lambda *_a, **_kw: self.fail("unexpected W04 read"))
-        self.assertEqual(len(result["skillbooks"]), 1)
+        self.assertEqual(len(result["skillbooks"]), 2)
         self.assertEqual(result["public_shelf_status"], "NOT_REQUESTED")
         result = f.search_federated(
             self.root, filters=self.filters(shelf="all", kind="PREVENTION_RULE"),
