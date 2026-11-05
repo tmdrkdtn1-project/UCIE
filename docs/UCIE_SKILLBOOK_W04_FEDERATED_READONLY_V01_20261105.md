@@ -32,3 +32,6 @@ No approved exports are provided.
 - Owner opt-in actual W04 read-only query and observed UI screenshots: pending.
 - Independent behavior/security QA, source rights, signoff, package export: pending.
 - Existing runtime DB, C40 supervisor, scheduler and other projects: no changes.
+
+## 2026-11-05 owner-browser observation
+Owner-submitted local UI screenshot confirms `q=python&shelf=all`: SkillBook 001 visible, W04 source-linked candidate query completed, `public_candidate_total=529`, initial 10 displayed. These are UNVERIFIED metadata matches, not validated capabilities or 529 approved rules. Real browser/DB integrity and independent source-level QA remain separate gates. Follow-on UI copy labels are Korean and candidate rows display source, revision hint and 12-hex-ID, without changing retrieval or approval semantics.
