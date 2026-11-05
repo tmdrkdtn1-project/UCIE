@@ -258,6 +258,25 @@ def make_handler(root: Path, *, public_reader=None, **legacy_injections):
     base = previous.make_handler(root, **legacy_injections)
 
     class Handler(base):
+        def reply(self, status, content, mime="text/html; charset=utf-8"):
+            # Only the federated launcher supplies /catalog; leave standalone
+            # V1.1 and standalone SkillBook launchers untouched.
+            route = urlsplit(self.path).path
+            if (status == 200 and mime == "text/html; charset=utf-8"
+                    and type(content) is str
+                    and (route == "/" or route.startswith("/skillbooks"))
+                    and "</header>" in content
+                    and 'href="/catalog"' not in content):
+                jump = (
+                    '<nav class="panel" aria-label="UCIE 통합 도서관으로 이동">'
+                    '<strong><a href="/catalog">'
+                    '통합 도서관 열기 (SkillBook + W04)</a></strong>'
+                    '<p>SkillBook과 공개 기술 근거 후보를 한 화면에서 검색합니다.</p>'
+                    '</nav>'
+                )
+                content = content.replace("</header>", "</header>" + jump, 1)
+            return super().reply(status, content, mime)
+
         def do_GET(self):
             path = urlsplit(self.path)
             if path.path not in ("/catalog", "/catalog.json"):
