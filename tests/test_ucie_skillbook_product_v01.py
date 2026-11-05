@@ -156,6 +156,35 @@ class UCIESkillBookV01Tests(unittest.TestCase):
                         recipe.BoundedScandirError):
                     recipe.bounded_regular_file_names(target, max_entries=budget)
 
+    def test_maximum_128_entries_inclusive_then_129_fail_closed(self):
+        # Fixed contract boundary on both supported CPython CI versions and
+        # both runner operating systems; no real directory is inspected.
+        with tempfile.TemporaryDirectory(prefix="UCIE_SB001_BOUNDARY_") as tmp:
+            owned = Path(tmp) / "ucie_disposable_only"
+            owned.mkdir()
+            expected = tuple(f"file_{i:03d}.txt" for i in range(128))
+            for name in expected:
+                (owned / name).write_bytes(b"UCIE synthetic")
+            self.assertEqual(
+                recipe.bounded_regular_file_names(owned, max_entries=128),
+                expected)
+            (owned / "extra_directory").mkdir()
+            with self.assertRaises(recipe.BoundedScandirError):
+                recipe.bounded_regular_file_names(owned, max_entries=128)
+
+    def test_unicode_filenames_sort_deterministically_in_temporary_directory(self):
+        # Distinguish algorithmic sorted Unicode filename behavior from
+        # filesystem enumeration order; no file contents are opened.
+        with tempfile.TemporaryDirectory(prefix="UCIE_SB001_UNICODE_") as tmp:
+            owned = Path(tmp) / "ucie_disposable_only"
+            owned.mkdir()
+            expected = ("Z.txt", "ñ.txt", "한글.txt")
+            for name in expected:
+                (owned / name).write_bytes(b"UCIE synthetic")
+            self.assertEqual(
+                recipe.bounded_regular_file_names(owned, max_entries=3),
+                tuple(sorted(expected)))
+
     def test_bounded_entry_total_not_just_regular_files(self):
         with tempfile.TemporaryDirectory(prefix="UCIE-OWNED-LIMIT-") as tmp:
             path = Path(tmp).resolve()
