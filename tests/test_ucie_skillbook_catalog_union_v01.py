@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 from ucie_miner import skillbook_catalog_union_v01 as f
 from ucie_miner.library_search import SCHEMA as W04_SCHEMA
 from ucie_miner import skillbook_scandir_qa_v01 as qa
+from ucie_miner import skillbook_w09_release_gate_v01 as w09
 
 
 def w04(state="READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"):
@@ -266,6 +267,56 @@ class FederatedReadOnlyTests(unittest.TestCase):
                         get("/skillbooks/qa-plan?test=run")[0], 400)
                     self.assertEqual(
                         get("/skillbooks/qa-plan", host="untrusted.invalid")[0],
+                        403)
+            finally:
+                server.shutdown()
+                thread.join(timeout=3)
+
+    def test_w09_release_gate_is_linked_and_never_executes_qa(self):
+        handler = f.make_handler(self.root,
+                                 public_reader=lambda *_a, **_kw:
+                                 self.fail("W09 triggered W04 read"))
+        with HTTPServer(("127.0.0.1", 0), handler) as server:
+            thread = threading.Thread(target=server.serve_forever,
+                                      kwargs={"poll_interval": 0.05}, daemon=True)
+            thread.start()
+            prefix = "http://127.0.0.1:" + str(server.server_port)
+
+            def read(path, *, host=None):
+                headers = {} if host is None else {"Host": host}
+                request = Request(prefix + path, headers=headers)
+                try:
+                    with urlopen(request, timeout=5) as response:
+                        return response.status, response.read().decode("utf-8")
+                except HTTPError as error:
+                    with error:
+                        return error.code, error.read().decode("utf-8")
+            try:
+                with patch.object(qa, "evaluate_skillbook_scandir",
+                                  side_effect=AssertionError("unsolicited W08")), \
+                     patch.object(w09, "assess_release_readiness",
+                                  side_effect=AssertionError("unsolicited W09")):
+                    for entry in ("/catalog", "/skillbooks", "/skillbooks/qa-plan"):
+                        status, html = read(entry)
+                        self.assertEqual(status, 200)
+                        self.assertIn('href="/skillbooks/release-gates"', html)
+                    status, html = read("/skillbooks/release-gates")
+                    self.assertEqual(status, 200)
+                    self.assertIn("해결되어야 할 관문 6개", html)
+                    self.assertIn("이 브라우저에서는 미조회", html)
+                    self.assertNotIn("9/9 PASS", html)
+                    status, raw = read("/skillbooks/release-gates.json")
+                    self.assertEqual(status, 200)
+                    preview = json.loads(raw)
+                    self.assertEqual(preview["status"], w09.PREVIEW_STATE)
+                    self.assertFalse(preview["receipt_validation_performed"])
+                    self.assertFalse(preview["package_created"])
+                    self.assertFalse(preview["export_allowed"])
+                    self.assertEqual(len(preview["blocked_release_requirements"]), 6)
+                    self.assertEqual(read(
+                        "/skillbooks/release-gates?run=1")[0], 400)
+                    self.assertEqual(read(
+                        "/skillbooks/release-gates", host="evil.invalid")[0],
                         403)
             finally:
                 server.shutdown()
