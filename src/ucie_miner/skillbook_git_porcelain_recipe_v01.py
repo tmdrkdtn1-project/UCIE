@@ -20,12 +20,18 @@ class PorcelainSummaryError(ValueError):
     """Invalid, incomplete, ambiguous, or over-budget Git status bytes."""
 
 
-def _opaque_relative_name(name: bytes) -> None:
-    """Verify the bounded shape without decoding or returning any filename."""
-    if (not name or len(name) > MAX_PATH_BYTES
-            or name.startswith(b"/") or b"\\" in name
-            or b":" in name[:2]
-            or any(part in (b"", b".", b"..") for part in name.split(b"/"))):
+def _opaque_relative_name(
+    name: bytes, *, allow_directory_suffix: bool = False
+) -> None:
+    """Verify an opaque name; Git allows trailing slash on untracked dirs."""
+    normalized = (
+        name[:-1] if allow_directory_suffix and name.endswith(b"/") else name
+    )
+    if (not normalized or len(name) > MAX_PATH_BYTES
+            or normalized.startswith(b"/") or b"\\" in normalized
+            or b":" in normalized[:2]
+            or any(part in (b"", b".", b"..")
+                   for part in normalized.split(b"/"))):
         raise PorcelainSummaryError("unsafe or ambiguous opaque path component")
 
 
@@ -64,7 +70,8 @@ def summarize_porcelain_v1_z(
             raise PorcelainSummaryError("invalid porcelain v1 status header")
         xy = record[:2]
         name = record[3:]
-        _opaque_relative_name(name)
+        _opaque_relative_name(
+            name, allow_directory_suffix=xy in (b"??", b"!!"))
         if xy == b"??":
             category = "untracked"
         elif xy == b"!!":
