@@ -39,8 +39,10 @@ NOT that Python ended, STDOUT flushed or Windows marked task success.
   - Default no-execution static preview.
   - Only --run-synthetic spawns fixed sys.executable with -I -B and a
     first-party static child script; no network or collector call.
-  - Loads UCIE's actual worker import graph and main entrypoint as a
-    module, without executing public_miner_cycle.main().
+  - Loads UCIE's actual worker import graph. The main entrypoint is
+    imported only on D:/UCIE owner Windows or non-Windows synthetic CI;
+    the GitHub temporary Windows checkout deliberately does NOT load the
+    owner-only script or bypass its D:/UCIE guard.
   - Calls run_cycle() with a fixed SYNTHETIC collector and report inside a
     disposable system temp UCIE fixture. Writes a synthetic last_run.json,
     synthetic run_history.jsonl, and synthetic report ONLY in temp.
