@@ -15,6 +15,9 @@ from ucie_miner import skillbook_catalog_union_v01 as f
 from ucie_miner.library_search import SCHEMA as W04_SCHEMA
 from ucie_miner import skillbook_scandir_qa_v01 as qa
 from ucie_miner import skillbook_w09_release_gate_v01 as w09
+from ucie_miner import skillbook_consumer_pilot_v01 as pilot
+from ucie_miner import library_browser_skillbook_v01 as browser
+from ucie_miner import skillbook_product_v01 as product
 
 
 def w04(state="READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"):
@@ -40,6 +43,69 @@ class FederatedReadOnlyTests(unittest.TestCase):
 
     def filters(self, **changes):
         return dict(f.parse_filters(""), **changes)
+
+    def test_product_funnel_catalog_to_real_manual_consumer_is_consistent(self):
+        # One first-party integration acceptance. Existing HTTP tests validate
+        # loopback GET routing; this checks the whole product contract without
+        # opening a second HTTP server or triggering a live public W04 read.
+        def no_public(*_args, **_kwargs):
+            self.fail("SkillBook-only funnel must not access W04 or public API")
+        catalog = f.search_federated(
+            self.root, filters=self.filters(query="scandir"),
+            public_reader=no_public)
+        self.assertEqual(catalog["public_shelf_status"], "NOT_REQUESTED")
+        self.assertEqual(catalog["public_evidence_candidates"], [])
+        self.assertEqual(len(catalog["skillbooks"]), 1)
+        item = catalog["skillbooks"][0]
+        self.assertEqual(item["skillbook_id"], product.SKILLBOOK_ID)
+        self.assertFalse(item["export_allowed"])
+
+        # The user's link leads to the same draft, source and consumer
+        # contract as the JSON route (HTTP route itself has separate tests).
+        html = f.render_federated(catalog)
+        self.assertIn('href="/skillbooks/' + product.SKILLBOOK_ID + '"', html)
+        book = product.get_skillbook(item["skillbook_id"])
+        chapter = browser.render_chapter(book)
+        self.assertIn(
+            'href="/skillbooks/' + product.SKILLBOOK_ID + '.json"', chapter)
+        self.assertIn("ucie_miner.skillbook_consumer_pilot_v01", chapter)
+        self.assertIn("--run-synthetic-demo", chapter)
+        self.assertIn(product.SOURCE_DOCUMENT_SHA256, chapter)
+        contract = book["machine_skill_contract"]
+        self.assertEqual(
+            contract["callable"],
+            "ucie_miner.skillbook_scandir_recipe_v01.bounded_regular_file_names")
+        self.assertEqual(book["consumer_pilot"]["manual_opt_in"],
+                         "--run-synthetic-demo")
+        self.assertFalse(contract["runtime_execution_by_catalog"])
+        self.assertFalse(book["proof_gates"]["independent_test_verified"])
+        self.assertFalse(book["proof_gates"]["security_review_approved"])
+        self.assertFalse(book["proof_gates"]["license_redistribution_approved"])
+        self.assertFalse(book["export_allowed"])
+
+        # Browse/display does not execute the consumer: only the explicit
+        # manual, UCIE-authored disposable recipe below does.
+        with patch.object(
+                pilot, "demonstrate_synthetic_consumer",
+                side_effect=AssertionError("browser execution is forbidden")):
+            self.assertIn("SkillBook", f.render_federated(catalog))
+            self.assertIn("직접 실행하는 소비자 예제",
+                          browser.render_chapter(book))
+        actual = pilot.demonstrate_synthetic_consumer()
+        self.assertEqual(actual["skillbook_id"], item["skillbook_id"])
+        self.assertEqual(actual["source_document_sha256"],
+                         item["source_document_sha256"])
+        self.assertEqual(actual["status"], pilot.OBSERVED)
+        self.assertEqual(actual["bounded_regular_file_names"],
+                         ["alpha.txt", "zeta.txt"])
+        self.assertEqual(actual["directory_entry_budget"], 3)
+        self.assertTrue(actual["budget_overflow_blocked"])
+        self.assertTrue(actual["temporary_fixture_cleaned"])
+        self.assertFalse(actual["real_owner_directory_scanned"])
+        self.assertFalse(actual["export_allowed"])
+        self.assertFalse(actual["independent_qa_verified"])
+        self.assertEqual(actual["network_requests"], 0)
+        self.assertEqual(actual["operating_database_writes"], 0)
 
     def test_default_no_w04_read(self):
         result = f.search_federated(
