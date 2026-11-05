@@ -26,6 +26,12 @@ class UCIESkillBookUITests(unittest.TestCase):
         self.assertIn("NOT_REVIEWED_FOR_DISTRIBUTION", html)
         self.assertIn(book["source_evidence"]["source_document_sha256"], html)
         self.assertIn('href="/skillbooks/', html)
+        self.assertIn("직접 실행하는 소비자 예제", html)
+        self.assertIn("ucie_miner.skillbook_consumer_pilot_v01", html)
+        self.assertIn("--run-synthetic-demo", html)
+        self.assertIn("임시 모의 디렉터리", html)
+        self.assertIn("0.1.0-draft", html)
+        self.assertIn("외부 패키지 반출 불가", html)
         self.assertNotIn("자동 배포 승인 완료", html)
 
     def test_catalog_rejects_forged_approvals(self):
