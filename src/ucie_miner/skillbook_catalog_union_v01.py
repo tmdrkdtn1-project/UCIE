@@ -26,6 +26,10 @@ from .skillbook_product_v01 import (
     search_skillbooks,
 )
 from .skillbook_scandir_qa_v01 import CASES as W08_CASES
+from .skillbook_w09_release_gate_v01 import (
+    BLOCKERS as W09_BLOCKERS, SCHEMA as W09_SCHEMA,
+    PREVIEW_STATE as W09_PREVIEW_STATE, preview_release_gate,
+)
 from .source_registry import SourceRegistryError, get_source
 
 SCHEMA = "UCIE_SKILLBOOK_W04_FEDERATED_READONLY_V01"
@@ -252,6 +256,7 @@ def render_federated(result: dict) -> str:
     parts += ['</section><p><a href="/">기존 W04 검색</a> · '
               '<a href="/skillbooks">SkillBook 검색</a> · '
               '<a href="/skillbooks/qa-plan">SkillBook 검증 계획</a> · '
+              '<a href="/skillbooks/release-gates">W09 출시 준비도</a> · '
               '<a href="/catalog.json">JSON 계약</a></p>']
     template = previous._template("UCIE SkillBook + W04 읽기 전용 검색", "")
     template = template.replace("UCIE_LOCAL_SOURCE_REVIEW_BROWSER_V11", SCHEMA)
@@ -301,7 +306,8 @@ def render_skillbook_qa_plan(plan: dict) -> str:
     e = lambda value: escape(str(value), quote=True)
     content = [
         '<p><a href="/catalog">통합 도서관으로 돌아가기</a> · '
-        '<a href="/skillbooks">SkillBook 검색</a></p>',
+        '<a href="/skillbooks">SkillBook 검색</a> · '
+        '<a href="/skillbooks/release-gates">W09 출시 준비도</a></p>',
         '<section class="panel"><h2>실행하지 않은 QA 계획</h2>',
         '<p>이 페이지는 검증 항목의 목록만 보여줍니다. '
         '브라우저 조회만으로 시험을 실행하거나 PASS, 외부 독립 인증, '
@@ -322,6 +328,67 @@ def render_skillbook_qa_plan(plan: dict) -> str:
     page = previous._template("SkillBook 001 · W08 검증 계획", "".join(content))
     page = page.replace("UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V02", QA_PLAN_SCHEMA)
     return page
+
+
+W09_KOREAN_BLOCKER_LABELS = {
+    "EXACT_HEAD_COMPLETE_CI_4_OF_4_NOT_ATTESTED_BY_LOCAL_RECEIPT":
+        "정확한 커밋 기준 CI 4개 환경 성공 확인",
+    "INDEPENDENT_THIRD_PARTY_QA_NOT_ATTESTED":
+        "독립 제3자 재현·기능 검증",
+    "PLATFORM_SECURITY_REVIEW_NOT_ATTESTED":
+        "보안·플랫폼 위험 검토",
+    "LICENSE_DISTRIBUTION_RIGHTS_NOT_APPROVED":
+        "라이선스 및 재배포 권리 검토",
+    "OWNER_RELEASE_AUTHORIZATION_NOT_PROVIDED":
+        "소유자 출시 승인",
+    "SIGNED_PACKAGE_AND_EXTERNAL_PUBLICATION_NOT_AUTHORIZED":
+        "패키지 서명 및 외부 공개 승인",
+}
+
+
+def render_skillbook_w09_release_gate(plan: dict) -> str:
+    """Read-only readiness explainer, NOT a receipt-runner or signing UI."""
+    if (type(plan) is not dict or plan.get("schema") != W09_SCHEMA
+            or plan.get("status") != W09_PREVIEW_STATE
+            or plan.get("skillbook_id") != SKILLBOOK_ID
+            or plan.get("receipt_validation_performed") is not False
+            or plan.get("package_created") is not False
+            or plan.get("export_allowed") is not False
+            or plan.get("owner_release_authorized") is not False
+            or plan.get("independent_qa_verified") is not False
+            or plan.get("security_review_approved") is not False
+            or plan.get("license_redistribution_approved") is not False
+            or plan.get("package_signed") is not False
+            or plan.get("blocked_release_requirements") != list(W09_BLOCKERS)
+            or set(W09_KOREAN_BLOCKER_LABELS) != set(W09_BLOCKERS)):
+        raise FederationError("untrusted W09 release preview")
+    esc = lambda value: escape(str(value), quote=True)
+    items = [
+        '<p><a href="/catalog">통합 도서관으로 돌아가기</a> · '
+        '<a href="/skillbooks/qa-plan">W08 합성 검증 계획</a></p>',
+        '<section class="panel"><h2>W09 출시 준비도 · 승인 전</h2>',
+        '<p>이 화면은 실제 영수증이나 CI를 읽지 않고, 미충족 승인을 '
+        '보여주는 정적 목록입니다. PASS 또는 배포 가능 선언이 아닙니다.</p>',
+        '<p>대상: ' + esc(plan["skillbook_id"]) + '</p>',
+        '<h3>해결되어야 할 관문 6개</h3><ol>',
+    ]
+    for item in W09_BLOCKERS:
+        items.append('<li>' + esc(W09_KOREAN_BLOCKER_LABELS[item])
+                     + ' · 미검증 / 승인 필요</li>')
+    items.extend([
+        '</ol><p>검증 영수증 상태: 이 브라우저에서는 미조회</p>',
+        '<p>패키지 생성: 차단 · 서명: 없음 · 내보내기/배포: 불가</p>',
+        '<p>UCIE 소유자 PowerShell에서 수동 사전검토:</p>',
+        '<pre><code>&amp; &#39;'
+        'D:\\UCIE\\scripts\\ucie_skillbook_w09_preflight_v01.ps1'
+        '&#39; -RunSynthetic</code></pre>',
+        '<p>위 명령은 별도로 실행하는 경우에만 작은 합성 파일을 만들고 '
+        '삭제하며, QA 영수증의 일치 여부를 확인합니다. '
+        '독립 QA 및 배포 승인은 제공하지 않습니다.</p>',
+        '</section>',
+    ])
+    html = previous._template("SkillBook 001 · W09 출시 준비도", "".join(items))
+    return html.replace("UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V02", W09_SCHEMA)
 
 
 def make_handler(root: Path, *, public_reader=None, **legacy_injections):
@@ -355,11 +422,26 @@ def make_handler(root: Path, *, public_reader=None, **legacy_injections):
                     "</header>",
                     '</header><nav aria-label="SkillBook 검증 메뉴">'
                     '<a href="/skillbooks/qa-plan">'
-                    '검증 계획 보기 (9개 합성 시험)</a></nav>', 1)
+                    '검증 계획 보기 (9개 합성 시험)</a> · '
+                    '<a href="/skillbooks/release-gates">'
+                    '출시 준비도 (미승인) 확인</a></nav>', 1)
             return super().reply(status, content, mime)
 
         def do_GET(self):
             path = urlsplit(self.path)
+            if path.path in ("/skillbooks/release-gates",
+                             "/skillbooks/release-gates.json"):
+                if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
+                    return self.reply(403, "LOOPBACK_ONLY", "text/plain; charset=utf-8")
+                if path.query or path.fragment or len(self.path) > 110:
+                    return self.reply(400, "EXACT_W09_PLAN_ROUTE_ONLY",
+                                      "text/plain; charset=utf-8")
+                preview = preview_release_gate()
+                if path.path.endswith(".json"):
+                    return self.reply(
+                        200, json.dumps(preview, ensure_ascii=True, sort_keys=True),
+                        "application/json; charset=utf-8")
+                return self.reply(200, render_skillbook_w09_release_gate(preview))
             if path.path in ("/skillbooks/qa-plan", "/skillbooks/qa-plan.json"):
                 if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
                     return self.reply(403, "LOOPBACK_ONLY", "text/plain; charset=utf-8")
