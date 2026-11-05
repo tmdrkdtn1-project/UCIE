@@ -22,9 +22,13 @@ PRODUCT_BLOBS = {
     "skillbook_product_v01.py": "666d4c3bd1549b353748f6ada6dc4eb8f9924e98",
     "skillbook_git_porcelain_product_v01.py": "eb92f23cd6865ca55e11e491d968f10f00220b0f",
 }
+COMPOSER_BLOB = "a22a5278f716234e19661525d1b51c90043ad04e"
+PRINCIPLE_SCHEMA = "UCIE_SKILLBOOK_CROSS_SOURCE_PRINCIPLE_V01"
+PRINCIPLE_ID = "UCIE-PRINCIPLE-PYTHON-GIT-BOUNDED-METADATA-001"
 ENTRY_NAMES = ("__main__.py", "skillbook_git_porcelain_recipe_v01.py",
-               "skillbook_scandir_recipe_v01.py", "SKILLBOOKS.json",
-               "SKILLBOOKS.md", "MANIFEST.json")
+               "skillbook_scandir_recipe_v01.py", "PRINCIPLE.json",
+               "PRINCIPLE.md", "SKILLBOOKS.json", "SKILLBOOKS.md",
+               "MANIFEST.json")
 CONTENT_SCHEMA = "UCIE_TWO_AUTHORED_SKILLBOOKS_V01"
 PINNED_BOOKS = {
     "UCIE-SKILLBOOK-PY-SCANDIR-001": (
@@ -95,7 +99,8 @@ def _run():
     with ZipFile(sys.argv[0], "r") as archive:
         names = archive.namelist()
         if names != ["__main__.py", "skillbook_git_porcelain_recipe_v01.py",
-                     "skillbook_scandir_recipe_v01.py", "SKILLBOOKS.json",
+                     "skillbook_scandir_recipe_v01.py", "PRINCIPLE.json",
+                     "PRINCIPLE.md", "SKILLBOOKS.json",
                      "SKILLBOOKS.md", "MANIFEST.json"]:
             raise ValueError("unexpected ZIP entries")
         if any(i.file_size > 16000 or i.compress_size > 16000
@@ -105,6 +110,11 @@ def _run():
         if (type(manifest) is not dict
                 or manifest.get("schema") != SCHEMA
                 or manifest.get("content_schema") != CONTENT_SCHEMA
+                or manifest.get("principle_schema") != "UCIE_SKILLBOOK_CROSS_SOURCE_PRINCIPLE_V01"
+                or type(manifest.get("principle_content_sha256")) is not str
+                or len(manifest["principle_content_sha256"]) != 64
+                or manifest.get("composer_git_blob_sha1")
+                   != "a22a5278f716234e19661525d1b51c90043ad04e"
                 or manifest.get("released") is not False
                 or manifest.get("export_approved") is not False
                 or manifest.get("signed") is not False
@@ -121,6 +131,21 @@ def _run():
             if (type(digest) is not str or len(digest) != 64
                     or hashlib.sha256(archive.read(name)).hexdigest() != digest):
                 raise ValueError("modified archive member")
+        principle = json.loads(archive.read("PRINCIPLE.json"))
+        if (type(principle) is not dict
+                or principle.get("schema")
+                   != "UCIE_SKILLBOOK_CROSS_SOURCE_PRINCIPLE_V01"
+                or principle.get("principle_id")
+                   != "UCIE-PRINCIPLE-PYTHON-GIT-BOUNDED-METADATA-001"
+                or principle.get("content_sha256")
+                   != manifest["principle_content_sha256"]
+                or principle.get("export_allowed") is not False
+                or principle.get("independent_qa_verified") is not False
+                or principle.get("rights_approved") is not False
+                or principle.get("released") is not False
+                or type(principle.get("sources")) is not list
+                or len(principle["sources"]) != 2):
+            raise ValueError("cross-source authored principle not attested")
         books = json.loads(archive.read("SKILLBOOKS.json"))
         if (type(books) is not dict
                 or books.get("schema") != CONTENT_SCHEMA
@@ -156,6 +181,28 @@ def _run():
             result = {"names": list(bounded_regular_file_names(folder, max_entries=2)),
                       "synthetic_fixture_only": True}
         item_id = "UCIE-SKILLBOOK-PY-SCANDIR-001"
+    elif action == "principle-synthetic" and set(request) == {"action"}:
+        from skillbook_scandir_recipe_v01 import bounded_regular_file_names
+        from skillbook_git_porcelain_recipe_v01 import summarize_porcelain_v1_z
+        with tempfile.TemporaryDirectory(prefix="UCIE_PRINCIPLE_SYNTHETIC_") as d:
+            folder = Path(d)
+            (folder / "alpha.txt").write_bytes(b"self-authored fixture\n")
+            (folder / "beta.txt").write_bytes(b"self-authored fixture\n")
+            scanned = bounded_regular_file_names(folder, max_entries=2)
+        parsed = summarize_porcelain_v1_z(
+            b" M fake-a.txt\x00?? fake-b.txt\x00", max_entries=2)
+        if (len(scanned) != 2 or parsed["total_entries"] != 2
+                or parsed["filenames_or_content_returned"] is not False):
+            raise ValueError("cross-source synthetic results drift")
+        result = {
+            "scandir_file_count": len(scanned),
+            "scandir_names_exported": False,
+            "git_entry_count": parsed["total_entries"],
+            "git_counts": parsed["counts"],
+            "git_names_exported": False,
+            "synthetic_sources_only": True,
+        }
+        item_id = "UCIE-PRINCIPLE-PYTHON-GIT-BOUNDED-METADATA-001"
     else:
         raise ValueError("unsupported action or unauthorized input keys")
     return {"schema": SCHEMA, "status": "FIRST_PARTY_DRAFT_ONLY_NOT_RELEASED",
