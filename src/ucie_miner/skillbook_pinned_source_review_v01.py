@@ -365,6 +365,8 @@ def _owner_root(root: Path) -> Path:
     result = root.resolve(strict=True)
     if result.name != "UCIE":
         raise SourceReviewError("refusing alias outside UCIE root")
+    if os.name == "nt" and result != Path("D:/UCIE").resolve():
+        raise SourceReviewError("owner Windows review root must be D:/UCIE")
     return result
 
 
