@@ -382,6 +382,33 @@ def _safe_review_dir(root: Path) -> Path:
     return folder
 
 
+def read_isolated_review_journal(root: Path) -> bytes:
+    """Owner-local read-only journal snapshot for W04 at server startup.
+
+    No file creation, no auto-review, no source/inbox access. Invalid chain
+    blocks the consumer instead of silently hiding contradictory evidence.
+    """
+    base = _owner_root(root)
+    runtime = base / "runtime"
+    folder = runtime / "skillbook_manual_review"
+    target = folder / REVIEW_FILE
+    if (runtime.is_symlink() or not runtime.is_dir()
+            or folder.is_symlink() or target.is_symlink()):
+        raise SourceReviewError("unsafe UCIE review journal path")
+    if not folder.exists():
+        return b""
+    if not folder.is_dir():
+        raise SourceReviewError("not a review directory")
+    if not target.exists():
+        return b""
+    if not target.is_file() or target.resolve() != folder.resolve() / REVIEW_FILE:
+        raise SourceReviewError("invalid UCIE review journal file")
+    with target.open("rb") as f:
+        data = f.read(MAX_JOURNAL_BYTES + 1)
+    inspect_review_journal(data)
+    return data
+
+
 def verify_ucie_inbox(root: Path, source_id: str) -> dict:
     """Read only one exact named file under UCIE's isolated review inbox."""
     _pinned_book(source_id)
