@@ -323,6 +323,50 @@ class AcceptanceTests(unittest.TestCase):
                          "ALREADY_RECORDED_NO_DUPLICATE")
         self.assertEqual(second["review_journal_total_events"], 1)
 
+    def test_repeat_source_after_other_source_event_is_idempotent(self):
+        # Reproduce a real future two-source manual ledger: Python 001 was
+        # recorded, then a separate Git 002 proposal. Rechecking Python must
+        # not require its event to be the global journal tail.
+        from ucie_miner import skillbook_catalog_union_v01 as catalog
+        py_event = review.propose_source_review(
+            review.verify_pinned_raw_bytes(self.sid, self.raw))
+        with patch.object(accept, "_fetch_pinned_blob_json",
+                          return_value=self._api()):
+            with patch.object(catalog, "inspect_review_candidate",
+                              return_value={
+                                  "pinned_source_review_statuses": [{
+                                      "source_id": self.sid,
+                                      "review_event_id": py_event["event_id"],
+                                      "status": "PINNED_RAW_SOURCE_HASHES_MATCH_UNAUTHENTICATED",
+                                  }],
+                                  "export_allowed": False,
+                              }):
+                first = accept.accept_one_exact_source(
+                    self.sid, owner_root=self.owner, confirm_network=True,
+                    record_review=True, confirm_review_write=True)
+                self.assertEqual(first["review_journal_total_events"], 1)
+                git_source = review.verify_pinned_raw_bytes(
+                    "doc:git/git", b"synthetic non-matching Git tagged file\n")
+                self.assertFalse(git_source["pinned_bytes_match"])
+                git_event = review.propose_source_review(git_source)
+                review.persist_review_event(
+                    self.owner, git_event, owner_opt_in=True)
+                second = accept.accept_one_exact_source(
+                    self.sid, owner_root=self.owner, confirm_network=True,
+                    record_review=True, confirm_review_write=True)
+        self.assertFalse(second["review_journal_written"])
+        self.assertEqual(second["review_journal_status"],
+                         "ALREADY_RECORDED_NO_DUPLICATE")
+        self.assertTrue(second["catalog_reference_checked"])
+        self.assertEqual(second["review_event_id"], py_event["event_id"])
+        self.assertEqual(second["review_journal_total_events"], 2)
+        state = review.inspect_review_journal(
+            review.read_isolated_review_journal(self.owner))
+        self.assertEqual([e["event_id"] for e in state["events"]],
+                         [py_event["event_id"], git_event["event_id"]])
+        self.assertFalse(second["human_approved"])
+        self.assertFalse(second["export_allowed"])
+
     def test_catalog_ref_disagreement_fails_closed_without_forging_approval(self):
         from ucie_miner import skillbook_catalog_union_v01 as catalog
         with patch.object(accept, "_fetch_pinned_blob_json",
