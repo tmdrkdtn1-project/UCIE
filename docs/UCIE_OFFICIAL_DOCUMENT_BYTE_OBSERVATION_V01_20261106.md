@@ -1,5 +1,8 @@
 # UCIE V1 — 공식 공개 문서 원본 바이트 수동 관측·SkillBook 근거 결속 V0.1
 
+> **2026-11-06 검증 계약 수정** — 이 문서 초판에서 버전 고정 RST/AsciiDoc SHA와 최신 웹 HTML 원본 SHA를 직접 비교해 '불일치=차단'으로 분류한 것은 잘못된 비교 대상 판정이었다. 정정본 [SHA 대상 식별·실제 사용자 영수증 재분류](UCIE_SHA_MATERIAL_RECONCILIATION_20261106.md)를 우선 적용한다. 기존 Python v3.15.0 RST 및 Git v2.51.0 AsciiDoc 원본 SHA는 승인된 공식 저장소 해당 태그에서 재계산해 **기존 기록과 일치**했다. 현재 코드는 `INCOMPARABLE_PINNED_SOURCE_VS_LIVE_HTML_REVIEW_REQUIRED`로 판정하고, 자동 승인·버전 진위·재배포는 계속 차단한다.
+
+
 기준일: 2026-11-06. 범위: UCIE ONLY. 상태: **실제 코드 개발 / 소유자 자체 합성 테스트 / 공식 사이트 실원본 영수증 미수집 / 출시 NO_GO**.
 
 ## 해결하려는 실제 제품 결함
