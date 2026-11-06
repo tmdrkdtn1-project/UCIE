@@ -190,3 +190,14 @@ UCIE 통합개발방에서 UCIE 제품 개발의 한 묶음을 끝내고 응답�
 **업데이트된 6단계 판정:** 01 PARTIAL(첫 번째 실제 소유자 pinned 원본 바이트 성공, 원리/기술 사실 사람 독립 검토 미완); 02 PARTIAL(실제 검토 원장·W04 상세 연동 인수 미실시); 03 PARTIAL(승인형 외부 기술 패키지·서명 미완); 04 PARTIAL(실원본 조회 1건+기존 201/201 및 CI 4/4 자체 근거, 독립 QA/효과 비교 미완); 05 PARTIAL(공식 원문 GET 실제 관측, 사람 선택 분리 원장 기록 및 영구 개정·철회 인수 미완); 06 NO_GO(운영 안정성·독립 QA·권리/보안·소유자 서명/배포·전체 인수 미완).
 
 **다음 정확 한 단계:** 별도 소유자 명시 승인에 따라 동일 출처 공개 blob 1회 재확인→미승인 분리 검토 이벤트 단 1건 기록→W04 연결 성공 영수증 제출. 이 승인은 출시 승인이 아니고 해당 격리 원장 이벤트 기록에 한정. 승인 전에는 자동 실행하지 않음.
+
+## 소유자 실제 영수증 002 — 검토 원장에 1건 커밋·W04 실연결
+
+- **이번 실제 사용자 출력** `2026-11-06T05:04:44Z` (KST 14:04:44), `PS D:\UCIE`, `status=SOURCE_VERIFIED_REVIEW_JOURNAL_AND_W04_LINKED_NOT_APPROVED`, 승인 공개 `python/cpython` v3.15.0 `Doc/library/os.rst`, `network_requests=1`, 221596 raw bytes, source SHA256 `9d78f43c...`·Git blob SHA1 `74419ee7...` 기존 고정 값 동시 일치. 앞선 2026-11-06T04:59:41Z의 **조회만 수행한 영수증 001과 별도**.
+- **제품 인수에 실제 변화 있음**: 별도 명시 소유자 동의 후 `review_journal_status=ISOLATED_REVIEW_EVENT_COMMITTED_NOT_APPROVED`, `review_journal_written=true`, `review_journal_total_events=1`, `catalog_reference_checked=true`, `catalog_source_status=PINNED_RAW_SOURCE_HASHES_MATCH_UNAUTHENTICATED`. 이벤트 ID `88978c947cd80607c3f8b90222143f2354cd888db41cae46515851401ff8c9ae`; 원장 헤드 SHA256 `af1c1584862869e00bf126e83f0ec0f33af607a0d5c1cb2c7e9730d38592c1d5`. **PILOT 001: 실제 소유자 고정 공개 근거→미승인 격리 검토 원장→W04 상세 출처 연결 한 건 인수**.
+- **아직 주장할 수 없는 일**: 소유자 출력은 미서명·독립 원장 파일 감사를 수행하지 않은 사용자 보고 값. `source_tag_signature_verified=false`, `source_origin_independently_attested=false`, `technical_claims_reviewed=false`, `independent_qa_verified=false`, `human_approved=false`, `license_redistribution_approved=false`, `review_journal_is_signed=false`, `export_allowed=false`, `released=false`. 따라서 **검토 원장 인수 1건**은 사실이나 기술 독립 진위/권리/서명·출시 인수와 동일하지 않다.
+- 상세 선후 영수증·근거: `docs/UCIE_OWNER_PINNED_SOURCE_LIVE_RECEIPT_20261106.md`. 이번 기록 자체는 GitHub 설명 문서·PR/UCIE 전용 Slack의 **메타데이터 업데이트만** 수행하며, 운영 원장·기존 소유자 dirty tree·scheduler/C40/타 프로젝트·main/release에는 손대지 않았다. 원장 기록을 위해 동일 명령을 무작정 재실행해 중복 사용하지 말 것.
+
+**6단계 업데이트:** 01 PARTIAL(첫 실제 소유자 원문 파일 SHA 확인; 독립 전문가 검토 미완), **02 PARTIAL 내 파일→원장→도서관 실사용 한 사례 완료**(모든 기술 유형/범용 검색/배포 인수 미완), 03 PARTIAL(외부 승인형 실행/기술 패키지 미완), 04 PARTIAL(기존 자체 호환성 시험/첫 실통합 관측; 외부 독립 QA·효과 비교 미완), **05 PARTIAL 내 미승인 검토 이력 1건 실제 커밋·조회 완료**(사람 승인형 기술 개정/철회 폐회로 미완), **06 NO_GO**(독립 QA·권리/보안·운영 안정·서명 패키지·소유자 출시 승인 미완).
+
+**NEXT: 기능 양산 금지, 게이트 해소 우선**. PR #182의 수정 파일 중 소유자 dirty-tree 충돌·보안/독립 기술 QA 심사→권리/서명/테스트 영수증→실패 가능성이 있었던 운영 공개 collector 안정성과 W09 재검증→제한된 출시 승인 검토. 원장 성공을 제품 전체 성공으로 등치하지 말 것.
