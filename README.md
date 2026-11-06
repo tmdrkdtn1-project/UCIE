@@ -1,6 +1,10 @@
 # UCIE — Universal Coding Intelligence Engine
 
-**Status: Stage 1 PUBLIC_ONLY offline demonstrator; production NO-GO.**
+**Release target (owner instruction, 2026-11-07): complete four-pillar UCIE product for specifically designated customers under a private proprietary commercial license — NOT a standalone first rule or an open-source/public package release. Current readiness: INCOMPLETE / commercial production NO-GO.**
+
+This PUBLIC repository is a development surface, not a customer download channel. No customer identities, contracts, tokens, license keys, or private customer code belong here. Four-pillar functional acceptance, rights/security review, complete installer, customer-specific signing, isolated recipient QA, update/rollback, and owner release authorization are required. See [complete private-customer release contract](docs/UCIE_FULL_PRODUCT_PRIVATE_CUSTOMER_RELEASE_V1.md) and [owner release issue #199](https://github.com/tmdrkdtn1-project/UCIE/issues/199).
+
+**Legacy Stage 1 demonstrator remains limited; full-product customer delivery has NOT occurred.**
 
 UCIE is being developed as an independent public-source coding intelligence system. The intended future flow is approved third-party public documentation and open-source bug fixes → provenance review → independent tests → versioned general-purpose guidance.
 
