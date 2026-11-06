@@ -291,6 +291,21 @@ def make_handler(root: Path, *, explorer=None):
             self.wfile.write(body)
 
         def do_POST(self):
+            # On Windows, rejecting a small POST while its body remains
+            # unread can make the TCP stack reset the socket before the
+            # client receives our 405. Drain only a strictly bounded body;
+            # never parse it, execute it, store it or change state.
+            size_header = self.headers.get("Content-Length", "")
+            if (size_header.isascii() and size_header.isdecimal()
+                    and len(size_header) <= 5):
+                size = int(size_header)
+                if 0 < size <= 8192:
+                    self.connection.settimeout(2.0)
+                    try:
+                        self.rfile.read(size)
+                    except (OSError, TimeoutError):
+                        self.close_connection = True
+                        return
             self._reply(405, "GET_ONLY", "text/plain; charset=utf-8")
 
         def do_GET(self):
