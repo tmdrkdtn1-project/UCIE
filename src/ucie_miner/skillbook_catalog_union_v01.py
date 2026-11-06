@@ -991,6 +991,8 @@ def make_handler(root: Path, *, public_reader=None,
 def main() -> int:
     p = argparse.ArgumentParser(description="UCIE local read-only federated catalog")
     p.add_argument("--port", type=int, default=0)
+    p.add_argument("--revision-review-file", action="store_true",
+                   help="Read fixed UCIE owner review manuscript pair only")
     args = p.parse_args()
     root = Path(__file__).resolve().parents[2]
     if (not 0 <= args.port <= 65535 or root.name.casefold() != "ucie"
@@ -1000,19 +1002,28 @@ def main() -> int:
         return 3
     try:
         pinned_snapshot = pinned_review.read_isolated_review_journal(root)
+        previous = None
+        candidate_inputs = None
+        if args.revision_review_file:
+            previous, candidate = revision_review.read_review_pair(root)
+            candidate_inputs = (candidate["authoring_input"],)
         with HTTPServer(
                 ("127.0.0.1", args.port),
-                make_handler(root, pinned_review_history=pinned_snapshot)) as server:
+                make_handler(root, pinned_review_history=pinned_snapshot,
+                             editorial_records=candidate_inputs,
+                             previous_editorial_draft=previous)) as server:
             print(json.dumps({
                 "schema": SCHEMA, "status": "LOCAL_DRAFT_CATALOG_LISTENING",
                 "url": "http://127.0.0.1:" + str(server.server_port) + "/catalog",
                 "default_public_db_opened": False, "scheduler_registered": False,
+                "revision_review_file_loaded": args.revision_review_file,
                 "approved_packages": 0, "export_allowed": False,
             }), flush=True)
             server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
         return 0
-    except (OSError, pinned_review.SourceReviewError):
+    except (OSError, pinned_review.SourceReviewError,
+            editorial.EditorialDraftError):
         print(json.dumps({"schema": SCHEMA, "status": "LOCAL_REVIEW_OR_BIND_FAILED_NO_GO"}))
         return 3
     return 0
