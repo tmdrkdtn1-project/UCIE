@@ -137,6 +137,8 @@ def assess_revision_review_impact(previous: dict, candidate: dict,
     if changes["machine_contract_changed"]:
         affected.update(("SAFE_PRECONDITIONS", "BOUNDED_APPLICATION",
                          "COUNTEREXAMPLES", "VERSION_AND_QA_LIMITATIONS"))
+    if changes["version_changed"]:
+        affected.add("VERSION_AND_QA_LIMITATIONS")
     affected = sorted(affected, key=ORDER.index)
     return {
         "schema": REVISION_IMPACT_SCHEMA,
