@@ -124,3 +124,17 @@ UCIE 통합개발방에서 UCIE 제품 개발의 한 묶음을 끝내고 응답�
 **6단계 종료 상태:** 01 PARTIAL(원문 바이트 관측 및 후보 SHA 결속 로직 구현, 실제 소유자 실원문 영수증/독립 전문가 검토 미완). 02 PARTIAL(도서관에서 제출/관측 SHA 미조회·일치·불일치 표시 동작, 출시형 가상도서관 통합 미완). 03 PARTIAL(승인형 기술 배포/서명 미완). 04 PARTIAL(자체 host/CI 범위, 독립 QA·실증 효과 미완). 05 PARTIAL(영구 개정 기록/철회 미완). 06 NO_GO(서비스 운영 안정·법적 권리·보안·소유자 인수·전체 제품 출시 미완).
 
 **NEXT**: 소유자 UCIE 환경에서 승인 공식 문서 수동 1회 실제 GET 영수증을 확보해 기존 두 SkillBook의 주장 SHA와 비교하고, 버전 불일치/근거 신규 개정에 대한 **사람 검토 승인·기술 개정/철회 영수증**을 연결한다. 외부 공개 기술 진위·배포는 별도 승인이 완료되기 전까지 차단.
+
+## 작업 묶음 07 — 해시 바이트 대상 불일치 교정 및 실제 소유자 관측 영수증 재분류 (2026-11-06)
+
+- 사용자 소유자 호스트 관측 메타데이터 수령: `2026-11-06T03:21:39Z`, docs.python.org `/3/library/os.html` 응답 HTML 791,358바이트, HTML SHA-256 `c447c03a759513fa8f5d084954511235e6add13c6784d9b0894a033397c9a51c`. 영수증은 사용자 제출이며 서명/기원 독립 인증은 안 됨.
+- **중요한 검증 버그 발견/수정:** 기존 `OBSERVED_BODY_SHA_MISMATCH_BLOCKED`는 **서로 다른 해시 대상**을 비교한 로직 오류였다. 기존 저장 `9d78...`는 python/cpython v3.15.0 `Doc/library/os.rst` 고정 태그 원시 소스 221,596바이트, 제출 받은 `c447...`는 가변 사이트 HTML 791,358바이트. 이 두 digest는 기존 문서 변경 증거가 아니다.
+- 실제 승인 공개 공식 GitHub 원본에서 v3.15.0 `Doc/library/os.rst`의 raw base64를 디코딩해 SHA-256 `9d78f43c...`와 blob `74419ee7...` **정확 일치**; git/git v2.51.0 `Documentation/git-status.adoc`의 SHA-256 `1cdd1c73...`, blob `9a376886...`도 정확 일치. 기존 두 SkillBook 원본 근거는 교체하지 않았다. 이는 공개 저장소 바이트 재계산이며 출처 소유/법적 사용권/실제 적용 효과 독립 QA는 아님.
+- 기존 `src/ucie_miner/skillbook_official_doc_observation_v01.py`의 비교 로직에 **해시 바이트 대상 추적**을 추가. pinned RST/AsciiDoc vs live HTML → `INCOMPARABLE_PINNED_SOURCE_VS_LIVE_HTML_REVIEW_REQUIRED`; digest material 선언 없는 기타 W02 후보 → `INCOMPARABLE_UNDECLARED_MATERIAL_REVIEW_REQUIRED`. 두 경우 `byte_sha_equal=null`, `digest_material_comparable=false`, 기존 승인·버전·출시 게이트 모두 false.
+- 실제 사용 개선: 사용자 과거 관측 JSON을 8KiB 이내 **표준입력**으로 받아 네트워크 재요청 없이 과거 잘못된 판정을 버리는 `--compare-curated --recheck-receipt-stdin`. 유효하지 않은 JSON, 중복 키, 다른 초안/출처, 권리 승인 위조 차단. 기존 로컬 W04 `/catalog`·상세·JSON 화면의 잘못된 'SHA 불일치' 표현도 '해시 대상 달라 직접 비교 불가·재검토'로 수정.
+- 사용자 제공 실제 관측 메타데이터를 축약해 시험한 `tests/test_ucie_owner_receipt_hash_basis_regression_v01.py` 신규 설치. 본 건의 수정/테스트는 GitHub Draft PR #182에만 반영하며 main 미병합, 소유자 기존 수정 15개/공개 마이너 DB/스케줄/C40/타 프로젝트/자동 배포 변경 없음.
+- 근거 상세: `docs/UCIE_SHA_MATERIAL_RECONCILIATION_20261106.md` 및 기존 공식 관측 문서의 초판 정정문.
+
+**6단계 종료 기준:** 01 PARTIAL(원본 근거 SHA 정확 파일 범위 재확인, 버전별 **같은 바이트 대상** 비교/독립 기술 심사 미완), 02 PARTIAL(도서관에서 잘못된 SHA 상태 교정, 검토 가능한 새 승인형 도서관 전체 인수 미완), 03 PARTIAL(서명·배포 미완), 04 PARTIAL(자체 검증 확대, 외부 독립 QA/실효 비교 미완), 05 PARTIAL(오류 판정 정정 기록, 영구 개정·철회 폐회로 미완), 06 NO_GO(전체 운영/법률/보안/소유자 출시 인수 미완).
+
+**NEXT:** 승인된 공식 공개 저장소에 이미 고정된 두 버전 원본의 *동일 바이트 대상 재검증* 기능과 근거 기반 전문가 기술·권리 검토 인수를 제품 구조에 연결한다. 출처 해시가 다르다는 이유만으로 잘못된 철회/자동 승격을 하지 않는다.
