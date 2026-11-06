@@ -138,3 +138,17 @@ UCIE 통합개발방에서 UCIE 제품 개발의 한 묶음을 끝내고 응답�
 **6단계 종료 기준:** 01 PARTIAL(원본 근거 SHA 정확 파일 범위 재확인, 버전별 **같은 바이트 대상** 비교/독립 기술 심사 미완), 02 PARTIAL(도서관에서 잘못된 SHA 상태 교정, 검토 가능한 새 승인형 도서관 전체 인수 미완), 03 PARTIAL(서명·배포 미완), 04 PARTIAL(자체 검증 확대, 외부 독립 QA/실효 비교 미완), 05 PARTIAL(오류 판정 정정 기록, 영구 개정·철회 폐회로 미완), 06 NO_GO(전체 운영/법률/보안/소유자 출시 인수 미완).
 
 **NEXT:** 승인된 공식 공개 저장소에 이미 고정된 두 버전 원본의 *동일 바이트 대상 재검증* 기능과 근거 기반 전문가 기술·권리 검토 인수를 제품 구조에 연결한다. 출처 해시가 다르다는 이유만으로 잘못된 철회/자동 승격을 하지 않는다.
+
+## 작업 묶음 08 — 버전 고정 원문 재검증과 격리된 원장·가상도서관 연동 (2026-11-06)
+
+- **이번 실제 제품 진척:** 이전 사용자 보고 HTML vs RST/AsciiDoc 해시 대상 오류를 재발시키지 않고, 두 기존 SkillBook에 고정된 **공식 공개 저장소 tag/source_file/SHA-256/Git blob SHA1을 같은 원시 파일 바이트로 검증**하는 소유자 UCIE 전용 offline 기능 구현.
+- 신규 `src/ucie_miner/skillbook_pinned_source_review_v01.py`의 `verify_pinned_raw_bytes`는 Python v3.15.0 `Doc/library/os.rst`, Git v2.51.0 `Documentation/git-status.adoc` **정확히 두 승인 공개 원본**만 수용한다. 임의의 다른 저장소/URL/사용자 경로·초과(512KiB) 파일/비승인 태그를 허용하지 않는다. 단순 SHA 문자열이 아니라 `git blob <N>\0 + raw bytes` Git SHA1도 확인하며, 일치=원본 bytes 일치이되 출처 독립 신원/서명/기술 진위/권리·QA 승인은 false.
+- `verify_ucie_inbox`/CLI는 `D:\UCIE\runtime\skillbook_manual_review` 내부 두 **고정 이름** 파일만 오프라인 조회한다. `--record-review --confirm-review-write`의 명시적 소유자 opt-in이 있을 때만 `skillbook_review_events_v01.jsonl`에 UCIE 격리 원장 이벤트(검토 제안/재검증·출시 보류, 중복 방지·연결 SHA·제한된 크기/잠금·원자적 파일 교체)를 기록할 수 있다. 운영 수집기 DB·스케줄러·Rulepack/외부 프로젝트와 별개. 원장 SHA 체인은 위·변조 조기 발견에 도움되나 서명/외부 인증은 아니며 자동 철회·패키지 승격 없음.
+- **기존 가상도서관 사용자 경로 확대:** `src/ucie_miner/skillbook_catalog_union_v01.py` 시작 시 `read_isolated_review_journal`로 딱 해당 UCIE 분리 원장만 읽기, `/catalog` → `/catalog/review` → `/catalog/review.json`에서 **원본 검토 기록 없음·버전 고정 원본 두 해시 일치/신원 미확인·불일치/재검증 필요**를 보여준다. GET은 원문 다운로드/파일 기록/승인하지 않음. 원장이 손상되면 fail closed.
+- 소유자 D:\UCIE **기존 tracked 수정 15파일 보존**, 기존 운영 DB/작업 스케줄/C40/자동 승격/타 프로젝트 접근/외부 출시 0. 신규 코드·신규 회귀 두 파일 및 기존 W04 모듈은 별도 GitHub Draft PR #182/UCIE SHA-lease·백업으로만 수정, main 미병합.
+- 이번 묶음 소유자 Windows 신규 원본·원장 시험14/14 + 신규 HTTP 원장 시험6/6 포함 관련 선별 자체 회귀 **총 171건**(정확 결과는 마지막 전체 재실행 후 기록), 최신 PR 정확 HEAD CI Windows/Ubuntu Python3.13/3.15 결과 별도 확인. 합성 source bytes 시험은 **실제 운영 원장에 공개 원본 검증/소유자 검토가 승인된 증거가 아님**.
+- 제품 실행 설명/원본 태그 목록/인수 경계: `docs/UCIE_SKILLBOOK_PINNED_SOURCE_REVIEW_JOURNAL_V01_20261106.md`.
+
+**1~6 단계 종료:** 01 PARTIAL(동일 바이트 대상 검증 로직/기존 원본 메타데이터 결속, 태그 서명/사람 기술 검토 미완); 02 PARTIAL(실제 가상도서관에 격리 검토 원장 연결, 범용 모든 엔진·스킬 유형 통합/승인형 소비 미완); 03 PARTIAL(자체 unsigned 초안, 서명·권리·외부 패키지 미완); 04 PARTIAL(호스트 자체 QA/CI, 독립 QA·실효성 비교 미완); **05 PARTIAL(오프라인 검토 제안의 격리·원자적 영구 기록/해시 체인/가상도서관 읽기 흐름 구현, 실제 승인형 기술 개정·철회·회귀 자동 전파 미완)**; **06 NO_GO(운영 수집기 안정화/보안·라이선스/외부 독립 인수/소유자 승인/서명·배포 미완)**.
+
+**다음 기능 병목:** 실제 소유자 D:\UCIE 검토함에 승인 공식 태그 파일 1건을 입력하여 **실원본 두 해시 검증 영수증 + 명시적 수동 원장 기록**을 최초 1회 인수한 다음, 새로운 버전이 발견되면 기술 챕터/레시피의 실제 변경 사항·반례·회귀를 검토·소유자 승인으로 연결. 단독 기록/동일 소스 재조회는 자동 개정/철회나 출시 완료로 간주하지 않음.
