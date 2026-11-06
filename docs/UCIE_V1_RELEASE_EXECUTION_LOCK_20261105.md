@@ -110,3 +110,17 @@ UCIE 통합개발방에서 UCIE 제품 개발의 한 묶음을 끝내고 응답�
 **6단계 종료 상태:** 01 PARTIAL(신규 공식 근거 원문 검증·인간 기술 심사 미완). **02 PARTIAL: 기존 로컬 도서관에 검토 후보 검색·선택·실제 3자산 비교·JSON 연결이 동작**, 범용 기술/사용 권한 인수는 아직 미완. 03 PARTIAL(승인 배포 미완). 04 PARTIAL(실호스트 자체 시험, 외부 QA/효능 미완). 05 PARTIAL(개정 비교, 영구 수정·철회 미완). 06 NO_GO(운영 안정·독립 QA·사용권·보안·소유자 서명/출시 인수 미완).
 
 **다음 실제 개발:** 기존 공식 공개 문서 라우트에서 실제 문서 바이트·버전·SHA를 재검증한 영수증을 편집 후보와 결속하고 가상도서관에 검증/미검증 상태를 분리한다. 현재는 후보가 존재해도 원본 진위가 미검증이라는 표시를 유지한다.
+
+## 작업 묶음 06 — 공식 문서 실제 바이트 관측·근거 상태 표시 기능 개발 (2026-11-06)
+
+- **실제 코드 구현**: src/ucie_miner/skillbook_official_doc_observation_v01.py를 추가, 기존 W01 Registry와 `public_evidence_routes.DOC_ENDPOINTS`의 **이미 허용된 공식 HTML 문서 정확 URL**에 한정된 `--confirm-network` 수동 1회 GET. 기존 NoRedirect, content-type text/html, identity 인코딩, 최대 1.5MB/12초, UTF-8 및 기존 HTML 주제 마커 조건으로 본문을 검사하고 **응답 본문 원본 바이트 SHA-256**만 기록한다. 원본 대량 저장·재배포·외부 코드 실행은 없음.
+- 기존 공식 문서 URL은 동일 문자열이어도 콘텐츠 버전이 변경될 수 있다. Python `/3/library/os.html`의 현재 페이지는 3.15.2, Git 기본 문서는 2.56.0을 표시한다. 기존 기술서적의 기록 버전(Python 3.15.0, Git 2.51.0)에 대한 불변 리비전 SHA로 오인하지 않는다. 기술 내용·권리/라이선스·독립 QA는 항상 미승인.
+- 수동 CLI 예시: `python -m ucie_miner.skillbook_official_doc_observation_v01 --source doc:python/cpython --confirm-network --compare-curated`. 기존 SkillBook 검토 후보와 제출 SHA/수동 관측 SHA를 맞춰보되 **일치=버전 미검증 / 불일치=차단**이다. 미서명 영수증에 의한 승인 승격 없음.
+- 기존 `skillbook_catalog_union_v01.py` 직접 변경: `make_handler(..., editorial_observations=(receipt,))`로 **이미 수동 수집한** 메타데이터만 인메모리 전달하고 `/catalog`, `/catalog/review`, `/catalog/review.json`에 미조회/일치(리비전 미확인)/불일치(차단)를 표시한다. HTTP GET으로 공식 네트워크 수집은 절대 개시하지 않는다. 기존 W04 PR 서가/기존 SkillBook 001·002와 분리된 검토 대기 도서관을 유지.
+- **실제 Windows 소유자 대상 시험**: 공식 문서 합성 HTTP 관측 12/12, 브라우저 관측 상태/실제 loopback HTTP 6/6, 기존 편집 후보 실제 HTTP 10/10, 기존 catalog17/17, editorial16/16, cross-source principle10/10, ZIP19/19, product16/16, Git00220/20, browser6/6, W09 release gate10/10, disposable real Git4/4 → **총 146/146 PASS**. 최종 정확 HEAD GitHub CI Windows/Ubuntu × Python3.13/3.15는 별도 관측하기 전까지 PASS 주장 금지.
+- **현실 경계**: 원격 소유자 도구는 파일 승인 시험은 제공하지만 임의 공식 HTTPS 문서 1회 GET을 수행할 쉘/브라우저 실행을 허가하지 않는다. 이 묶음에서 실제 소유자 PC의 공식 문서 응답 본문 SHA 영수증은 **0건**이며, 외부 웹 페이지의 현재 버전 표시는 참고 관측이지 원본 바이트 SHA 검증이 아니다. 배포 승인/서명/운영 DB 변경/TaskScheduler/C40/다른 프로젝트 접근 0. 원래 소유자 tracked 수정 15개 그대로.
+- 상세 인수 문서: `docs/UCIE_OFFICIAL_DOCUMENT_BYTE_OBSERVATION_V01_20261106.md`. 기능+테스트+문서는 GitHub Draft PR #182의 UCIE 전용 변경으로 기록하며 main 미병합.
+
+**6단계 종료 상태:** 01 PARTIAL(원문 바이트 관측 및 후보 SHA 결속 로직 구현, 실제 소유자 실원문 영수증/독립 전문가 검토 미완). 02 PARTIAL(도서관에서 제출/관측 SHA 미조회·일치·불일치 표시 동작, 출시형 가상도서관 통합 미완). 03 PARTIAL(승인형 기술 배포/서명 미완). 04 PARTIAL(자체 host/CI 범위, 독립 QA·실증 효과 미완). 05 PARTIAL(영구 개정 기록/철회 미완). 06 NO_GO(서비스 운영 안정·법적 권리·보안·소유자 인수·전체 제품 출시 미완).
+
+**NEXT**: 소유자 UCIE 환경에서 승인 공식 문서 수동 1회 실제 GET 영수증을 확보해 기존 두 SkillBook의 주장 SHA와 비교하고, 버전 불일치/근거 신규 개정에 대한 **사람 검토 승인·기술 개정/철회 영수증**을 연결한다. 외부 공개 기술 진위·배포는 별도 승인이 완료되기 전까지 차단.
