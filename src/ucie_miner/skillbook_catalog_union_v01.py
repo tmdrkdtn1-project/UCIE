@@ -20,11 +20,17 @@ from .library_search import (
     ALLOWED_DOMAINS, LibrarySearchError, SCHEMA as W04_SCHEMA,
     search_existing_public_library,
 )
-from .public_discovery import DiscoveryError
+from .public_discovery import DiscoveryError, SOURCE_SKILL
+from .skill_profiles import PROFILE
+from . import skillbook_editorial_production_v01 as editorial
+from . import skillbook_official_doc_observation_v01 as official_docs
+from . import skillbook_pinned_source_review_v01 as pinned_review
+from . import skillbook_revision_review_v01 as revision_review
 from .skillbook_product_v01 import (
     SKILLBOOK_ID, SOURCE_DOCUMENT_SHA256, SkillBookProductError,
-    search_skillbooks,
+    search_skillbooks, build_skillbook as build_python_book,
 )
+from .skillbook_git_porcelain_product_v01 import build_skillbook as build_git_book
 from .skillbook_scandir_qa_v01 import CASES as W08_CASES
 from .skillbook_w09_release_gate_v01 import (
     BLOCKERS as W09_BLOCKERS, SCHEMA as W09_SCHEMA,
@@ -121,7 +127,432 @@ def _read_public(report: dict, limit: int) -> tuple[str, int | None, list]:
     return status, count, list(rows)
 
 
-def search_federated(root: Path, *, filters: dict, public_reader=None) -> dict:
+REVIEW_SCHEMA = "UCIE_W04_SKILLBOOK_EDITORIAL_COMPARISON_V01"
+REVIEW_STATUS = "EDITORIAL_REVIEW_ONLY_NOT_A_RELEASE"
+REVIEW_LIMIT = 4
+
+
+def _editorial_drafts(editorial_records=None) -> list[dict]:
+    """Only UCIE-first-party curated pilot or explicitly supplied bounded drafts.
+
+    No GET/body parameters are accepted as draft source; data is passed only
+    via a caller-supplied in-memory interface, recompiled through W01/W02.
+    """
+    if editorial_records is None:
+        drafts = [editorial.compose_curated_two_book_pilot()]
+    else:
+        if (type(editorial_records) is not tuple
+                or not 1 <= len(editorial_records) <= REVIEW_LIMIT):
+            raise FederationError("bounded in-memory review set required")
+        try:
+            drafts = [editorial.compile_review_draft(r) for r in editorial_records]
+        except editorial.EditorialDraftError as exc:
+            raise FederationError("unverified editorial record") from exc
+    identifiers = [d["draft_sha256"] for d in drafts]
+    if len(set(identifiers)) != len(drafts):
+        raise FederationError("duplicate editorial candidate")
+    if any(d["status"] != "EDITORIAL_CANDIDATE_REVIEW_PENDING_NO_GO"
+           or d["export_allowed"] is not False
+           or d["human_approved"] is not False
+           or d["source_digest_independently_verified"] is not False
+           for d in drafts):
+        raise FederationError("editorial approval state drift")
+    return sorted(drafts, key=lambda d: d["draft_sha256"])
+
+
+def _review_domains(draft: dict) -> list[str]:
+    domains = set()
+    for source in draft["sources"]:
+        rid = source["source_id"].split(":", 1)[1]
+        profile = SOURCE_SKILL.get(rid)
+        if profile not in PROFILE:
+            raise FederationError("unrecognized editorial source skill")
+        domains.add(PROFILE[profile]["domain"])
+    return sorted(domains)
+
+
+def _review_observation_status(draft: dict, observations=None) -> list[dict]:
+    """Read bounded, already-observed and UNSIGNED source-byte metadata.
+
+    This display NEVER fetches official sources or authenticates receipt JSON.
+    A pinned upstream source RST/AsciiDoc SHA is NOT a rendered HTML SHA.
+    Incomparability never grants approval, nor proves source drift.
+    """
+    if observations is None:
+        observations = ()
+    if type(observations) is not tuple or len(observations) > REVIEW_LIMIT:
+        raise FederationError("only bounded in-memory unsigned observation receipts")
+    seen = set()
+    linked = {}
+    candidate_ids = {item["source_id"] for item in draft["sources"]}
+    for receipt in observations:
+        if type(receipt) is not dict:
+            raise FederationError("unrecognized official byte receipt")
+        sid = receipt.get("source_id")
+        if type(sid) is not str or sid in seen:
+            raise FederationError("invalid or duplicate observation source")
+        seen.add(sid)
+        if sid not in candidate_ids:
+            continue  # Multiple candidates may use distinct registered sources.
+        try:
+            result = official_docs.compare_editorial_source_to_observation(
+                draft, receipt)
+        except official_docs.OfficialDocumentObservationError as exc:
+            raise FederationError("untrusted source byte receipt") from exc
+        linked[sid] = result
+    statuses = []
+    for sid in sorted(candidate_ids):
+        result = linked.get(sid)
+        if result is None:
+            status = ("NOT_AN_OFFICIAL_DOCUMENT_ROUTE"
+                      if sid.startswith("repo:") else "NO_MANUAL_RAW_BYTE_OBSERVATION")
+            statuses.append({
+                "source_id": sid, "status": status,
+                "byte_sha_equal": None, "observed_raw_sha256": None,
+                "digest_material_comparable": False,
+                "submitted_digest_material": "NOT_EVALUATED",
+                "observed_digest_material": None,
+                "pinned_source_tag": None, "pinned_source_path": None,
+                "observed_at_utc": None, "source_revision_verified": False,
+                "receipt_authenticity_cryptographically_verified": False,
+                "review_completed": False, "export_allowed": False,
+            })
+        else:
+            statuses.append({
+                "source_id": sid, "status": result["status"],
+                "byte_sha_equal": result["byte_sha_equal"],
+                "digest_material_comparable": result["digest_material_comparable"],
+                "submitted_digest_material": result["submitted_digest_material"],
+                "observed_digest_material": result["observed_digest_material"],
+                "pinned_source_tag": result["pinned_source_tag"],
+                "pinned_source_path": result["pinned_source_path"],
+                "observed_raw_sha256": result["observed_raw_sha256"],
+                "observed_at_utc": result["observed_at_utc"],
+                "source_revision_verified": False,
+                "receipt_authenticity_cryptographically_verified": False,
+                "review_completed": False, "export_allowed": False,
+            })
+    return statuses
+
+
+def _pinned_review_statuses(draft: dict, journal_data=None) -> list[dict]:
+    """Display UCIE-only review proposals from an already supplied snapshot.
+
+    Journal hash-chain integrity is checked; it is NOT a signature, human
+    decision, source-origin authentication, approval or automatic withdrawal.
+    """
+    if journal_data is None:
+        journal_data = b""
+    try:
+        state = pinned_review.inspect_review_journal(journal_data)
+    except pinned_review.SourceReviewError as exc:
+        raise FederationError("invalid isolated review history") from exc
+    per_source = {
+        e["source_id"]: e for e in state["events"]
+    }
+    statuses = []
+    for entry in sorted(draft["sources"], key=lambda e: e["source_id"]):
+        latest = per_source.get(entry["source_id"])
+        if (latest is None
+                or latest["expected_source_sha256"] != entry["evidence_sha256"]):
+            statuses.append({
+                "source_id": entry["source_id"],
+                "status": "NO_MATCHING_PINNED_REVIEW_EVENT",
+                "review_action": None,
+                "review_event_id": None,
+                "raw_source_sha_match": None,
+                "human_approval_granted": False,
+                "source_origin_independently_verified": False,
+                "withdrawal_executed": False,
+                "export_allowed": False,
+            })
+            continue
+        statuses.append({
+            "source_id": entry["source_id"],
+            "status": ("PINNED_RAW_SOURCE_HASHES_MATCH_UNAUTHENTICATED"
+                       if latest["pinned_bytes_match"] else
+                       "PINNED_RAW_SOURCE_MISMATCH_REVIEW_REQUIRED"),
+            "review_action": latest["recommended_action"],
+            "review_event_id": latest["event_id"],
+            "raw_source_sha_match": latest["pinned_bytes_match"],
+            "human_approval_granted": False,
+            "source_origin_independently_verified": False,
+            "withdrawal_executed": False,
+            "export_allowed": False,
+        })
+    return statuses
+
+
+def _review_summary(draft: dict, observations=None, journal_data=None) -> dict:
+    return {
+        "draft_sha256": draft["draft_sha256"], "topic": draft["topic"],
+        "source_ids": sorted(s["source_id"] for s in draft["sources"]),
+        "source_observation_statuses": _review_observation_status(
+            draft, observations),
+        "pinned_source_review_statuses": _pinned_review_statuses(
+            draft, journal_data),
+        "domains": _review_domains(draft),
+        "chapter_count": len(draft["chapters"]),
+        "status": draft["status"], "kind": "REUSABLE_SKILL",
+        "machine_contract_implemented": False,
+        "source_content_verified": False, "independent_qa_verified": False,
+        "human_approved": False, "export_allowed": False,
+    }
+
+
+def inspect_review_candidate(candidate_id: str | None = None, *,
+                             editorial_records=None,
+                             editorial_observations=None,
+                             pinned_review_history=None,
+                             previous_editorial_draft=None) -> dict:
+    """Actual browse-to-compare-to-review dossier, no DB/network/QA run."""
+    if (candidate_id is not None
+            and (type(candidate_id) is not str
+                 or HEX64.fullmatch(candidate_id) is None)):
+        raise FederationError("bad editorial detail selector")
+    drafts = _editorial_drafts(editorial_records)
+    if candidate_id is None and len(drafts) == 1:
+        chosen = drafts[0]
+    else:
+        selected = [d for d in drafts if d["draft_sha256"] == candidate_id]
+        if len(selected) != 1:
+            raise FederationError("unknown editorial revision")
+        chosen = selected[0]
+    try:
+        handoff = editorial.build_review_handoff(chosen["authoring_input"])
+    except editorial.EditorialDraftError as exc:
+        raise FederationError("invalid editorial handoff") from exc
+    if (handoff["receipt"]["draft_sha256"] != chosen["draft_sha256"]
+            or handoff["receipt"]["human_review_completed"] is not False
+            or handoff["receipt"]["export_allowed"] is not False):
+        raise FederationError("review dossier identity/approval drift")
+    comparison = []
+    for book in (build_python_book(), build_git_book()):
+        entry = book["library_entry"]
+        gates = book["proof_gates"]
+        if (book["status"] != "FIRST_PARTY_DRAFT_NOT_APPROVED"
+                or book["export_allowed"] is not False
+                or gates["human_approved"] is not False):
+            raise FederationError("existing SkillBook approval drift")
+        comparison.append({
+            "item_id": book["skillbook_id"], "title": book["title"],
+            "asset_type": "EXISTING_UCIE_AUTHORED_BOOK_DRAFT",
+            "source_ids": [entry["source_id"]],
+            "chapter_count": len(book["ucie_authored_chapters"]),
+            "machine_contract": "FIRST_PARTY_RECIPE_EXISTS_NOT_RELEASED",
+            "independent_qa_verified": False,
+            "source_content_verified_in_this_request": False,
+            "human_approved": False, "export_allowed": False,
+        })
+    comparison.append({
+        "item_id": chosen["draft_sha256"], "title": chosen["topic"],
+        "asset_type": "EDITORIAL_CANDIDATE_NOT_REVIEWED",
+        "source_ids": sorted(s["source_id"] for s in chosen["sources"]),
+        "chapter_count": len(chosen["chapters"]),
+        "machine_contract": "DESIGN_ONLY_NO_EXECUTABLE",
+        "independent_qa_verified": False,
+        "source_content_verified_in_this_request": False,
+        "human_approved": False, "export_allowed": False,
+    })
+    impact = None
+    if previous_editorial_draft is not None:
+        try:
+            impact = revision_review.assess_revision_review_impact(
+                previous_editorial_draft, chosen,
+                pinned_review_history=(
+                    pinned_review_history if pinned_review_history is not None
+                    else b""))
+        except editorial.EditorialDraftError as exc:
+            raise FederationError("unverified editorial revision lineage") from exc
+    elif chosen["revision"]["previous_draft_sha256_claim"] is not None:
+        # A claim of a parent is never enough for an attributed comparison.
+        impact = {
+            "schema": revision_review.REVISION_IMPACT_SCHEMA,
+            "status": "PREVIOUS_REVISION_NOT_SUPPLIED_REVIEW_BLOCKED",
+            "old_draft_sha256": chosen["revision"]["previous_draft_sha256_claim"],
+            "new_draft_sha256": chosen["draft_sha256"],
+            "owner_approval_granted": False,
+            "export_allowed": False,
+        }
+    return {
+        "schema": REVIEW_SCHEMA, "status": REVIEW_STATUS,
+        "revision_review_impact": impact,
+        "candidate": chosen,
+        "summary": _review_summary(
+            chosen, editorial_observations, pinned_review_history),
+        "source_observation_statuses": _review_observation_status(
+            chosen, editorial_observations),
+        "pinned_source_review_statuses": _pinned_review_statuses(
+            chosen, pinned_review_history),
+        "pinned_review_history_is_unsigned": True,
+        "pinned_review_history_read_only": True,
+        "observation_receipts_cryptographically_authenticated": False,
+        "browser_performs_official_network_fetch": False,
+        "comparison": comparison, "review_receipt": handoff["receipt"],
+        "human_markdown_sha256": handoff["receipt"]["human_markdown_sha256"],
+        "machine_json_sha256": handoff["receipt"]["machine_json_sha256"],
+        "source_document_bytes_fetched": 0,
+        "source_content_independently_verified": False,
+        "manual_editorial_review_completed": False,
+        "machine_contract_executed": False,
+        "approved_items": 0, "export_allowed": False,
+        "network_requests": 0, "operating_database_writes": 0,
+        "other_project_access": False,
+    }
+
+
+def render_review_candidate(report: dict) -> str:
+    if (type(report) is not dict or report.get("schema") != REVIEW_SCHEMA
+            or report.get("status") != REVIEW_STATUS
+            or report.get("export_allowed") is not False
+            or report.get("manual_editorial_review_completed") is not False
+            or report.get("machine_contract_executed") is not False
+            or type(report.get("candidate")) is not dict
+            or report["candidate"].get("human_approved") is not False):
+        raise FederationError("unsafe editorial detail display")
+    e = lambda x: escape(str(x), quote=True)
+    draft = report["candidate"]
+    lines = [
+        '<p><a href="/catalog">통합 도서관으로 돌아가기</a></p>',
+        '<section class="panel"><h2>SkillBook 검토 후보 · 미승인</h2>',
+        '<p>이 문서는 편집자 제출 원리 초안입니다. 공식 원문 SHA·기술 사실·권리·독립 QA를 '
+        '이 화면에서 검증하거나 승인하지 않습니다.</p>',
+        '<p>주제: <strong>' + e(draft["topic"]) + '</strong></p>',
+        '<p>초안 SHA-256: <code>' + e(draft["draft_sha256"]) + '</code></p>',
+        '<h3>기존 실행형 기술서적과 후보 비교</h3>',
+        '<table><thead><tr><th>기술 자산</th><th>출처</th><th>챕터</th>'
+        '<th>기계 계약 상태</th><th>검토/반출</th></tr></thead><tbody>',
+    ]
+    for item in report["comparison"]:
+        lines.append(
+            "<tr><td>" + e(item["title"]) + "</td><td>"
+            + e(", ".join(item["source_ids"])) + "</td><td>"
+            + str(item["chapter_count"]) + "</td><td>"
+            + e(item["machine_contract"]) +
+            "</td><td>미승인 · 반출 불가</td></tr>"
+        )
+    lines.extend(["</tbody></table>", "<h3>편집 후보의 출처</h3><ul>"])
+    for src in draft["sources"]:
+        lines.append(
+            '<li>' + e(src["source_id"]) + ' · '
+            + e(src["version_scope_claim"]) + ' · '
+            + e(src["public_url"]) + '<p>제출 근거 SHA: '
+            + e(src["evidence_sha256"]) + ' · 원문 재확인 미실시</p></li>'
+        )
+    lines.extend(["</ul>", "<h3>공식 문서 바이트 관측 상태 (미서명)</h3>",
+                  "<p>조회 전 수동으로 받은 영수증만 비교합니다. "
+                  "RST/AsciiDoc 버전 고정 원문과 최신 HTML 응답의 SHA는 "
+                  "서로 비교할 수 없으며, 기술 사실·권리 승인이 아닙니다.</p>",
+                  "<ul>"])
+    observation_labels = {
+        "NO_MANUAL_RAW_BYTE_OBSERVATION": "공식 원문 바이트 관측 미실시",
+        "NOT_AN_OFFICIAL_DOCUMENT_ROUTE": "공식 HTML 문서 관측 대상 아님",
+        "INCOMPARABLE_PINNED_SOURCE_VS_LIVE_HTML_REVIEW_REQUIRED":
+            "해시 대상 불일치 · 버전 고정 원문과 웹 HTML 비교 불가 · 재검토",
+        "INCOMPARABLE_UNDECLARED_MATERIAL_REVIEW_REQUIRED":
+            "제출된 해시 대상 미정의 · HTML 비교 보류 · 재검토",
+    }
+    for proof in report["source_observation_statuses"]:
+        state = proof["status"]
+        if state not in observation_labels:
+            raise FederationError("unknown source byte status")
+        lines.append(
+            "<li>" + e(proof["source_id"]) + " · "
+            + e(observation_labels[state])
+            + (" · 관측 SHA: " + e(proof["observed_raw_sha256"])
+               if proof["observed_raw_sha256"] is not None else "")
+            + (" · 고정 근거: " + e(proof["pinned_source_tag"])
+               + " / " + e(proof["pinned_source_path"])
+               if proof["pinned_source_tag"] is not None else "")
+            + " · 영수증 미서명 · 재배포 불가</li>"
+        )
+    lines.extend(["</ul>", "<h3>버전 고정 원본 검토 원장 (미서명)</h3>",
+                  "<p>UCIE 전용 수동 이력은 해시 체인으로 변조를 감지하지만 "
+                  "외부 원본의 신원 인증·전문가 승인·실제 철회가 아닙니다.</p>",
+                  "<ul>"])
+    pinned_labels = {
+        "NO_MATCHING_PINNED_REVIEW_EVENT":
+            "해당 버전 고정 원문 검증 이력 없음",
+        "PINNED_RAW_SOURCE_HASHES_MATCH_UNAUTHENTICATED":
+            "해당 태그 원본 SHA256/Git blob SHA1 일치 · 출처 진위/QA 미완",
+        "PINNED_RAW_SOURCE_MISMATCH_REVIEW_REQUIRED":
+            "버전 고정 원본 불일치 · 재확인/출시 보류 · 자동 철회 없음",
+    }
+    for entry in report["pinned_source_review_statuses"]:
+        code = entry["status"]
+        if code not in pinned_labels:
+            raise FederationError("unknown pinned review status")
+        lines.append(
+            "<li>" + e(entry["source_id"]) + " · " + e(pinned_labels[code])
+            + (" · 이벤트 " + e(entry["review_event_id"][:12])
+               if entry["review_event_id"] is not None else "")
+            + " · 검토/반출 미승인</li>"
+        )
+    lines.extend(["</ul>", "<h3>사람이 검토할 5개 기술 챕터</h3>"])
+    for chapter in draft["chapters"]:
+        lines.append(
+            '<section><h4>' + e(chapter["heading"]) + '</h4>'
+            + '<p style="white-space:pre-wrap">' + e(chapter["text"])
+            + '</p><small>편집자 주장 · 미검증 · 근거: '
+            + e(", ".join(chapter["source_ids"])) + '</small></section>'
+        )
+    impact = report.get("revision_review_impact")
+    if impact is not None:
+        if (type(impact) is not dict
+                or impact.get("schema") != revision_review.REVISION_IMPACT_SCHEMA
+                or impact.get("export_allowed") is not False
+                or impact.get("owner_approval_granted") is not False):
+            raise FederationError("untrusted editorial revision status")
+        lines.extend(["<h3>개정 영향 및 필수 재검토</h3>",
+                      "<p>신규 후보는 기술 변경 여부를 수동 확인해야 합니다. "
+                      "이 화면은 검증·QA를 실행하거나 철회하지 않습니다.</p>"])
+        if impact["status"] == "PREVIOUS_REVISION_NOT_SUPPLIED_REVIEW_BLOCKED":
+            lines.append("<p>이전 초안 실물 미제공 · 개정 영향 분석 차단</p>")
+        elif impact["status"] == "AUTHORING_REVISION_REQUIRES_EXPERT_REVIEW_NO_GO":
+            lines.append(
+                "<p>이전 초안 SHA: <code>"
+                + e(impact["old_draft_sha256"]) + "</code></p>"
+                "<p>재검토 챕터: " + e(
+                    ", ".join(impact["recheck_chapter_ids"])) + "</p>"
+                "<p>검토 원장 이벤트: " + str(impact["journal_event_count"])
+                + " · 미서명 · 재검토/배포 미승인</p>"
+            )
+            for record in impact["sources"]:
+                lines.append(
+                    "<p>" + e(record["source_id"]) + " · "
+                    + e(record["source_ledger_state"]) + "</p>"
+                )
+            lines.extend(["<h4>재검증이 필요한 자체 시험</h4>", "<ul>"])
+            lines.extend("<li>" + e(item["filename"])
+                         + " · 미실행</li>" for item in impact["required_retests"])
+            lines.append("</ul>")
+        else:
+            raise FederationError("unrecognized editorial revision impact")
+    lines.extend([
+        "<h3>실행 불가 기계 설계 계약</h3><p>"
+        + e(draft["machine_contract"]["interface_name"]) +
+        " · DESIGN_ONLY_NO_EXECUTABLE</p>",
+        "<h3>필수 사람 검토 게이트</h3><ol>",
+    ])
+    lines.extend("<li>" + e(g["gate"]) + " · PENDING</li>"
+                 for g in draft["manual_review_checklist"])
+    lines.extend([
+        "</ol>", "<p>문서 SHA: <code>" + e(report["human_markdown_sha256"])
+        + "</code></p>",
+        "<p>JSON SHA: <code>" + e(report["machine_json_sha256"])
+        + "</code></p>",
+        '<p><a href="/catalog/review.json?id=' + e(draft["draft_sha256"])
+        + '">기계 검토 JSON</a></p>',
+        "<p>실행 · 다운로드 · 서명 · 승인: 불가</p></section>",
+    ])
+    page = previous._template("UCIE 편집 SkillBook 검토·비교", "".join(lines))
+    return page.replace("UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V02", REVIEW_SCHEMA)
+
+
+def search_federated(root: Path, *, filters: dict, public_reader=None,
+                     editorial_records=None,
+                     editorial_observations=None,
+                     pinned_review_history=None) -> dict:
     """Default SkillBook queries never read SQLite; public shelf is opt-in."""
     f = _safe_filters(filters)
     q, shelf, kind, domain, limit = (
@@ -143,6 +574,19 @@ def search_federated(root: Path, *, filters: dict, public_reader=None) -> dict:
                 row.get("human_approved") is not False
                 or row.get("export_allowed") is not False for row in books)):
             raise FederationError("untrusted SkillBook approval")
+    pending = []
+    if shelf in ("skillbooks", "all") and kind in ("", "REUSABLE_SKILL"):
+        for draft in _editorial_drafts(editorial_records):
+            item = _review_summary(
+                draft, editorial_observations, pinned_review_history)
+            searchable = " ".join([
+                item["topic"], *item["source_ids"],
+                *[c["text"] for c in draft["chapters"]],
+            ]).casefold()
+            if ((not q or q.casefold() in searchable)
+                    and (not domain or domain in item["domains"])):
+                pending.append(item)
+        pending = pending[:limit]
     state, total, candidates = "NOT_REQUESTED", None, []
     if shelf in ("all", "public") and kind != "REUSABLE_SKILL":
         if not q.isascii():
@@ -158,7 +602,9 @@ def search_federated(root: Path, *, filters: dict, public_reader=None) -> dict:
         "schema": SCHEMA,
         "status": "READ_ONLY_TWO_SHELF_DRAFT_NOT_APPROVED",
         **f,
-        "skillbooks": books, "public_evidence_candidates": candidates,
+        "skillbooks": books, "editorial_review_candidates": pending,
+        "editorial_candidates_unapproved": True,
+        "public_evidence_candidates": candidates,
         "public_candidate_total": total, "public_shelf_status": state,
         "distinct_evidence_units_not_joined": True,
         "legacy_sqlite_index_migrated": False,
@@ -214,6 +660,36 @@ def render_federated(result: dict) -> str:
                      + 'UCIE 제작 초안 · 미승인 · 내보내기 불가</p>')
     if not result["skillbooks"]:
         parts.append("<p>조건에 맞는 SkillBook 없음</p>")
+    parts += ['</section><section class="panel"><h2>편집 검토 대기 기술서적</h2>']
+    for review in result["editorial_review_candidates"]:
+        parts.append(
+            '<p><a href="/catalog/review?id=' + e(review["draft_sha256"])
+            + '">' + e(review["topic"]) + '</a> · '
+            + e(", ".join(review["source_ids"])) +
+            ' · 기술 본문/원문 미검증 · 기계 실행 미구현 · 반출 불가</p>'
+        )
+        note = review.get("source_observation_statuses", [])
+        if any(item.get("status") ==
+               "INCOMPARABLE_PINNED_SOURCE_VS_LIVE_HTML_REVIEW_REQUIRED"
+               for item in note):
+            parts.append("<p>서로 다른 근거 형식 · SHA 직접 비교 불가 · 재검토</p>")
+        elif any(item.get("status") ==
+                 "INCOMPARABLE_UNDECLARED_MATERIAL_REVIEW_REQUIRED"
+                 for item in note):
+            parts.append("<p>해시 대상 미정의 · 검증 보류 · 재검토</p>")
+        else:
+            parts.append("<p>수동 공식 문서 바이트 관측 미실시</p>")
+        pinned = review.get("pinned_source_review_statuses", [])
+        if any(x["status"] == "PINNED_RAW_SOURCE_MISMATCH_REVIEW_REQUIRED"
+               for x in pinned):
+            parts.append("<p>고정 태그 원본 검증 불일치 · 재검증 필요</p>")
+        elif any(x["status"] == "PINNED_RAW_SOURCE_HASHES_MATCH_UNAUTHENTICATED"
+                 for x in pinned):
+            parts.append("<p>고정 태그 원본 SHA 일치 · 출처 진위/QA 승인 별도</p>")
+        else:
+            parts.append("<p>고정 태그 원본 수동 검토 이력 없음</p>")
+    if not result["editorial_review_candidates"]:
+        parts.append('<p>검색 조건에 맞는 편집 후보가 없습니다.</p>')
     public_status_labels = {
         "NOT_REQUESTED": "검색하지 않음 (SkillBook 전용 검색)",
         "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO":
@@ -394,7 +870,11 @@ def render_skillbook_w09_release_gate(plan: dict) -> str:
     return html.replace("UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V02", W09_SCHEMA)
 
 
-def make_handler(root: Path, *, public_reader=None, **legacy_injections):
+def make_handler(root: Path, *, public_reader=None,
+                 editorial_records=None,
+                 editorial_observations=None,
+                 pinned_review_history=None,
+                 previous_editorial_draft=None, **legacy_injections):
     base = previous.make_handler(root, **legacy_injections)
 
     class Handler(base):
@@ -457,6 +937,31 @@ def make_handler(root: Path, *, public_reader=None, **legacy_injections):
                         200, json.dumps(plan, ensure_ascii=True, sort_keys=True),
                         "application/json; charset=utf-8")
                 return self.reply(200, render_skillbook_qa_plan(plan))
+            if path.path in ("/catalog/review", "/catalog/review.json"):
+                if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
+                    return self.reply(403, "LOOPBACK_ONLY", "text/plain; charset=utf-8")
+                if path.fragment or len(self.path) > 185:
+                    return self.reply(400, "INVALID_REVIEW_ROUTE", "text/plain; charset=utf-8")
+                try:
+                    args = parse_qs(path.query, strict_parsing=True,
+                                    keep_blank_values=True, max_num_fields=1) if path.query else {}
+                    if set(args) not in (set(), {"id"}) or any(
+                            len(v) != 1 for v in args.values()):
+                        raise FederationError("unexpected review selector")
+                    ident = args.get("id", [None])[0]
+                    data = inspect_review_candidate(
+                        ident, editorial_records=editorial_records,
+                        editorial_observations=editorial_observations,
+                        pinned_review_history=pinned_review_history,
+                        previous_editorial_draft=previous_editorial_draft)
+                    if path.path.endswith(".json"):
+                        return self.reply(
+                            200, json.dumps(data, sort_keys=True, ensure_ascii=True),
+                            "application/json; charset=utf-8")
+                    return self.reply(200, render_review_candidate(data))
+                except (FederationError, editorial.EditorialDraftError, ValueError):
+                    return self.reply(400, "REVIEW_CANDIDATE_INPUT_NO_GO",
+                                      "text/plain; charset=utf-8")
             if path.path not in ("/catalog", "/catalog.json"):
                 return super().do_GET()
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
@@ -465,7 +970,10 @@ def make_handler(root: Path, *, public_reader=None, **legacy_injections):
                 return self.reply(400, "INVALID_CATALOG_ROUTE", "text/plain; charset=utf-8")
             try:
                 data = search_federated(root, filters=parse_filters(path.query),
-                                        public_reader=public_reader)
+                                        public_reader=public_reader,
+                                        editorial_records=editorial_records,
+                                        editorial_observations=editorial_observations,
+                                        pinned_review_history=pinned_review_history)
                 if path.path == "/catalog.json":
                     return self.reply(200, json.dumps(data, ensure_ascii=False, sort_keys=True),
                                       "application/json; charset=utf-8")
@@ -483,6 +991,8 @@ def make_handler(root: Path, *, public_reader=None, **legacy_injections):
 def main() -> int:
     p = argparse.ArgumentParser(description="UCIE local read-only federated catalog")
     p.add_argument("--port", type=int, default=0)
+    p.add_argument("--revision-review-file", action="store_true",
+                   help="Read fixed UCIE owner review manuscript pair only")
     args = p.parse_args()
     root = Path(__file__).resolve().parents[2]
     if (not 0 <= args.port <= 65535 or root.name.casefold() != "ucie"
@@ -491,18 +1001,30 @@ def main() -> int:
         print(json.dumps({"schema": SCHEMA, "status": "FAIL_CLOSED"}))
         return 3
     try:
-        with HTTPServer(("127.0.0.1", args.port), make_handler(root)) as server:
+        pinned_snapshot = pinned_review.read_isolated_review_journal(root)
+        previous = None
+        candidate_inputs = None
+        if args.revision_review_file:
+            previous, candidate = revision_review.read_review_pair(root)
+            candidate_inputs = (candidate["authoring_input"],)
+        with HTTPServer(
+                ("127.0.0.1", args.port),
+                make_handler(root, pinned_review_history=pinned_snapshot,
+                             editorial_records=candidate_inputs,
+                             previous_editorial_draft=previous)) as server:
             print(json.dumps({
                 "schema": SCHEMA, "status": "LOCAL_DRAFT_CATALOG_LISTENING",
                 "url": "http://127.0.0.1:" + str(server.server_port) + "/catalog",
                 "default_public_db_opened": False, "scheduler_registered": False,
+                "revision_review_file_loaded": args.revision_review_file,
                 "approved_packages": 0, "export_allowed": False,
             }), flush=True)
             server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
         return 0
-    except OSError:
-        print(json.dumps({"schema": SCHEMA, "status": "LOCAL_BIND_FAILED_NO_GO"}))
+    except (OSError, pinned_review.SourceReviewError,
+            editorial.EditorialDraftError):
+        print(json.dumps({"schema": SCHEMA, "status": "LOCAL_REVIEW_OR_BIND_FAILED_NO_GO"}))
         return 3
     return 0
 
