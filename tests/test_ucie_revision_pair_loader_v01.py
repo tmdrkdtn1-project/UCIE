@@ -124,7 +124,7 @@ class ExactRevisionPairLoaderTests(unittest.TestCase):
                 return False
             def serve_forever(self, **_kwargs):
                 raise KeyboardInterrupt()
-        with patch.object(catalog.sys, "argv", [
+        with patch.object(sys, "argv", [
                 "catalog", "--port", "0", "--revision-review-file"]):
             with patch.object(catalog.revision_review, "read_review_pair",
                               return_value=(previous, candidate)) as loader:
