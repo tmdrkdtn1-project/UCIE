@@ -227,10 +227,18 @@ def accept_one_exact_source(source_id: str, *,
                 root, proposal, owner_opt_in=True)
             actual = pinned.read_isolated_review_journal(root)
             checked = pinned.inspect_review_journal(actual)
-            if (not checked["events"]
-                    or checked["events"][-1]["event_id"] != proposal["event_id"]):
+            # A later *different* public source review is allowed. The
+            # required event must be the current entry for THIS source,
+            # not necessarily the last entry of the whole shared journal.
+            current_source_events = [
+                event for event in checked["events"]
+                if event["source_id"] == source_id
+            ]
+            if (not current_source_events
+                    or current_source_events[-1]["event_id"]
+                       != proposal["event_id"]):
                 raise AcceptanceError(
-                    "journal changed after preflight; review not accepted")
+                    "source review changed after preflight; review not accepted")
             state = inspect_catalog_link(actual)
             result.update({
                 "status": "SOURCE_VERIFIED_REVIEW_JOURNAL_AND_W04_LINKED_NOT_APPROVED",
