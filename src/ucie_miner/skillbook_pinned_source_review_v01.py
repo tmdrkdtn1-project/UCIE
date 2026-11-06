@@ -278,6 +278,20 @@ def _validate_event(event: dict) -> None:
         raise SourceReviewError("unsupported manual review or provenance claim")
 
 
+def _unique_review_json_pairs(pairs):
+    """Refuse duplicate object keys before checking a journal hash chain."""
+    record = {}
+    for key, value in pairs:
+        if key in record:
+            raise SourceReviewError("duplicate journal JSON key")
+        record[key] = value
+    return record
+
+
+def _reject_review_json_constant(value):
+    raise SourceReviewError("nonstandard journal JSON constant")
+
+
 def inspect_review_journal(data: bytes) -> dict:
     """Validate every bounded hash-linked line; fail on partial/corrupt tails."""
     if type(data) is not bytes or len(data) > MAX_JOURNAL_BYTES:
@@ -295,7 +309,11 @@ def inspect_review_journal(data: bytes) -> dict:
         if not line or len(line) > 4096:
             raise SourceReviewError("invalid journal entry size")
         try:
-            obj = json.loads(line.decode("ascii"))
+            obj = json.loads(
+                line.decode("ascii"),
+                object_pairs_hook=_unique_review_json_pairs,
+                parse_constant=_reject_review_json_constant,
+            )
         except (ValueError, UnicodeError) as exc:
             raise SourceReviewError("corrupt UTF-8 journal") from exc
         if (type(obj) is not dict
