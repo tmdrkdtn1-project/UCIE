@@ -10,6 +10,7 @@ from __future__ import annotations
 from hashlib import sha1
 import json
 import os
+import subprocess
 from pathlib import Path
 import unittest
 
@@ -78,6 +79,19 @@ def audit_overlap_read_only() -> dict:
 
 
 class UCIEOwnerOverlapReadOnlyPreflight(unittest.TestCase):
+    def test_local_editorial_git_object_if_available(self):
+        """Never fetch or modify Git: inspect pinned object only if locally cached."""
+        sha = EXPECTED_GIT_BLOBS["skillbook_editorial_production_v01.py"]
+        result = subprocess.run(
+            ["git", "-C", str(ROOT), "cat-file", "-e", sha],
+            capture_output=True, timeout=6, check=False)
+        print("UCIE_PR182_EDITORIAL_OBJECT_CACHED=" + json.dumps({
+            "expected_git_blob": sha,
+            "cached": result.returncode == 0,
+            "git_operation": "CAT_FILE_READ_ONLY",
+        }))
+        self.assertIn(result.returncode, (0, 1, 128))
+
     def test_actual_owner_eight_source_blobs_no_mutation(self):
         result = audit_overlap_read_only()
         self.assertEqual(result["schema"], "UCIE_PR182_OWNER_OVERLAP_AUDIT_V01")
