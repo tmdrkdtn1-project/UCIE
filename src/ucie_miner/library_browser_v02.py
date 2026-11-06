@@ -291,7 +291,33 @@ def make_handler(root: Path, *, explorer=None):
             self.wfile.write(body)
 
         def do_POST(self):
-            self._reply(405, "GET_ONLY", "text/plain; charset=utf-8")
+            # A one-byte POST can trigger a TCP reset on Windows when its
+            # unread request body remains queued as the connection closes.
+            # Read at most 8192 inert bytes, then emit the existing 405.
+            length = self.headers.get("Content-Length", "0")
+            if (self.headers.get("Transfer-Encoding") is not None
+                    or not length.isascii() or not length.isdecimal()
+                    or len(length) > 5):
+                self.close_connection = True
+                return self._reply(400, "INVALID_POST_LENGTH",
+                                   "text/plain; charset=utf-8")
+            size = int(length)
+            if size > 8192:
+                self.close_connection = True
+                return self._reply(413, "POST_BODY_TOO_LARGE",
+                                   "text/plain; charset=utf-8")
+            prior_timeout = self.connection.gettimeout()
+            self.connection.settimeout(2.0)
+            try:
+                if len(self.rfile.read(size)) != size:
+                    self.close_connection = True
+                    return
+            except (OSError, TimeoutError):
+                self.close_connection = True
+                return
+            finally:
+                self.connection.settimeout(prior_timeout)
+            return self._reply(405, "GET_ONLY", "text/plain; charset=utf-8")
 
         def do_GET(self):
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
