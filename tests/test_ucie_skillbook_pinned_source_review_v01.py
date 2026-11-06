@@ -181,6 +181,32 @@ class PinnedSourceReviewTests(unittest.TestCase):
                 with self.assertRaises(review.SourceReviewError):
                     review.inspect_review_journal(tampered)
 
+    def test_journal_rejects_duplicate_fields_and_nonstandard_numbers(self):
+        # Both forged lines decode to the SAME logical object under Python's
+        # permissive default JSON parser, leaving the original hash valid.
+        # Ambiguous bytes must fail even with a valid reconstructed hash.
+        verified = review.verify_pinned_raw_bytes(self.source_id, self.raw)
+        event = review.propose_source_review(verified)
+        saved, _ = review.extend_review_journal(b"", event)
+        self.assertTrue(saved.startswith(b'{"entry_sha256":'))
+        dup = saved.replace(
+            b'{"entry_sha256":',
+            b'{"sequence":1,"entry_sha256":',
+            1,
+        )
+        nonfinite = saved.replace(
+            b'{"entry_sha256":',
+            b'{"sequence":NaN,"entry_sha256":',
+            1,
+        )
+        self.assertNotEqual(dup, saved)
+        self.assertNotEqual(nonfinite, saved)
+        for tampered in (dup, nonfinite):
+            with self.subTest(prefix=tampered[:48]):
+                with self.assertRaises(review.SourceReviewError):
+                    review.inspect_review_journal(tampered)
+        self.assertEqual(review.inspect_review_journal(saved)["total_events"], 1)
+
     def test_event_forged_release_and_approval_flags_blocked(self):
         source = review.verify_pinned_raw_bytes(self.source_id, self.raw)
         event = review.propose_source_review(source)
