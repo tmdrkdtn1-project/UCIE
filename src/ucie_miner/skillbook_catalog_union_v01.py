@@ -955,8 +955,8 @@ def main() -> int:
             server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
         return 0
-    except OSError:
-        print(json.dumps({"schema": SCHEMA, "status": "LOCAL_BIND_FAILED_NO_GO"}))
+    except (OSError, pinned_review.SourceReviewError):
+        print(json.dumps({"schema": SCHEMA, "status": "LOCAL_REVIEW_OR_BIND_FAILED_NO_GO"}))
         return 3
     return 0
 
