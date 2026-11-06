@@ -135,7 +135,7 @@ class OfficialDocumentObservationTests(unittest.TestCase):
                          self.expected_sha)
         self.assertEqual(receipt["comparison"]["source_id"], self.source)
         self.assertEqual(receipt["comparison"]["status"],
-                         "OBSERVED_BODY_SHA_MISMATCH_BLOCKED")
+                         "INCOMPARABLE_PINNED_SOURCE_VS_LIVE_HTML_REVIEW_REQUIRED")
         self.assertFalse(receipt["comparison"]["human_approved"])
         self.assertFalse(receipt["comparison"]["export_allowed"])
 
@@ -209,8 +209,11 @@ class OfficialDocumentObservationTests(unittest.TestCase):
         r = self._observed()
         observation = obs.compare_editorial_source_to_observation(self.pilot, r)
         self.assertEqual(observation["status"],
-                         "OBSERVED_BODY_SHA_MISMATCH_BLOCKED")
-        self.assertFalse(observation["byte_sha_equal"])
+                         "INCOMPARABLE_PINNED_SOURCE_VS_LIVE_HTML_REVIEW_REQUIRED")
+        self.assertIsNone(observation["byte_sha_equal"])
+        self.assertFalse(observation["digest_material_comparable"])
+        self.assertEqual(observation["pinned_source_tag"], "v3.15.0")
+        self.assertEqual(observation["pinned_source_path"], "Doc/library/os.rst")
         self.assertFalse(observation["technical_claims_reviewed"])
         self.assertFalse(observation["receipt_authenticity_cryptographically_verified"])
         self.assertFalse(observation["source_revision_verified"])
@@ -222,9 +225,10 @@ class OfficialDocumentObservationTests(unittest.TestCase):
                 item["evidence_sha256"] = self.expected_sha
         claimed = editor.compile_review_draft(record)
         equal = obs.compare_editorial_source_to_observation(claimed, r)
-        self.assertTrue(equal["byte_sha_equal"])
+        self.assertIsNone(equal["byte_sha_equal"])
+        self.assertFalse(equal["digest_material_comparable"])
         self.assertEqual(equal["status"],
-                         "OBSERVED_BODY_SHA_MATCH_REVISION_UNVERIFIED")
+                         "INCOMPARABLE_UNDECLARED_MATERIAL_REVIEW_REQUIRED")
         self.assertFalse(equal["source_origin_independently_attested"])
         self.assertFalse(equal["receipt_authenticity_cryptographically_verified"])
         self.assertFalse(equal["human_approved"])
@@ -240,7 +244,7 @@ class OfficialDocumentObservationTests(unittest.TestCase):
         self.assertEqual(result["comparison"]["draft_sha256"],
                          self.pilot["draft_sha256"])
         self.assertEqual(result["comparison"]["status"],
-                         "OBSERVED_BODY_SHA_MISMATCH_BLOCKED")
+                         "INCOMPARABLE_PINNED_SOURCE_VS_LIVE_HTML_REVIEW_REQUIRED")
         self.assertFalse(result["comparison"]["human_approved"])
 
     def test_missing_source_fails_before_network(self):
