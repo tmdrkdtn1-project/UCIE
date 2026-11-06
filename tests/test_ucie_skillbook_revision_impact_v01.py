@@ -83,6 +83,37 @@ class RevisionReviewImpactTests(unittest.TestCase):
             self.assertIn(cid, report["recheck_chapter_ids"])
         self.assertFalse(report["running_skill_mutated"])
 
+    def test_version_only_change_requires_applicability_recheck_even_with_hash_claims(self):
+        # A self-consistent journal fixture does not authenticate public origin.
+        journal = b""
+        for sid in ("doc:python/cpython", "doc:git/git"):
+            evidence = pinned.verify_pinned_raw_bytes(sid, self.raw)
+            evidence["observed_raw_sha256"] = evidence["expected_raw_sha256"]
+            evidence["observed_git_blob_sha1"] = evidence["expected_git_blob_sha1"]
+            evidence["sha256_equal"] = True
+            evidence["git_blob_sha1_equal"] = True
+            evidence["pinned_bytes_match"] = True
+            evidence["status"] = "PINNED_SOURCE_FILE_DIGESTS_MATCH_ORIGIN_REVIEW_PENDING"
+            event = pinned.propose_source_review(evidence)
+            journal, _ = pinned.extend_review_journal(journal, event)
+        record = deepcopy(self.base["authoring_input"])
+        record["previous_revision"] = self.base["draft_sha256"]
+        record["draft_version"] = "0.1.1-draft"
+        record["revision_note"] = (
+            "A version-only review candidate requires applicability verification.")
+        version_only = author.compile_review_draft(record)
+        report = revision.assess_revision_review_impact(
+            self.base, version_only, pinned_review_history=journal)
+        self.assertEqual(report["changed_chapter_ids"], [])
+        self.assertEqual(report["recheck_chapter_ids"], ["VERSION_AND_QA_LIMITATIONS"])
+        self.assertTrue(report["version_changed"])
+        self.assertTrue(all(
+            row["source_ledger_state"] ==
+            "PIN_MATCH_RECORDED_ORIGIN_AND_QA_UNVERIFIED"
+            for row in report["sources"]))
+        self.assertFalse(report["owner_approval_granted"])
+        self.assertFalse(report["export_allowed"])
+
     def test_unrelated_parent_does_not_create_forged_lineage(self):
         tampered = deepcopy(self.current)
         tampered["authoring_input"]["previous_revision"] = "0" * 64
