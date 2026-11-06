@@ -74,7 +74,9 @@ class UCIEStagingWheelSmoke(unittest.TestCase):
                         "--no-build-isolation", "--wheel-dir", str(wheel_dir),
                         str(build))
             self.assertEqual(built.returncode, 0,
-                             "STAGING_WHEEL_BUILD_FAIL:" + str(built.returncode))
+                             "STAGING_WHEEL_BUILD_FAIL:" + str(built.returncode)
+                             + " STDERR_TAIL:" + built.stderr.decode(
+                                 "utf-8", "replace")[-950:])
             wheels = list(wheel_dir.glob("ucie_public_only_demo-*.whl"))
             self.assertEqual(len(wheels), 1)
             wheel = wheels[0]
