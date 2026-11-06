@@ -31,9 +31,9 @@ Set-Location D:\UCIE
 
 ## 실제 시험과 환경 경계
 
-- 신규 `tests/test_ucie_skillbook_revision_impact_v01.py` **7/7 PASS**: 변경 챕터/계약, 서로 다른 버전 부모, 해시 불일치 원장 영향, 재시험 미실행, 수정·승인 없음, 실제 로컬 HTTP 상세와 JSON.
+- 신규 `tests/test_ucie_skillbook_revision_impact_v01.py` **8/8 PASS**: 변경 챕터/계약, 서로 다른 버전 부모, 해시 불일치 원장 영향, 재시험 미실행, 수정·승인 없음, 실제 로컬 HTTP 상세와 JSON.
 - 신규 `tests/test_ucie_revision_pair_loader_v01.py` **7/7 PASS**: 실제 고정 입력 파일을 통한 로더, 추가/중복 JSON 키·거짓 승인·부모 SHA·symlink 차단, 명시적 CLI 로딩, 실제 W04 로컬 HTTP 검색/상세/JSON.
-- 기존 출시 관련 15개 시험 파일을 함께 재실행하여 **총 17개 파일, 185/185 소유자 Windows 대상 자체 시험 PASS**. 정확 최신 GitHub Actions 4개 환경의 결과는 최종 HEAD에서 별도 확인. 이 자체 시험은 독립 3자 검증·실사용 보안 인수 또는 출시 승인이 아니다.
+- 기존 출시 관련 15개 시험 파일을 함께 재실행하여 **총 17개 파일, 186/186 소유자 Windows 대상 자체 시험 PASS**. 정확 최신 GitHub Actions 4개 환경의 결과는 최종 HEAD에서 별도 확인. 이 자체 시험은 독립 3자 검증·실사용 보안 인수 또는 출시 승인이 아니다.
 - **호스트 충돌 보존:** 기존 `skillbook_editorial_production_v01.py` 소유자 로컬 SHA가 원격 HEAD의 이전 내용과 다르므로 덮어쓰지 않았다. GitHub에서 편집기 수정 시도도 **이전 exact Git blob로 복원**했다. 신규 좁은 `skillbook_revision_review_v01.py`를 별도 추가해 기존 편집기를 import하고 W04에 연결한다. 기존 소유자 추적 수정 15파일 유지, DB/수집기/스케줄/C40/타 프로젝트 접근/공개 배포 변경 없음.
 
 ## 남은 실제 출시 인수
