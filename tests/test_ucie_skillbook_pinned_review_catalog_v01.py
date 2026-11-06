@@ -140,6 +140,7 @@ class PinnedReviewCatalogTests(unittest.TestCase):
                     urlopen(base + "/catalog/review.json?id=" +
                             self.draft["draft_sha256"], timeout=6)
                 self.assertEqual(ctx.exception.code, 400)
+                ctx.exception.close()
             finally:
                 server.shutdown()
                 thread.join(timeout=3)
