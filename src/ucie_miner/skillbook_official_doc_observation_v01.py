@@ -203,8 +203,50 @@ def _check_receipt(receipt: dict) -> dict:
     return receipt
 
 
+def _submitted_source_material(item: dict) -> dict:
+    """Derive source byte *basis* from the existing two curated books.
+
+    The publisher's pinned upstream RST/AsciiDoc Git blob is NOT the moving
+    docs.python.org/git-scm.com HTML response. No caller-provided identity,
+    approval flag or untyped SHA can make the material comparable.
+    """
+    from .skillbook_product_v01 import build_skillbook as python_book
+    from .skillbook_git_porcelain_product_v01 import build_skillbook as git_book
+    for book in (python_book(), git_book()):
+        entry, source = book["library_entry"], book["source_evidence"]
+        if (item["source_id"] == entry["source_id"]
+                and item["public_url"] == entry["public_url"]
+                and item["evidence_sha256"] == source["source_document_sha256"]):
+            if (source.get("source_digest_scope") not in (
+                    "ENTIRE_VERSION_PINNED_DOC_SOURCE_BYTES",
+                    "ENTIRE_GIT_TAG_PINNED_DOCUMENT_BYTES")
+                    or not source.get("source_file")
+                    or not source.get("source_tag")
+                    or not source.get("source_document_git_blob_sha1")):
+                raise OfficialDocumentObservationError(
+                    "curated version-pinned source identity drift")
+            return {
+                "kind": "VERSION_TAG_PINNED_REPOSITORY_DOC_SOURCE_BYTES",
+                "repository": source["publisher"],
+                "tag": source["source_tag"],
+                "source_file": source["source_file"],
+                "git_blob_sha1": source["source_document_git_blob_sha1"],
+                "submitted_file_sha256": source["source_document_sha256"],
+                "source_material_known": True,
+                "raw_html_same_material": False,
+            }
+    return {
+        "kind": "UNDECLARED_HASH_MATERIAL",
+        "repository": None, "tag": None, "source_file": None,
+        "git_blob_sha1": None,
+        "submitted_file_sha256": item["evidence_sha256"],
+        "source_material_known": False,
+        "raw_html_same_material": False,
+    }
+
+
 def compare_editorial_source_to_observation(draft: dict, receipt: dict) -> dict:
-    """Observe supplied SHA equality only; do not assert signed provenance."""
+    """Compare *material scopes*, not merely two unrelated SHA hex strings."""
     if (type(draft) is not dict
             or type(draft.get("authoring_input")) is not dict):
         raise OfficialDocumentObservationError("untrusted editorial draft")
@@ -222,18 +264,35 @@ def compare_editorial_source_to_observation(draft: dict, receipt: dict) -> dict:
         raise OfficialDocumentObservationError(
             "receipt source not part of candidate's official document evidence")
     item = matches[0]
-    equal = item["evidence_sha256"] == r["observed_raw_sha256"]
+    material = _submitted_source_material(item)
+    # A source-file SHA vs rendered HTML SHA is not a content revision check.
+    # Likewise, newly submitted W02 digest has no recorded material basis.
+    # Even equal 64-hex values cannot bypass this missing provenance.
+    state = (
+        "INCOMPARABLE_PINNED_SOURCE_VS_LIVE_HTML_REVIEW_REQUIRED"
+        if material["source_material_known"]
+        else "INCOMPARABLE_UNDECLARED_MATERIAL_REVIEW_REQUIRED"
+    )
     return {
         "schema": BINDING_SCHEMA,
-        "status": ("OBSERVED_BODY_SHA_MATCH_REVISION_UNVERIFIED"
-                   if equal else "OBSERVED_BODY_SHA_MISMATCH_BLOCKED"),
+        "status": state,
         "draft_sha256": draft["draft_sha256"],
         "source_id": r["source_id"], "official_url": r["source_url"],
         "submitted_evidence_sha256": item["evidence_sha256"],
         "observed_raw_sha256": r["observed_raw_sha256"],
         "observed_at_utc": r["observed_at_utc"],
         "observed_raw_bytes": r["observed_raw_bytes"],
-        "byte_sha_equal": equal,
+        "byte_sha_equal": None,
+        "digest_material_comparable": False,
+        "submitted_digest_material": material["kind"],
+        "observed_digest_material": "LIVE_RENDERED_HTML_RESPONSE_BODY_BYTES",
+        "pinned_source_tag": material["tag"],
+        "pinned_source_path": material["source_file"],
+        "pinned_repository": material["repository"],
+        "pinned_git_blob_sha1": material["git_blob_sha1"],
+        "source_file_digest_verified_by_this_receipt": False,
+        "legacy_mismatch_verdict_invalidated": True,
+        "requires_same_byte_material_for_comparison": True,
         "exact_endpoint_route_checked": True,
         "source_revision_verified": False,
         "source_origin_independently_attested": False,
