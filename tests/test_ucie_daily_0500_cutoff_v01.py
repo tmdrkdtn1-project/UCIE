@@ -1,6 +1,7 @@
 """UCIE daily report 05 KST cut-off regression; synthetic DB or owner read-only."""
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import date
 from hashlib import sha256
 import json
@@ -22,7 +23,7 @@ class DailyReportCutoffTests(unittest.TestCase):
         (self.root / ".git").mkdir(parents=True)
         (self.root / "runtime").mkdir()
         self.path = self.root / "runtime" / "public_miner.sqlite3"
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("CREATE TABLE candidates (source TEXT, observed_at TEXT, status TEXT)")
             db.execute("CREATE TABLE runs (at_utc TEXT, status TEXT)")
             db.executemany("INSERT INTO candidates VALUES (?,?,?)", [
@@ -73,13 +74,13 @@ class DailyReportCutoffTests(unittest.TestCase):
         self.assertFalse((self.root / "runtime" / "reports").exists())
 
     def test_bad_source_and_approved_row_fail_closed(self):
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("INSERT INTO candidates VALUES (?,?,?)", (
                 "unapproved/repo", "2026-11-05T10:00:00+00:00",
                 "UNVERIFIED_CANDIDATE_ONLY"))
         with self.assertRaises(DailyCutoffError):
             inspect_snapshot(self.root, date(2026, 11, 6))
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("DELETE FROM candidates WHERE source='unapproved/repo'")
             db.execute("INSERT INTO candidates VALUES (?,?,?)", (
                 "python/cpython", "2026-11-05T10:00:00+00:00", "APPROVED"))
