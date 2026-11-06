@@ -331,6 +331,36 @@ def make_handler(root: Path, *, auditor=None, public_prober=None,
     audit_reader = v07.audit_existing_public_library if auditor is None else auditor
 
     class Handler(base):
+        def do_POST(self):
+            # Consume only a small, bounded request body before sending 405.
+            # On Windows a TCP close with unread POST bytes can reset the
+            # connection before the caller receives the response.
+            raw_length = self.headers.get("Content-Length", "0")
+            if (self.headers.get("Transfer-Encoding") is not None
+                    or not raw_length.isascii()
+                    or not raw_length.isdecimal()
+                    or len(raw_length) > 4):
+                self.close_connection = True
+                return self.reply(400, "INVALID_POST_BODY",
+                                  "text/plain; charset=utf-8")
+            body_size = int(raw_length)
+            if body_size > 1024:
+                self.close_connection = True
+                return self.reply(413, "POST_BODY_TOO_LARGE",
+                                  "text/plain; charset=utf-8")
+            original_timeout = self.connection.gettimeout()
+            self.connection.settimeout(2.0)
+            try:
+                if len(self.rfile.read(body_size)) != body_size:
+                    self.close_connection = True
+                    return
+            except OSError:
+                self.close_connection = True
+                return
+            finally:
+                self.connection.settimeout(original_timeout)
+            return self.reply(405, "GET_ONLY", "text/plain; charset=utf-8")
+
         def reply(self, status, content, mime="text/html; charset=utf-8"):
             if status == 200 and mime == "text/html; charset=utf-8":
                 content = _brand(content)
