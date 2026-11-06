@@ -10,6 +10,14 @@ Never silently shrink the product into a PR scraper, static error list, search p
 
 Run and preserve `python -m ucie_miner.product_plan` and tests in `tests/test_ucie_product_plan.py` and `tests/test_ucie_skillbook_blueprint.py` before changing product scope. SkillBook blueprint output is **UNVERIFIED_METADATA_ONLY**, not a completed skill or product.
 
+
+## Mandatory UCIE Slack decision logging and new-room handoff
+
+- Before starting in any **new UCIE workroom/chat**, read `docs/UCIE_SLACK_HANDOFF_PROTOCOL_V1_20261102.md` and `docs/UCIE_HANDOFF_CURRENT.md` (if still pending merge, read them from the reviewed PR branch), then recheck the latest relevant `#ucie-project` Slack message/thread, GitHub PR/commit and CI, and separately owner-host receipts. Do not assume an old Slack message proves current operations. If those tools are unavailable, say which step was not observed and keep `UNKNOWN/HOLD` rather than inventing state.
+- Record **locked product/scope decisions**, consequential design changes, branch/workroom owner transfers, newly discovered or cleared blockers, CI/merge/host/approval gate changes, status corrections, and pending work before chat transfer. Store the source-linked decision in GitHub, update the single `UCIE_HANDOFF_CURRENT.md`, post a compact evidence-linked Slack receipt when connected, and report the actual message permalink and KST time. Never report a Slack post as successful before the API supplies its receipt.
+- Distinguish `HANDOFF_SENT` from `HANDOFF_RECEIVED`: the new room must actually inspect live evidence and acknowledge in the original handoff thread. Include one primary `NEXT_OWNER`, 1-3 concrete `NEXT_ACTION` items, blockers, acceptance tests, and non-authorizations. Avoid repetitive status spam; new evidence can update the original Slack thread.
+- These instructions do **not** create a background watcher or guarantee a fresh ChatGPT conversation automatically loads repository documents. The initiating message/connected repo and Slack access must bring them into context. Never read unrelated project channels, code, or user-private content to satisfy a handoff.
+
 ## Inviolable safety and scientific boundaries
 
 - Only UCIE-approved public official material plus `python/cpython`, `PowerShell/PowerShell`, `git/git`, `modelcontextprotocol/python-sdk`, `actions/runner-images`. No implicit source expansion.
