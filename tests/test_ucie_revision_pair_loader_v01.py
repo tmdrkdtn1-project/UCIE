@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 from http.server import HTTPServer
+from contextlib import redirect_stdout
+from io import StringIO
 import json
+import sys
 from pathlib import Path
 import tempfile
 import threading
@@ -104,6 +107,41 @@ class ExactRevisionPairLoaderTests(unittest.TestCase):
             self.skipTest("cannot create symlink under local policy")
         with self.assertRaises(editorial.EditorialDraftError):
             revision.read_review_pair(self.root)
+
+    def test_actual_catalog_cli_flag_selects_exact_review_pair(self):
+        """No HTTP bind: exercise CLI routing and owner opt-in switch."""
+        previous = self.before
+        candidate = editorial.compile_review_draft(self.b)
+        seen = {}
+        class FakeServer:
+            server_port = 49152
+            def __init__(self, bind, handler):
+                seen["bind"] = bind
+                seen["handler"] = handler
+            def __enter__(self):
+                return self
+            def __exit__(self, *_args):
+                return False
+            def serve_forever(self, **_kwargs):
+                raise KeyboardInterrupt()
+        with patch.object(catalog.sys, "argv", [
+                "catalog", "--port", "0", "--revision-review-file"]):
+            with patch.object(catalog.revision_review, "read_review_pair",
+                              return_value=(previous, candidate)) as loader:
+                with patch.object(catalog.pinned_review,
+                                  "read_isolated_review_journal",
+                                  return_value=b""):
+                    with patch.object(catalog, "HTTPServer", FakeServer):
+                        buf = StringIO()
+                        with redirect_stdout(buf):
+                            result = catalog.main()
+        self.assertEqual(result, 0)
+        self.assertEqual(seen["bind"], ("127.0.0.1", 0))
+        self.assertTrue(loader.called)
+        text = json.loads(buf.getvalue())
+        self.assertTrue(text["revision_review_file_loaded"])
+        self.assertEqual(text["approved_packages"], 0)
+        self.assertFalse(text["export_allowed"])
 
     def test_browsing_explicit_pair_returns_w09_retest_no_release(self):
         self._write()
