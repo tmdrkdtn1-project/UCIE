@@ -165,3 +165,17 @@ UCIE 통합개발방에서 UCIE 제품 개발의 한 묶음을 끝내고 응답�
 **6단계 작업 종료 상태:** 01 PARTIAL(사람/기계 편집 및 개정 내용 자체 비교 구현, 새 실제 공개 자료의 전문가 기술 사실/권리 인수 미완); 02 PARTIAL(가상도서관에서 명시 버전별 편집 후보 선택→개정 영향·출처 검토 이력·미실행 재시험 조회 동작, 모든 자산 유형 인수 미완); 03 PARTIAL(승인형 버전 고정 실행 패키지/서명/외부 전달 미완); 04 PARTIAL(소유자 대상186/186 자체 시험, 독립 외부 QA/실사용 효과 비교 미완); **05 PARTIAL(서명되지 않은 검토 원장→실제 변경 챕터·근거 상태·재시험 대상 의사결정표까지 연결, 실제 승인형 개정/철회 영구 기록/전파 미완)**; **06 NO_GO**(운영 수집 스케줄 안정·독립 QA/라이선스·보안·소유자 최종 승인·서명·외부 출시 미완).
 
 **NEXT:** 실제 소유자 검토 원장에 승인 공식 태그 원본 최소 1건을 수동 확보/검증해 1차 실영수증을 인수한 뒤, 신규 버전에서 실증된 기술 변경을 편집 파일로 작성하고 부정 시험·독립 리뷰를 거쳐 승인/철회 인수 프로토콜을 구축. 자동 승격/철회/외부 배포는 사람 승인이 없으면 실행 금지.
+
+## 작업 묶음 10 — 공식 원본 인수 1회 호출과 실제 검토 원장·가상도서관 연계 (2026-11-06)
+
+- **빙빙도는 중간 설계가 아닌 실사용 종단 경로 연결**: 기존 SkillBook 001/002의 고정 태그·파일·SHA-256·Git blob SHA-1와 기존 source-review 원장/W04 로컬 가상도서관을 **한 번의 수동 인수 명령**으로 연결하는 `src/ucie_miner/skillbook_owner_pinned_acceptance_v01.py` 및 단일 `tests/test_ucie_skillbook_owner_pinned_acceptance_v01.py` 신규 구현.
+- 기존 승인 2개 SkillBook 원본 소스만 허용: Python `python/cpython` v3.15.0 `Doc/library/os.rst`, Git `git/git` v2.51.0 `Documentation/git-status.adoc`. 정확 GitHub 공개 Git blob 콘텐츠 주소 URL(기존 first-party 고정 blob SHA에서 유도) 1회 비인증 HTTPS 조회. 최대900KB JSON 응답/15초, redirect·MIME·압축·중복키/Base64/size·Git blob identity 검사, raw bytes는 메모리에서만 사용. 제출된 버전 원문 SHA-256과 Git blob SHA-1이 **모두 일치해야 통과**하며 가변 HTML과 비교하지 않음.
+- `--confirm-network`만 있으면 **쓰기 없는 raw source 공개 조회+검증 영수증**. 사용자 명시 `--record-review --confirm-review-write`가 추가된 경우에만 기존 UCIE `runtime/skillbook_manual_review/skillbook_review_events_v01.jsonl` **미서명 검토 권고**를 단 1회/중복방지 기록. 기록 전 기존 W04가 해당 이벤트를 정상 조회할 수 있는지 **인메모리 사전검사**해 불일치 시 실제 파일을 변경하지 않고 차단. 기록 후 실제 journal hash chain + W04 동일 이벤트 상태를 다시 검사. 실제 자동 승인/철회/규칙 반영/외부 배포/원본 저장·재배포는 0.
+- **현재 소유자 Windows 코드 검증** 신규 synthetic HTTP·원장·W04 소비/차단 15/15 및 이전 관련 17개 파일 186/186, 즉 **18개 파일 201/201 PASS**. 이 테스트는 실제 원격 public API와 owner journal 직접 요청이 아니며, 최신 정확 PR HEAD의 GitHub Actions4개 환경 여부는 별도로 기록한다.
+- **실제 호스트 권한 장벽**: 현재 UCIE MCP Admin Bridge는 source-files SHA-lease와 **단일 unittest 파일**만 실행할 수 있고 owner-host에서 임의 외부 HTTPS 공개 파일 GET이나 runtime/skillbook_manual_review 운영 원장 기록 수행 권한은 없다. PR 코드/소유자 파일의 테스트 실행은 가능했지만, owner의 1회 실제 `GitHub blob GET → verify → review event → W04` 영수증은 **이번 작업에서 수집 0건**. 이를 사용자에게 100% 인수 PASS라 주장하지 않는다.
+- **PR 검수**: #182는 main `c41460...` 대비 기존 W04 확장+새 UCIE src/테스트/문서 등 많은 변경을 묶은 Draft 미병합. owner 실제 로컬 tracked 기존 수정15/다수 untracked 보호. 전체 병합·main 전환·운영 TaskScheduler/DB/C40/설치·서명/배포는 별도 owner 승인 전 금지.
+- 실제 수동 명령·안전 범위: `docs/UCIE_ONE_SHOT_PINNED_SOURCE_OWNER_ACCEPTANCE_V01_20261106.md`. owner가 실조회 동의 없이 정상 실행하면 FAIL_CLOSED.
+
+**6단계 종료 판정:** 01 PARTIAL(실제 고정 원문 검증을 SkillBook 근거에 연결하는 코드, 사람 기술/공식 tag 서명 검토 미완); 02 PARTIAL(현행 W04와 검토원장에 1회 인수 결과 연결 가능, 모든 유형의 독립 사용자 소비 미완); 03 PARTIAL(승인/권리/서명된 실행형 패키지 미완); 04 PARTIAL(소유자 201/201 및 정확 커밋 CI 별도, 외부 독립 QA/실제 효과 비교 미완); **05 PARTIAL(기존 기술 개정 영향+원본 검증+원장+W04 연결 호출 구현, 실제 소유자 실영수증 및 승인형 영구 철회 미완)**; **06 NO_GO(운영 안정·보안/사용권/독립 QA/서명/소유자 최종 출시 인수 미완)**.
+
+**NEXT 현실적인 한 단계:** 소유자 환경의 정확한 명시적 수동 호출로 **실제 1건** 인수 영수증을 확보하고, 해당 결과의 출처·기술 사실·권리 독립 검수를 판정. 이후 PR #182가 제품 코드 검수/통합 승인 조건을 충족했을 때만 병합/서명 준비로 진행. 새로운 실적 없는 설계 모듈 무한 추가 금지.
