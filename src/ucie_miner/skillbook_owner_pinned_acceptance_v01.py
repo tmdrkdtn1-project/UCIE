@@ -193,32 +193,45 @@ def accept_one_exact_source(source_id: str, *,
             "export_allowed": False, "released": False,
         }
         if record_review:
-            # Permission for this single isolated advisory event is distinct
-            # from permission for the single public GET.
+            # Prepare a candidate journal entirely in memory and verify that
+            # the existing W04 display would accept the *latest* source event
+            # BEFORE touching the owner's isolated review journal.
+            from . import skillbook_catalog_union_v01 as catalog
+
+            def inspect_catalog_link(history):
+                try:
+                    dossier = catalog.inspect_review_candidate(
+                        pinned_review_history=history)
+                except (catalog.FederationError, ValueError, KeyError) as exc:
+                    raise AcceptanceError("W04 read-only preflight failed") from exc
+                matching = [
+                    row for row in dossier["pinned_source_review_statuses"]
+                    if row["source_id"] == source_id
+                ]
+                if (len(matching) != 1
+                        or matching[0]["review_event_id"] != proposal["event_id"]
+                        or matching[0]["status"] !=
+                        "PINNED_RAW_SOURCE_HASHES_MATCH_UNAUTHENTICATED"
+                        or dossier["export_allowed"] is not False):
+                    raise AcceptanceError(
+                        "W04 cannot display current source review; no write allowed")
+                return matching[0]["status"]
+
+            existing = pinned.read_isolated_review_journal(root)
+            hypothetical, _ = pinned.extend_review_journal(
+                existing, proposal)
+            inspect_catalog_link(hypothetical)
+            # Only a separate explicit owner consent can persist this already
+            # W04-checked advisory; no source bytes or publisher code stored.
             journal_result = pinned.persist_review_event(
                 root, proposal, owner_opt_in=True)
-            history = pinned.read_isolated_review_journal(root)
-            checked = pinned.inspect_review_journal(history)
-            if (checked["total_events"] < 1
-                    or not checked["events"]
-                    or checked["events"][-1]["event_id"] != proposal["event_id"]
-                    and not any(event["event_id"] == proposal["event_id"]
-                                for event in checked["events"])):
-                raise AcceptanceError("persisted event not in verified journal")
-            from . import skillbook_catalog_union_v01 as catalog
-            dossier = catalog.inspect_review_candidate(
-                pinned_review_history=history)
-            matching = [
-                row for row in dossier["pinned_source_review_statuses"]
-                if row["source_id"] == source_id
-            ]
-            if (len(matching) != 1
-                    or matching[0]["review_event_id"] != proposal["event_id"]
-                    or matching[0]["status"] !=
-                    "PINNED_RAW_SOURCE_HASHES_MATCH_UNAUTHENTICATED"
-                    or dossier["export_allowed"] is not False):
+            actual = pinned.read_isolated_review_journal(root)
+            checked = pinned.inspect_review_journal(actual)
+            if (not checked["events"]
+                    or checked["events"][-1]["event_id"] != proposal["event_id"]):
                 raise AcceptanceError(
-                    "journal event not current in W04 catalog; manual review required")
+                    "journal changed after preflight; review not accepted")
+            state = inspect_catalog_link(actual)
             result.update({
                 "status": "SOURCE_VERIFIED_REVIEW_JOURNAL_AND_W04_LINKED_NOT_APPROVED",
                 "review_journal_written": (
@@ -228,7 +241,7 @@ def accept_one_exact_source(source_id: str, *,
                 "review_journal_total_events": checked["total_events"],
                 "review_journal_head_sha256": checked["last_hash"],
                 "catalog_reference_checked": True,
-                "catalog_source_status": matching[0]["status"],
+                "catalog_source_status": state,
             })
         return result
     except pinned.SourceReviewError as exc:
