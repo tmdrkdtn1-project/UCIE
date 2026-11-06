@@ -53,6 +53,7 @@ class AcceptanceTests(unittest.TestCase):
             b"blob " + str(len(self.raw)).encode("ascii") + b"\0" +
             self.raw).hexdigest()
         book = review._pinned_book(self.sid)
+        git_book = review._pinned_book("doc:git/git")
         self.synthetic_book = deepcopy(book)
         self.synthetic_book["source_evidence"][
             "source_document_sha256"] = self.raw_sha256
@@ -65,8 +66,14 @@ class AcceptanceTests(unittest.TestCase):
         self.owner = Path(self.temp.name) / "UCIE"
         self.owner.mkdir()
         (self.owner / "runtime").mkdir()
+        def restricted_fixture(sid):
+            if sid == self.sid:
+                return self.synthetic_book
+            if sid == "doc:git/git":
+                return git_book
+            raise review.SourceReviewError("not one of the two approved sources")
         self.source_guard = patch.object(
-            review, "_pinned_book", return_value=self.synthetic_book)
+            review, "_pinned_book", side_effect=restricted_fixture)
         self.source_guard.start()
         self.addCleanup(self.source_guard.stop)
         self.root_guard = patch.object(
