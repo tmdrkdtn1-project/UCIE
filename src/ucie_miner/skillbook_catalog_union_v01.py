@@ -302,7 +302,8 @@ def _review_summary(draft: dict, observations=None, journal_data=None) -> dict:
 def inspect_review_candidate(candidate_id: str | None = None, *,
                              editorial_records=None,
                              editorial_observations=None,
-                             pinned_review_history=None) -> dict:
+                             pinned_review_history=None,
+                             previous_editorial_draft=None) -> dict:
     """Actual browse-to-compare-to-review dossier, no DB/network/QA run."""
     if (candidate_id is not None
             and (type(candidate_id) is not str
@@ -352,8 +353,29 @@ def inspect_review_candidate(candidate_id: str | None = None, *,
         "source_content_verified_in_this_request": False,
         "human_approved": False, "export_allowed": False,
     })
+    impact = None
+    if previous_editorial_draft is not None:
+        try:
+            impact = editorial.assess_revision_review_impact(
+                previous_editorial_draft, chosen,
+                pinned_review_history=(
+                    pinned_review_history if pinned_review_history is not None
+                    else b""))
+        except editorial.EditorialDraftError as exc:
+            raise FederationError("unverified editorial revision lineage") from exc
+    elif chosen["revision"]["previous_draft_sha256_claim"] is not None:
+        # A claim of a parent is never enough for an attributed comparison.
+        impact = {
+            "schema": editorial.REVISION_IMPACT_SCHEMA,
+            "status": "PREVIOUS_REVISION_NOT_SUPPLIED_REVIEW_BLOCKED",
+            "old_draft_sha256": chosen["revision"]["previous_draft_sha256_claim"],
+            "new_draft_sha256": chosen["draft_sha256"],
+            "owner_approval_granted": False,
+            "export_allowed": False,
+        }
     return {
         "schema": REVIEW_SCHEMA, "status": REVIEW_STATUS,
+        "revision_review_impact": impact,
         "candidate": chosen,
         "summary": _review_summary(
             chosen, editorial_observations, pinned_review_history),
@@ -473,6 +495,38 @@ def render_review_candidate(report: dict) -> str:
             + '</p><small>편집자 주장 · 미검증 · 근거: '
             + e(", ".join(chapter["source_ids"])) + '</small></section>'
         )
+    impact = report.get("revision_review_impact")
+    if impact is not None:
+        if (type(impact) is not dict
+                or impact.get("schema") != editorial.REVISION_IMPACT_SCHEMA
+                or impact.get("export_allowed") is not False
+                or impact.get("owner_approval_granted") is not False):
+            raise FederationError("untrusted editorial revision status")
+        lines.extend(["<h3>개정 영향 및 필수 재검토</h3>",
+                      "<p>신규 후보는 기술 변경 여부를 수동 확인해야 합니다. "
+                      "이 화면은 검증·QA를 실행하거나 철회하지 않습니다.</p>"])
+        if impact["status"] == "PREVIOUS_REVISION_NOT_SUPPLIED_REVIEW_BLOCKED":
+            lines.append("<p>이전 초안 실물 미제공 · 개정 영향 분석 차단</p>")
+        elif impact["status"] == "AUTHORING_REVISION_REQUIRES_EXPERT_REVIEW_NO_GO":
+            lines.append(
+                "<p>이전 초안 SHA: <code>"
+                + e(impact["old_draft_sha256"]) + "</code></p>"
+                "<p>재검토 챕터: " + e(
+                    ", ".join(impact["recheck_chapter_ids"])) + "</p>"
+                "<p>검토 원장 이벤트: " + str(impact["journal_event_count"])
+                + " · 미서명 · 재검토/배포 미승인</p>"
+            )
+            for record in impact["sources"]:
+                lines.append(
+                    "<p>" + e(record["source_id"]) + " · "
+                    + e(record["source_ledger_state"]) + "</p>"
+                )
+            lines.extend(["<h4>재검증이 필요한 자체 시험</h4>", "<ul>"])
+            lines.extend("<li>" + e(item["filename"])
+                         + " · 미실행</li>" for item in impact["required_retests"])
+            lines.append("</ul>")
+        else:
+            raise FederationError("unrecognized editorial revision impact")
     lines.extend([
         "<h3>실행 불가 기계 설계 계약</h3><p>"
         + e(draft["machine_contract"]["interface_name"]) +
@@ -818,7 +872,8 @@ def render_skillbook_w09_release_gate(plan: dict) -> str:
 def make_handler(root: Path, *, public_reader=None,
                  editorial_records=None,
                  editorial_observations=None,
-                 pinned_review_history=None, **legacy_injections):
+                 pinned_review_history=None,
+                 previous_editorial_draft=None, **legacy_injections):
     base = previous.make_handler(root, **legacy_injections)
 
     class Handler(base):
@@ -896,7 +951,8 @@ def make_handler(root: Path, *, public_reader=None,
                     data = inspect_review_candidate(
                         ident, editorial_records=editorial_records,
                         editorial_observations=editorial_observations,
-                        pinned_review_history=pinned_review_history)
+                        pinned_review_history=pinned_review_history,
+                        previous_editorial_draft=previous_editorial_draft)
                     if path.path.endswith(".json"):
                         return self.reply(
                             200, json.dumps(data, sort_keys=True, ensure_ascii=True),
