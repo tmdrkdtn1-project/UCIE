@@ -7,7 +7,7 @@ PR #182 HEAD 6d502d82e31bd7964d914873618f1d3f1d575fd2.
 """
 from __future__ import annotations
 
-from hashlib import sha1
+from hashlib import sha1, sha256
 import ast
 import json
 import os
@@ -93,8 +93,12 @@ class UCIEOwnerOverlapReadOnlyPreflight(unittest.TestCase):
         top_classes = [node.name for node in tree.body if isinstance(node, ast.ClassDef)]
         self.assertLess(len(functions), 50)
         self.assertLess(len(top_classes), 12)
+        semantic_ast_sha256 = sha256(
+            ast.dump(tree, annotate_fields=True, include_attributes=False)
+            .encode("utf-8")).hexdigest()
         print("UCIE_PR182_OWNER_EDITORIAL_METADATA=" + json.dumps({
             "git_blob_sha1": _git_blob(raw),
+            "semantic_ast_sha256": semantic_ast_sha256,
             "lines": len(raw.splitlines()),
             "top_functions": functions,
             "top_classes": top_classes,
