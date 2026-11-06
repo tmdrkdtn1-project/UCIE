@@ -358,7 +358,7 @@ def extend_review_journal(existing: bytes, event: dict) -> tuple[bytes, dict]:
 
 
 def _owner_root(root: Path) -> Path:
-    if type(root) is not Path or root.name != "UCIE" or root.is_symlink():
+    if not isinstance(root, Path) or root.name != "UCIE" or root.is_symlink():
         raise SourceReviewError("isolated UCIE project root required")
     if not root.is_dir():
         raise SourceReviewError("UCIE project root missing")
