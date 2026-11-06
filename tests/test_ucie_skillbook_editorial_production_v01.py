@@ -39,6 +39,39 @@ class EditorialProductionDraftTests(unittest.TestCase):
         self.assertFalse(obj["technical_claim_verified"])
         self.assertFalse(obj["source_digest_independently_verified"])
 
+    def test_review_handoff_produces_reproducible_human_machine_sha_receipts(self):
+        from hashlib import sha256
+        first = ed.build_review_handoff(self.record)
+        second = ed.build_review_handoff(self.record)
+        self.assertEqual(first, second)
+        receipt = first["receipt"]
+        self.assertEqual(receipt["status"], "IN_MEMORY_REVIEW_HANDOFF_PENDING_NO_GO")
+        self.assertEqual(receipt["source_count"], 2)
+        self.assertEqual(receipt["chapter_count"], 5)
+        self.assertEqual(receipt["draft_sha256"], self.original["draft_sha256"])
+        self.assertEqual(sha256(first["human_markdown"]).hexdigest(),
+                         receipt["human_markdown_sha256"])
+        self.assertEqual(sha256(first["machine_json"]).hexdigest(),
+                         receipt["machine_json_sha256"])
+        self.assertEqual(json.loads(first["machine_json"]), self.original)
+        self.assertIn("독립", first["human_markdown"].decode("utf-8"))
+        self.assertFalse(receipt["human_review_completed"])
+        self.assertFalse(receipt["source_content_verified"])
+        self.assertFalse(receipt["signed"])
+        self.assertFalse(receipt["export_allowed"])
+        self.assertFalse(receipt["independent_qa_verified"])
+        self.assertEqual(receipt["files_written"], 0)
+        self.assertEqual(receipt["network_requests"], 0)
+
+    def test_handoff_rejects_untrusted_approval_claims(self):
+        for key, value in (("owner_approved", True), ("signed", True),
+                           ("export_allowed", True)):
+            rec = deepcopy(self.record)
+            rec[key] = value
+            with self.subTest(key=key):
+                with self.assertRaises(ed.EditorialDraftError):
+                    ed.build_review_handoff(rec)
+
     def test_reordering_sources_and_chapters_is_deterministic(self):
         record = deepcopy(self.record)
         record["sources"].reverse()
