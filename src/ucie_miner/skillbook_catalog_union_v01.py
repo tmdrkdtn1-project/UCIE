@@ -173,7 +173,8 @@ def _review_observation_status(draft: dict, observations=None) -> list[dict]:
     """Read bounded, already-observed and UNSIGNED source-byte metadata.
 
     This display NEVER fetches official sources or authenticates receipt JSON.
-    An observed byte SHA match does not attest revision, facts, rights or QA.
+    A pinned upstream source RST/AsciiDoc SHA is NOT a rendered HTML SHA.
+    Incomparability never grants approval, nor proves source drift.
     """
     if observations is None:
         observations = ()
@@ -206,6 +207,10 @@ def _review_observation_status(draft: dict, observations=None) -> list[dict]:
             statuses.append({
                 "source_id": sid, "status": status,
                 "byte_sha_equal": None, "observed_raw_sha256": None,
+                "digest_material_comparable": False,
+                "submitted_digest_material": "NOT_EVALUATED",
+                "observed_digest_material": None,
+                "pinned_source_tag": None, "pinned_source_path": None,
                 "observed_at_utc": None, "source_revision_verified": False,
                 "receipt_authenticity_cryptographically_verified": False,
                 "review_completed": False, "export_allowed": False,
@@ -214,6 +219,11 @@ def _review_observation_status(draft: dict, observations=None) -> list[dict]:
             statuses.append({
                 "source_id": sid, "status": result["status"],
                 "byte_sha_equal": result["byte_sha_equal"],
+                "digest_material_comparable": result["digest_material_comparable"],
+                "submitted_digest_material": result["submitted_digest_material"],
+                "observed_digest_material": result["observed_digest_material"],
+                "pinned_source_tag": result["pinned_source_tag"],
+                "pinned_source_path": result["pinned_source_path"],
                 "observed_raw_sha256": result["observed_raw_sha256"],
                 "observed_at_utc": result["observed_at_utc"],
                 "source_revision_verified": False,
@@ -351,15 +361,16 @@ def render_review_candidate(report: dict) -> str:
         )
     lines.extend(["</ul>", "<h3>공식 문서 바이트 관측 상태 (미서명)</h3>",
                   "<p>조회 전 수동으로 받은 영수증만 비교합니다. "
-                  "바이트 일치도 문서 버전·기술 정확성·권리 승인이 아닙니다.</p>",
+                  "RST/AsciiDoc 버전 고정 원문과 최신 HTML 응답의 SHA는 "
+                  "서로 비교할 수 없으며, 기술 사실·권리 승인이 아닙니다.</p>",
                   "<ul>"])
     observation_labels = {
         "NO_MANUAL_RAW_BYTE_OBSERVATION": "공식 원문 바이트 관측 미실시",
         "NOT_AN_OFFICIAL_DOCUMENT_ROUTE": "공식 HTML 문서 관측 대상 아님",
-        "OBSERVED_BODY_SHA_MATCH_REVISION_UNVERIFIED":
-            "제출 SHA와 관측 SHA 일치 · 버전/권리·외부 검증 미완",
-        "OBSERVED_BODY_SHA_MISMATCH_BLOCKED":
-            "제출 SHA와 관측 SHA 불일치 · 차단",
+        "INCOMPARABLE_PINNED_SOURCE_VS_LIVE_HTML_REVIEW_REQUIRED":
+            "해시 대상 불일치 · 버전 고정 원문과 웹 HTML 비교 불가 · 재검토",
+        "INCOMPARABLE_UNDECLARED_MATERIAL_REVIEW_REQUIRED":
+            "제출된 해시 대상 미정의 · HTML 비교 보류 · 재검토",
     }
     for proof in report["source_observation_statuses"]:
         state = proof["status"]
@@ -370,6 +381,9 @@ def render_review_candidate(report: dict) -> str:
             + e(observation_labels[state])
             + (" · 관측 SHA: " + e(proof["observed_raw_sha256"])
                if proof["observed_raw_sha256"] is not None else "")
+            + (" · 고정 근거: " + e(proof["pinned_source_tag"])
+               + " / " + e(proof["pinned_source_path"])
+               if proof["pinned_source_tag"] is not None else "")
             + " · 영수증 미서명 · 재배포 불가</li>"
         )
     lines.extend(["</ul>", "<h3>사람이 검토할 5개 기술 챕터</h3>"])
@@ -519,10 +533,14 @@ def render_federated(result: dict) -> str:
             ' · 기술 본문/원문 미검증 · 기계 실행 미구현 · 반출 불가</p>'
         )
         note = review.get("source_observation_statuses", [])
-        if any(item.get("byte_sha_equal") is False for item in note):
-            parts.append("<p>원문 바이트 SHA 불일치 후보 · 차단</p>")
-        elif any(item.get("byte_sha_equal") is True for item in note):
-            parts.append("<p>관측 SHA 일치 (미서명/버전 확인·검토 미완)</p>")
+        if any(item.get("status") ==
+               "INCOMPARABLE_PINNED_SOURCE_VS_LIVE_HTML_REVIEW_REQUIRED"
+               for item in note):
+            parts.append("<p>서로 다른 근거 형식 · SHA 직접 비교 불가 · 재검토</p>")
+        elif any(item.get("status") ==
+                 "INCOMPARABLE_UNDECLARED_MATERIAL_REVIEW_REQUIRED"
+                 for item in note):
+            parts.append("<p>해시 대상 미정의 · 검증 보류 · 재검토</p>")
         else:
             parts.append("<p>수동 공식 문서 바이트 관측 미실시</p>")
     if not result["editorial_review_candidates"]:
