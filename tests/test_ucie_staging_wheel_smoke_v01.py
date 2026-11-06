@@ -81,6 +81,23 @@ class UCIEStagingWheelSmoke(unittest.TestCase):
             self.assertEqual(len(wheels), 1)
             wheel = wheels[0]
             self.assertLess(wheel.stat().st_size, 15_000_000)
+            # Reconcile every packaged .py byte with this exact clean
+            # checkout. Wheel RECORD must also verify before installing.
+            from ucie_miner.staging_wheel_integrity_v01 import (
+                verify_staging_wheel,
+            )
+            source_sha = {}
+            for package in ("ucie_miner", "ucie_public"):
+                for module in (source / package).rglob("*.py"):
+                    self.assertFalse(module.is_symlink())
+                    name = module.relative_to(source).as_posix()
+                    source_sha[name] = hashlib.sha256(
+                        module.read_bytes()).hexdigest()
+            attestation = verify_staging_wheel(
+                wheel.read_bytes(), source_sha)
+            self.assertTrue(attestation["wheel_record_verified"])
+            self.assertTrue(attestation["source_files_match_checkout"])
+            self.assertFalse(attestation["external_release_authorized"])
             installed = run("install", "--no-index", "--no-deps",
                             "--target", str(target), str(wheel))
             self.assertEqual(installed.returncode, 0,
