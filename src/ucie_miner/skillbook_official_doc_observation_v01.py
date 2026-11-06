@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 import json
 import re
+import sys
 import urllib.error
 import urllib.request
 
@@ -326,6 +327,76 @@ def manual_check_candidate_source(
     return {"observation": observation, "comparison": result}
 
 
+MAX_RECORDED_RECEIPT_BYTES = 8192
+
+
+def recheck_recorded_observation(raw: bytes) -> dict:
+    """Offline reclassification of a previously emitted unsigned JSON receipt.
+
+    Never trusts the prior comparison verdict or reuses it as evidence.
+    Supports either the exact observation or the previous CLI envelope.
+    No network, source text, filesystem, signature or approval side effects.
+    """
+    if type(raw) is not bytes or not 1 <= len(raw) <= MAX_RECORDED_RECEIPT_BYTES:
+        raise OfficialDocumentObservationError("bounded receipt JSON required")
+
+    def _unique_object(pairs):
+        record = {}
+        for key, value in pairs:
+            if key in record:
+                raise OfficialDocumentObservationError("duplicate JSON key")
+            record[key] = value
+        return record
+
+    try:
+        data = json.loads(raw.decode("utf-8", "strict"),
+                          object_pairs_hook=_unique_object)
+    except (ValueError, UnicodeError, TypeError) as exc:
+        raise OfficialDocumentObservationError("invalid recorded JSON") from exc
+    if type(data) is not dict:
+        raise OfficialDocumentObservationError("receipt object expected")
+    if set(data) == {"observation", "comparison"}:
+        prior, raw_receipt = data["comparison"], data["observation"]
+        if (type(prior) is not dict
+                or type(raw_receipt) is not dict
+                or prior.get("schema") != BINDING_SCHEMA
+                or prior.get("source_id") != raw_receipt.get("source_id")
+                or prior.get("observed_raw_sha256")
+                   != raw_receipt.get("observed_raw_sha256")):
+            raise OfficialDocumentObservationError(
+                "historical comparison not linked to observation")
+        prior_status = prior.get("status")
+        if type(prior_status) is not str or len(prior_status) > 100:
+            raise OfficialDocumentObservationError("invalid previous verdict")
+    else:
+        raw_receipt, prior_status = data, None
+    observation = _check_receipt(raw_receipt)
+    from .skillbook_editorial_production_v01 import compose_curated_two_book_pilot
+    draft = compose_curated_two_book_pilot()
+    comparison = compare_editorial_source_to_observation(draft, observation)
+    if prior_status is not None:
+        if (prior.get("draft_sha256") != draft["draft_sha256"]
+                or prior.get("submitted_evidence_sha256")
+                   != comparison["submitted_evidence_sha256"]):
+            raise OfficialDocumentObservationError("historical draft identity drift")
+    return {
+        "schema": "UCIE_RECORDED_OFFICIAL_DOC_RECONCILIATION_V01",
+        "status": "OFFLINE_RECLASSIFIED_NOT_REOBSERVED_NOT_APPROVED",
+        "new_comparison": comparison,
+        "prior_comparison_status": prior_status,
+        "previous_verdict_replaced": prior_status is not None,
+        "observation_source_id": observation["source_id"],
+        "observed_raw_sha256": observation["observed_raw_sha256"],
+        "receipt_cryptographically_authenticated": False,
+        "source_file_raw_bytes_retrieved": False,
+        "network_requests": 0,
+        "operating_database_writes": 0,
+        "export_allowed": False,
+        "owner_approved": False,
+        "released": False,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="UCIE manual exact approved official document raw SHA observation")
@@ -333,7 +404,25 @@ def main(argv: list[str] | None = None) -> int:
                         required=True)
     parser.add_argument("--confirm-network", action="store_true")
     parser.add_argument("--compare-curated", action="store_true")
+    parser.add_argument("--recheck-receipt-stdin", action="store_true")
     args = parser.parse_args(argv)
+    if args.recheck_receipt_stdin:
+        if args.confirm_network or not args.compare_curated:
+            print(json.dumps({"schema": SCHEMA,
+                              "status": "OFFLINE_RECEIPT_MODE_REQUIRES_NO_NETWORK"}))
+            return 2
+        try:
+            result = recheck_recorded_observation(
+                sys.stdin.buffer.read(MAX_RECORDED_RECEIPT_BYTES + 1))
+            if result["observation_source_id"] != args.source:
+                raise OfficialDocumentObservationError(
+                    "CLI requested source differs from observed source")
+        except (OfficialDocumentObservationError, OSError):
+            print(json.dumps({"schema": SCHEMA,
+                              "status": "RECORDED_RECEIPT_RECHECK_FAIL_CLOSED"}))
+            return 3
+        print(json.dumps(result, sort_keys=True))
+        return 0
     if not args.confirm_network:
         print(json.dumps({"schema": SCHEMA, "status": "OWNER_NETWORK_OPT_IN_REQUIRED_NO_GO"}))
         return 2
