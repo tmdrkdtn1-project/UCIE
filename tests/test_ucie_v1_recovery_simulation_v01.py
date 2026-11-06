@@ -148,6 +148,30 @@ class UCIERecoveryGateSimulation(unittest.TestCase):
             "source_scope": "UCIE_ONLY_FIRST_PARTY_SYNTHETIC",
         }, sort_keys=True))
 
+    def test_editorial_semantic_fingerprint_without_source_export(self):
+        # Compare these public-main/owner-only digests out of band; do NOT
+        # claim identical semantics merely because ordinary tests pass.
+        import ast
+        from hashlib import sha256
+        from pathlib import Path
+        import sys
+        source = (Path(__file__).resolve().parents[1] / "src" /
+                  "ucie_miner" / "skillbook_editorial_production_v01.py")
+        self.assertFalse(source.is_symlink())
+        raw = source.read_bytes()
+        self.assertLess(len(raw), 80000)
+        tree = ast.parse(raw.decode("utf-8-sig"), filename=source.name)
+        semantic = sha256(ast.dump(
+            tree, annotate_fields=True, include_attributes=False
+        ).encode("utf-8")).hexdigest()
+        print("UCIE_EDITORIAL_AST_FINGERPRINT=" + json.dumps({
+            "python": f"{sys.version_info.major}.{sys.version_info.minor}",
+            "semantic_ast_sha256": semantic,
+            "source_size": len(raw),
+            "source_disclosed": False,
+            "files_modified": 0
+        }, sort_keys=True))
+
 
 if __name__ == "__main__":
     unittest.main()
