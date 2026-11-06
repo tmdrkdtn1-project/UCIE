@@ -18,6 +18,7 @@ from unittest.mock import patch
 from ucie_miner import skillbook_editorial_production_v01 as author
 from ucie_miner import skillbook_catalog_union_v01 as catalog
 from ucie_miner import skillbook_pinned_source_review_v01 as pinned
+from ucie_miner import skillbook_revision_review_v01 as revision
 
 
 class RevisionReviewImpactTests(unittest.TestCase):
@@ -38,9 +39,9 @@ class RevisionReviewImpactTests(unittest.TestCase):
         self.root = Path("/UCIE_SYNTHETIC_NO_OWNER_RUNTIME")
 
     def test_linked_revision_marks_retests_and_source_mismatch(self):
-        result = author.assess_revision_review_impact(
+        result = revision.assess_revision_review_impact(
             self.base, self.current, pinned_review_history=self.journal)
-        self.assertEqual(result["schema"], author.REVISION_IMPACT_SCHEMA)
+        self.assertEqual(result["schema"], revision.REVISION_IMPACT_SCHEMA)
         self.assertEqual(result["status"],
                          "AUTHORING_REVISION_REQUIRES_EXPERT_REVIEW_NO_GO")
         self.assertEqual(result["old_draft_sha256"], self.base["draft_sha256"])
@@ -74,7 +75,7 @@ class RevisionReviewImpactTests(unittest.TestCase):
         record["machine_contract"]["failure_contract"] += (
             " Every contradictory case must block further processing.")
         changed = author.compile_review_draft(record)
-        report = author.assess_revision_review_impact(
+        report = revision.assess_revision_review_impact(
             self.base, changed, pinned_review_history=b"")
         self.assertTrue(report["machine_contract_changed"])
         for cid in ("SAFE_PRECONDITIONS", "BOUNDED_APPLICATION",
@@ -86,14 +87,14 @@ class RevisionReviewImpactTests(unittest.TestCase):
         tampered = deepcopy(self.current)
         tampered["authoring_input"]["previous_revision"] = "0" * 64
         with self.assertRaises(author.EditorialDraftError):
-            author.assess_revision_review_impact(self.base, tampered)
+            revision.assess_revision_review_impact(self.base, tampered)
         rec = deepcopy(self.new_input)
         rec["previous_revision"] = "0" * 64
         orphan = author.compile_review_draft(rec)
         with self.assertRaises(author.EditorialDraftError):
-            author.assess_revision_review_impact(self.base, orphan)
+            revision.assess_revision_review_impact(self.base, orphan)
         with self.assertRaises(author.EditorialDraftError):
-            author.assess_revision_review_impact(
+            revision.assess_revision_review_impact(
                 self.base, self.current, pinned_review_history=b"not-journal")
 
     def test_unlinked_revision_cannot_be_misrepresented_as_approved(self):
