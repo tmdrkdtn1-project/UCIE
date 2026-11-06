@@ -302,6 +302,43 @@ def compare_review_revisions(previous: dict, candidate: dict) -> dict:
     }
 
 
+
+def build_review_handoff(record: dict) -> dict:
+    """Build two reproducible *in-memory* review assets with a SHA receipt.
+
+    No disk output, authorization, signed package, runtime skill or publish.
+    Output bytes are for UCIE-internal human review; their existence is not
+    proof that human fact-checking, source revision or rights review happened.
+    """
+    draft = compile_review_draft(record)
+    human = render_review_markdown(draft).encode("utf-8")
+    machine = (json.dumps(
+        draft, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ) + "\n").encode("ascii")
+    if not 0 < len(human) <= 25000 or not 0 < len(machine) <= 25000:
+        raise EditorialDraftError("review handoff output exceeds bounded budget")
+    return {
+        "human_markdown": human,
+        "machine_json": machine,
+        "receipt": {
+            "schema": SCHEMA,
+            "status": "IN_MEMORY_REVIEW_HANDOFF_PENDING_NO_GO",
+            "draft_sha256": draft["draft_sha256"],
+            "human_markdown_sha256": sha256(human).hexdigest(),
+            "machine_json_sha256": sha256(machine).hexdigest(),
+            "source_count": len(draft["sources"]),
+            "chapter_count": len(draft["chapters"]),
+            "human_review_completed": False,
+            "source_content_verified": False,
+            "independent_qa_verified": False,
+            "human_approved": False,
+            "rights_approved": False,
+            "signed": False, "export_allowed": False,
+            "files_written": 0, "network_requests": 0,
+            "operating_database_writes": 0, "other_project_access": False,
+        },
+    }
+
 def compose_curated_two_book_pilot() -> dict:
     """Real UCIE authored chapters through the generic manual-review contract."""
     from .skillbook_product_v01 import build_skillbook as python_book
