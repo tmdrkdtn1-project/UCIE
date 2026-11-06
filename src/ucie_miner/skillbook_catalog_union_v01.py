@@ -20,11 +20,14 @@ from .library_search import (
     ALLOWED_DOMAINS, LibrarySearchError, SCHEMA as W04_SCHEMA,
     search_existing_public_library,
 )
-from .public_discovery import DiscoveryError
+from .public_discovery import DiscoveryError, SOURCE_SKILL
+from .skill_profiles import PROFILE
+from . import skillbook_editorial_production_v01 as editorial
 from .skillbook_product_v01 import (
     SKILLBOOK_ID, SOURCE_DOCUMENT_SHA256, SkillBookProductError,
-    search_skillbooks,
+    search_skillbooks, build_skillbook as build_python_book,
 )
+from .skillbook_git_porcelain_product_v01 import build_skillbook as build_git_book
 from .skillbook_scandir_qa_v01 import CASES as W08_CASES
 from .skillbook_w09_release_gate_v01 import (
     BLOCKERS as W09_BLOCKERS, SCHEMA as W09_SCHEMA,
@@ -121,7 +124,199 @@ def _read_public(report: dict, limit: int) -> tuple[str, int | None, list]:
     return status, count, list(rows)
 
 
-def search_federated(root: Path, *, filters: dict, public_reader=None) -> dict:
+REVIEW_SCHEMA = "UCIE_W04_SKILLBOOK_EDITORIAL_COMPARISON_V01"
+REVIEW_STATUS = "EDITORIAL_REVIEW_ONLY_NOT_A_RELEASE"
+REVIEW_LIMIT = 4
+
+
+def _editorial_drafts(editorial_records=None) -> list[dict]:
+    """Only UCIE-first-party curated pilot or explicitly supplied bounded drafts.
+
+    No GET/body parameters are accepted as draft source; data is passed only
+    via a caller-supplied in-memory interface, recompiled through W01/W02.
+    """
+    if editorial_records is None:
+        drafts = [editorial.compose_curated_two_book_pilot()]
+    else:
+        if (type(editorial_records) is not tuple
+                or not 1 <= len(editorial_records) <= REVIEW_LIMIT):
+            raise FederationError("bounded in-memory review set required")
+        try:
+            drafts = [editorial.compile_review_draft(r) for r in editorial_records]
+        except editorial.EditorialDraftError as exc:
+            raise FederationError("unverified editorial record") from exc
+    identifiers = [d["draft_sha256"] for d in drafts]
+    if len(set(identifiers)) != len(drafts):
+        raise FederationError("duplicate editorial candidate")
+    if any(d["status"] != "EDITORIAL_CANDIDATE_REVIEW_PENDING_NO_GO"
+           or d["export_allowed"] is not False
+           or d["human_approved"] is not False
+           or d["source_digest_independently_verified"] is not False
+           for d in drafts):
+        raise FederationError("editorial approval state drift")
+    return sorted(drafts, key=lambda d: d["draft_sha256"])
+
+
+def _review_domains(draft: dict) -> list[str]:
+    domains = set()
+    for source in draft["sources"]:
+        rid = source["source_id"].split(":", 1)[1]
+        profile = SOURCE_SKILL.get(rid)
+        if profile not in PROFILE:
+            raise FederationError("unrecognized editorial source skill")
+        domains.add(PROFILE[profile]["domain"])
+    return sorted(domains)
+
+
+def _review_summary(draft: dict) -> dict:
+    return {
+        "draft_sha256": draft["draft_sha256"], "topic": draft["topic"],
+        "source_ids": sorted(s["source_id"] for s in draft["sources"]),
+        "domains": _review_domains(draft),
+        "chapter_count": len(draft["chapters"]),
+        "status": draft["status"], "kind": "REUSABLE_SKILL",
+        "machine_contract_implemented": False,
+        "source_content_verified": False, "independent_qa_verified": False,
+        "human_approved": False, "export_allowed": False,
+    }
+
+
+def inspect_review_candidate(candidate_id: str | None = None, *,
+                             editorial_records=None) -> dict:
+    """Actual browse-to-compare-to-review dossier, no DB/network/QA run."""
+    if (candidate_id is not None
+            and (type(candidate_id) is not str
+                 or HEX64.fullmatch(candidate_id) is None)):
+        raise FederationError("bad editorial detail selector")
+    drafts = _editorial_drafts(editorial_records)
+    if candidate_id is None and len(drafts) == 1:
+        chosen = drafts[0]
+    else:
+        selected = [d for d in drafts if d["draft_sha256"] == candidate_id]
+        if len(selected) != 1:
+            raise FederationError("unknown editorial revision")
+        chosen = selected[0]
+    try:
+        handoff = editorial.build_review_handoff(chosen["authoring_input"])
+    except editorial.EditorialDraftError as exc:
+        raise FederationError("invalid editorial handoff") from exc
+    if (handoff["receipt"]["draft_sha256"] != chosen["draft_sha256"]
+            or handoff["receipt"]["human_review_completed"] is not False
+            or handoff["receipt"]["export_allowed"] is not False):
+        raise FederationError("review dossier identity/approval drift")
+    comparison = []
+    for book in (build_python_book(), build_git_book()):
+        entry = book["library_entry"]
+        gates = book["proof_gates"]
+        if (book["status"] != "FIRST_PARTY_DRAFT_NOT_APPROVED"
+                or book["export_allowed"] is not False
+                or gates["human_approved"] is not False):
+            raise FederationError("existing SkillBook approval drift")
+        comparison.append({
+            "item_id": book["skillbook_id"], "title": book["title"],
+            "asset_type": "EXISTING_UCIE_AUTHORED_BOOK_DRAFT",
+            "source_ids": [entry["source_id"]],
+            "chapter_count": len(book["ucie_authored_chapters"]),
+            "machine_contract": "FIRST_PARTY_RECIPE_EXISTS_NOT_RELEASED",
+            "independent_qa_verified": False,
+            "source_content_verified_in_this_request": False,
+            "human_approved": False, "export_allowed": False,
+        })
+    comparison.append({
+        "item_id": chosen["draft_sha256"], "title": chosen["topic"],
+        "asset_type": "EDITORIAL_CANDIDATE_NOT_REVIEWED",
+        "source_ids": sorted(s["source_id"] for s in chosen["sources"]),
+        "chapter_count": len(chosen["chapters"]),
+        "machine_contract": "DESIGN_ONLY_NO_EXECUTABLE",
+        "independent_qa_verified": False,
+        "source_content_verified_in_this_request": False,
+        "human_approved": False, "export_allowed": False,
+    })
+    return {
+        "schema": REVIEW_SCHEMA, "status": REVIEW_STATUS,
+        "candidate": chosen, "summary": _review_summary(chosen),
+        "comparison": comparison, "review_receipt": handoff["receipt"],
+        "human_markdown_sha256": handoff["receipt"]["human_markdown_sha256"],
+        "machine_json_sha256": handoff["receipt"]["machine_json_sha256"],
+        "source_document_bytes_fetched": 0,
+        "source_content_independently_verified": False,
+        "manual_editorial_review_completed": False,
+        "machine_contract_executed": False,
+        "approved_items": 0, "export_allowed": False,
+        "network_requests": 0, "operating_database_writes": 0,
+        "other_project_access": False,
+    }
+
+
+def render_review_candidate(report: dict) -> str:
+    if (type(report) is not dict or report.get("schema") != REVIEW_SCHEMA
+            or report.get("status") != REVIEW_STATUS
+            or report.get("export_allowed") is not False
+            or report.get("manual_editorial_review_completed") is not False
+            or report.get("machine_contract_executed") is not False
+            or type(report.get("candidate")) is not dict
+            or report["candidate"].get("human_approved") is not False):
+        raise FederationError("unsafe editorial detail display")
+    e = lambda x: escape(str(x), quote=True)
+    draft = report["candidate"]
+    lines = [
+        '<p><a href="/catalog">통합 도서관으로 돌아가기</a></p>',
+        '<section class="panel"><h2>SkillBook 검토 후보 · 미승인</h2>',
+        '<p>이 문서는 편집자 제출 원리 초안입니다. 공식 원문 SHA·기술 사실·권리·독립 QA를 '
+        '이 화면에서 검증하거나 승인하지 않습니다.</p>',
+        '<p>주제: <strong>' + e(draft["topic"]) + '</strong></p>',
+        '<p>초안 SHA-256: <code>' + e(draft["draft_sha256"]) + '</code></p>',
+        '<h3>기존 실행형 기술서적과 후보 비교</h3>',
+        '<table><thead><tr><th>기술 자산</th><th>출처</th><th>챕터</th>'
+        '<th>기계 계약 상태</th><th>검토/반출</th></tr></thead><tbody>',
+    ]
+    for item in report["comparison"]:
+        lines.append(
+            "<tr><td>" + e(item["title"]) + "</td><td>"
+            + e(", ".join(item["source_ids"])) + "</td><td>"
+            + str(item["chapter_count"]) + "</td><td>"
+            + e(item["machine_contract"]) +
+            "</td><td>미승인 · 반출 불가</td></tr>"
+        )
+    lines.extend(["</tbody></table>", "<h3>편집 후보의 출처</h3><ul>"])
+    for src in draft["sources"]:
+        lines.append(
+            '<li>' + e(src["source_id"]) + ' · '
+            + e(src["version_scope_claim"]) + ' · '
+            + e(src["public_url"]) + '<p>제출 근거 SHA: '
+            + e(src["evidence_sha256"]) + ' · 원문 재확인 미실시</p></li>'
+        )
+    lines.extend(["</ul>", "<h3>사람이 검토할 5개 기술 챕터</h3>"])
+    for chapter in draft["chapters"]:
+        lines.append(
+            '<section><h4>' + e(chapter["heading"]) + '</h4>'
+            + '<p style="white-space:pre-wrap">' + e(chapter["text"])
+            + '</p><small>편집자 주장 · 미검증 · 근거: '
+            + e(", ".join(chapter["source_ids"])) + '</small></section>'
+        )
+    lines.extend([
+        "<h3>실행 불가 기계 설계 계약</h3><p>"
+        + e(draft["machine_contract"]["interface_name"]) +
+        " · DESIGN_ONLY_NO_EXECUTABLE</p>",
+        "<h3>필수 사람 검토 게이트</h3><ol>",
+    ])
+    lines.extend("<li>" + e(g["gate"]) + " · PENDING</li>"
+                 for g in draft["manual_review_checklist"])
+    lines.extend([
+        "</ol>", "<p>문서 SHA: <code>" + e(report["human_markdown_sha256"])
+        + "</code></p>",
+        "<p>JSON SHA: <code>" + e(report["machine_json_sha256"])
+        + "</code></p>",
+        '<p><a href="/catalog/review.json?id=' + e(draft["draft_sha256"])
+        + '">기계 검토 JSON</a></p>',
+        "<p>실행 · 다운로드 · 서명 · 승인: 불가</p></section>",
+    ])
+    page = previous._template("UCIE 편집 SkillBook 검토·비교", "".join(lines))
+    return page.replace("UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V02", REVIEW_SCHEMA)
+
+
+def search_federated(root: Path, *, filters: dict, public_reader=None,
+                     editorial_records=None) -> dict:
     """Default SkillBook queries never read SQLite; public shelf is opt-in."""
     f = _safe_filters(filters)
     q, shelf, kind, domain, limit = (
@@ -143,6 +338,18 @@ def search_federated(root: Path, *, filters: dict, public_reader=None) -> dict:
                 row.get("human_approved") is not False
                 or row.get("export_allowed") is not False for row in books)):
             raise FederationError("untrusted SkillBook approval")
+    pending = []
+    if shelf in ("skillbooks", "all") and kind in ("", "REUSABLE_SKILL"):
+        for draft in _editorial_drafts(editorial_records):
+            item = _review_summary(draft)
+            searchable = " ".join([
+                item["topic"], *item["source_ids"],
+                *[c["text"] for c in draft["chapters"]],
+            ]).casefold()
+            if ((not q or q.casefold() in searchable)
+                    and (not domain or domain in item["domains"])):
+                pending.append(item)
+        pending = pending[:limit]
     state, total, candidates = "NOT_REQUESTED", None, []
     if shelf in ("all", "public") and kind != "REUSABLE_SKILL":
         if not q.isascii():
@@ -158,7 +365,9 @@ def search_federated(root: Path, *, filters: dict, public_reader=None) -> dict:
         "schema": SCHEMA,
         "status": "READ_ONLY_TWO_SHELF_DRAFT_NOT_APPROVED",
         **f,
-        "skillbooks": books, "public_evidence_candidates": candidates,
+        "skillbooks": books, "editorial_review_candidates": pending,
+        "editorial_candidates_unapproved": True,
+        "public_evidence_candidates": candidates,
         "public_candidate_total": total, "public_shelf_status": state,
         "distinct_evidence_units_not_joined": True,
         "legacy_sqlite_index_migrated": False,
@@ -214,6 +423,16 @@ def render_federated(result: dict) -> str:
                      + 'UCIE 제작 초안 · 미승인 · 내보내기 불가</p>')
     if not result["skillbooks"]:
         parts.append("<p>조건에 맞는 SkillBook 없음</p>")
+    parts += ['</section><section class="panel"><h2>편집 검토 대기 기술서적</h2>']
+    for review in result["editorial_review_candidates"]:
+        parts.append(
+            '<p><a href="/catalog/review?id=' + e(review["draft_sha256"])
+            + '">' + e(review["topic"]) + '</a> · '
+            + e(", ".join(review["source_ids"])) +
+            ' · 기술 본문/원문 미검증 · 기계 실행 미구현 · 반출 불가</p>'
+        )
+    if not result["editorial_review_candidates"]:
+        parts.append('<p>검색 조건에 맞는 편집 후보가 없습니다.</p>')
     public_status_labels = {
         "NOT_REQUESTED": "검색하지 않음 (SkillBook 전용 검색)",
         "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO":
@@ -394,7 +613,8 @@ def render_skillbook_w09_release_gate(plan: dict) -> str:
     return html.replace("UCIE_LOCAL_PUBLIC_LIBRARY_BROWSER_V02", W09_SCHEMA)
 
 
-def make_handler(root: Path, *, public_reader=None, **legacy_injections):
+def make_handler(root: Path, *, public_reader=None,
+                 editorial_records=None, **legacy_injections):
     base = previous.make_handler(root, **legacy_injections)
 
     class Handler(base):
@@ -457,6 +677,28 @@ def make_handler(root: Path, *, public_reader=None, **legacy_injections):
                         200, json.dumps(plan, ensure_ascii=True, sort_keys=True),
                         "application/json; charset=utf-8")
                 return self.reply(200, render_skillbook_qa_plan(plan))
+            if path.path in ("/catalog/review", "/catalog/review.json"):
+                if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
+                    return self.reply(403, "LOOPBACK_ONLY", "text/plain; charset=utf-8")
+                if path.fragment or len(self.path) > 185:
+                    return self.reply(400, "INVALID_REVIEW_ROUTE", "text/plain; charset=utf-8")
+                try:
+                    args = parse_qs(path.query, strict_parsing=True,
+                                    keep_blank_values=True, max_num_fields=1) if path.query else {}
+                    if set(args) not in (set(), {"id"}) or any(
+                            len(v) != 1 for v in args.values()):
+                        raise FederationError("unexpected review selector")
+                    ident = args.get("id", [None])[0]
+                    data = inspect_review_candidate(
+                        ident, editorial_records=editorial_records)
+                    if path.path.endswith(".json"):
+                        return self.reply(
+                            200, json.dumps(data, sort_keys=True, ensure_ascii=True),
+                            "application/json; charset=utf-8")
+                    return self.reply(200, render_review_candidate(data))
+                except (FederationError, editorial.EditorialDraftError, ValueError):
+                    return self.reply(400, "REVIEW_CANDIDATE_INPUT_NO_GO",
+                                      "text/plain; charset=utf-8")
             if path.path not in ("/catalog", "/catalog.json"):
                 return super().do_GET()
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
@@ -465,7 +707,8 @@ def make_handler(root: Path, *, public_reader=None, **legacy_injections):
                 return self.reply(400, "INVALID_CATALOG_ROUTE", "text/plain; charset=utf-8")
             try:
                 data = search_federated(root, filters=parse_filters(path.query),
-                                        public_reader=public_reader)
+                                        public_reader=public_reader,
+                                        editorial_records=editorial_records)
                 if path.path == "/catalog.json":
                     return self.reply(200, json.dumps(data, ensure_ascii=False, sort_keys=True),
                                       "application/json; charset=utf-8")
