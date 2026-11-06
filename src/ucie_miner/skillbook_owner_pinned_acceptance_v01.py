@@ -145,7 +145,7 @@ def accept_one_exact_source(source_id: str, *,
             or type(confirm_review_write) is not bool
             or record_review != confirm_review_write):
         raise AcceptanceError("separate explicit network and journal options")
-    if type(owner_root) is not Path:
+    if not isinstance(owner_root, Path):
         raise AcceptanceError("UCIE owner root Path required")
     # Enforces D:/UCIE on Windows; tests may substitute a disposable UCIE
     # fixture with a narrowly scoped _owner_root patch.
