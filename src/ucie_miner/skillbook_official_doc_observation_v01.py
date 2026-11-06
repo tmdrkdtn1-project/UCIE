@@ -273,13 +273,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source", choices=["doc:" + x for x in DOC_ENDPOINTS],
                         required=True)
     parser.add_argument("--confirm-network", action="store_true")
+    parser.add_argument("--compare-curated", action="store_true")
     args = parser.parse_args(argv)
     if not args.confirm_network:
         print(json.dumps({"schema": SCHEMA, "status": "OWNER_NETWORK_OPT_IN_REQUIRED_NO_GO"}))
         return 2
     try:
-        result = observe_official_document_once(
-            args.source, owner_opt_in=True)
+        if args.compare_curated:
+            from .skillbook_editorial_production_v01 import compose_curated_two_book_pilot
+            result = manual_check_candidate_source(
+                compose_curated_two_book_pilot(), args.source,
+                owner_opt_in=True)
+        else:
+            result = observe_official_document_once(
+                args.source, owner_opt_in=True)
     except OfficialDocumentObservationError:
         print(json.dumps({"schema": SCHEMA, "status": "SOURCE_OBSERVATION_FAIL_CLOSED"}))
         return 3
