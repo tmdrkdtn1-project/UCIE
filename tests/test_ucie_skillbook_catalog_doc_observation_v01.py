@@ -49,14 +49,14 @@ class CatalogDocumentObservationTests(unittest.TestCase):
             self.pilot["draft_sha256"], editorial_observations=(receipt,))
         states = {x["source_id"]: x for x in report["source_observation_statuses"]}
         self.assertEqual(states["doc:python/cpython"]["status"],
-                         "OBSERVED_BODY_SHA_MISMATCH_BLOCKED")
+                         "INCOMPARABLE_PINNED_SOURCE_VS_LIVE_HTML_REVIEW_REQUIRED")
         self.assertEqual(states["doc:git/git"]["status"],
                          "NO_MANUAL_RAW_BYTE_OBSERVATION")
         self.assertFalse(report["observation_receipts_cryptographically_authenticated"])
         self.assertFalse(report["manual_editorial_review_completed"])
         self.assertFalse(report["export_allowed"])
         html = catalog.render_review_candidate(report)
-        self.assertIn("제출 SHA와 관측 SHA 불일치 · 차단", html)
+        self.assertIn("해시 대상 불일치 · 버전 고정 원문과 웹 HTML 비교 불가 · 재검토", html)
         self.assertNotIn("synthetic doc byte", html)
 
     def test_matching_bytes_still_require_version_and_independent_review(self):
@@ -70,13 +70,14 @@ class CatalogDocumentObservationTests(unittest.TestCase):
             draft["draft_sha256"], editorial_records=(record,),
             editorial_observations=(receipt,))
         states = {x["source_id"]: x for x in report["source_observation_statuses"]}
-        self.assertTrue(states["doc:python/cpython"]["byte_sha_equal"])
+        self.assertIsNone(states["doc:python/cpython"]["byte_sha_equal"])
+        self.assertFalse(states["doc:python/cpython"]["digest_material_comparable"])
         self.assertFalse(states["doc:python/cpython"]["source_revision_verified"])
         self.assertFalse(states["doc:python/cpython"]
                          ["receipt_authenticity_cryptographically_verified"])
         self.assertFalse(report["source_content_independently_verified"])
         self.assertFalse(report["export_allowed"])
-        self.assertIn("관측 SHA 일치",
+        self.assertIn("제출된 해시 대상 미정의",
                       catalog.render_review_candidate(report))
 
     def test_catalog_search_shows_mismatch_but_w04_stays_unread(self):
@@ -87,7 +88,7 @@ class CatalogDocumentObservationTests(unittest.TestCase):
             public_reader=lambda *_a, **_kw: self.fail("unrequested W04"),
             editorial_observations=(r,))
         self.assertEqual(len(report["editorial_review_candidates"]), 1)
-        self.assertIn("원문 바이트 SHA 불일치 후보 · 차단",
+        self.assertIn("서로 다른 근거 형식 · SHA 직접 비교 불가 · 재검토",
                       catalog.render_federated(report))
         self.assertFalse(report["export_allowed"])
         self.assertEqual(report["network_requests"], 0)
@@ -136,11 +137,11 @@ class CatalogDocumentObservationTests(unittest.TestCase):
                     side_effect=AssertionError("GET must not fetch source")):
                     status, page = fetch("/catalog?q=BOUNDED_METADATA")
                     self.assertEqual(status, 200)
-                    self.assertIn("SHA 불일치", page)
+                    self.assertIn("SHA 직접 비교 불가", page)
                     status, page = fetch("/catalog/review?id=" +
                                          self.pilot["draft_sha256"])
                     self.assertEqual(status, 200)
-                    self.assertIn("불일치 · 차단", page)
+                    self.assertIn("비교 불가 · 재검토", page)
                     status, raw = fetch("/catalog/review.json?id=" +
                                         self.pilot["draft_sha256"])
                     self.assertEqual(status, 200)
