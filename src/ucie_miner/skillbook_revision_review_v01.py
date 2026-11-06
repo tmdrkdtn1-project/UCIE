@@ -10,6 +10,60 @@ from .skillbook_editorial_production_v01 import (
     compare_review_revisions, ORDER, EditorialDraftError,
 )
 
+from pathlib import Path
+import json
+
+from .skillbook_editorial_production_v01 import compile_review_draft
+from . import skillbook_pinned_source_review_v01 as pinned_review
+
+REVISION_PAIR_NAME = "editorial_revision_pair_v01.json"
+MAX_REVISION_PAIR_BYTES = 48_000
+
+
+def read_review_pair(root: Path) -> tuple[dict, dict]:
+    """Load an opt-in UCIE-only manuscript pair without modifying anything.
+
+    A named, local-only, non-symlink review input is required. Two source
+    bound *authoring inputs* are compiled to exact canonical drafts. The
+    next revision must be explicitly linked to the previous SHA.
+    """
+    try:
+        base = pinned_review._owner_root(root)
+    except pinned_review.SourceReviewError as exc:
+        raise EditorialDraftError("review pair outside owner UCIE") from exc
+    runtime = base / "runtime"
+    folder = runtime / "skillbook_manual_review"
+    target = folder / REVISION_PAIR_NAME
+    if (runtime.is_symlink() or folder.is_symlink() or target.is_symlink()
+            or not folder.is_dir() or not target.is_file()
+            or target.resolve(strict=True) != folder.resolve() / REVISION_PAIR_NAME):
+        raise EditorialDraftError("only exact UCIE revision pair review file")
+    with target.open("rb") as stream:
+        raw = stream.read(MAX_REVISION_PAIR_BYTES + 1)
+    if not 1 <= len(raw) <= MAX_REVISION_PAIR_BYTES:
+        raise EditorialDraftError("bounded UCIE revision pair required")
+
+    def unique_keys(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise EditorialDraftError("duplicate revision JSON field")
+            obj[key] = value
+        return obj
+
+    try:
+        request = json.loads(raw.decode("utf-8", "strict"),
+                             object_pairs_hook=unique_keys)
+    except (UnicodeError, ValueError) as exc:
+        raise EditorialDraftError("malformed UCIE revision pair") from exc
+    if type(request) is not dict or set(request) != {"previous", "candidate"}:
+        raise EditorialDraftError("exact previous/candidate authoring pair required")
+    previous = compile_review_draft(request["previous"])
+    candidate = compile_review_draft(request["candidate"])
+    compare_review_revisions(previous, candidate)
+    return previous, candidate
+
+
 REVISION_IMPACT_SCHEMA = "UCIE_SKILLBOOK_REVISION_IMPACT_REVIEW_V01"
 REVISION_RETEST_FILES = (
     "test_ucie_skillbook_product_v01.py",
