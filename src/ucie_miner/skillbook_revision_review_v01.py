@@ -34,7 +34,8 @@ def read_review_pair(root: Path) -> tuple[dict, dict]:
     runtime = base / "runtime"
     folder = runtime / "skillbook_manual_review"
     target = folder / REVISION_PAIR_NAME
-    if (runtime.is_symlink() or folder.is_symlink() or target.is_symlink()
+    if (runtime.is_symlink() or not runtime.is_dir()
+            or folder.is_symlink() or target.is_symlink()
             or not folder.is_dir() or not target.is_file()
             or target.resolve(strict=True) != folder.resolve() / REVISION_PAIR_NAME):
         raise EditorialDraftError("only exact UCIE revision pair review file")
