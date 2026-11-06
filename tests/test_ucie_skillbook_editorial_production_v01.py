@@ -50,7 +50,7 @@ class EditorialProductionDraftTests(unittest.TestCase):
 
     def test_human_markdown_contains_real_chapters_and_contract(self):
         text = ed.render_review_markdown(self.original)
-        self.assertIn("공통 원리", text)
+        self.assertIn("작동 원리와 공식 근거", text)
         self.assertIn("Git", text)
         self.assertIn("Python", text)
         self.assertIn("사실 독립 검증 전", text)
