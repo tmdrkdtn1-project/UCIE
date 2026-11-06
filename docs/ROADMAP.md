@@ -1,5 +1,7 @@
 # UCIE — Four-Pillar Product Charter and Development Roadmap
 
+**Commercial distribution decision (owner clarification, 2026-11-07):** The target is the COMPLETE FOUR-PILLAR UCIE product, licensed privately and delivered ONLY to specifically designated customers. A standalone signed first rule, draft SkillBook or CI-only wheel is not full-product release. No general public/open-source product distribution is planned. Current commercial release state is **NO-GO** pending complete functionality, owner/rightsholder/third-party rights, private customer licensing, full-product installer/security/recipient acceptance and signature. See [customer-only full release contract](UCIE_FULL_PRODUCT_PRIVATE_CUSTOMER_RELEASE_V1.md) and [issue #199](https://github.com/tmdrkdtn1-project/UCIE/issues/199). Existing public source repository does not imply a license grant; no customer data or keys may be added here.
+
 **Authoritative product direction (owner clarification, 2026-10-27).**
 UCIE is an independent, public-evidence-based **development intelligence and reusable capability library platform**. It is **not merely a coding error prevention tool**. The four pillars below are coequal *end goals*; the Virtual Library is the shared product foundation, and continual evolution is an ongoing feedback loop, not a final optional feature.
 
