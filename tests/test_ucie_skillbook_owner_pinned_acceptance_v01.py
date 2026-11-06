@@ -337,9 +337,11 @@ class AcceptanceTests(unittest.TestCase):
                         self.sid, owner_root=self.owner, confirm_network=True,
                         record_review=True, confirm_review_write=True)
         event_bytes = review.read_isolated_review_journal(self.owner)
-        self.assertEqual(review.inspect_review_journal(event_bytes)["total_events"], 1)
-        # The event is an unsigned pending advisory and must not be erased or
-        # presented as an accepted product when catalog linking fails.
+        self.assertEqual(review.inspect_review_journal(event_bytes)["total_events"], 0)
+        self.assertFalse((self.owner / "runtime" /
+                          "skillbook_manual_review").exists())
+        # W04 rejection occurs in memory before any advisory ledger mutation.
+        # The pending source is not accepted, signed or distributed.
 
     def test_main_requires_opt_in_and_failure_contains_no_source_material(self):
         with patch.object(accept.Path, "cwd", return_value=self.owner):
