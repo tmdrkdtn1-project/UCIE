@@ -8,6 +8,7 @@ PR #182 HEAD 6d502d82e31bd7964d914873618f1d3f1d575fd2.
 from __future__ import annotations
 
 from hashlib import sha1
+import ast
 import json
 import os
 import subprocess
@@ -79,6 +80,28 @@ def audit_overlap_read_only() -> dict:
 
 
 class UCIEOwnerOverlapReadOnlyPreflight(unittest.TestCase):
+    def test_divergent_editorial_semantic_inventory_without_disclosing_source(self):
+        """Read only one known UCIE editor and print bounded AST names/digests."""
+        target = ROOT / "src" / "ucie_miner" / "skillbook_editorial_production_v01.py"
+        self.assertFalse(target.is_symlink())
+        self.assertTrue(target.is_file())
+        raw = target.read_bytes()
+        self.assertLess(len(raw), 80_000)
+        tree = ast.parse(raw.decode("utf-8-sig"), filename=target.name)
+        functions = [node.name for node in tree.body
+                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        top_classes = [node.name for node in tree.body if isinstance(node, ast.ClassDef)]
+        self.assertLess(len(functions), 50)
+        self.assertLess(len(top_classes), 12)
+        print("UCIE_PR182_OWNER_EDITORIAL_METADATA=" + json.dumps({
+            "git_blob_sha1": _git_blob(raw),
+            "lines": len(raw.splitlines()),
+            "top_functions": functions,
+            "top_classes": top_classes,
+            "source_contents_shared": False,
+            "repo_mutated": False,
+        }, sort_keys=True))
+
     def test_local_editorial_git_object_if_available(self):
         """Never fetch or modify Git: inspect pinned object only if locally cached."""
         sha = EXPECTED_GIT_BLOBS["skillbook_editorial_production_v01.py"]
