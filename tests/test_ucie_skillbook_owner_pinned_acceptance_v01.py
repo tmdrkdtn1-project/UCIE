@@ -89,9 +89,6 @@ class AcceptanceTests(unittest.TestCase):
         return json.dumps(result, sort_keys=True).encode("ascii")
 
     def test_only_two_registered_official_public_repo_blobs(self):
-        with patch.stopall if False else patch.object(
-            review, "_pinned_book", side_effect=None):
-            pass
         for sid in (self.sid, "doc:git/git"):
             # Production pin (no synthetic SHA override) is required.
             real = (
@@ -351,10 +348,9 @@ class AcceptanceTests(unittest.TestCase):
     def test_original_owner_root_guard_applies_on_windows(self):
         if review.os.name != "nt":
             self.skipTest("Windows D:/UCIE root guard only")
-        with patch.stopall if False else patch.object(
-                review, "_owner_root", wraps=review._owner_root) as original:
-            # Patch explicitly disabled while using this synthetic path.
-            original.side_effect = review.SourceReviewError("not D:/UCIE")
+        with patch.object(
+                review, "_owner_root",
+                side_effect=review.SourceReviewError("not D:/UCIE")):
             with patch.object(accept, "_fetch_pinned_blob_json",
                               side_effect=AssertionError("network must not start")):
                 with self.assertRaises(accept.AcceptanceError):
