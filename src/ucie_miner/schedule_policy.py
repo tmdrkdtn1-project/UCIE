@@ -60,6 +60,8 @@ def next_cycle(last_finished: datetime | None, *, now: datetime,
             # Do not grant grace for shorter retries, legacy receipts,
             # or any moment before the previous cycle finished.
             due_at = max(last_finished, due_at - FAILURE_TRIGGER_JITTER)
-    seconds = max(0, int((due_at - now).total_seconds()))
+    # Integer ceiling: flooring a positive subsecond delay incorrectly reports DUE.
+    # Negated timedelta floor division avoids floating-point rounding at boundaries.
+    seconds = max(0, -(-(due_at - now) // timedelta(seconds=1)))
     return {"decision": "DUE" if seconds == 0 else "WAIT",
             "retry_after_seconds": seconds}
