@@ -516,7 +516,7 @@ def render_federated(result: dict) -> str:
             '<p><a href="/catalog/review?id=' + e(review["draft_sha256"])
             + '">' + e(review["topic"]) + '</a> · '
             + e(", ".join(review["source_ids"])) +
-            ' · 기술 본문/원문 독립 검증 미완 · 기계 실행 미구현 · 반출 불가</p>'
+            ' · 기술 본문/원문 미검증 · 기계 실행 미구현 · 반출 불가</p>'
         )
         note = review.get("source_observation_statuses", [])
         if any(item.get("byte_sha_equal") is False for item in note):
