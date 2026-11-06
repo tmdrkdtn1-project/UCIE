@@ -194,10 +194,24 @@ class PinnedSourceReviewTests(unittest.TestCase):
                 with self.assertRaises(review.SourceReviewError):
                     review.extend_review_journal(b"", forged)
 
+    def test_actual_windows_root_rejects_other_ucie_named_directories(self):
+        if os.name != "nt":
+            self.skipTest("D:/UCIE restriction applies only on Windows")
+        with tempfile.TemporaryDirectory() as td:
+            fake = Path(td) / "UCIE"
+            fake.mkdir()
+            with self.assertRaises(review.SourceReviewError):
+                review._owner_root(fake)
+
     def test_ucie_named_isolated_inbox_and_atomic_journal_write(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td) / "UCIE"
             root.mkdir()
+            # Synthetic test root only; production enforces exact D:/UCIE.
+            guard = patch.object(review, "_owner_root",
+                                 return_value=root.resolve(strict=True))
+            guard.start()
+            self.addCleanup(guard.stop)
             runtime = root / "runtime"
             runtime.mkdir()
             folder = runtime / "skillbook_manual_review"
@@ -248,6 +262,10 @@ class PinnedSourceReviewTests(unittest.TestCase):
             root = Path(td) / "UCIE"
             box = root / "runtime" / "skillbook_manual_review"
             box.mkdir(parents=True)
+            guard = patch.object(review, "_owner_root",
+                                 return_value=root.resolve(strict=True))
+            guard.start()
+            self.addCleanup(guard.stop)
             unrelated = Path(td) / "other.txt"
             unrelated.write_bytes(self.raw)
             link = box / review.INBOX[self.source_id]
@@ -270,6 +288,10 @@ class PinnedSourceReviewTests(unittest.TestCase):
             root = Path(td) / "UCIE"
             box = root / "runtime" / "skillbook_manual_review"
             box.mkdir(parents=True)
+            guard = patch.object(review, "_owner_root",
+                                 return_value=root.resolve(strict=True))
+            guard.start()
+            self.addCleanup(guard.stop)
             (box / review.INBOX[self.source_id]).write_bytes(self.raw)
             with patch.object(review.Path, "cwd", return_value=root):
                 with patch.object(review, "_pinned_book", return_value=self.synthetic):
