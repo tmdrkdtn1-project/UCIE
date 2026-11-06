@@ -55,3 +55,18 @@
 **종합 판정**: PR #182 기술 안정성 결함 2건 수정, 자체 회귀 확대 및 첫 소유자 실 파일럿 증거 확보. **DRAFT/NOT_MERGED/RELEASE_NO_GO**. 다음 대형 묶음은 사용자 소유자 승인과 접근 가능한 근거에 따라 B1/B2/B3/B4의 실제 인수 자료를 채우고, 승인 후에만 V1 통합을 시도한다.
 
 **6단계:** 01 PARTIAL, 02 PARTIAL(첫 실원장→W04 사례), 03 PARTIAL, 04 PARTIAL(자체 203검사; 독립 QA 없음), 05 PARTIAL(첫 파일럿·원장 보안/중복 개선), **06 NO_GO**.
+
+## 6. 승인 저장소 고정 태그의 공개 라이선스 1차 근거
+
+이번 대형 통합 검수에서 **기존 승인 공개 저장소 두 곳의 고정 태그**에서만 라이선스 원문을 직접 읽었다. license/copyright 원문을 UCIE 번들에 대량 복사하지 않으며, 공개 라이선스를 보았다는 사실을 **법무·권리 승인**으로 표시하지 않는다.
+
+| 승인 공개 원본 | 검증된 근거 (태그·Git blob SHA-1) | 공개 라이선스에서 확인된 사실 | 실제 UCIE 배포 판단 |
+|---|---|---|---|
+| [python/cpython `v3.15.0` LICENSE](https://github.com/python/cpython/blob/v3.15.0/LICENSE) | `20cf39097c68baa17cc566b64e76d34ebf034044` | Python 소프트웨어와 문서에 **PSF License v2** 적용. 문서 내 예제·레시피·기타 코드는 3.8.6 이후 **PSF v2 또는 Zero-Clause BSD의 이중 라이선스** 설명. 변경 저작물/notice·변경 내용 정리 등 조건을 별도 검토해야 함 | Python 공식 RST 원문이나 코드 발췌를 제품에 재수록할 때 조건별 사용권 검토 필요. **NOT_APPROVED** |
+| [python/cpython `v3.15.0` Doc/license.rst](https://github.com/python/cpython/blob/v3.15.0/Doc/license.rst) | `47c4fa9d582de3ad794b24a192f4d9d6b6aa106a` | 소스 문서 자체에서 History/License 및 PSF v2·문서 예제에 대한 이중 라이선스 설명 재확인 | 직접 인용·수정·배포 범위는 별도 검토. **NOT_APPROVED** |
+| [git/git `v2.51.0` COPYING](https://github.com/git/git/blob/v2.51.0/COPYING) | `536e55524db72bd2acf175208aef4f3dfc148d42` | Git 프로젝트의 COPYING은 **GPL version 2**를 제시하고 해당 버전 선택을 명시 | Git 프로그램 코드나 공식 기술문서 일부를 번들로 재배포할 경우 라이선스/고지·의무 별도 검토. **NOT_APPROVED** |
+| [git/git `v2.51.0` Documentation/git-status.adoc](https://github.com/git/git/blob/v2.51.0/Documentation/git-status.adoc) | `9a376886a5867a63d173d85162c57027f336f915` | 기술 원본 태그 파일 확인. 해당 문서 파일 자체에서 별도의 라이선스 식별자 헤더는 이 검수에서 확인되지 않음 | 저장소 `COPYING`의 일반 조건과 문서별 예외/저작권 표기 확인이 필요. **NOT_APPROVED** |
+
+**실제 판단:** UCIE는 현재 승인 공개 원본의 **해시·버전·출처 메타데이터를 검증**하고 UCIE가 별도로 작성한 초안·레시피를 테스트했다. 그러나 이것만으로 제3자 원본 내용을 재배포하거나 UCIE 기술 패키지에 포함할 권리가 자동 발생하지 않는다. 특히 Git 쪽 문서 원본의 적용 조건은 전문가가 검토해야 한다. `license_redistribution_approved=false`, `owner_release_approved=false`, `signed=false`, `export_allowed=false`를 계속 유지한다. 이 요약은 라이선스의 법적 효력에 대한 의견서가 아니다.
+
+**B3 세부 진척:** 공식 공개 출처의 라이선스 **증거 식별과 태그/파일 무결성 확인까지 완료**. 실제 배포 대상 파일 인벤토리, 고지/라이선스 포함 계획, 파생 저작물 여부, 소유자/법무 승인과 서명·배포 검증은 **미완료**.
