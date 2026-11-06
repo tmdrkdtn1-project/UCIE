@@ -1,6 +1,6 @@
 """UCIE SkillBook Phase 01: source-bound editorial draft compiler.
 
-Generalizes existing W01/W02/W03 metadata and curated first-party claims.
+Reuses W01 Source Registry, W02 LibraryEntry, the SkillBook Blueprint and first-party claims.
 This is offline, inert, unapproved review material: not verification of
 supplied source digest, technical truth, executable skill or release.
 """
