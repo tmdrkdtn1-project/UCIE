@@ -137,7 +137,17 @@ class UCIECurrentCheckoutSmoke(unittest.TestCase):
         self.assertEqual(set(r["pillars"]), set(PILLAR_FILES))
         self.assertFalse(r["actual_customer_receipt_verified"])
         self.assertFalse(r["private_distribution_executed"])
+        # Clean CI must contain all four product surfaces. The owner's
+        # existing dirty checkout may be incomplete and is never overwritten.
+        import os
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            self.assertTrue(r["four_pillar_source_inventory_present"])
         print("UCIE_COMPLETE_CUSTOMER_READINESS=" + json.dumps({
+            "missing_first_party_paths": [
+                path for row in r["pillars"].values()
+                for path, item in row["files"].items()
+                if item["file_problem"] is not None
+            ],
             "schema": r["schema"],
             "status": r["status"],
             "distribution": r["distribution"],
