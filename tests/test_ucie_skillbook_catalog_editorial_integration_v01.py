@@ -184,6 +184,51 @@ class EditorialCatalogIntegrationTests(unittest.TestCase):
         # Rendering does not authorize approval. Host still uses only source data.
         self.assertFalse(detail["candidate"]["human_approved"])
 
+    def test_live_http_injected_registered_source_can_be_selected(self):
+        record = deepcopy(self.record)
+        entry = get_source("doc:PowerShell/PowerShell")
+        record["topic"] = "POWERSHELL_REVIEW_SELECTION"
+        record["sources"] = [{
+            "kind": "REUSABLE_SKILL",
+            "source_id": "doc:PowerShell/PowerShell",
+            "evidence_reference": entry["public_url"],
+            "evidence_sha256": "b" * 64,  # UCIE synthetic, not actual SHA
+            "purpose_code": "POWERSHELL_SYNTHETIC_REVIEW",
+            "version_scope": "PWSH_7_6",
+            "dependencies": ["pwsh"],
+        }]
+        for ch in record["chapters"]:
+            ch["source_ids"] = ["doc:PowerShell/PowerShell"]
+        draft = editor.compile_review_draft(record)
+        handler = catalog.make_handler(
+            self.root, editorial_records=(record,),
+            public_reader=lambda *_a, **_kw: self.fail("unexpected W04"))
+        with HTTPServer(("127.0.0.1", 0), handler) as server:
+            thread = threading.Thread(
+                target=server.serve_forever,
+                kwargs={"poll_interval": 0.05}, daemon=True)
+            thread.start()
+            root = "http://127.0.0.1:" + str(server.server_port)
+            try:
+                with urlopen(root + "/catalog?q=POWERSHELL", timeout=6) as r:
+                    self.assertEqual(r.status, 200)
+                    index = r.read().decode("utf-8")
+                self.assertIn("/catalog/review?id=" + draft["draft_sha256"], index)
+                with urlopen(root + "/catalog/review.json?id=" +
+                             draft["draft_sha256"], timeout=6) as r:
+                    self.assertEqual(r.status, 200)
+                    dossier = json.loads(r.read())
+                self.assertEqual(dossier["candidate"]["topic"],
+                                 "POWERSHELL_REVIEW_SELECTION")
+                self.assertEqual(dossier["comparison"][-1]["source_ids"],
+                                 ["doc:PowerShell/PowerShell"])
+                self.assertFalse(dossier["source_content_independently_verified"])
+                self.assertFalse(dossier["export_allowed"])
+                self.assertFalse(dossier["manual_editorial_review_completed"])
+            finally:
+                server.shutdown()
+                thread.join(timeout=3)
+
     def test_loopback_http_real_catalog_to_detail_and_json(self):
         def forbidden(*_a, **_kw):
             self.fail("HTTP review reads W04/DB")
