@@ -137,7 +137,7 @@ class EditorialCatalogIntegrationTests(unittest.TestCase):
                          "DESIGN_ONLY_NO_EXECUTABLE")
 
     def test_wrong_domain_or_kind_filters_do_not_leak_candidate(self):
-        filters = dict(catalog.parse_filters(""), domain="Windows")
+        filters = dict(catalog.parse_filters(""), domain="MCP/API")
         result = catalog.search_federated(
             self.root, filters=filters,
             public_reader=lambda *_a, **_kw: self.fail("wrong W04 path"))
