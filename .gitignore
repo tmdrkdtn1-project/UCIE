@@ -33,6 +33,7 @@ private/
 project_data/
 internal/
 runtime/
+.ucie_bridge_state/
 reports/private/
 backups/
 secrets/
