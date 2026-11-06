@@ -24,6 +24,7 @@ from .public_discovery import DiscoveryError, SOURCE_SKILL
 from .skill_profiles import PROFILE
 from . import skillbook_editorial_production_v01 as editorial
 from . import skillbook_official_doc_observation_v01 as official_docs
+from . import skillbook_pinned_source_review_v01 as pinned_review
 from .skillbook_product_v01 import (
     SKILLBOOK_ID, SOURCE_DOCUMENT_SHA256, SkillBookProductError,
     search_skillbooks, build_skillbook as build_python_book,
@@ -233,12 +234,62 @@ def _review_observation_status(draft: dict, observations=None) -> list[dict]:
     return statuses
 
 
-def _review_summary(draft: dict, observations=None) -> dict:
+def _pinned_review_statuses(draft: dict, journal_data=None) -> list[dict]:
+    """Display UCIE-only review proposals from an already supplied snapshot.
+
+    Journal hash-chain integrity is checked; it is NOT a signature, human
+    decision, source-origin authentication, approval or automatic withdrawal.
+    """
+    if journal_data is None:
+        journal_data = b""
+    try:
+        state = pinned_review.inspect_review_journal(journal_data)
+    except pinned_review.SourceReviewError as exc:
+        raise FederationError("invalid isolated review history") from exc
+    per_source = {
+        e["source_id"]: e for e in state["events"]
+    }
+    statuses = []
+    for entry in sorted(draft["sources"], key=lambda e: e["source_id"]):
+        latest = per_source.get(entry["source_id"])
+        if (latest is None
+                or latest["expected_source_sha256"] != entry["evidence_sha256"]):
+            statuses.append({
+                "source_id": entry["source_id"],
+                "status": "NO_MATCHING_PINNED_REVIEW_EVENT",
+                "review_action": None,
+                "review_event_id": None,
+                "raw_source_sha_match": None,
+                "human_approval_granted": False,
+                "source_origin_independently_verified": False,
+                "withdrawal_executed": False,
+                "export_allowed": False,
+            })
+            continue
+        statuses.append({
+            "source_id": entry["source_id"],
+            "status": ("PINNED_RAW_SOURCE_HASHES_MATCH_UNAUTHENTICATED"
+                       if latest["pinned_bytes_match"] else
+                       "PINNED_RAW_SOURCE_MISMATCH_REVIEW_REQUIRED"),
+            "review_action": latest["recommended_action"],
+            "review_event_id": latest["event_id"],
+            "raw_source_sha_match": latest["pinned_bytes_match"],
+            "human_approval_granted": False,
+            "source_origin_independently_verified": False,
+            "withdrawal_executed": False,
+            "export_allowed": False,
+        })
+    return statuses
+
+
+def _review_summary(draft: dict, observations=None, journal_data=None) -> dict:
     return {
         "draft_sha256": draft["draft_sha256"], "topic": draft["topic"],
         "source_ids": sorted(s["source_id"] for s in draft["sources"]),
         "source_observation_statuses": _review_observation_status(
             draft, observations),
+        "pinned_source_review_statuses": _pinned_review_statuses(
+            draft, journal_data),
         "domains": _review_domains(draft),
         "chapter_count": len(draft["chapters"]),
         "status": draft["status"], "kind": "REUSABLE_SKILL",
@@ -250,7 +301,8 @@ def _review_summary(draft: dict, observations=None) -> dict:
 
 def inspect_review_candidate(candidate_id: str | None = None, *,
                              editorial_records=None,
-                             editorial_observations=None) -> dict:
+                             editorial_observations=None,
+                             pinned_review_history=None) -> dict:
     """Actual browse-to-compare-to-review dossier, no DB/network/QA run."""
     if (candidate_id is not None
             and (type(candidate_id) is not str
@@ -303,9 +355,14 @@ def inspect_review_candidate(candidate_id: str | None = None, *,
     return {
         "schema": REVIEW_SCHEMA, "status": REVIEW_STATUS,
         "candidate": chosen,
-        "summary": _review_summary(chosen, editorial_observations),
+        "summary": _review_summary(
+            chosen, editorial_observations, pinned_review_history),
         "source_observation_statuses": _review_observation_status(
             chosen, editorial_observations),
+        "pinned_source_review_statuses": _pinned_review_statuses(
+            chosen, pinned_review_history),
+        "pinned_review_history_is_unsigned": True,
+        "pinned_review_history_read_only": True,
         "observation_receipts_cryptographically_authenticated": False,
         "browser_performs_official_network_fetch": False,
         "comparison": comparison, "review_receipt": handoff["receipt"],
@@ -386,6 +443,28 @@ def render_review_candidate(report: dict) -> str:
                if proof["pinned_source_tag"] is not None else "")
             + " · 영수증 미서명 · 재배포 불가</li>"
         )
+    lines.extend(["</ul>", "<h3>버전 고정 원본 검토 원장 (미서명)</h3>",
+                  "<p>UCIE 전용 수동 이력은 해시 체인으로 변조를 감지하지만 "
+                  "외부 원본의 신원 인증·전문가 승인·실제 철회가 아닙니다.</p>",
+                  "<ul>"])
+    pinned_labels = {
+        "NO_MATCHING_PINNED_REVIEW_EVENT":
+            "해당 버전 고정 원문 검증 이력 없음",
+        "PINNED_RAW_SOURCE_HASHES_MATCH_UNAUTHENTICATED":
+            "해당 태그 원본 SHA256/Git blob SHA1 일치 · 출처 진위/QA 미완",
+        "PINNED_RAW_SOURCE_MISMATCH_REVIEW_REQUIRED":
+            "버전 고정 원본 불일치 · 재확인/출시 보류 · 자동 철회 없음",
+    }
+    for entry in report["pinned_source_review_statuses"]:
+        code = entry["status"]
+        if code not in pinned_labels:
+            raise FederationError("unknown pinned review status")
+        lines.append(
+            "<li>" + e(entry["source_id"]) + " · " + e(pinned_labels[code])
+            + (" · 이벤트 " + e(entry["review_event_id"][:12])
+               if entry["review_event_id"] is not None else "")
+            + " · 검토/반출 미승인</li>"
+        )
     lines.extend(["</ul>", "<h3>사람이 검토할 5개 기술 챕터</h3>"])
     for chapter in draft["chapters"]:
         lines.append(
@@ -417,7 +496,8 @@ def render_review_candidate(report: dict) -> str:
 
 def search_federated(root: Path, *, filters: dict, public_reader=None,
                      editorial_records=None,
-                     editorial_observations=None) -> dict:
+                     editorial_observations=None,
+                     pinned_review_history=None) -> dict:
     """Default SkillBook queries never read SQLite; public shelf is opt-in."""
     f = _safe_filters(filters)
     q, shelf, kind, domain, limit = (
@@ -442,7 +522,8 @@ def search_federated(root: Path, *, filters: dict, public_reader=None,
     pending = []
     if shelf in ("skillbooks", "all") and kind in ("", "REUSABLE_SKILL"):
         for draft in _editorial_drafts(editorial_records):
-            item = _review_summary(draft, editorial_observations)
+            item = _review_summary(
+                draft, editorial_observations, pinned_review_history)
             searchable = " ".join([
                 item["topic"], *item["source_ids"],
                 *[c["text"] for c in draft["chapters"]],
@@ -543,6 +624,15 @@ def render_federated(result: dict) -> str:
             parts.append("<p>해시 대상 미정의 · 검증 보류 · 재검토</p>")
         else:
             parts.append("<p>수동 공식 문서 바이트 관측 미실시</p>")
+        pinned = review.get("pinned_source_review_statuses", [])
+        if any(x["status"] == "PINNED_RAW_SOURCE_MISMATCH_REVIEW_REQUIRED"
+               for x in pinned):
+            parts.append("<p>고정 태그 원본 검증 불일치 · 재검증 필요</p>")
+        elif any(x["status"] == "PINNED_RAW_SOURCE_HASHES_MATCH_UNAUTHENTICATED"
+                 for x in pinned):
+            parts.append("<p>고정 태그 원본 SHA 일치 · 출처 진위/QA 승인 별도</p>")
+        else:
+            parts.append("<p>고정 태그 원본 수동 검토 이력 없음</p>")
     if not result["editorial_review_candidates"]:
         parts.append('<p>검색 조건에 맞는 편집 후보가 없습니다.</p>')
     public_status_labels = {
@@ -727,7 +817,8 @@ def render_skillbook_w09_release_gate(plan: dict) -> str:
 
 def make_handler(root: Path, *, public_reader=None,
                  editorial_records=None,
-                 editorial_observations=None, **legacy_injections):
+                 editorial_observations=None,
+                 pinned_review_history=None, **legacy_injections):
     base = previous.make_handler(root, **legacy_injections)
 
     class Handler(base):
@@ -804,7 +895,8 @@ def make_handler(root: Path, *, public_reader=None,
                     ident = args.get("id", [None])[0]
                     data = inspect_review_candidate(
                         ident, editorial_records=editorial_records,
-                        editorial_observations=editorial_observations)
+                        editorial_observations=editorial_observations,
+                        pinned_review_history=pinned_review_history)
                     if path.path.endswith(".json"):
                         return self.reply(
                             200, json.dumps(data, sort_keys=True, ensure_ascii=True),
@@ -823,7 +915,8 @@ def make_handler(root: Path, *, public_reader=None,
                 data = search_federated(root, filters=parse_filters(path.query),
                                         public_reader=public_reader,
                                         editorial_records=editorial_records,
-                                        editorial_observations=editorial_observations)
+                                        editorial_observations=editorial_observations,
+                                        pinned_review_history=pinned_review_history)
                 if path.path == "/catalog.json":
                     return self.reply(200, json.dumps(data, ensure_ascii=False, sort_keys=True),
                                       "application/json; charset=utf-8")
@@ -849,7 +942,10 @@ def main() -> int:
         print(json.dumps({"schema": SCHEMA, "status": "FAIL_CLOSED"}))
         return 3
     try:
-        with HTTPServer(("127.0.0.1", args.port), make_handler(root)) as server:
+        pinned_snapshot = pinned_review.read_isolated_review_journal(root)
+        with HTTPServer(
+                ("127.0.0.1", args.port),
+                make_handler(root, pinned_review_history=pinned_snapshot)) as server:
             print(json.dumps({
                 "schema": SCHEMA, "status": "LOCAL_DRAFT_CATALOG_LISTENING",
                 "url": "http://127.0.0.1:" + str(server.server_port) + "/catalog",
