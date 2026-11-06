@@ -297,7 +297,9 @@ class PublicProbeTests(unittest.TestCase):
                             data=b"x" * size, method="POST")
                         with self.assertRaises(HTTPError) as error:
                             urlopen(request, timeout=5)
-                        self.assertEqual(error.exception.code, 405)
+                        with error.exception as response:
+                            self.assertEqual(response.code, 405)
+                            self.assertEqual(response.read(), b"GET_ONLY")
         self.assertEqual(calls, [])
 
     def test_http_explicit_click_required_and_status_retains_not_verified(self):
@@ -345,15 +347,21 @@ class PublicProbeTests(unittest.TestCase):
             ):
                 with self.subTest(path=path), self.assertRaises(HTTPError) as err:
                     urlopen(url + path, timeout=5)
-                self.assertIn(err.exception.code, (400, 404))
+                with err.exception as response:
+                    self.assertIn(response.code, (400, 404))
+                    response.read()
             with self.assertRaises(HTTPError) as err:
                 urlopen(Request(url + "/public-check/" + row["library_item_id"],
                                 data=b"x", method="POST"), timeout=5)
-            self.assertEqual(err.exception.code, 405)
+            with err.exception as response:
+                self.assertEqual(response.code, 405)
+                self.assertEqual(response.read(), b"GET_ONLY")
             with self.assertRaises(HTTPError) as err:
                 urlopen(Request(url + "/public-check/" + row["library_item_id"],
                                 headers={"Host":"evil.example"}), timeout=5)
-            self.assertEqual(err.exception.code, 403)
+            with err.exception as response:
+                self.assertEqual(response.code, 403)
+                response.read()
             self.assertEqual(invoked, [(row["library_item_id"], 1)])
 
 
