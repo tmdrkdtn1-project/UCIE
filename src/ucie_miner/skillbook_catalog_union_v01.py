@@ -23,6 +23,7 @@ from .library_search import (
 from .public_discovery import DiscoveryError, SOURCE_SKILL
 from .skill_profiles import PROFILE
 from . import skillbook_editorial_production_v01 as editorial
+from . import skillbook_official_doc_observation_v01 as official_docs
 from .skillbook_product_v01 import (
     SKILLBOOK_ID, SOURCE_DOCUMENT_SHA256, SkillBookProductError,
     search_skillbooks, build_skillbook as build_python_book,
@@ -168,10 +169,66 @@ def _review_domains(draft: dict) -> list[str]:
     return sorted(domains)
 
 
-def _review_summary(draft: dict) -> dict:
+def _review_observation_status(draft: dict, observations=None) -> list[dict]:
+    """Read bounded, already-observed and UNSIGNED source-byte metadata.
+
+    This display NEVER fetches official sources or authenticates receipt JSON.
+    An observed byte SHA match does not attest revision, facts, rights or QA.
+    """
+    if observations is None:
+        observations = ()
+    if type(observations) is not tuple or len(observations) > REVIEW_LIMIT:
+        raise FederationError("only bounded in-memory unsigned observation receipts")
+    seen = set()
+    linked = {}
+    candidate_ids = {item["source_id"] for item in draft["sources"]}
+    for receipt in observations:
+        if type(receipt) is not dict:
+            raise FederationError("unrecognized official byte receipt")
+        sid = receipt.get("source_id")
+        if type(sid) is not str or sid in seen:
+            raise FederationError("invalid or duplicate observation source")
+        seen.add(sid)
+        if sid not in candidate_ids:
+            continue  # Multiple candidates may use distinct registered sources.
+        try:
+            result = official_docs.compare_editorial_source_to_observation(
+                draft, receipt)
+        except official_docs.OfficialDocumentObservationError as exc:
+            raise FederationError("untrusted source byte receipt") from exc
+        linked[sid] = result
+    statuses = []
+    for sid in sorted(candidate_ids):
+        result = linked.get(sid)
+        if result is None:
+            status = ("NOT_AN_OFFICIAL_DOCUMENT_ROUTE"
+                      if sid.startswith("repo:") else "NO_MANUAL_RAW_BYTE_OBSERVATION")
+            statuses.append({
+                "source_id": sid, "status": status,
+                "byte_sha_equal": None, "observed_raw_sha256": None,
+                "observed_at_utc": None, "source_revision_verified": False,
+                "receipt_authenticity_cryptographically_verified": False,
+                "review_completed": False, "export_allowed": False,
+            })
+        else:
+            statuses.append({
+                "source_id": sid, "status": result["status"],
+                "byte_sha_equal": result["byte_sha_equal"],
+                "observed_raw_sha256": result["observed_raw_sha256"],
+                "observed_at_utc": result["observed_at_utc"],
+                "source_revision_verified": False,
+                "receipt_authenticity_cryptographically_verified": False,
+                "review_completed": False, "export_allowed": False,
+            })
+    return statuses
+
+
+def _review_summary(draft: dict, observations=None) -> dict:
     return {
         "draft_sha256": draft["draft_sha256"], "topic": draft["topic"],
         "source_ids": sorted(s["source_id"] for s in draft["sources"]),
+        "source_observation_statuses": _review_observation_status(
+            draft, observations),
         "domains": _review_domains(draft),
         "chapter_count": len(draft["chapters"]),
         "status": draft["status"], "kind": "REUSABLE_SKILL",
@@ -182,7 +239,8 @@ def _review_summary(draft: dict) -> dict:
 
 
 def inspect_review_candidate(candidate_id: str | None = None, *,
-                             editorial_records=None) -> dict:
+                             editorial_records=None,
+                             editorial_observations=None) -> dict:
     """Actual browse-to-compare-to-review dossier, no DB/network/QA run."""
     if (candidate_id is not None
             and (type(candidate_id) is not str
@@ -234,7 +292,12 @@ def inspect_review_candidate(candidate_id: str | None = None, *,
     })
     return {
         "schema": REVIEW_SCHEMA, "status": REVIEW_STATUS,
-        "candidate": chosen, "summary": _review_summary(chosen),
+        "candidate": chosen,
+        "summary": _review_summary(chosen, editorial_observations),
+        "source_observation_statuses": _review_observation_status(
+            chosen, editorial_observations),
+        "observation_receipts_cryptographically_authenticated": False,
+        "browser_performs_official_network_fetch": False,
         "comparison": comparison, "review_receipt": handoff["receipt"],
         "human_markdown_sha256": handoff["receipt"]["human_markdown_sha256"],
         "machine_json_sha256": handoff["receipt"]["machine_json_sha256"],
@@ -286,6 +349,29 @@ def render_review_candidate(report: dict) -> str:
             + e(src["public_url"]) + '<p>제출 근거 SHA: '
             + e(src["evidence_sha256"]) + ' · 원문 재확인 미실시</p></li>'
         )
+    lines.extend(["</ul>", "<h3>공식 문서 바이트 관측 상태 (미서명)</h3>",
+                  "<p>조회 전 수동으로 받은 영수증만 비교합니다. "
+                  "바이트 일치도 문서 버전·기술 정확성·권리 승인이 아닙니다.</p>",
+                  "<ul>"])
+    observation_labels = {
+        "NO_MANUAL_RAW_BYTE_OBSERVATION": "공식 원문 바이트 관측 미실시",
+        "NOT_AN_OFFICIAL_DOCUMENT_ROUTE": "공식 HTML 문서 관측 대상 아님",
+        "OBSERVED_BODY_SHA_MATCH_REVISION_UNVERIFIED":
+            "제출 SHA와 관측 SHA 일치 · 버전/권리·외부 검증 미완",
+        "OBSERVED_BODY_SHA_MISMATCH_BLOCKED":
+            "제출 SHA와 관측 SHA 불일치 · 차단",
+    }
+    for proof in report["source_observation_statuses"]:
+        state = proof["status"]
+        if state not in observation_labels:
+            raise FederationError("unknown source byte status")
+        lines.append(
+            "<li>" + e(proof["source_id"]) + " · "
+            + e(observation_labels[state])
+            + (" · 관측 SHA: " + e(proof["observed_raw_sha256"])
+               if proof["observed_raw_sha256"] is not None else "")
+            + " · 영수증 미서명 · 재배포 불가</li>"
+        )
     lines.extend(["</ul>", "<h3>사람이 검토할 5개 기술 챕터</h3>"])
     for chapter in draft["chapters"]:
         lines.append(
@@ -316,7 +402,8 @@ def render_review_candidate(report: dict) -> str:
 
 
 def search_federated(root: Path, *, filters: dict, public_reader=None,
-                     editorial_records=None) -> dict:
+                     editorial_records=None,
+                     editorial_observations=None) -> dict:
     """Default SkillBook queries never read SQLite; public shelf is opt-in."""
     f = _safe_filters(filters)
     q, shelf, kind, domain, limit = (
@@ -341,7 +428,7 @@ def search_federated(root: Path, *, filters: dict, public_reader=None,
     pending = []
     if shelf in ("skillbooks", "all") and kind in ("", "REUSABLE_SKILL"):
         for draft in _editorial_drafts(editorial_records):
-            item = _review_summary(draft)
+            item = _review_summary(draft, editorial_observations)
             searchable = " ".join([
                 item["topic"], *item["source_ids"],
                 *[c["text"] for c in draft["chapters"]],
@@ -429,8 +516,15 @@ def render_federated(result: dict) -> str:
             '<p><a href="/catalog/review?id=' + e(review["draft_sha256"])
             + '">' + e(review["topic"]) + '</a> · '
             + e(", ".join(review["source_ids"])) +
-            ' · 기술 본문/원문 미검증 · 기계 실행 미구현 · 반출 불가</p>'
+            ' · 기술 본문/원문 독립 검증 미완 · 기계 실행 미구현 · 반출 불가</p>'
         )
+        note = review.get("source_observation_statuses", [])
+        if any(item.get("byte_sha_equal") is False for item in note):
+            parts.append("<p>원문 바이트 SHA 불일치 후보 · 차단</p>")
+        elif any(item.get("byte_sha_equal") is True for item in note):
+            parts.append("<p>관측 SHA 일치 (미서명/버전 확인·검토 미완)</p>")
+        else:
+            parts.append("<p>수동 공식 문서 바이트 관측 미실시</p>")
     if not result["editorial_review_candidates"]:
         parts.append('<p>검색 조건에 맞는 편집 후보가 없습니다.</p>')
     public_status_labels = {
@@ -614,7 +708,8 @@ def render_skillbook_w09_release_gate(plan: dict) -> str:
 
 
 def make_handler(root: Path, *, public_reader=None,
-                 editorial_records=None, **legacy_injections):
+                 editorial_records=None,
+                 editorial_observations=None, **legacy_injections):
     base = previous.make_handler(root, **legacy_injections)
 
     class Handler(base):
@@ -690,7 +785,8 @@ def make_handler(root: Path, *, public_reader=None,
                         raise FederationError("unexpected review selector")
                     ident = args.get("id", [None])[0]
                     data = inspect_review_candidate(
-                        ident, editorial_records=editorial_records)
+                        ident, editorial_records=editorial_records,
+                        editorial_observations=editorial_observations)
                     if path.path.endswith(".json"):
                         return self.reply(
                             200, json.dumps(data, sort_keys=True, ensure_ascii=True),
@@ -708,7 +804,8 @@ def make_handler(root: Path, *, public_reader=None,
             try:
                 data = search_federated(root, filters=parse_filters(path.query),
                                         public_reader=public_reader,
-                                        editorial_records=editorial_records)
+                                        editorial_records=editorial_records,
+                                        editorial_observations=editorial_observations)
                 if path.path == "/catalog.json":
                     return self.reply(200, json.dumps(data, ensure_ascii=False, sort_keys=True),
                                       "application/json; charset=utf-8")
