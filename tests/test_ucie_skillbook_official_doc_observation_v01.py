@@ -121,6 +121,35 @@ class OfficialDocumentObservationTests(unittest.TestCase):
         self.assertEqual(json.loads(buffer.getvalue())["status"],
                          "OWNER_NETWORK_OPT_IN_REQUIRED_NO_GO")
 
+    def test_manual_cli_one_command_compares_curated_claim_to_observed_bytes(self):
+        from io import StringIO
+        out = StringIO()
+        with patch.object(obs, "_get_raw_official_bytes",
+                          return_value=(self.body, "text/html")):
+            with redirect_stdout(out):
+                code = obs.main(["--source", self.source, "--confirm-network",
+                                 "--compare-curated"])
+        self.assertEqual(code, 0)
+        receipt = json.loads(out.getvalue())
+        self.assertEqual(receipt["observation"]["observed_raw_sha256"],
+                         self.expected_sha)
+        self.assertEqual(receipt["comparison"]["source_id"], self.source)
+        self.assertEqual(receipt["comparison"]["status"],
+                         "OBSERVED_BODY_SHA_MISMATCH_BLOCKED")
+        self.assertFalse(receipt["comparison"]["human_approved"])
+        self.assertFalse(receipt["comparison"]["export_allowed"])
+
+        with patch.object(obs, "_get_raw_official_bytes",
+                          side_effect=AssertionError("cannot read unsupported book")):
+            out = StringIO()
+            with redirect_stdout(out):
+                code = obs.main([
+                    "--source", "doc:PowerShell/PowerShell",
+                    "--confirm-network", "--compare-curated"])
+            self.assertEqual(code, 3)
+            self.assertEqual(json.loads(out.getvalue())["status"],
+                             "SOURCE_OBSERVATION_FAIL_CLOSED")
+
     def test_only_exact_registered_official_url_and_scope(self):
         with self.assertRaises(obs.OfficialDocumentObservationError):
             obs._get_raw_official_bytes("https://docs.python.org/3/library/os.html?x=1")
