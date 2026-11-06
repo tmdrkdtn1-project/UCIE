@@ -85,7 +85,7 @@ UCIE 통합개발방에서 UCIE 제품 개발의 한 묶음을 끝내고 응답�
 
 ## 작업 묶음 04 — 일반화된 공개 근거 편집·검토 생산 (2026-11-06)
 
-- **01 SkillBook 생산 기능 PARTIAL 향상:** 기존 고정 Python·Git 두 책만 받던 경로를 확장. 기존 W01 Source Registry/W02 LibraryEntry/W03 SkillBook Blueprint 위에 새 UCIE 작성 기술 챕터 5개와 기계 설계 계약을 안전하게 **정규화·편집·검토 대기 상태로 생산**하는 실제 모듈을 추가했다.
+- **01 SkillBook 생산 기능 PARTIAL 향상:** 기존 고정 Python·Git 두 책만 받던 경로를 확장. 기존 W01 Source Registry/W02 LibraryEntry/SkillBook Blueprint 위에 새 UCIE 작성 기술 챕터 5개와 기계 설계 계약을 안전하게 **정규화·편집·검토 대기 상태로 생산**하는 실제 모듈을 추가했다.
 - 새 실코드: src/ucie_miner/skillbook_editorial_production_v01.py. 문서: docs/UCIE_SKILLBOOK_EDITORIAL_PRODUCTION_V01_20261106.md. 실제 단일 파일 시험: tests/test_ucie_skillbook_editorial_production_v01.py.
 - 여러 등록 공개 출처(최대 4개)의 제출된 문서 해시/주제/버전/의존성을 원장 ID에 묶고, 원리/입력조건/제한 실행/반례/버전·QA의 **편집 원문 5챕터**, 실행 불가 기계 계약, 개정 부모 주장과 SHA 기반 비교 영수증 생성. HTML/Markdown은 불신 **텍스트**로 렌더링하며 출처 사실·원문 SHA·기술 효능을 자동으로 승인하지 않는다.
 - 사람용 Markdown + 기계용 JSON **인메모리 바이트**, 각각 SHA-256 + 초안 SHA-256 영수증을 반환하는 실제 review handoff. 리뷰 확인 7개 게이트는 항상 PENDING; 실행·서명·권리 부여·외부 반출 없음.
