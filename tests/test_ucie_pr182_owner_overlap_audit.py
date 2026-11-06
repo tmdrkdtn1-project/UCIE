@@ -27,7 +27,7 @@ EXPECTED_GIT_BLOBS = {
 
 
 def _git_blob(data: bytes) -> str:
-    return sha1(b"blob " + str(len(data)).encode("ascii") + b"\\0" + data).hexdigest()
+    return sha1(b"blob " + str(len(data)).encode("ascii") + b"\0" + data).hexdigest()
 
 
 def audit_overlap_read_only() -> dict:
@@ -51,7 +51,7 @@ def audit_overlap_read_only() -> dict:
         else:
             raw = target.read_bytes()
             actual_hash = _git_blob(raw)
-            normalized_hash = _git_blob(raw.replace(b"\\r\\n", b"\\n"))
+            normalized_hash = _git_blob(raw.replace(b"\r\n", b"\n"))
             status = (
                 "EXACT_GIT_BLOB" if actual_hash == expected
                 else "CRLF_ONLY" if normalized_hash == expected
