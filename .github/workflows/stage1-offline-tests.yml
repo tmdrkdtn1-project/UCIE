@@ -25,8 +25,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
-      - name: Install standalone dependencies
-        run: python -m pip install -r requirements.txt
+      - name: Install standalone dependencies and declared wheel build backend
+        run: python -m pip install -r requirements.txt "setuptools>=68"
       - name: Syntax compilation (no external code executed)
         run: python -m compileall -q src tests scripts/public_miner_cycle.py
       - name: Public-only offline unit tests
