@@ -6,6 +6,9 @@ No HTTP, files, OS environment, unknown repository or approval is accessed.
 from __future__ import annotations
 
 from copy import deepcopy
+from io import BytesIO, StringIO
+from contextlib import redirect_stdout
+import json
 import unittest
 from unittest.mock import patch
 
@@ -81,6 +84,78 @@ class OwnerReceiptHashBasisRegression(unittest.TestCase):
         self.assertFalse(result["receipt_authenticity_cryptographically_verified"])
         self.assertFalse(result["human_approved"])
         self.assertFalse(result["export_allowed"])
+
+    def test_real_owner_report_reclassified_offline_without_new_network(self):
+        draft = editorial.compose_curated_two_book_pilot()
+        old_comparison = {
+            "schema": "UCIE_SKILLBOOK_DOC_BYTE_COMPARISON_V01",
+            "status": "OBSERVED_BODY_SHA_MISMATCH_BLOCKED",
+            "source_id": "doc:python/cpython",
+            "draft_sha256": draft["draft_sha256"],
+            "submitted_evidence_sha256": SOURCE_DOCUMENT_SHA256,
+            "observed_raw_sha256": OWNER_REPORTED_OBSERVATION["observed_raw_sha256"],
+        }
+        payload = json.dumps({
+            "comparison": old_comparison,
+            "observation": OWNER_REPORTED_OBSERVATION,
+        }).encode("utf-8")
+        with patch.object(source, "observe_official_document_once",
+                          side_effect=AssertionError("offline-only")):
+            changed = source.recheck_recorded_observation(payload)
+        self.assertEqual(
+            changed["new_comparison"]["status"],
+            "INCOMPARABLE_PINNED_SOURCE_VS_LIVE_HTML_REVIEW_REQUIRED")
+        self.assertEqual(changed["prior_comparison_status"],
+                         "OBSERVED_BODY_SHA_MISMATCH_BLOCKED")
+        self.assertTrue(changed["previous_verdict_replaced"])
+        self.assertIsNone(changed["new_comparison"]["byte_sha_equal"])
+        self.assertFalse(changed["receipt_cryptographically_authenticated"])
+        self.assertFalse(changed["export_allowed"])
+        self.assertEqual(changed["network_requests"], 0)
+
+        class FakeStdin:
+            buffer = BytesIO(payload)
+        with patch.object(source.sys, "stdin", FakeStdin()):
+            with patch.object(source, "observe_official_document_once",
+                              side_effect=AssertionError("offline only")):
+                out = StringIO()
+                with redirect_stdout(out):
+                    exit_code = source.main([
+                        "--source", "doc:python/cpython",
+                        "--compare-curated", "--recheck-receipt-stdin"])
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(json.loads(out.getvalue()), changed)
+
+    def test_offline_recheck_fails_closed_on_duplicate_and_unlinked_old_verdict(self):
+        draft = editorial.compose_curated_two_book_pilot()
+        bad = [
+            b'{"schema":"bad","schema":"duplicated"}',
+            b'not JSON',
+            b'{"observation":{}, "comparison": {}, "extra":1}',
+            b'x' * (source.MAX_RECORDED_RECEIPT_BYTES + 1),
+        ]
+        for payload in bad:
+            with self.subTest(length=len(payload)):
+                with self.assertRaises(source.OfficialDocumentObservationError):
+                    source.recheck_recorded_observation(payload)
+        old = {
+            "schema": "UCIE_SKILLBOOK_DOC_BYTE_COMPARISON_V01",
+            "status": "OBSERVED_BODY_SHA_MISMATCH_BLOCKED",
+            "source_id": "doc:python/cpython",
+            "draft_sha256": "0" * 64,
+            "submitted_evidence_sha256": SOURCE_DOCUMENT_SHA256,
+            "observed_raw_sha256": OWNER_REPORTED_OBSERVATION["observed_raw_sha256"],
+        }
+        with self.assertRaises(source.OfficialDocumentObservationError):
+            source.recheck_recorded_observation(
+                json.dumps({"observation": OWNER_REPORTED_OBSERVATION,
+                            "comparison": old}).encode())
+        plain = source.recheck_recorded_observation(
+            json.dumps(OWNER_REPORTED_OBSERVATION).encode())
+        self.assertIsNone(plain["prior_comparison_status"])
+        self.assertFalse(plain["previous_verdict_replaced"])
+        self.assertEqual(plain["new_comparison"]["draft_sha256"],
+                         draft["draft_sha256"])
 
     def test_owner_receipt_observation_in_existing_catalog_is_not_sha_drift(self):
         draft = editorial.compose_curated_two_book_pilot()
