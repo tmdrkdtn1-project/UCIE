@@ -179,3 +179,14 @@ UCIE 통합개발방에서 UCIE 제품 개발의 한 묶음을 끝내고 응답�
 **6단계 종료 판정:** 01 PARTIAL(실제 고정 원문 검증을 SkillBook 근거에 연결하는 코드, 사람 기술/공식 tag 서명 검토 미완); 02 PARTIAL(현행 W04와 검토원장에 1회 인수 결과 연결 가능, 모든 유형의 독립 사용자 소비 미완); 03 PARTIAL(승인/권리/서명된 실행형 패키지 미완); 04 PARTIAL(소유자 201/201 및 정확 커밋 CI 별도, 외부 독립 QA/실제 효과 비교 미완); **05 PARTIAL(기존 기술 개정 영향+원본 검증+원장+W04 연결 호출 구현, 실제 소유자 실영수증 및 승인형 영구 철회 미완)**; **06 NO_GO(운영 안정·보안/사용권/독립 QA/서명/소유자 최종 출시 인수 미완)**.
 
 **NEXT 현실적인 한 단계:** 소유자 환경의 정확한 명시적 수동 호출로 **실제 1건** 인수 영수증을 확보하고, 해당 결과의 출처·기술 사실·권리 독립 검수를 판정. 이후 PR #182가 제품 코드 검수/통합 승인 조건을 충족했을 때만 병합/서명 준비로 진행. 새로운 실적 없는 설계 모듈 무한 추가 금지.
+
+## 소유자 실제 영수증 001 — Python 고정 원본 1회 조회 검증 (2026-11-06)
+
+- **이번 영수증은 사용자 직접 제공 실호스트 출력**: `2026-11-06T04:59:41+00:00` (`2026-11-06 13:59:41 KST`) owner `PS D:\UCIE>` 에서 정확히 `UCIE_OWNER_PINNED_SOURCE_ONE_SHOT_ACCEPTANCE_V01` 상태 `RAW_PUBLIC_GIT_BLOB_MATCHES_PIN_NOT_RELEASE_APPROVED`, `network_requests=1`, 221,596 bytes, `source_id=doc:python/cpython`, pinned `v3.15.0` `Doc/library/os.rst` 확인.
+- owner 출력 `source_bytes_sha256_and_git_blob_match=true`: SHA-256 `9d78f43c4d521c1adfe339731628feadc834728ff09112c29e63ebc09406c45a` 및 Git blob SHA-1 `74419ee7f3588f1baec83c85b05716e6388719e3`. 이번 검토에서 `python/cpython` 공식 공개 저장소 해당 v3.15.0 원본 파일의 blob SHA를 다시 조회하여 동일함을 확인. 이 소스의 raw SHA 일치는 앞선 별도 정확 파일 바이트 재계산과도 일치. **실 owner 공개 원본 검증 1건 관측**, 권리/신원 서명·기술 사실 독립 QA는 아님.
+- **인수 미완**: `review_journal_status=NOT_REQUESTED`, `review_journal_written=false`, `catalog_reference_checked=false`, `operating_database_writes=0`, `human_approved=false`, `export_allowed=false`, `released=false`. 사용자 직접 제출 미서명 JSON을 실 운영 journal 승인/서명·제품 출시 영수증으로 자동 전환하지 않는다. 별도 명시 동의 전 owner `--record-review --confirm-review-write` 실행 없음.
+- 상세 최소화 메타데이터/미인수 게이트: `docs/UCIE_OWNER_PINNED_SOURCE_LIVE_RECEIPT_20261106.md`. 기존 소유자 tracked modified 15 및 관계없는 작업 파일을 보존. main 병합/운영 DB/스케줄/룰 자동승격/서명/배포 없음.
+
+**업데이트된 6단계 판정:** 01 PARTIAL(첫 번째 실제 소유자 pinned 원본 바이트 성공, 원리/기술 사실 사람 독립 검토 미완); 02 PARTIAL(실제 검토 원장·W04 상세 연동 인수 미실시); 03 PARTIAL(승인형 외부 기술 패키지·서명 미완); 04 PARTIAL(실원본 조회 1건+기존 201/201 및 CI 4/4 자체 근거, 독립 QA/효과 비교 미완); 05 PARTIAL(공식 원문 GET 실제 관측, 사람 선택 분리 원장 기록 및 영구 개정·철회 인수 미완); 06 NO_GO(운영 안정성·독립 QA·권리/보안·소유자 서명/배포·전체 인수 미완).
+
+**다음 정확 한 단계:** 별도 소유자 명시 승인에 따라 동일 출처 공개 blob 1회 재확인→미승인 분리 검토 이벤트 단 1건 기록→W04 연결 성공 영수증 제출. 이 승인은 출시 승인이 아니고 해당 격리 원장 이벤트 기록에 한정. 승인 전에는 자동 실행하지 않음.
