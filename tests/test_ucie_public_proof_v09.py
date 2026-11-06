@@ -281,6 +281,25 @@ class PublicProbeTests(unittest.TestCase):
                     fetch_json=fetch)
             self.assertFalse((root / "runtime").exists())
 
+    def test_windows_loopback_rejected_post_bodies_never_run_public_probe(self):
+        h = fixture()
+        row = rows(h)[0]
+        calls = []
+        def deny_probe(*_args, **_kwargs):
+            calls.append(True)
+            raise AssertionError("POST must never trigger a public probe")
+        with browser(h, deny_probe) as url:
+            for size in (1, 512, 8192):
+                for iteration in range(4):
+                    with self.subTest(size=size, iteration=iteration):
+                        request = Request(
+                            url + "/public-check/" + row["library_item_id"],
+                            data=b"x" * size, method="POST")
+                        with self.assertRaises(HTTPError) as error:
+                            urlopen(request, timeout=5)
+                        self.assertEqual(error.exception.code, 405)
+        self.assertEqual(calls, [])
+
     def test_http_explicit_click_required_and_status_retains_not_verified(self):
         h = fixture()
         row = rows(h)[0]
