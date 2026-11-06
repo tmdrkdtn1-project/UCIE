@@ -25,6 +25,7 @@ from .skill_profiles import PROFILE
 from . import skillbook_editorial_production_v01 as editorial
 from . import skillbook_official_doc_observation_v01 as official_docs
 from . import skillbook_pinned_source_review_v01 as pinned_review
+from . import skillbook_revision_review_v01 as revision_review
 from .skillbook_product_v01 import (
     SKILLBOOK_ID, SOURCE_DOCUMENT_SHA256, SkillBookProductError,
     search_skillbooks, build_skillbook as build_python_book,
@@ -356,7 +357,7 @@ def inspect_review_candidate(candidate_id: str | None = None, *,
     impact = None
     if previous_editorial_draft is not None:
         try:
-            impact = editorial.assess_revision_review_impact(
+            impact = revision_review.assess_revision_review_impact(
                 previous_editorial_draft, chosen,
                 pinned_review_history=(
                     pinned_review_history if pinned_review_history is not None
@@ -366,7 +367,7 @@ def inspect_review_candidate(candidate_id: str | None = None, *,
     elif chosen["revision"]["previous_draft_sha256_claim"] is not None:
         # A claim of a parent is never enough for an attributed comparison.
         impact = {
-            "schema": editorial.REVISION_IMPACT_SCHEMA,
+            "schema": revision_review.REVISION_IMPACT_SCHEMA,
             "status": "PREVIOUS_REVISION_NOT_SUPPLIED_REVIEW_BLOCKED",
             "old_draft_sha256": chosen["revision"]["previous_draft_sha256_claim"],
             "new_draft_sha256": chosen["draft_sha256"],
@@ -498,7 +499,7 @@ def render_review_candidate(report: dict) -> str:
     impact = report.get("revision_review_impact")
     if impact is not None:
         if (type(impact) is not dict
-                or impact.get("schema") != editorial.REVISION_IMPACT_SCHEMA
+                or impact.get("schema") != revision_review.REVISION_IMPACT_SCHEMA
                 or impact.get("export_allowed") is not False
                 or impact.get("owner_approval_granted") is not False):
             raise FederationError("untrusted editorial revision status")
