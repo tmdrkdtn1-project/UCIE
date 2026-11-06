@@ -150,6 +150,11 @@ class PinnedReviewCatalogTests(unittest.TestCase):
             root = Path(td) / "UCIE"
             runtime = root / "runtime"
             runtime.mkdir(parents=True)
+            # Runtime production is pinned to D:/UCIE; test uses temp fixture.
+            guard = patch.object(pinned, "_owner_root",
+                                 return_value=root.resolve(strict=True))
+            guard.start()
+            self.addCleanup(guard.stop)
             self.assertEqual(pinned.read_isolated_review_journal(root), b"")
             saved = pinned.persist_review_event(
                 root, self.event, owner_opt_in=True)
