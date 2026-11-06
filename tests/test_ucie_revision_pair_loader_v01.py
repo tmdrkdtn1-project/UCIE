@@ -135,13 +135,27 @@ class ExactRevisionPairLoaderTests(unittest.TestCase):
                         buf = StringIO()
                         with redirect_stdout(buf):
                             result = catalog.main()
-        self.assertEqual(result, 0)
-        self.assertEqual(seen["bind"], ("127.0.0.1", 0))
-        self.assertTrue(loader.called)
+        actual = Path(catalog.__file__).resolve().parents[2]
+        owner_root_allowed = (
+            actual.name.casefold() == "ucie"
+            and not actual.is_symlink() and actual.is_dir()
+            and (catalog.os.name != "nt"
+                 or actual.resolve() == Path("D:/UCIE").resolve()))
         text = json.loads(buf.getvalue())
-        self.assertTrue(text["revision_review_file_loaded"])
-        self.assertEqual(text["approved_packages"], 0)
-        self.assertFalse(text["export_allowed"])
+        if owner_root_allowed:
+            self.assertEqual(result, 0)
+            self.assertEqual(seen["bind"], ("127.0.0.1", 0))
+            self.assertTrue(loader.called)
+            self.assertTrue(text["revision_review_file_loaded"])
+            self.assertEqual(text["approved_packages"], 0)
+            self.assertFalse(text["export_allowed"])
+        else:
+            # GitHub Windows runners use D:/a/UCIE/UCIE, NOT the owner's D:/UCIE.
+            # Refusal is the security feature, not a failed launch regression.
+            self.assertEqual(result, 3)
+            self.assertEqual(text["status"], "FAIL_CLOSED")
+            self.assertFalse(loader.called)
+            self.assertEqual(seen, {})
 
     def test_browsing_explicit_pair_returns_w09_retest_no_release(self):
         self._write()
