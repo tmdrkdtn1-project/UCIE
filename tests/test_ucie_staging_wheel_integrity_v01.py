@@ -131,5 +131,66 @@ class StagingWheelIntegrityTests(unittest.TestCase):
             verify_staging_wheel(target.getvalue(), source_sha_map())
 
 
+    def test_exact_first_party_customer_preview_entrypoint_is_allowed(self):
+        from ucie_miner.staging_wheel_integrity_v01 import ENTRY_POINT
+        source = b'"""UCIE staging synthetic module"""\n'
+        manifest = {
+            "ucie_miner/customer_staging_v01.py": source,
+            ENTRY_POINT: (
+                b"[console_scripts]\n"
+                b"ucie-product-preview = ucie_miner.customer_staging_v01:main\n"
+            ),
+        }
+        digests = source_sha_map()
+        digests["ucie_miner/customer_staging_v01.py"] = sha256(
+            source).hexdigest()
+        report = verify_staging_wheel(
+            fake_wheel(extra=manifest), digests)
+        self.assertTrue(report["customer_preview_entrypoint_verified"])
+        self.assertFalse(report["external_release_authorized"])
+
+    def test_extra_or_wrong_console_scripts_are_refused(self):
+        from ucie_miner.staging_wheel_integrity_v01 import ENTRY_POINT
+        source = b'"""UCIE staging synthetic module"""\n'
+        digests = source_sha_map()
+        digests["ucie_miner/customer_staging_v01.py"] = sha256(
+            source).hexdigest()
+        for content in (
+            b"[console_scripts]\nucie-product-preview = os:system\n",
+            b"[console_scripts]\n"
+            b"ucie-product-preview = ucie_miner.customer_staging_v01:main\n"
+            b"extra-install = os:system\n",
+            b"[other_scripts]\n"
+            b"ucie-product-preview = ucie_miner.customer_staging_v01:main\n",
+        ):
+            with self.subTest(content=content), self.assertRaises(
+                WheelAttestationError
+            ):
+                verify_staging_wheel(fake_wheel(extra={
+                    "ucie_miner/customer_staging_v01.py": source,
+                    ENTRY_POINT: content,
+                }), digests)
+
+    def test_missing_entrypoint_with_staging_cli_source_is_refused(self):
+        source = b'"""UCIE staging synthetic module"""\n'
+        digests = source_sha_map()
+        digests["ucie_miner/customer_staging_v01.py"] = sha256(
+            source).hexdigest()
+        with self.assertRaises(WheelAttestationError):
+            verify_staging_wheel(fake_wheel(extra={
+                "ucie_miner/customer_staging_v01.py": source,
+            }), digests)
+
+    def test_entrypoint_without_staging_cli_source_is_refused(self):
+        from ucie_miner.staging_wheel_integrity_v01 import ENTRY_POINT
+        with self.assertRaises(WheelAttestationError):
+            verify_staging_wheel(fake_wheel(extra={
+                ENTRY_POINT: (
+                    b"[console_scripts]\nucie-product-preview = "
+                    b"ucie_miner.customer_staging_v01:main\n"
+                ),
+            }), source_sha_map())
+
+
 if __name__ == "__main__":
     unittest.main()
