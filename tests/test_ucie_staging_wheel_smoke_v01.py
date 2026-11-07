@@ -97,6 +97,7 @@ class UCIEStagingWheelSmoke(unittest.TestCase):
                 wheel.read_bytes(), source_sha)
             self.assertTrue(attestation["wheel_record_verified"])
             self.assertTrue(attestation["source_files_match_checkout"])
+            self.assertTrue(attestation["customer_preview_entrypoint_verified"])
             self.assertFalse(attestation["external_release_authorized"])
             installed = run("install", "--no-index", "--no-deps",
                             "--target", str(target), str(wheel))
