@@ -16,9 +16,15 @@ from zipfile import BadZipFile, ZipFile
 
 SCHEMA = "UCIE_STAGING_WHEEL_CONTENT_ATTESTATION_V01"
 DIST = "ucie_public_only_demo-0.1.0.dist-info/"
+ENTRY_POINT = DIST + "entry_points.txt"
+CUSTOMER_PREVIEW_MODULE = "ucie_miner/customer_staging_v01.py"
+EXPECTED_ENTRY_POINT = (
+    "[console_scripts]\n"
+    "ucie-product-preview = ucie_miner.customer_staging_v01:main"
+)
 ALLOWED_DIST = frozenset({
     DIST + "METADATA", DIST + "WHEEL", DIST + "RECORD",
-    DIST + "top_level.txt",
+    DIST + "top_level.txt", ENTRY_POINT,
 })
 ALLOWED_PACKAGES = ("ucie_miner/", "ucie_public/")
 HEX64 = re.compile(r"[0-9a-f]{64}\Z")
@@ -106,6 +112,17 @@ def verify_staging_wheel(raw: bytes, source_digests: dict[str, str]) -> dict:
             if ("Tag: py3-none-any" not in wheel_metadata.splitlines()
                     or "Root-Is-Purelib: true" not in wheel_metadata.splitlines()):
                 _reject("wheel is not pure Python")
+            # Console scripts are executable entrypoint metadata. The
+            # first-party UCIE preview is the ONLY executable label allowed.
+            has_preview_module = CUSTOMER_PREVIEW_MODULE in code
+            has_entrypoint = ENTRY_POINT in names
+            if has_entrypoint != has_preview_module:
+                _reject("customer preview entrypoint/source mismatch")
+            if has_entrypoint:
+                entrypoint = wheel.read(ENTRY_POINT).decode(
+                    "utf-8", "strict").replace("\r\n", "\n").strip()
+                if entrypoint != EXPECTED_ENTRY_POINT:
+                    _reject("unexpected executable console entry point")
             records = list(csv.reader(
                 io.StringIO(wheel.read(DIST+"RECORD").decode("utf-8", "strict"))
             ))
@@ -146,6 +163,7 @@ def verify_staging_wheel(raw: bytes, source_digests: dict[str, str]) -> dict:
                 "source_files_match_checkout": True,
                 "package_version": "0.1.0",
                 "pure_python_wheel": True,
+                "customer_preview_entrypoint_verified": has_entrypoint,
                 "external_release_authorized": False,
                 "independent_security_or_license_attested": False,
                 "operating_db_writes": 0,
