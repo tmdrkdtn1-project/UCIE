@@ -302,7 +302,11 @@ def make_handler(root: Path, *, explorer=None):
                 return self._reply(400, "INVALID_POST_LENGTH",
                                    "text/plain; charset=utf-8")
             size = int(length)
-            if size > 8192:
+            # Windows may reset the TCP connection if the server sends 413
+            # while a small oversized body is still queued unread.
+            # Discard at most 16384 inert bytes before returning 413. This
+            # never accepts, interprets, stores or executes POST payloads.
+            if size > 16384:
                 self.close_connection = True
                 return self._reply(413, "POST_BODY_TOO_LARGE",
                                    "text/plain; charset=utf-8")
@@ -317,6 +321,10 @@ def make_handler(root: Path, *, explorer=None):
                 return
             finally:
                 self.connection.settimeout(prior_timeout)
+            if size > 8192:
+                self.close_connection = True
+                return self._reply(413, "POST_BODY_TOO_LARGE",
+                                   "text/plain; charset=utf-8")
             return self._reply(405, "GET_ONLY", "text/plain; charset=utf-8")
 
         def do_GET(self):

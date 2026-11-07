@@ -52,9 +52,14 @@ class BrowserRejectedPostTests(unittest.TestCase):
                 with self.subTest(size=size):
                     self._reject(url, b"x" * size, 405)
 
-    def test_oversized_body_is_not_consumed_or_accepted(self):
+    def test_small_oversized_bodies_are_discarded_and_still_413(self):
+        # The rejected request data must be fully drained (not processed)
+        # before the server closes the connection on Windows.
         with ephemeral_loopback(base.make_handler) as url:
-            self._reject(url, b"x" * 8193, 413)
+            for size in (8193, 8194, 16384):
+                with self.subTest(size=size):
+                    for _ in range(3):
+                        self._reject(url, b"x" * size, 413)
 
     def test_zero_length_post_is_405_and_does_not_trigger_get(self):
         with ephemeral_loopback(base.make_handler) as url:
