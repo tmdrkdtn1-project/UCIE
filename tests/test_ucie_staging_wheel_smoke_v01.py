@@ -110,15 +110,32 @@ class UCIEStagingWheelSmoke(unittest.TestCase):
                 "from ucie_miner.skillbook_w09_release_gate_v01 import preview_release_gate\n"
                 "from ucie_miner.skillbook_editorial_production_v01 import compose_curated_two_book_pilot\n"
                 "from ucie_public.cli import main\n"
+                "from ucie_miner.customer_staging_v01 import main as staged_main\n"
+                "from importlib.metadata import distributions\n"
+                "from contextlib import redirect_stdout\n"
+                "from io import StringIO\n"
                 "gate=preview_release_gate()\n"
                 "book=compose_curated_two_book_pilot()\n"
+                "dist=[d for d in distributions(path=[sys.argv[1]]) if d.metadata['Name']=='ucie-public-only-demo']\n"
+                "assert len(dist)==1\n"
+                "assert any(e.name=='ucie-product-preview' and e.value=='ucie_miner.customer_staging_v01:main' for e in dist[0].entry_points)\n"
+                "stage_out=StringIO()\n"
+                "with redirect_stdout(stage_out):\n"
+                "  rc=staged_main(['--pillar','all'])\n"
+                "assert rc==0\n"
+                "staged=json.loads(stage_out.getvalue())\n"
+                "assert staged['four_pillars_exercised'] is True\n"
+                "assert len(staged['workflows'])==4\n"
+                "assert staged['customer_distribution_authorized'] is False\n"
+                "assert staged['complete_customer_functional_acceptance'] is False\n"
                 "assert gate['export_allowed'] is False\n"
                 "assert gate['package_signed'] is False\n"
                 "assert gate['owner_release_authorized'] is False\n"
                 "assert book['export_allowed'] is False\n"
                 "assert callable(main)\n"
                 "assert cutoff_window(date(2026,11,6))[1]=='2026-11-05T20:00:00+00:00'\n"
-                "print(json.dumps({'smoke':'PASS','released':False,'task_changed':False,"
+                "print(json.dumps({'smoke':'PASS','four_pillars_staged':True,"
+                "'installed_entrypoint_verified':True,'released':False,'task_changed':False,"
                 "'operating_db_writes':0},sort_keys=True))\n"
             )
             child = subprocess.run(
@@ -130,6 +147,8 @@ class UCIEStagingWheelSmoke(unittest.TestCase):
                              "STAGING_ISOLATED_START_FAIL:" + str(child.returncode))
             observed = json.loads(child.stdout.decode("utf-8", "strict"))
             self.assertEqual(observed["smoke"], "PASS")
+            self.assertTrue(observed["four_pillars_staged"])
+            self.assertTrue(observed["installed_entrypoint_verified"])
             self.assertIs(observed["released"], False)
             self.assertIs(observed["task_changed"], False)
             self.assertEqual(observed["operating_db_writes"], 0)
