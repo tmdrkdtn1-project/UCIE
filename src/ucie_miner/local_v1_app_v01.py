@@ -339,53 +339,115 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
     return _page("개발 엔진·스킬", body)
 
 
-def _books(raw: str) -> str:
-    require_local_work("VIRTUAL_LIBRARY")
-    from .skillbook_product_v01 import search_skillbooks
+def _library(root: Path, raw: str) -> str:
+    """One user-facing UCIE library: SkillBooks, editorial drafts and all W04 pages.
 
-    args = _params(raw, ("q",))
+    Reuse the existing federated catalog for human/machine books and draft
+    review, and existing W04 source validation for paged public evidence.
+    Never merge the distinct approval/rights statuses into one count.
+    """
+    require_local_work("VIRTUAL_LIBRARY")
+    from .skillbook_catalog_union_v01 import (
+        SCHEMA as FEDERATED_SCHEMA, search_federated,
+    )
+
+    args = _params(raw, ("q", "page"))
     term = args.get("q", "")
     if BOOK_QUERY.fullmatch(term) is None:
-        raise LocalProductError("invalid SkillBook search term")
-    result = search_skillbooks(query=term)
-    if (result.get("status") != "READ_ONLY_FIRST_PARTY_DRAFT_CATALOG"
-            or result.get("approved_reusable_packages") != 0
-            or result.get("operating_database_writes") != 0
-            or result.get("network_requests") != 0):
-        raise LocalProductError("untrusted SkillBook result")
+        raise LocalProductError("invalid unified library query")
+    page = _page_number(args)
+    catalog = search_federated(root, filters={
+        "query": term, "shelf": "skillbooks", "kind": "",
+        "domain": "", "limit": 20,
+    })
+    if (catalog.get("schema") != FEDERATED_SCHEMA
+            or catalog.get("status") != "READ_ONLY_TWO_SHELF_DRAFT_NOT_APPROVED"
+            or catalog.get("public_shelf_status") != "NOT_REQUESTED"
+            or catalog.get("public_evidence_candidates") != []
+            or catalog.get("human_approved") is not False
+            or catalog.get("export_allowed") is not False
+            or catalog.get("approved_packages") != 0
+            or catalog.get("network_requests") != 0
+            or catalog.get("operating_database_writes") != 0):
+        raise LocalProductError("untrusted unified catalog contract")
+    books = catalog.get("skillbooks")
+    drafts = catalog.get("editorial_review_candidates")
+    if (type(books) is not list or len(books) > 2
+            or type(drafts) is not list or len(drafts) > 20):
+        raise LocalProductError("unbounded unified catalog shelves")
+
     body = (
-        '<section><h2>실제 UCIE 작성 SkillBook 열람</h2>'
-        '<form action="/local/books" method="get">'
-        '<input name="q" maxlength="80" value="' + _e(term) +
-        '" placeholder="scandir 또는 Git"><button>도서 검색</button></form>'
-        '<p>본문과 기계 실행 계약은 아래 링크에서 열람합니다.'
-        ' 미승인 초안은 승인된 제품으로 내보내지 않습니다.</p></section>')
-    for book in result.get("items", []):
-        if book.get("human_approved") is not False or book.get("export_allowed") is not False:
-            raise LocalProductError("unapproved SkillBook status tampered")
-        ident = book.get("skillbook_id")
-        if type(ident) is not str or len(ident) > 100 or not ident.isascii():
-            raise LocalProductError("unsafe book identifier")
+        '<section><h2>UCIE 통합 가상도서관</h2>'
+        '<p>SkillBook · 편집 검토 기술서적 · 실제 수집된 공개 기술 근거를'
+        ' 한 화면에서 검색합니다. 세 자료는 검증 단위가 달라'
+        ' 개수를 합산하거나 승인된 책/규칙으로 간주하지 않습니다.</p>'
+        '<form action="/local/library" method="get">'
+        '<label>검색어 <input name="q" maxlength="80" value="' +
+        _e(term) + '" placeholder="Git, Python, scandir"></label>'
+        '<button>통합 검색</button></form>'
+        '<p>모든 자료는 미검증 또는 미승인 상태입니다.'
+        ' 자동 적용·출시·외부 배포는 하지 않습니다.</p></section>'
+        '<section><h2>SkillBook 본문 · 기계 계약 (미승인 초안)</h2>'
+        '<p>일치 초안: ' + _e(len(books)) +
+        '권 · 두 권을 전체 공개 근거 후보 수와 비교하지 마세요.</p></section>'
+    )
+    for book in books:
+        identity = book.get("skillbook_id")
+        if (type(identity) is not str or len(identity) > 100
+                or not identity.isascii()
+                or book.get("human_approved") is not False
+                or book.get("export_allowed") is not False):
+            raise LocalProductError("forged or unsafe SkillBook")
         body += (
-            '<article><h3><a href="/skillbooks/' + quote(ident, safe="") +
-            '">' + _e(book.get("title")) + '</a></h3>'
+            '<article><h3><a href="/skillbooks/' + quote(identity, safe="") +
+            '">' + _e(book.get("title", "SkillBook")) + '</a></h3>'
             '<p>출처 ' + _e(book.get("source_id")) +
-            ' · 버전 ' + _e(book.get("version_scope_claim")) +
-            ' · ' + _e(book.get("status")) + '</p>'
-            '<p>미승인·수동 검토 필요·상용 내보내기 불가</p></article>')
-    if not result.get("items"):
-        body += '<section>검색 조건과 일치하는 SkillBook이 없습니다.</section>'
-    return _page("가상도서관", body)
+            ' · 적용 범위 ' + _e(book.get("version_scope_claim")) + '</p>'
+            '<p>본문 및 기계 판독 계약 열람 가능 · 미승인 · 내보내기 불가</p>'
+            '</article>')
+    if not books:
+        body += '<section>일치하는 SkillBook 초안이 없습니다.</section>'
+    body += (
+        '<section><h2>편집·원문 검토 대기 기술서적</h2>'
+        '<p>일치 편집 후보: ' + _e(len(drafts)) +
+        '건 · 검토 미완료 · 실행 계약과 승인된 책이 아닙니다.</p></section>'
+    )
+    for draft in drafts:
+        ident = draft.get("draft_sha256")
+        if type(ident) is not str or re.fullmatch(r"[0-9a-f]{64}", ident) is None:
+            raise LocalProductError("invalid reviewed editorial draft reference")
+        body += (
+            '<article><a href="/catalog/review?id=' + ident + '">' +
+            _e(draft.get("topic", "검토 대기")) + '</a>'
+            '<p>출처 ' + _e(", ".join(draft.get("source_ids", []))) +
+            ' · 원문·라이선스·QA 미승인</p></article>')
+    body += (
+        '<section><h2>기존 UCIE 공개 근거·코딩 예방 후보</h2>'
+        '<p>원본 공개 변경 링크와 미승인 상태를 표시하며'
+        ' 전체 검색 결과를 페이지별로 탐색할 수 있습니다.</p></section>')
+    if term.isascii():
+        body += _paged_evidence(
+            root, term, page=page, route="/local/library")
+    else:
+        if page != 1:
+            raise LocalProductError("non-ASCII public evidence paging not supported")
+        body += (
+            '<section>공개 근거 W04 검색은 현재 영문 검색어만 지원합니다.'
+            ' SkillBook·편집 자료 검색 결과는 위에 표시했습니다.'
+            ' 공개 근거를 보려면 Python, Git 등의 영문 검색어를 사용하세요.'
+            '</section>')
+    return _page("통합 가상도서관", body)
 
 
 def _evolution(root: Path, raw: str) -> str:
     require_local_work("EVIDENCE_EVOLUTION")
     from .public_collection_inventory_v01 import SCHEMA as INVENTORY_SCHEMA, collection_inventory
 
-    args = _params(raw, ("q",))
+    args = _params(raw, ("q", "page"))
     term = args.get("q", "")
     if QUERY.fullmatch(term) is None:
         raise LocalProductError("invalid public change search")
+    page = _page_number(args)
     body = (
         '<section><h2>현재 UCIE 공개 수집·검토 현황</h2>'
         '<p>실제 기존 UCIE 공개 기록만 읽습니다. 추가 수집·자동 승격은 하지 않습니다.</p>')
@@ -400,7 +462,8 @@ def _evolution(root: Path, raw: str) -> str:
         '<p>기존 공개 PR 후보: ' + _e(inventory.get("legacy_miner", {}).get("candidates", "확인 불가")) +
         ' · Stage10 개정: ' + _e(inventory.get("stage10_public_candidate_staging", {}).get("candidate_revisions", "확인 불가")) + '</p>'
         '<p>검증 문제: ' + _e(", ".join(inventory.get("issues", []))) +
-        '</p></section>'
+        '</p><p>기본 마이너·Stage10 개정·W04 검색 결과는 서로 다른 원장이므로'
+        ' 합산된 제품 규칙 수가 아닙니다.</p></section>'
         '<section><h2>개선·검토할 공개 변경 검색</h2>'
         '<form action="/local/evolution" method="get">'
         '<input name="q" maxlength="80" value="' + _e(term) +
@@ -409,8 +472,8 @@ def _evolution(root: Path, raw: str) -> str:
         '<p>원본 공개 URL → 검증 미완료 상태 → 원본·중복·버전·회귀시험'
         ' 수동 검토가 다음 단계입니다.</p></section>'
     )
-    report = _search(root, term)
-    body += _evidence_rows(report)
+    body += _paged_evidence(root, term, page=page,
+                            route="/local/evolution")
     return _page("근거 기반 개선", body)
 
 
@@ -459,6 +522,22 @@ def make_handler(root: Path):
                 self.end_headers()
                 self.wfile.write(data)
                 return
+            if (status == 200 and mime == "text/html; charset=utf-8"
+                    and isinstance(content, str)
+                    and "</header>" in content
+                    and "UCIE_LOCAL_V1_UNIFIED_NAV" not in content):
+                links = "".join(
+                    '<a href="' + href + '">' + _e(title) + '</a> · '
+                    for href, title, _ in ROUTES)
+                local_nav = (
+                    '<nav aria-label="UCIE Local V1" '
+                    'style="margin:12px 0;padding:12px;background:#e9f2f7;'
+                    'border-radius:8px">'
+                    '<strong>UCIE_LOCAL_V1_UNIFIED_NAV</strong> · '
+                    '<a href="/local">UCIE 홈</a> · ' + links +
+                    '</nav>'
+                )
+                content = content.replace("</header>", "</header>" + local_nav, 1)
             return super().reply(status, content, mime)
 
         def do_POST(self):
@@ -469,8 +548,8 @@ def make_handler(root: Path):
             parts = urlsplit(self.path)
             if parts.path not in (
                     "/", "/local", "/local/health", "/local/error",
-                    "/local/engine", "/local/books", "/local/evolution",
-                    "/local/policy"):
+                    "/local/engine", "/local/books", "/local/library",
+                    "/local/evolution", "/local/policy"):
                 return super().do_GET()
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
                 return self.reply(403, "LOOPBACK_ONLY",
@@ -500,8 +579,8 @@ def make_handler(root: Path):
                     html = _error(root, parts.query)
                 elif parts.path == "/local/engine":
                     html = _engine(parts.query, root=root)
-                elif parts.path == "/local/books":
-                    html = _books(parts.query)
+                elif parts.path in ("/local/library", "/local/books"):
+                    html = _library(root, parts.query)
                 elif parts.path == "/local/evolution":
                     html = _evolution(root, parts.query)
                 else:
