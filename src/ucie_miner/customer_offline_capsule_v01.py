@@ -7,6 +7,8 @@ sign, license, export approved SkillBooks, fetch dependencies, or touch runtime.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import csv
 from hashlib import sha256
 import io
@@ -114,15 +116,48 @@ def _check_wheel(raw: bytes) -> None:
             metadata = wheel.read(DIST + "METADATA").decode("utf-8", "strict")
             entries = wheel.read(DIST + "entry_points.txt").decode("utf-8", "strict")
             record = wheel.read(DIST + "RECORD").decode("utf-8", "strict")
-            if ("\nName: ucie-public-only-demo\n" not in "\n" + metadata
-                    or "\nVersion: 0.1.0\n" not in "\n" + metadata
-                    or "Requires-Dist: cryptography" not in metadata
-                    or "[console_scripts]" not in entries
-                    or "ucie-product-preview = ucie_miner.customer_staging_v01:main"
-                    not in entries):
+            # Python/setuptools wheel METADATA is CRLF on some Windows builds.
+            # Parse header lines instead of requiring LF byte sequences.
+            fields = metadata.splitlines()
+            entry_lines = [x.strip() for x in entries.splitlines() if x.strip()]
+            if (fields.count("Name: ucie-public-only-demo") != 1
+                    or fields.count("Version: 0.1.0") != 1
+                    or not any(x.startswith("Requires-Dist: cryptography")
+                               for x in fields)
+                    or entry_lines != [
+                        "[console_scripts]",
+                        "ucie-product-preview = ucie_miner.customer_staging_v01:main",
+                    ]):
                 raise OfflineCapsuleError("unexpected wheel identity or entrypoint")
-            recorded = {row[0] for row in csv.reader(io.StringIO(record)) if row}
-            if not REQUIRED.issubset(recorded):
+            rows = list(csv.reader(io.StringIO(record)))
+            if len(rows) != len(names):
+                raise OfflineCapsuleError("wheel RECORD size mismatch")
+            recorded = set()
+            for row in rows:
+                if len(row) != 3:
+                    raise OfflineCapsuleError("invalid wheel RECORD fields")
+                name, value, size = row
+                if name not in names or name in recorded:
+                    raise OfflineCapsuleError("missing or duplicated RECORD path")
+                recorded.add(name)
+                if name == DIST + "RECORD":
+                    if value or size:
+                        raise OfflineCapsuleError("RECORD self-hash must be empty")
+                    continue
+                if not value.startswith("sha256=") or not size.isdecimal():
+                    raise OfflineCapsuleError("missing wheel RECORD digest")
+                try:
+                    text = value[len("sha256="):]
+                    digest = base64.urlsafe_b64decode(
+                        text + "=" * (-len(text) % 4)
+                    )
+                except (ValueError, binascii.Error) as exc:
+                    raise OfflineCapsuleError("invalid RECORD digest encoding") from exc
+                payload = wheel.read(name)
+                if (len(digest) != 32 or digest != sha256(payload).digest()
+                        or int(size) != len(payload)):
+                    raise OfflineCapsuleError("wheel RECORD content mismatch")
+            if recorded != names:
                 raise OfflineCapsuleError("wheel RECORD inventory incomplete")
     except (BadZipFile, UnicodeError, KeyError, OSError) as exc:
         raise OfflineCapsuleError("invalid bounded wheel") from exc
