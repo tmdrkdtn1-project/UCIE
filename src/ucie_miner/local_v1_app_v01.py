@@ -414,8 +414,9 @@ def make_handler(root: Path):
         def do_GET(self):
             parts = urlsplit(self.path)
             if parts.path not in (
-                    "/", "/local", "/local/error", "/local/engine",
-                    "/local/books", "/local/evolution", "/local/policy"):
+                    "/", "/local", "/local/health", "/local/error",
+                    "/local/engine", "/local/books", "/local/evolution",
+                    "/local/policy"):
                 return super().do_GET()
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
                 return self.reply(403, "LOOPBACK_ONLY",
@@ -424,6 +425,19 @@ def make_handler(root: Path):
                 return self.reply(400, "INVALID_LOCAL_PRODUCT_ROUTE",
                                   "text/plain; charset=utf-8")
             try:
+                if parts.path == "/local/health":
+                    if parts.query:
+                        raise LocalProductError("local health cannot take query")
+                    require_local_work("LOCAL_APP")
+                    return self.reply(200, json.dumps({
+                        "schema": APP_SCHEMA,
+                        "status": APP_STATUS,
+                        "bound_host": "127.0.0.1",
+                        "bound_port": self.server.server_port,
+                        "owner_acceptance_verified": False,
+                        "online_release_authorized": False,
+                        "operating_database_writes": 0,
+                    }, sort_keys=True), "application/json; charset=utf-8")
                 if parts.path in ("/", "/local"):
                     if parts.query:
                         raise LocalProductError("local home cannot take query")
@@ -452,11 +466,13 @@ def make_handler(root: Path):
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="UCIE Local V1 four-pillar localhost work surface")
-    parser.add_argument("--port", type=int, default=8767)
+    parser.add_argument("--port", type=int, default=0,
+                        help="0 = automatically choose a free local port")
     parser.add_argument("--open-browser", action="store_true")
     args = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[2]
-    if (not 1024 <= args.port <= 65535 or root.is_symlink()
+    if (args.port != 0 and not 1024 <= args.port <= 65535
+            or root.is_symlink()
             or root.name.casefold() != "ucie"
             or not (root / ".git").is_dir()
             or (os.name == "nt"
@@ -475,6 +491,8 @@ def main(argv: list[str] | None = None) -> int:
                 "schema": APP_SCHEMA,
                 "status": APP_STATUS,
                 "local_app_url": url,
+                "bound_port": server.server_port,
+                "port_selected_automatically": args.port == 0,
                 "owner_acceptance_verified": False,
                 "customer_distribution_authorized": False,
                 "external_network_requests": 0,
@@ -486,7 +504,17 @@ def main(argv: list[str] | None = None) -> int:
             server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
         return 0
-    except (OSError, LocalProductError, LocalPriorityError):
+    except OSError as exc:
+        print(json.dumps({
+            "schema": APP_SCHEMA,
+            "status": "UCIE_LOCAL_V1_LISTEN_FAILED_USE_AUTO_PORT",
+            "requested_port": args.port,
+            "reason": type(exc).__name__,
+            "remedy": "Use --port 0 or the one-command owner launcher",
+            "owner_acceptance_verified": False,
+        }, sort_keys=True))
+        return 2
+    except (LocalProductError, LocalPriorityError):
         print(json.dumps({
             "schema": APP_SCHEMA,
             "status": "UCIE_LOCAL_V1_START_FAIL_CLOSED",

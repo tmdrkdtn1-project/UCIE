@@ -8,6 +8,8 @@ from __future__ import annotations
 from http.server import HTTPServer
 from pathlib import Path
 import http.client
+import json
+import socket
 import tempfile
 import threading
 import unittest
@@ -197,6 +199,45 @@ class LoopbackOwnerAppTests(unittest.TestCase):
                       "/local/books", "/local/policy"):
             status, _, _ = self.request(route)
             self.assertEqual(status, 200, route)
+
+    def test_dynamic_local_port_identity_and_host_validation(self):
+        status, body, headers = self.request("/local/health")
+        self.assertEqual(status, 200)
+        receipt = json.loads(body)
+        self.assertEqual(receipt["schema"], app.APP_SCHEMA)
+        self.assertEqual(receipt["status"], app.APP_STATUS)
+        self.assertEqual(receipt["bound_port"], self.server.server_port)
+        self.assertEqual(receipt["bound_host"], "127.0.0.1")
+        self.assertFalse(receipt["owner_acceptance_verified"])
+        self.assertFalse(receipt["online_release_authorized"])
+        self.assertIn("application/json", headers["Content-Type"])
+        code, _, _ = self.request("/local/health", host="incorrect.example")
+        self.assertEqual(code, 403)
+        code, _, _ = self.request("/local/health?force_approved=true")
+        self.assertEqual(code, 400)
+
+    def test_unrelated_local_service_port_is_left_untouched(self):
+        # Emulate the user's observed JSON NOT_FOUND service. Do not
+        # occupy or modify the actual 8767 port or any host-owned process.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as other:
+            other.bind(("127.0.0.1", 0))
+            other.listen(1)
+            occupied_port = other.getsockname()[1]
+            # An already running Local V1 is still independent of the
+            # other process; starting a new auto-port listener also works.
+            with HTTPServer(("127.0.0.1", 0),
+                            self.server.RequestHandlerClass) as fresh:
+                self.assertNotEqual(fresh.server_port, occupied_port)
+                self.assertNotEqual(fresh.server_port, self.server.server_port)
+                self.assertEqual(other.getsockname()[1], occupied_port)
+
+    def test_start_script_uses_auto_port_and_real_url(self):
+        script = Path(__file__).resolve().parents[1] / "scripts" / "start_ucie_local_v1.ps1"
+        text = script.read_text(encoding="utf-8")
+        self.assertIn("[int] $Port = 0", text)
+        self.assertIn("--port $Port --open-browser", text)
+        self.assertIn("local_app_url", text)
+        self.assertNotIn("[int] $Port = 8767", text)
 
     def test_external_host_rejected_and_post_disabled(self):
         status, _, _ = self.request("/local", host="evil.example")
