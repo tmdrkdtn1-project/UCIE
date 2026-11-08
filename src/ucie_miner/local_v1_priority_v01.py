@@ -13,10 +13,13 @@ import json
 
 SCHEMA = "UCIE_LOCAL_V1_OWNER_PRIORITY_CONTRACT_V01"
 OWNER_DECISION = "2026-11-08_LOCAL_PRODUCT_BEFORE_ONLINE_AND_PERIPHERAL"
-CURRENT_PHASE = "LOCAL_V1_OWNER_ACCEPTED_ONLINE_RELEASE_PREPARATION"
+CURRENT_PHASE = "LOCAL_V1_CONTINUOUS_USE_AND_DATA_MATURITY_PUBLIC_LAUNCH_HOLD"
 LOCAL_V1_ACCEPTED_BY_OWNER = True
 LOCAL_V1_OWNER_ACCEPTANCE_RECEIPT = "docs/UCIE_LOCAL_V1_OWNER_ACCEPTANCE_20261108.md"
 ONLINE_RELEASE_AUTHORIZED = False
+PAID_HOSTING_SPEND_AUTHORIZED = False
+PUBLIC_CLOUDFLARE_ROUTE_AUTHORIZED = False
+DATA_MATURITY_BEFORE_PUBLIC_RELEASE = True
 PERIPHERAL_EXPANSION_AUTHORIZED = False
 
 LOCAL_WORK = {
@@ -76,6 +79,9 @@ def require_local_work(task: str) -> dict:
         "status": "LOCAL_PRODUCT_TASK_ALLOWED_AFTER_OWNER_ACCEPTANCE",
         "local_v1_accepted": True,
         "online_release_authorized": False,
+        "paid_hosting_spend_authorized": False,
+        "public_cloudflare_route_authorized": False,
+        "data_maturity_before_public_release": True,
         "peripheral_expansion_authorized": False,
         "automatic_rule_promotion": False,
     }
@@ -89,8 +95,9 @@ def roadmap() -> dict:
         "status": "UCIE_LOCAL_V1_OWNER_ACCEPTED_LOCAL_GO",
         "ordered_phases": [
             "1_LOCAL_V1_OWNER_ACCEPTED_GO",
-            "2_ONLINE_AND_DESIGNATED_CUSTOMER_DELIVERY",
-            "3_PERIPHERAL_DEVELOPMENT_AND_EXPANSION",
+            "2_EXISTING_PUBLIC_EVIDENCE_DATA_MATURITY_AND_LOCAL_STABILITY",
+            "3_ONLINE_AND_CUSTOMER_RELEASE_ONLY_AFTER_SEPARATE_OWNER_GO",
+            "4_PERIPHERAL_DEVELOPMENT_AND_EXPANSION_LAST",
         ],
         "allowed_local_work": dict(LOCAL_WORK),
         "deferred_until_separate_commercial_or_expansion_approval": list(DEFERRED_WORK),
