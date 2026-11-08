@@ -41,6 +41,8 @@ def public_rows():
         "operating_database_writes": 0,
         "approved_or_exportable_items": 0,
         "auto_promoted": False,
+        "total_matches": 1,
+        "returned_count": 1,
         "items": [item],
     }
 
@@ -93,7 +95,8 @@ class LocalUserJobsTests(unittest.TestCase):
         self.assertIn("실제 프로젝트", html)
 
     def test_real_two_skillbooks_are_clickable_and_draft_only(self):
-        html = app._books("q=")
+        with patch.object(app, "_search", return_value=public_rows()):
+            html = app._library(Path("UCIE"), "q=")
         self.assertIn("/skillbooks/", html)
         self.assertIn("미승인", html)
         self.assertIn("내보내기 불가", html)
@@ -142,9 +145,44 @@ class LocalUserJobsTests(unittest.TestCase):
         with self.assertRaises(app.LocalProductError):
             app._engine("purpose=ONLINE_DEPLOYMENT")
 
+    def test_visible_total_and_next_page_without_candidate_loss(self):
+        report = public_rows()
+        report["total_matches"] = 962
+        report["items"] = [
+            {**report["items"][0],
+             "public_url": "https://github.com/python/cpython/pull/" + str(2000 + i)}
+            for i in range(10)
+        ]
+        report["returned_count"] = 10
+        with patch.object(app, "_search", return_value=report) as mock_search:
+            page1 = app._error(Path("UCIE"), "q=python")
+            self.assertIn("전체 일치 공개 근거 후보·개정 행: 962건", page1)
+            self.assertIn("현재 1–10건 표시", page1)
+            self.assertIn("/local/error?q=python&page=2", page1.replace("&amp;", "&"))
+            page2 = app._error(Path("UCIE"), "q=python&page=2")
+            self.assertIn("현재 11–20건 표시", page2)
+            self.assertIn("이전 10건", page2)
+            self.assertIn("다음 10건", page2)
+            self.assertEqual(mock_search.call_args.kwargs["offset"], 10)
+
+    def test_legacy_books_url_is_same_unified_library(self):
+        with patch.object(app, "_search", return_value=public_rows()):
+            unified = app._library(Path("UCIE"), "q=Git")
+        self.assertIn("UCIE 통합 가상도서관", unified)
+        self.assertIn("SkillBook", unified)
+        self.assertIn("기존 UCIE 공개 근거", unified)
+
+    def test_paging_invalid_or_cross_project_query_fails_closed(self):
+        for raw in ("q=python&page=0", "q=python&page=9999",
+                    "q=python&page=2&page=3", "q=python&page=-1"):
+            with self.subTest(raw=raw), self.assertRaises(app.LocalProductError):
+                app._error(Path("UCIE"), raw)
+
     def test_nonexistent_public_evidence_does_not_fabricate_fix(self):
         row = public_rows()
         row["status"] = "SOURCE_LINKAGE_INCOMPLETE_NO_GO"
+        row["total_matches"] = 0
+        row["returned_count"] = 0
         row["items"] = []
         with patch.object(app, "_search", return_value=row):
             html = app._error(Path("UCIE"), "q=scandir")
@@ -155,7 +193,8 @@ class LocalUserJobsTests(unittest.TestCase):
         home, policy_page = app._home(), app._policy()
         self.assertIn("/local/error", home)
         self.assertIn("/local/engine", home)
-        self.assertIn("/local/books", home)
+        self.assertIn("/local/library", home)
+        self.assertNotIn('href="/catalog">기존 통합 도서관', home)
         self.assertIn("/local/evolution", home)
         self.assertIn("보류", policy_page)
         self.assertIn("LG6_OWNER_HOST_SIGNOFF_RECEIPT", policy_page)
