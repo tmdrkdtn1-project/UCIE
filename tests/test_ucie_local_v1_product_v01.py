@@ -85,8 +85,7 @@ class LocalUserJobsTests(unittest.TestCase):
     def test_real_first_party_engine_runs_on_user_selection(self):
         html = app._engine("purpose=SKILL_TEST_AUTOMATION")
         self.assertIn("TAGGED_TEST_CASE_LOOKUP_V1", html)
-        self.assertIn("baseline", html.lower() if "baseline" in html else
-                      "baseline") if False else self.assertIn("기준 연산", html)
+        self.assertIn("기준 연산", html)
         self.assertIn("결과 동등성", html)
         self.assertIn("합성 workload", html)
         self.assertIn("실제 프로젝트", html)
@@ -104,8 +103,7 @@ class LocalUserJobsTests(unittest.TestCase):
             html = app._error(Path("UCIE"), "q=SCANDIR")
         self.assertIn("github.com/python/cpython/pull/155365", html)
         self.assertIn("UNVERIFIED_CANDIDATE_ONLY", html)
-        self.assertIn("공유", html) if "공유" in html else self.assertIn(
-            "Never concurrently share a raw scandir iterator", html)
+        self.assertIn("Never concurrently share a raw scandir iterator", html)
         self.assertIn("회귀", html)
 
     def test_evolution_displays_real_ucie_only_readonly_snapshot_and_change(self):
