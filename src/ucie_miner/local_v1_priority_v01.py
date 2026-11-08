@@ -12,7 +12,7 @@ import argparse
 import json
 
 SCHEMA = "UCIE_LOCAL_V1_OWNER_PRIORITY_CONTRACT_V01"
-OWNER_DECISION = "2026-11-08_LOCAL_PRODUCT_BEFORE_ONLINE_AND_PERIPHERAL"
+OWNER_DECISION = "2026-11-08_LOCAL_USE_AND_DATA_MATURITY_BEFORE_PAID_PUBLIC_HOSTING"
 CURRENT_PHASE = "LOCAL_V1_CONTINUOUS_USE_AND_DATA_MATURITY_PUBLIC_LAUNCH_HOLD"
 LOCAL_V1_ACCEPTED_BY_OWNER = True
 LOCAL_V1_OWNER_ACCEPTANCE_RECEIPT = "docs/UCIE_LOCAL_V1_OWNER_ACCEPTANCE_20261108.md"
@@ -104,6 +104,9 @@ def roadmap() -> dict:
         "local_acceptance_gates": list(LOCAL_ACCEPTANCE_GATES),
         "local_v1_accepted_by_owner": True,
         "online_release_authorized": False,
+        "paid_hosting_spend_authorized": False,
+        "public_cloudflare_route_authorized": False,
+        "data_maturity_before_public_release": True,
         "peripheral_expansion_authorized": False,
         "customer_distribution_authorized": False,
         "owner_acceptance_receipt_generated": True,
