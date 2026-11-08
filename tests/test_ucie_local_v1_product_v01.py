@@ -178,6 +178,56 @@ class LocalUserJobsTests(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaises(app.LocalProductError):
                 app._error(Path("UCIE"), raw)
 
+    def test_real_source_selection_opens_actionable_regression_worksheet(self):
+        report = public_rows()
+        with patch.object(app, "_search", return_value=report):
+            result = app._error(Path("UCIE"), "q=scandir")
+            self.assertIn("이 후보로 오류 예방·회귀 검토 작업 열기", result)
+            self.assertIn("/local/review?q=scandir&amp;page=1", result)
+            html = app._review(
+                Path("UCIE"), "q=scandir&page=1&id=" + "a" * 64 +
+                "&from=error")
+        self.assertIn("github.com/python/cpython/pull/155365", html)
+        self.assertIn("PY_SCANDIR_SHARED_ITERATOR_RACE", html)
+        self.assertIn("Never concurrently share a raw scandir iterator", html)
+        self.assertIn("패턴별 한정형 재현 설계", html)
+        self.assertIn("NOT_VERIFIED", html)
+        self.assertIn("실제 회귀시험: NOT_EXECUTED", html)
+        self.assertIn("승인: NO", html)
+
+    def test_unknown_pattern_shows_no_fabricated_regression(self):
+        row = public_rows()
+        row["items"][0]["purpose_code"] = "API_CONTRACT"
+        row["items"][0]["source_id"] = "repo:modelcontextprotocol/python-sdk"
+        row["items"][0]["public_url"] = (
+            "https://github.com/modelcontextprotocol/python-sdk/pull/1928")
+        with patch.object(app, "_search", return_value=row):
+            html = app._review(
+                Path("UCIE"), "q=python&page=1&id=" + "a" * 64)
+        self.assertIn("개별 재현 설계", html)
+        self.assertIn("전용 재현 입력·기대값이 아직 정의되지 않았습니다", html)
+        self.assertIn("Validate accepted arguments", html)
+        self.assertIn("NOT_VERIFIED", html)
+
+    def test_review_rejects_unknown_candidates_and_approval_forgery(self):
+        row = public_rows()
+        with patch.object(app, "_search", return_value=row):
+            for raw in (
+                "q=scandir&page=1&id=" + "f" * 64,
+                "q=scandir&page=0&id=" + "a" * 64,
+                "q=scandir&page=1&id=not_hex",
+                "q=scandir&page=1&id=" + "a" * 64 + "&from=otherproject",
+                "q=scandir&page=1&id=" + "a" * 64 + "&q=python",
+            ):
+                with self.subTest(raw=raw), self.assertRaises(app.LocalProductError):
+                    app._review(Path("UCIE"), raw)
+        invalid = public_rows()
+        invalid["items"][0]["human_approved"] = True
+        with patch.object(app, "_search", return_value=invalid):
+            with self.assertRaises(ValueError):
+                app._review(
+                    Path("UCIE"), "q=scandir&page=1&id=" + "a" * 64)
+
     def test_nonexistent_public_evidence_does_not_fabricate_fix(self):
         row = public_rows()
         row["status"] = "SOURCE_LINKAGE_INCOMPLETE_NO_GO"
@@ -279,6 +329,19 @@ class LoopbackOwnerAppTests(unittest.TestCase):
         self.assertIn("--port $Port --open-browser", text)
         self.assertIn("local_app_url", text)
         self.assertNotIn("[int] $Port = 8767", text)
+
+    def test_http_review_route_for_selected_public_candidate(self):
+        with patch.object(app, "_search", return_value=public_rows()):
+            code, body, hdr = self.request(
+                "/local/review?q=scandir&page=1&id=" + "a" * 64 +
+                "&from=library")
+            self.assertEqual(code, 200)
+            self.assertIn("후보 검토 작업", body)
+            self.assertIn("NOT_VERIFIED", body)
+            code, body, _ = self.request(
+                "/local/review?q=scandir&page=1&id=" + "f" * 64)
+            self.assertEqual(code, 400)
+            self.assertIn("FAIL_CLOSED", body)
 
     def test_external_host_rejected_and_post_disabled(self):
         status, _, _ = self.request("/local", host="evil.example")
