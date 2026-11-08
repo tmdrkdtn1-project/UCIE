@@ -42,6 +42,18 @@ class UcieLocalAutostartSourceTests(unittest.TestCase):
         self.assertEqual(runner.DEFAULT_PORT, 18767)
         self.assertNotEqual(runner.DEFAULT_PORT, 8767)
 
+    def test_source_roadmap_keeps_paid_hosting_and_public_route_on_hold(self):
+        from ucie_miner import local_v1_priority_v01 as policy
+        state = policy.roadmap()
+        self.assertTrue(state["local_v1_accepted_by_owner"])
+        self.assertTrue(state["data_maturity_before_public_release"])
+        self.assertFalse(state["online_release_authorized"])
+        self.assertFalse(state["paid_hosting_spend_authorized"])
+        self.assertFalse(state["public_cloudflare_route_authorized"])
+        self.assertFalse(state["customer_distribution_authorized"])
+        self.assertFalse(state["peripheral_expansion_authorized"])
+        self.assertIn("DATA_MATURITY", state["ordered_phases"][1])
+
     def test_invalid_port_never_attempts_to_start(self):
         runner = load_runner()
         for port in (80, 8767, 65536, 0):
@@ -102,6 +114,39 @@ class UcieLocalAutostartSourceTests(unittest.TestCase):
             self.assertFalse(payload["online_release_authorized"])
             self.assertFalse(payload["cloudflare_tunnel_modified"])
             self.assertEqual(payload["operating_database_writes"], 0)
+
+    @unittest.skipUnless(os.name == "nt", "Windows ScheduledTasks introspection")
+    def test_owner_windows_task_scheduler_cmdlets_are_available_readonly(self):
+        command = (
+            "Import-Module ScheduledTasks -ErrorAction Stop; "
+            "$settings = (Get-Command New-ScheduledTaskSettingsSet).Parameters.Keys; "
+            "$triggers = (Get-Command New-ScheduledTaskTrigger).Parameters.Keys; "
+            "$principal = (Get-Command New-ScheduledTaskPrincipal).Parameters.Keys; "
+            "foreach ($name in @('RestartCount','RestartInterval',"
+            "'MultipleInstances','ExecutionTimeLimit','StartWhenAvailable')) { "
+            "if ($settings -notcontains $name) { throw ('Missing setting '+$name) }}; "
+            "foreach ($name in @('AtLogOn','At','Once','RepetitionInterval',"
+            "'RepetitionDuration','User')) { "
+            "if ($triggers -notcontains $name) { throw ('Missing trigger '+$name) }}; "
+            "if ($principal -notcontains 'LogonType') { throw 'No principal LogonType' }"
+        )
+        proc = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive",
+             "-Command", command], capture_output=True,
+            text=True, timeout=20, check=False)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    @unittest.skipUnless(os.name == "nt", "Owner Windows dry-run only")
+    def test_owner_installer_preview_never_uses_apply(self):
+        if ROOT.resolve() != Path("D:/UCIE").resolve():
+            self.skipTest("OWNER_EXACT_D_UCIE_ONLY")
+        proc = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive",
+             "-File", str(SCRIPTS / "install_ucie_local_v1_autostart.ps1")],
+            capture_output=True, text=True, timeout=20, check=False)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("PREVIEW", proc.stdout)
+        self.assertNotIn("REGISTERED_START_REQUESTED", proc.stdout)
 
     @unittest.skipUnless(os.name == "nt", "Windows PowerShell syntax parser only")
     def test_powershell_source_parses_without_executing_any_script(self):
