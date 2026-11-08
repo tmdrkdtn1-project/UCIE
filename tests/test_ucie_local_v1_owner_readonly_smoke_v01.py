@@ -61,8 +61,8 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
             "error_public_link_displayed": "github.com/" in error,
             "evolution_public_link_displayed": "github.com/" in evolution,
             "existing_public_ledger_snapshot_displayed": True,
-            "real_owner_browser_walkthrough_completed": False,
-            "local_product_go": False,
+            "owner_browser_walkthrough_independently_attested_by_test": False,
+            "local_product_owner_accepted_in_separate_record": True,
             "customer_distribution_authorized": False,
             "scheduler_changes": 0,
             "operating_ledger_writes": 0,
@@ -94,7 +94,7 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
             "first_page_displayed": len(first["items"]),
             "second_page_available": first["total_matches"] > 10,
             "stage12_index_total_not_equivalent_to_approved_rules": True,
-            "release_approved": False,
+            "public_candidate_rule_release_approved": False,
         }, sort_keys=True))
 
     def test_actual_source_bound_manual_review_worksheet(self):
@@ -123,7 +123,7 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
             "independent_upstream_regression_observed": False,
             "automatic_approval": False,
             "operating_db_writes": 0,
-            "local_owner_gui_acceptance": False,
+            "local_owner_gui_acceptance_inferred_from_this_test": False,
         }, sort_keys=True))
 
 
