@@ -280,7 +280,7 @@ def _books(raw: str) -> str:
 
 def _evolution(root: Path, raw: str) -> str:
     require_local_work("EVIDENCE_EVOLUTION")
-    from .public_collection_inventory_v01 import collection_inventory
+    from .public_collection_inventory_v01 import SCHEMA as INVENTORY_SCHEMA, collection_inventory
 
     args = _params(raw, ("q",))
     term = args.get("q", "")
@@ -290,13 +290,15 @@ def _evolution(root: Path, raw: str) -> str:
         '<section><h2>현재 UCIE 공개 수집·검토 현황</h2>'
         '<p>실제 기존 UCIE 공개 기록만 읽습니다. 추가 수집·자동 승격은 하지 않습니다.</p>')
     inventory = collection_inventory(root)
-    if (inventory.get("schema") != "UCIE_PUBLIC_COLLECTION_INVENTORY_V01"
+    if (inventory.get("schema") != INVENTORY_SCHEMA
             or inventory.get("operating_database_writes") != 0):
         raise LocalProductError("unexpected UCIE collection inventory")
     body += (
         '<p>수집 현황: ' + _e(inventory.get("status")) + '</p>'
-        '<p>관측 시각: ' + _e(inventory.get("observed_utc", "보고되지 않음")) +
+        '<p>관측 시각: ' + _e(inventory.get("captured_utc", "보고되지 않음")) +
         '</p>'
+        '<p>기존 공개 PR 후보: ' + _e(inventory.get("legacy_miner", {}).get("candidates", "확인 불가")) +
+        ' · Stage10 개정: ' + _e(inventory.get("stage10_public_candidate_staging", {}).get("candidate_revisions", "확인 불가")) + '</p>'
         '<p>검증 문제: ' + _e(", ".join(inventory.get("issues", []))) +
         '</p></section>'
         '<section><h2>개선·검토할 공개 변경 검색</h2>'
