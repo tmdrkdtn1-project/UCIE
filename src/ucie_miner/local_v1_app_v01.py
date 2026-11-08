@@ -455,6 +455,121 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
     return _page("개발 엔진·스킬", body)
 
 
+
+def _skillbook_runner(raw: str) -> str:
+    """User-initiated execution of ONLY the two existing first-party demos.
+
+    This is a real recipe call over UCIE-owned disposable/static inputs.
+    It is neither a customer-data analyser nor an approved or signed skill.
+    """
+    require_local_work("VIRTUAL_LIBRARY")
+    from .skillbook_consumer_pilot_v01 import (
+        SCHEMA as PY_SCHEMA, OBSERVED as PY_OBSERVED,
+        demonstrate_synthetic_consumer,
+    )
+    from .skillbook_git_porcelain_product_v01 import (
+        DEMO_SCHEMA as GIT_SCHEMA, DEMO_OBSERVED as GIT_OBSERVED,
+        demonstrate_in_memory_consumer,
+    )
+
+    args = _params(raw, ("book", "run"))
+    book = args.get("book", "")
+    execution = args.get("run", "")
+    if book not in ("python", "git") or execution not in ("", "1"):
+        raise LocalProductError("only registered existing UCIE SkillBook consumers")
+    title = (
+        "Python os.scandir 제한형 파일 열거"
+        if book == "python" else "Git porcelain v1 -z 상태 요약"
+    )
+    back = "/local/library?q=" + book
+    html = (
+        '<section><h2>' + _e(title) + '</h2>'
+        '<p><a href="' + back + '">통합 도서관 검색 결과로 돌아가기</a></p>'
+        '<p><strong>UCIE 작성 예제만 실행</strong>: 원본 SkillBook은 미승인 초안이며,'
+        ' 실제 사용자 디렉터리·다른 저장소·민감한 코드·온라인 서비스는 사용하지 않습니다.'
+        ' 승인된 실환경 효능이나 배포 가능 스킬을 의미하지 않습니다.</p>'
+        '<p><a href="/local/skillbook-run?book=' + book +
+        '&amp;run=1"><strong>기존 기계 계약으로 한정형 예제 직접 실행</strong>'
+        '</a></p></section>'
+    )
+    if execution != "1":
+        return _page("SkillBook 실행", html)
+    if book == "python":
+        out = demonstrate_synthetic_consumer()
+        if (type(out) is not dict or out.get("schema") != PY_SCHEMA
+                or out.get("status") != PY_OBSERVED
+                or out.get("real_ucie_authored_recipe_executed") is not True
+                or out.get("only_temporary_synthetic_fixture_used") is not True
+                or out.get("temporary_fixture_cleaned") is not True
+                or out.get("real_owner_directory_scanned") is not False
+                or out.get("file_contents_read") is not False
+                or out.get("operating_database_writes") != 0
+                or out.get("network_requests") != 0
+                or out.get("independent_qa_verified") is not False
+                or out.get("owner_release_approved") is not False
+                or out.get("export_allowed") is not False
+                or out.get("bounded_regular_file_name_count") != 2
+                or out.get("directory_entry_budget") != 3
+                or out.get("budget_overflow_blocked") is not True
+                or out.get("invalid_budget_blocked") is not True
+                or out.get("relative_path_blocked") is not True):
+            raise LocalProductError("Python SkillBook demo scope or result drift")
+        html += (
+            '<section><h2>첫 번째 파티 코드 실제 실행 결과</h2>'
+            '<p>합성 폴더의 정규 파일: ' +
+            _e(out["bounded_regular_file_name_count"]) +
+            '개 · 전체 항목 예산: ' + _e(out["directory_entry_budget"]) +
+            '개</p><p>예산 초과 차단: 예 · 잘못된 예산 차단: 예'
+            ' · 상대 경로 차단: 예</p>'
+            '<p>임시 합성 디렉터리 정리: 완료'
+            ' · 소유자 실제 파일 스캔: 없음</p>'
+            '<p>시험 상태: <strong>' + _e(out["status"]) + '</strong></p>'
+            '</section>'
+        )
+    else:
+        out = demonstrate_in_memory_consumer()
+        counts = out.get("safe_summary_counts")
+        if (type(out) is not dict or out.get("schema") != GIT_SCHEMA
+                or out.get("status") != GIT_OBSERVED
+                or out.get("real_ucie_recipe_executed") is not True
+                or out.get("only_static_ucie_authored_bytes_used") is not True
+                or out.get("real_repository_inspected") is not False
+                or out.get("git_subprocess_invoked") is not False
+                or out.get("filename_or_private_data_returned") is not False
+                or out.get("operating_database_writes") != 0
+                or out.get("network_requests") != 0
+                or out.get("independent_qa_verified") is not False
+                or out.get("owner_release_approved") is not False
+                or out.get("export_allowed") is not False
+                or out.get("demo_entries") != 4
+                or out.get("budget_3_rejected") is not True
+                or type(counts) is not dict
+                or counts != {
+                    "tracked_changed": 1, "renamed": 1, "copied": 0,
+                    "conflicted": 1, "untracked": 1, "ignored": 0}):
+            raise LocalProductError("Git SkillBook demo scope or result drift")
+        html += (
+            '<section><h2>Git 기계 계약 실제 파싱 결과</h2>'
+            '<p>UCIE 자체 작성 NUL 구분 합성 Git 레코드: ' +
+            _e(out["demo_entries"]) + '건</p>'
+            '<p>추적 변경: ' + _e(counts["tracked_changed"]) +
+            ' · 이름 변경: ' + _e(counts["renamed"]) +
+            ' · 충돌: ' + _e(counts["conflicted"]) +
+            ' · 미추적: ' + _e(counts["untracked"]) + '</p>'
+            '<p>3건으로 줄인 항목 한도 차단: 예'
+            ' · 실제 Git 프로세스 호출: 없음 · 저장소 스캔: 없음</p>'
+            '<p>시험 상태: <strong>' + _e(out["status"]) + '</strong></p>'
+            '</section>'
+        )
+    html += (
+        '<section><p><strong>검증 범위</strong>: UCIE 한정 예제로 기존'
+        ' 기계 계약의 동작을 실제 실행했습니다. 외부 코드 수정·독립 QA·'
+        ' 실사용 프로젝트 성능·라이선스·보안·승인·배포는 검증하지 않았습니다.'
+        '</p></section>'
+    )
+    return _page("SkillBook 실행 결과", html)
+
+
 def _library(root: Path, raw: str) -> str:
     """One user-facing UCIE library: SkillBooks, editorial drafts and all W04 pages.
 
@@ -514,13 +629,25 @@ def _library(root: Path, raw: str) -> str:
                 or book.get("human_approved") is not False
                 or book.get("export_allowed") is not False):
             raise LocalProductError("forged or unsafe SkillBook")
+        from .skillbook_product_v01 import SKILLBOOK_ID as PY_BOOK_ID
+        from .skillbook_git_porcelain_product_v01 import (
+            SKILLBOOK_ID as GIT_BOOK_ID,
+        )
+        if identity == PY_BOOK_ID:
+            demo_link = '<p><a href="/local/skillbook-run?book=python">' + (
+                'Python 기존 스킬 직접 실행해 보기 (UCIE 예제)</a></p>')
+        elif identity == GIT_BOOK_ID:
+            demo_link = '<p><a href="/local/skillbook-run?book=git">' + (
+                'Git 기존 스킬 직접 실행해 보기 (UCIE 예제)</a></p>')
+        else:
+            raise LocalProductError("unexpected unregistered SkillBook")
         body += (
             '<article><h3><a href="/skillbooks/' + quote(identity, safe="") +
             '">' + _e(book.get("title", "SkillBook")) + '</a></h3>'
             '<p>출처 ' + _e(book.get("source_id")) +
             ' · 적용 범위 ' + _e(book.get("version_scope_claim")) + '</p>'
             '<p>본문 및 기계 판독 계약 열람 가능 · 미승인 · 내보내기 불가</p>'
-            '</article>')
+            + demo_link + '</article>')
     if not books:
         body += '<section>일치하는 SkillBook 초안이 없습니다.</section>'
     body += (
@@ -665,7 +792,8 @@ def make_handler(root: Path):
             if parts.path not in (
                     "/", "/local", "/local/health", "/local/error",
                     "/local/engine", "/local/books", "/local/library",
-                    "/local/evolution", "/local/review", "/local/policy"):
+                    "/local/evolution", "/local/review", "/local/policy",
+                    "/local/skillbook-run"):
                 return super().do_GET()
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
                 return self.reply(403, "LOOPBACK_ONLY",
@@ -717,6 +845,8 @@ def make_handler(root: Path):
                     return
                 elif parts.path == "/local/library":
                     html = _library(root, parts.query)
+                elif parts.path == "/local/skillbook-run":
+                    html = _skillbook_runner(parts.query)
                 elif parts.path == "/local/evolution":
                     html = _evolution(root, parts.query)
                 else:
