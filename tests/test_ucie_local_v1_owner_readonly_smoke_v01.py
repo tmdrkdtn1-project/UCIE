@@ -16,6 +16,7 @@ import unittest
 
 from ucie_miner import local_v1_app_v01 as app
 from ucie_miner import local_v1_priority_v01 as policy
+from ucie_miner.library_search import search_existing_public_library
 
 
 @unittest.skipUnless(
@@ -30,7 +31,7 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
         self.assertTrue((root / "runtime").is_dir())
         home = app._home()
         self.assertIn('href="/local/error"', home)
-        self.assertIn('href="/local/books"', home)
+        self.assertIn('href="/local/library"', home)
         engine = app._engine("purpose=SKILL_TEST_AUTOMATION")
         self.assertIn("TAGGED_TEST_CASE_LOOKUP_V1", engine)
         real_engine = app._engine("purpose=REAL_PUBLIC_CATALOG", root=root)
@@ -38,7 +39,7 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
             "REAL_PUBLIC_METADATA_EXACT_QUERY_EQUIVALENT_UNAPPROVED" in real_engine
             or "현재 소스 계보가 연결된 공개 카탈로그가 없습니다" in real_engine
         )
-        books = app._books("q=")
+        books = app._library(root, "q=")
         self.assertIn("/skillbooks/", books)
         self.assertIn("미승인", books)
         error = app._error(root, "q=python")
@@ -69,6 +70,24 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
         }, sort_keys=True))
 
 
+    def test_actual_ucie_public_paging_preserves_total_matches(self):
+        root = Path("D:/UCIE")
+        first = search_existing_public_library(
+            root, query="python", limit=10, offset=0)
+        self.assertEqual(first["returned_count"], len(first["items"]))
+        self.assertTrue(first["total_matches"] >= len(first["items"]))
+        if first["total_matches"] > 10:
+            second = search_existing_public_library(
+                root, query="python", limit=10, offset=10)
+            self.assertEqual(second["total_matches"], first["total_matches"])
+            self.assertEqual(second["page_offset"], 10)
+            self.assertEqual(second["returned_count"], len(second["items"]))
+            self.assertTrue(all(
+                row["lifecycle"] == "UNVERIFIED_CANDIDATE_ONLY"
+                and row["human_approved"] is False
+                and row["export_allowed"] is False
+                for row in second["items"]))
+
     def test_actual_owner_localhost_browser_routes(self):
         root = Path("D:/UCIE")
         server = HTTPServer(("127.0.0.1", 0), app.make_handler(root))
@@ -79,8 +98,10 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
                 "/local", "/local/error?q=python",
                 "/local/engine?purpose=ENGINE_INCREMENTAL_BUILD",
                 "/local/engine?purpose=REAL_PUBLIC_CATALOG",
-                "/local/books?q=Git", "/local/evolution?q=python",
-                "/skillbooks",
+                "/local/library?q=Git", "/local/books?q=Git",
+                "/local/library?q=python&page=2",
+                "/local/evolution?q=python", "/skillbooks",
+                "/catalog?shelf=all&limit=5",
             )
             for route in paths:
                 with self.subTest(route=route):
