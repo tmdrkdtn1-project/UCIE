@@ -33,6 +33,11 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
         self.assertIn('href="/local/books"', home)
         engine = app._engine("purpose=SKILL_TEST_AUTOMATION")
         self.assertIn("TAGGED_TEST_CASE_LOOKUP_V1", engine)
+        real_engine = app._engine("purpose=REAL_PUBLIC_CATALOG", root=root)
+        self.assertTrue(
+            "REAL_PUBLIC_METADATA_EXACT_QUERY_EQUIVALENT_UNAPPROVED" in real_engine
+            or "현재 소스 계보가 연결된 공개 카탈로그가 없습니다" in real_engine
+        )
         books = app._books("q=")
         self.assertIn("/skillbooks/", books)
         self.assertIn("미승인", books)
@@ -70,6 +75,7 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
             paths = (
                 "/local", "/local/error?q=python",
                 "/local/engine?purpose=ENGINE_INCREMENTAL_BUILD",
+                "/local/engine?purpose=REAL_PUBLIC_CATALOG",
                 "/local/books?q=Git", "/local/evolution?q=python",
                 "/skillbooks",
             )
