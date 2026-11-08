@@ -22,7 +22,7 @@ Push-Location -LiteralPath $root
 try {
     # Never inherit a different project's Python modules.
     $env:PYTHONPATH = $source
-    Write-Host 'UCIE Local V1 - http://127.0.0.1:'$Port'/local'
+    Write-Host ("UCIE Local V1 - http://127.0.0.1:{0}/local" -f $Port)
     Write-Host 'Ctrl+C closes the foreground localhost server.'
     & $python -B -m ucie_miner.local_v1_app_v01 --port $Port --open-browser
     if ($LASTEXITCODE -ne 0) {
