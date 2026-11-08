@@ -201,24 +201,70 @@ def _error(root: Path, raw: str) -> str:
     return _page("오류 예방", body)
 
 
-def _engine(raw: str) -> str:
+def _engine(raw: str, *, root: Path | None = None) -> str:
     require_local_work("DEV_ENGINE_SKILL")
     from .capability_trials import RECIPES, evaluate_ucie_owned_recipe
 
     args = _params(raw, ("purpose",))
     purpose = args.get("purpose", "")
-    if purpose and purpose not in RECIPES:
+    if purpose and purpose not in (*RECIPES, "REAL_PUBLIC_CATALOG"):
         raise LocalProductError("unregistered development engine")
     choices = "".join(
         '<li><a href="/local/engine?purpose=' + _e(name) + '">' +
-        _e(name) + '</a> - ' + _e(info[0]) + '</li>'
+        _e(name) + '</a> - ' + _e(info[0]) + ' (UCIE 합성 워크로드)</li>'
         for name, info in sorted(RECIPES.items()))
+    choices += (
+        '<li><a href="/local/engine?purpose=REAL_PUBLIC_CATALOG">'
+        'REAL_PUBLIC_CATALOG</a> - 실제 기존 UCIE 공개 기술 근거의'
+        ' 정확 키 검색 인덱스와 기본 탐색을 비교 (원본 코드 실행 없음)</li>')
     body = (
         '<section><h2>UCIE 자체 개발 엔진 선택</h2>'
-        '<p>실제 첫 번째 파티 알고리즘을 선택해 호출합니다. 입력 워크로드는'
-        ' UCIE 생성 합성 데이터이며 실사용 코드 분석으로 오해하면 안 됩니다.</p>'
+        '<p>실제 UCIE 알고리즘을 선택해 호출합니다. 아래 공개 근거 엔진은'
+        ' 기존 UCIE 공개 후보의 메타데이터에서 실제 계산을 수행하며,'
+        ' 나머지 세 엔진은 명시된 합성 워크로드 실험입니다.</p>'
         '<ul>' + choices + '</ul></section>')
-    if purpose:
+    if purpose == "REAL_PUBLIC_CATALOG":
+        from .experience_application import (
+            SCHEMA as PUBLIC_ENGINE_SCHEMA,
+            benchmark_existing_ucie_public_catalog,
+        )
+        if root is None:
+            raise LocalProductError("UCIE catalog owner root required")
+        out = benchmark_existing_ucie_public_catalog(
+            root, queries=24, repeats=2)
+        if (out.get("schema") != PUBLIC_ENGINE_SCHEMA
+                or out.get("network_requests") != 0
+                or out.get("operating_database_writes") != 0
+                or out.get("production_index_applied") is not False
+                or out.get("v1_accepted") is not False):
+            raise LocalProductError("real public catalog engine scope drift")
+        if out.get("status") == "NO_COMPLETE_SOURCE_LINKED_PUBLIC_CATALOG_NO_GO":
+            body += ('<section>현재 소스 계보가 연결된 공개 카탈로그가 없습니다.'
+                     ' 미확인 데이터를 만든 것으로 표시하지 않습니다.</section>')
+        elif out.get("status") == "REAL_PUBLIC_METADATA_EXACT_QUERY_EQUIVALENT_UNAPPROVED":
+            if (out.get("automatic_learning_or_promotion") is not False
+                    or out.get("upstream_code_executed") is not False
+                    or out.get("approved_or_exportable_items") != 0
+                    or out.get("mismatched_query_results") != 0):
+                raise LocalProductError("unsafe real public catalog engine result")
+            body += (
+                '<section><h2>실제 UCIE 공개 근거 색인 비교</h2>'
+                '<p>공개 항목 ' + _e(out.get("real_public_catalog_items")) +
+                '건 · 요청 ' + _e(out.get("query_count")) +
+                '회 · 검색 결과 불일치 ' +
+                _e(out.get("mismatched_query_results")) + '건</p>'
+                '<p>기본 탐색 연산: ' + _e(out.get("baseline_scan_operations")) +
+                ' · 색인 구축 포함 연산: ' +
+                _e(out.get("candidate_index_build_and_lookup_operations")) +
+                ' · 소스 집합 SHA-256: ' +
+                _e(out.get("public_catalog_sha256")) + '</p>'
+                '<p>상태: ' + _e(out.get("status")) + '</p>'
+                '<p><strong>한계:</strong> 승인된 로컬 공개 근거 메타데이터의'
+                ' 정확 키 테스트이며, 전체 문자열 검색·원본 코드 실행·'
+                ' 고객 성능 검증·운영 색인 반영이 아닙니다.</p></section>')
+        else:
+            raise LocalProductError("real public catalog result requires review")
+    elif purpose:
         out = evaluate_ucie_owned_recipe(
             purpose, rows=128, queries=16, repeats=2)
         if (out.get("purpose_code") != purpose
@@ -385,7 +431,7 @@ def make_handler(root: Path):
                 elif parts.path == "/local/error":
                     html = _error(root, parts.query)
                 elif parts.path == "/local/engine":
-                    html = _engine(parts.query)
+                    html = _engine(parts.query, root=root)
                 elif parts.path == "/local/books":
                     html = _books(parts.query)
                 elif parts.path == "/local/evolution":
