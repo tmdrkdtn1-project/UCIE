@@ -28,7 +28,7 @@ BOOK_QUERY = re.compile(r"[\w .-]{0,80}\Z", re.UNICODE)
 PAGE_SIZE = 10
 MAX_PAGE = 500  # 10 at a time; covers the owner public catalog without bulk dumps.
 ROUTES = (
-    ("/local/error", "코딩 오류 예방", "승인된 공개 근거 후보, 안전한 수정 방향, 회귀 검토"),
+    ("/local/error", "코딩 오류 예방", "승인된 공개 출처의 미검증 후보, 안전한 수정 방향과 회귀 계획"),
     ("/local/engine", "개발 엔진 · 스킬", "직접 선택해 UCIE 작성 알고리즘 실행"),
     ("/local/library", "통합 가상도서관", "SkillBook·공개 기술 근거·편집 검토를 한 화면에서 탐색"),
     ("/local/evolution", "근거 기반 개선", "UCIE 로컬 공개 변경 이력, 검토 대기와 다음 작업"),
@@ -389,7 +389,7 @@ def _library(root: Path, raw: str) -> str:
         ' 자동 적용·출시·외부 배포는 하지 않습니다.</p></section>'
         '<section><h2>SkillBook 본문 · 기계 계약 (미승인 초안)</h2>'
         '<p>일치 초안: ' + _e(len(books)) +
-        '권 · 두 권을 전체 공개 근거 후보 수와 비교하지 마세요.</p></section>'
+        '권 · SkillBook 초안은 전체 공개 근거와 별도로 집계합니다.</p></section>'
     )
     for book in books:
         identity = book.get("skillbook_id")
@@ -525,15 +525,15 @@ def make_handler(root: Path):
             if (status == 200 and mime == "text/html; charset=utf-8"
                     and isinstance(content, str)
                     and "</header>" in content
-                    and "UCIE_LOCAL_V1_UNIFIED_NAV" not in content):
+                    and 'data-ucie-local-nav="true"' not in content):
                 links = "".join(
                     '<a href="' + href + '">' + _e(title) + '</a> · '
                     for href, title, _ in ROUTES)
                 local_nav = (
-                    '<nav aria-label="UCIE Local V1" '
+                    '<nav aria-label="UCIE Local V1" data-ucie-local-nav="true" '
                     'style="margin:12px 0;padding:12px;background:#e9f2f7;'
                     'border-radius:8px">'
-                    '<strong>UCIE_LOCAL_V1_UNIFIED_NAV</strong> · '
+                    '<strong>UCIE Local V1</strong> · '
                     '<a href="/local">UCIE 홈</a> · ' + links +
                     '</nav>'
                 )
