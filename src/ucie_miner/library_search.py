@@ -22,6 +22,7 @@ from .automated_candidate_qa import _checked_handoff
 SCHEMA = "UCIE_W04_READ_ONLY_LIBRARY_CANDIDATE_SEARCH_V1"
 MAX_QUERY = 80
 MAX_LIMIT = 20
+MAX_PAGE_OFFSET = 10000  # Bounded read-only pagination across existing W04 results.
 QUERY = re.compile(r"[A-Za-z0-9_.:/ -]{0,80}\Z")
 SOURCE = re.compile(r"(?:repo:)?[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\Z")
 ALLOWED_KINDS = frozenset(("PREVENTION_RULE", "PUBLIC_TECHNICAL_EVIDENCE"))
@@ -63,8 +64,11 @@ def search_linked_public_candidates(handoff: dict, *, query: str = "",
                                     domain: str | None = None,
                                     source_id: str | None = None,
                                     limit: int = 20,
-                                    group_revisions: bool = False) -> dict:
+                                    group_revisions: bool = False,
+                                    offset: int = 0) -> dict:
     """Search public evidence, never calling unreviewed PRs a usable skill."""
+    if type(offset) is not int or not 0 <= offset <= MAX_PAGE_OFFSET:
+        raise LibrarySearchError("public candidate page offset outside bounds")
     q, kind, domain, source_id, limit, group_revisions = _filters(
         query=query, kind=kind, domain=domain,
         source_id=source_id, limit=limit, group_revisions=group_revisions)
@@ -155,7 +159,8 @@ def search_linked_public_candidates(handoff: dict, *, query: str = "",
             matched.append(item)
         matched.sort(key=lambda x: (x["source_id"], x["kind"],
                                     x["purpose_code"], x["library_item_id"]))
-    return {
+    page = matched[offset:offset + limit]
+    result = {
         "schema": SCHEMA,
         "status": "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
         "query": q,
@@ -166,9 +171,9 @@ def search_linked_public_candidates(handoff: dict, *, query: str = "",
         "raw_evidence_revision_matches": raw_matches,
         "source_linked_count": len(tasks),
         "total_matches": len(matched),
-        "returned_count": min(limit, len(matched)),
-        "omitted_count": max(0, len(matched) - limit),
-        "items": matched[:limit],
+        "returned_count": len(page),
+        "omitted_count": max(0, len(matched) - len(page)),
+        "items": page,
         "shelves_available": ["PREVENTION_RULE", "PUBLIC_TECHNICAL_EVIDENCE"],
         "available_domains": sorted(ALLOWED_DOMAINS),
         "full_library_implemented": False,
@@ -179,6 +184,9 @@ def search_linked_public_candidates(handoff: dict, *, query: str = "",
         "auto_promoted": False,
         "v1_library_accepted": False,
     }
+    if offset:
+        result["page_offset"] = offset
+    return result
 
 
 def search_existing_public_library(root: Path, *, query: str = "",
@@ -186,8 +194,11 @@ def search_existing_public_library(root: Path, *, query: str = "",
                                    domain: str | None = None,
                                    source_id: str | None = None,
                                    limit: int = 20,
-                                   group_revisions: bool = False) -> dict:
+                                   group_revisions: bool = False,
+                                   offset: int = 0) -> dict:
     """Use existing Stage10/12/15 UCIE SQLite readers in query-only mode."""
+    if type(offset) is not int or not 0 <= offset <= MAX_PAGE_OFFSET:
+        raise LibrarySearchError("public candidate page offset outside bounds")
     _filters(query=query, kind=kind, domain=domain,
              source_id=source_id, limit=limit, group_revisions=group_revisions)
     root = Path(root)
@@ -196,7 +207,8 @@ def search_existing_public_library(root: Path, *, query: str = "",
     handoff = prepare_verification_handoff(root)
     return search_linked_public_candidates(
         handoff, query=query, kind=kind, domain=domain,
-        source_id=source_id, limit=limit, group_revisions=group_revisions)
+        source_id=source_id, limit=limit, group_revisions=group_revisions,
+        offset=offset)
 
 
 def main() -> int:
