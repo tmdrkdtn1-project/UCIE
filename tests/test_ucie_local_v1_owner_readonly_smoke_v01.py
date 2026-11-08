@@ -51,10 +51,10 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
         self.assertIn("기존 공개 PR 후보:", evolution)
         self.assertIn("수동 검토", evolution)
         snapshot = policy.roadmap()
-        self.assertFalse(snapshot["local_v1_accepted_by_owner"])
+        self.assertTrue(snapshot["local_v1_accepted_by_owner"])
         self.assertFalse(snapshot["customer_distribution_authorized"])
         print("UCIE_LOCAL_V1_OWNER_READONLY_SMOKE=" + json.dumps({
-            "status": "FOUR_PRODUCT_ACTION_RENDER_PATHS_OBSERVED_NOT_OWNER_UI_ACCEPTANCE",
+            "status": "FOUR_PRODUCT_ACTION_READONLY_PATHS_OWNER_ACCEPTANCE_RECORDED_SEPARATELY",
             "real_public_catalog_engine_observed": (
                 "REAL_PUBLIC_METADATA_EXACT_QUERY_EQUIVALENT_UNAPPROVED"
                 in real_engine),
