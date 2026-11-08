@@ -87,6 +87,15 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
                 and row["human_approved"] is False
                 and row["export_allowed"] is False
                 for row in second["items"]))
+        print("UCIE_OWNER_REAL_W04_PAGING=" + json.dumps({
+            "query": "python",
+            "all_matching_candidate_revisions": first["total_matches"],
+            "page_size": 10,
+            "first_page_displayed": len(first["items"]),
+            "second_page_available": first["total_matches"] > 10,
+            "stage12_index_total_not_equivalent_to_approved_rules": True,
+            "release_approved": False,
+        }, sort_keys=True))
 
     def test_actual_owner_localhost_browser_routes(self):
         root = Path("D:/UCIE")
@@ -112,7 +121,13 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
                             "Host": "127.0.0.1:" + str(server.server_port)})
                         reply = connection.getresponse()
                         body = reply.read()
-                        self.assertEqual(reply.status, 200)
+                        if route.startswith("/local/books"):
+                            self.assertEqual(reply.status, 302)
+                            self.assertTrue(
+                                dict(reply.getheaders()).get("Location", "")
+                                .startswith("/local/library"))
+                        else:
+                            self.assertEqual(reply.status, 200)
                         self.assertLess(len(body), 900_000)
                     finally:
                         connection.close()
