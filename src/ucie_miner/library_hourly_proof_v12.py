@@ -21,7 +21,7 @@ MAX_RECEIPT = 4096
 MAX_TAIL = 12288
 ACCEPTED = ("COLLECTED_UNVERIFIED", "COLLECTED_UNVERIFIED_PARTIAL_NO_GO")
 T10 = ("STAGE10_HOURLY_DISABLED", "STAGE10_UNVERIFIED_STAGED_NO_GO",
-       "STAGE10_HOURLY_PARTIAL_NO_GO")
+       "STAGE10_HOURLY_PARTIAL_NO_GO", "STAGE10_HOURLY_FAILED_NO_GO")
 T12 = ("STAGE12_REVIEW_DISABLED", "STAGE12_UNVERIFIED_REVIEW_UPDATED_NO_GO")
 T16 = ("STAGE16_SAFE_QA_DISABLED", "STAGE16_SAFE_QA_RATE_PAUSED_NO_GO",
        "STAGE16_SAFE_QA_ALREADY_ATTEMPTED_NO_GO",
@@ -155,8 +155,18 @@ def inspect_hourly_public_library(root: Path, *, now: datetime | None = None) ->
     two_collected = prev["status"] == recent["status"] == "COLLECTED_UNVERIFIED"
     fresh = 0 <= age_minutes <= 90
     cadence = 50 <= delta_minutes <= 90
+    # The base legacy collector may succeed even when the optional Stage10
+    # action fails and the scheduled Python action returns nonzero. Preserve
+    # the receipt as evidence, but do not report two healthy hourly cycles.
+    stage10_outcomes = tuple(item.get("stage10_status", "UNOBSERVED")
+                             for item in (prev, recent))
+    stage10_problem = any(state in (
+        "STAGE10_HOURLY_PARTIAL_NO_GO",
+        "STAGE10_HOURLY_FAILED_NO_GO",
+    ) for state in stage10_outcomes)
     healthy = (two_collected and fresh and cadence
-               and recent["consecutive_failures"] == 0)
+               and recent["consecutive_failures"] == 0
+               and not stage10_problem)
     # Snapshot alone is NOT TaskScheduler event/process proof. Existing
     # task_status.ps1 -Evidence must verify the scheduled task's real events.
     stage = {
@@ -182,6 +192,8 @@ def inspect_hourly_public_library(root: Path, *, now: datetime | None = None) ->
                    if healthy else "HOURLY_CYCLE_ACTIVITY_NOT_PROVEN_NO_GO"),
         "runtime_receipts_integrity_readable": True,
         "two_successful_collection_receipts": two_collected,
+        "last_two_stage10_statuses": list(stage10_outcomes),
+        "stage10_failure_or_partial_in_last_two": stage10_problem,
         "started_cadence_minutes": delta_minutes,
         "last_completed_age_minutes": age_minutes,
         "latest_started_utc": recent["started_utc"],
