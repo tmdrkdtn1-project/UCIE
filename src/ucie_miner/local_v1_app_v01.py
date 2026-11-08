@@ -860,6 +860,11 @@ def make_handler(root: Path):
                         raise LocalProductError("local roadmap does not take query")
                     html = _policy()
                 return self.reply(200, html)
+            except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+                # Edge/Chromium may abandon a speculative or stale socket.
+                # Do not attempt a second response to an already closed peer.
+                self.close_connection = True
+                return
             except (LocalProductError, LocalPriorityError, ValueError,
                     KeyError, TypeError, OSError):
                 return self.reply(400, "UCIE_LOCAL_V1_FAIL_CLOSED_NO_RELEASE",
