@@ -151,7 +151,9 @@ def _home() -> str:
     return _page("시작", body)
 
 
-def _evidence_rows(report: dict, *, guidance: bool = False) -> str:
+def _evidence_rows(report: dict, *, guidance: bool = False,
+                   query: str = "", page: int = 1,
+                   route: str = "/local/error") -> str:
     from .rule_candidates import GUIDANCE
 
     if report.get("status") == "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
@@ -183,6 +185,21 @@ def _evidence_rows(report: dict, *, guidance: bool = False) -> str:
                 _e(guidance_row[1]) + '</p>')
         elif guidance:
             details += '<p>이 패턴에 확인된 수정 안내가 없습니다. 출처 수동 검토가 필요합니다.</p>'
+        candidate_id = row.get("library_item_id")
+        if (type(candidate_id) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", candidate_id) is None
+                or route not in ("/local/error", "/local/evolution", "/local/library")):
+            raise LocalProductError("unsafe public candidate review selector")
+        origin = route.removeprefix("/local/")
+        target = (
+            "/local/review?q=" + quote(query, safe="") +
+            "&amp;page=" + str(page) + "&amp;id=" + candidate_id +
+            "&amp;from=" + origin
+        )
+        details += (
+            '<p><a href="' + target + '"><strong>'
+            '이 후보로 오류 예방·회귀 검토 작업 열기'
+            '</strong></a></p>')
         output.append('<article><h3>' + _e(row.get("purpose_code", "공개 근거"))
                       + '</h3>' + details + '</article>')
     return "".join(output)
@@ -228,7 +245,9 @@ def _paged_evidence(root: Path, query: str, *, page: int,
     navigation = (
         '<section><nav aria-label="공개 근거 검색 페이지">'
         + ' · '.join(links) + '</nav></section>' if links else '')
-    return summary + _evidence_rows(report, guidance=guidance) + navigation
+    return (summary + _evidence_rows(
+        report, guidance=guidance, query=query, page=page, route=route)
+        + navigation)
 
 
 def _error(root: Path, raw: str) -> str:
@@ -254,6 +273,103 @@ def _error(root: Path, raw: str) -> str:
     else:
         body += '<section>검색어를 입력하면 공개 변경과 UCIE 안전 검토·회귀 방향을 보여줍니다.</section>'
     return _page("오류 예방", body)
+
+def _review(root: Path, raw: str) -> str:
+    """Complete one actual public-source -> manual regression work task."""
+    require_local_work("ERROR_PREVENTION")
+    from .local_v1_public_review_v01 import (
+        SCHEMA as REVIEW_SCHEMA, create_review_worksheet,
+    )
+
+    args = _params(raw, ("q", "page", "id", "from"))
+    term = args.get("q", "")
+    page = _page_number(args)
+    candidate_id = args.get("id", "")
+    origin = args.get("from", "error")
+    if (QUERY.fullmatch(term) is None
+            or type(candidate_id) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", candidate_id) is None
+            or origin not in ("error", "evolution", "library")):
+        raise LocalProductError("invalid source-bound review selection")
+    search = _search(root, term, limit=PAGE_SIZE,
+                     offset=(page - 1) * PAGE_SIZE)
+    if search["status"] != "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO":
+        raise LocalProductError("source provenance unavailable for review")
+    matches = [
+        row for row in search["items"]
+        if row.get("library_item_id") == candidate_id
+    ]
+    if len(matches) != 1:
+        raise LocalProductError("candidate no longer exists on this verified page")
+    brief = create_review_worksheet(matches[0])
+    if (brief.get("schema") != REVIEW_SCHEMA
+            or brief.get("status") !=
+            "SOURCE_BOUND_MANUAL_REVIEW_DRAFT_NOT_APPROVED"
+            or brief.get("library_item_id") != candidate_id
+            or brief.get("automatic_rule_promotion") is not False
+            or brief.get("operating_database_writes") != 0
+            or brief.get("network_requests") != 0
+            or brief.get("regression_executed") is not False
+            or brief.get("export_allowed") is not False):
+        raise LocalProductError("review source/approval boundary drift")
+    for field in ("public_url", "source_id", "pattern_code", "version_scope_claim"):
+        if type(brief.get(field)) is not str:
+            raise LocalProductError("incomplete review provenance")
+    gates = brief.get("required_gates")
+    if (type(gates) is not dict
+            or any(status != "NOT_VERIFIED" for status in gates.values())):
+        raise LocalProductError("unapproved review gate")
+    return_path = "/local/" + origin + "?q=" + quote(term, safe="")
+    if page > 1:
+        return_path += "&page=" + str(page)
+    markup = [
+        '<section><h2>실제 공개 후보 · 오류 예방 검토 작업</h2>'
+        '<p><a href="' + _e(return_path) + '">검색 결과로 돌아가기</a></p>'
+        '<p>이 화면은 이미 수집된 공개 근거를 사람이 검토할 수 있는'
+        ' 작업으로 정리합니다. 새로운 코드 실행·자동 승인·수정은 없습니다.</p>'
+        '<p>검토 대상: <strong>' + _e(brief["pattern_code"]) + '</strong>'
+        ' · 출처: ' + _e(brief["source_id"]) + '</p>'
+        '<p>원본: <a target="_blank" rel="noopener noreferrer" href="' +
+        _e(brief["public_url"]) + '">' + _e(brief["public_url"]) + '</a></p>'
+        '<p>적용 버전 주장: ' + _e(brief["version_scope_claim"]) +
+        ' · 상태: <strong>UNVERIFIED_CANDIDATE_ONLY</strong></p>'
+        '<p>증거 SHA-256: <code>' + _e(brief["evidence_sha256"]) +
+        '</code></p></section>',
+        '<section><h2>UCIE 작성 안전 수정 방향 (검토안)</h2><p>' +
+        _e(brief["safe_fix_guidance"] or
+           "해당 패턴의 전용 수정 지침이 없습니다. 원본 출처와 오류를 수동 분석하세요.") +
+        '</p><h3>회귀시험 구성 계획 (미실행)</h3><p>' +
+        _e(brief["regression_plan"] or
+           "전용 회귀 계획이 없으므로 독립 검증 설계를 먼저 작성해야 합니다.") +
+        '</p></section>',
+    ]
+    if brief["fixture_design"] is not None:
+        markup.append(
+            '<section><h2>패턴별 한정형 재현 설계</h2>'
+            '<p>입력/조건: ' + _e(brief["fixture_design"]) + '</p>'
+            '<p>기대 불변조건: ' + _e(brief["expected_invariant"]) + '</p>'
+            '<p>시험 환경 가정: ' + _e(brief["target_environment"]) + '</p>'
+            '<p>이 설계는 독립 실행한 회귀시험의 결과가 아닙니다.</p>'
+            '</section>')
+    else:
+        markup.append(
+            '<section><h2>개별 재현 설계</h2><p>'
+            '이 후보의 전용 재현 입력·기대값이 아직 정의되지 않았습니다.'
+            ' 공개 변경 내용을 검토하고 독립 회귀시험을 수동 설계해야 합니다.'
+            '</p></section>')
+    markup.append(
+        '<section><h2>다음 검토 작업 (사람이 수행)</h2><ol>' +
+        "".join('<li>' + _e(action) + '</li>'
+                for action in brief["manual_actions"]) +
+        '</ol></section>')
+    markup.append(
+        '<section><h2>승인 전 필수 검증 상태</h2><ul>' +
+        "".join('<li>' + _e(name) + ': <strong>' + _e(state) +
+                '</strong></li>' for name, state in gates.items()) +
+        '</ul><p>실제 회귀시험: NOT_EXECUTED · 승인: NO · 배포: NO</p>'
+        '</section>')
+    return _page("후보 검토 작업", "".join(markup))
+
 
 def _engine(raw: str, *, root: Path | None = None) -> str:
     require_local_work("DEV_ENGINE_SKILL")
@@ -549,7 +665,7 @@ def make_handler(root: Path):
             if parts.path not in (
                     "/", "/local", "/local/health", "/local/error",
                     "/local/engine", "/local/books", "/local/library",
-                    "/local/evolution", "/local/policy"):
+                    "/local/evolution", "/local/review", "/local/policy"):
                 return super().do_GET()
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
                 return self.reply(403, "LOOPBACK_ONLY",
@@ -577,6 +693,8 @@ def make_handler(root: Path):
                     html = _home()
                 elif parts.path == "/local/error":
                     html = _error(root, parts.query)
+                elif parts.path == "/local/review":
+                    html = _review(root, parts.query)
                 elif parts.path == "/local/engine":
                     html = _engine(parts.query, root=root)
                 elif parts.path == "/local/books":
