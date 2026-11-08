@@ -129,12 +129,18 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
 
     def test_actual_owner_localhost_browser_routes(self):
         root = Path("D:/UCIE")
+        source = search_existing_public_library(
+            root, query="python", limit=10, offset=0)
+        self.assertTrue(source["items"], "no source-bound owner review candidate")
+        identity = source["items"][0]["library_item_id"]
         server = HTTPServer(("127.0.0.1", 0), app.make_handler(root))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
             paths = (
                 "/local", "/local/error?q=python",
+                "/local/review?q=python&page=1&id=" + identity +
+                "&from=error",
                 "/local/engine?purpose=ENGINE_INCREMENTAL_BUILD",
                 "/local/engine?purpose=REAL_PUBLIC_CATALOG",
                 "/local/library?q=Git", "/local/books?q=Git",
