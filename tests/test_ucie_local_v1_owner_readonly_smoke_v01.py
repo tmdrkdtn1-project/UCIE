@@ -51,18 +51,18 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
         self.assertIn("기존 공개 PR 후보:", evolution)
         self.assertIn("수동 검토", evolution)
         snapshot = policy.roadmap()
-        self.assertFalse(snapshot["local_v1_accepted_by_owner"])
+        self.assertTrue(snapshot["local_v1_accepted_by_owner"])
         self.assertFalse(snapshot["customer_distribution_authorized"])
         print("UCIE_LOCAL_V1_OWNER_READONLY_SMOKE=" + json.dumps({
-            "status": "FOUR_PRODUCT_ACTION_RENDER_PATHS_OBSERVED_NOT_OWNER_UI_ACCEPTANCE",
+            "status": "FOUR_PRODUCT_ACTION_READONLY_PATHS_OWNER_ACCEPTANCE_RECORDED_SEPARATELY",
             "real_public_catalog_engine_observed": (
                 "REAL_PUBLIC_METADATA_EXACT_QUERY_EQUIVALENT_UNAPPROVED"
                 in real_engine),
             "error_public_link_displayed": "github.com/" in error,
             "evolution_public_link_displayed": "github.com/" in evolution,
             "existing_public_ledger_snapshot_displayed": True,
-            "real_owner_browser_walkthrough_completed": False,
-            "local_product_go": False,
+            "owner_browser_walkthrough_independently_attested_by_test": False,
+            "local_product_owner_accepted_in_separate_record": True,
             "customer_distribution_authorized": False,
             "scheduler_changes": 0,
             "operating_ledger_writes": 0,
@@ -94,7 +94,7 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
             "first_page_displayed": len(first["items"]),
             "second_page_available": first["total_matches"] > 10,
             "stage12_index_total_not_equivalent_to_approved_rules": True,
-            "release_approved": False,
+            "public_candidate_rule_release_approved": False,
         }, sort_keys=True))
 
     def test_actual_source_bound_manual_review_worksheet(self):
@@ -123,7 +123,7 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
             "independent_upstream_regression_observed": False,
             "automatic_approval": False,
             "operating_db_writes": 0,
-            "local_owner_gui_acceptance": False,
+            "local_owner_gui_acceptance_inferred_from_this_test": False,
         }, sort_keys=True))
 
 

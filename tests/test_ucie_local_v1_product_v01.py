@@ -64,10 +64,14 @@ class PriorityContractTests(unittest.TestCase):
         for name in priority.LOCAL_WORK:
             row = priority.require_local_work(name)
             self.assertEqual(row["status"],
-                             "LOCAL_PRODUCT_TASK_ALLOWED_UNDER_OWNER_PRIORITY")
-            self.assertFalse(row["local_v1_accepted"])
+                             "LOCAL_PRODUCT_TASK_ALLOWED_AFTER_OWNER_ACCEPTANCE")
+            self.assertTrue(row["local_v1_accepted"])
             self.assertFalse(row["online_release_authorized"])
         self.assertFalse(priority.roadmap()["customer_distribution_authorized"])
+        self.assertTrue(priority.roadmap()["local_v1_accepted_by_owner"])
+        self.assertTrue(priority.roadmap()["owner_acceptance_receipt_generated"])
+        self.assertFalse(priority.roadmap()["online_release_authorized"])
+        self.assertFalse(priority.roadmap()["peripheral_expansion_authorized"])
 
     def test_online_peripheral_and_unknown_tasks_fail_closed(self):
         for kind in (*priority.DEFERRED_WORK, "UNKNOWN", "", "ONLINE_DEPLOYMENT ",
@@ -77,7 +81,7 @@ class PriorityContractTests(unittest.TestCase):
                     priority.require_local_work(kind)
 
     def test_acceptance_cannot_be_faked_with_source_flag(self):
-        with patch.object(priority, "LOCAL_V1_ACCEPTED_BY_OWNER", True):
+        with patch.object(priority, "LOCAL_V1_ACCEPTED_BY_OWNER", False):
             with self.assertRaises(priority.LocalPriorityError):
                 priority.require_local_work("LOCAL_APP")
         self.assertEqual(len(priority.LOCAL_ACCEPTANCE_GATES), 6)
@@ -299,7 +303,7 @@ class LoopbackOwnerAppTests(unittest.TestCase):
         self.assertEqual(receipt["status"], app.APP_STATUS)
         self.assertEqual(receipt["bound_port"], self.server.server_port)
         self.assertEqual(receipt["bound_host"], "127.0.0.1")
-        self.assertFalse(receipt["owner_acceptance_verified"])
+        self.assertTrue(receipt["owner_acceptance_verified"])
         self.assertFalse(receipt["online_release_authorized"])
         self.assertIn("application/json", headers["Content-Type"])
         code, _, _ = self.request("/local/health", host="incorrect.example")

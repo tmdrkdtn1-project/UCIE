@@ -3,7 +3,7 @@
 Single localhost browser entrypoint wiring existing first-party evidence,
 reusable engine, SkillBooks and change review. No POST, network fetch,
 customer/other-project paths, automatic promotion or background tasks.
-Local V1 has NOT been owner-accepted merely because this app runs.
+Local V1 owner acceptance is separately documented, not inferred from a running app.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from .local_v1_priority_v01 import (
 )
 
 APP_SCHEMA = "UCIE_OWNER_LOCAL_FOUR_PILLAR_APP_V01"
-APP_STATUS = "LOCAL_V1_USER_WORKFLOW_IMPLEMENTED_OWNER_ACCEPTANCE_PENDING"
+APP_STATUS = "LOCAL_V1_OWNER_ACCEPTED_LOCAL_GO_NO_ONLINE_RELEASE"
 QUERY = re.compile(r"[A-Za-z0-9_.:/ -]{0,80}\Z")
 BOOK_QUERY = re.compile(r"[\w .-]{0,80}\Z", re.UNICODE)
 PAGE_SIZE = 10
@@ -125,7 +125,8 @@ def _page(name: str, main: str) -> str:
         '</style></head><body><header>'
         '<h1>UCIE Local V1 · ' + _e(name) + '</h1>'
         '<p>로컬 실사용 제품 우선 · 공개 근거만 사용 · 자동 규칙 승격 없음'
-        ' · 소유자 실제 인수 <strong>미완료</strong></p>'
+        ' · 로컬 V1 소유자 인수 <strong>완료</strong>'
+        ' · 온라인·고객 배포 <strong>미승인</strong></p>'
         '<nav><a href="/local">홈</a>' + nav + '</nav></header>'
         '<main>' + main + '</main></body></html>'
     )
@@ -728,10 +729,12 @@ def _policy() -> str:
     return _page(
         "개발 규칙", '<section><h2>강제 개발 순서</h2>'
         '<p>' + _e(" → ".join(state["ordered_phases"])) + '</p>'
-        '<p>LOCAL V1 GO: <strong>아직 미승인</strong></p>'
+        '<p>LOCAL V1 GO: <strong>소유자 인수 승인 · 로컬 한정</strong></p>'
+        '<p>인수 근거: ' + _e(state["owner_acceptance_receipt_path"]) + '</p>'
         '<p>온라인·고객 출시: 금지 / 주변 확장: 보류</p>'
         '<ol>' + items + '</ol>'
-        '<p>실제 소유자 PC 사용 인수 전에는 완료 상태를 자동 설정할 수 없습니다.</p>'
+        '<p>2026-11-08 사용자 직접 승인으로 로컬 인수를 기록했습니다.'
+        ' 고객·온라인 출시나 개별 기술 후보/SkillBook 승인과는 별도입니다.</p>'
         '</section>')
 
 
@@ -811,7 +814,7 @@ def make_handler(root: Path):
                         "status": APP_STATUS,
                         "bound_host": "127.0.0.1",
                         "bound_port": self.server.server_port,
-                        "owner_acceptance_verified": False,
+                        "owner_acceptance_verified": True,
                         "online_release_authorized": False,
                         "operating_database_writes": 0,
                     }, sort_keys=True), "application/json; charset=utf-8")
@@ -892,7 +895,8 @@ def main(argv: list[str] | None = None) -> int:
                 "local_app_url": url,
                 "bound_port": server.server_port,
                 "port_selected_automatically": args.port == 0,
-                "owner_acceptance_verified": False,
+                "owner_acceptance_verified": True,
+                "online_release_authorized": False,
                 "customer_distribution_authorized": False,
                 "external_network_requests": 0,
                 "scheduler_modified": False,
