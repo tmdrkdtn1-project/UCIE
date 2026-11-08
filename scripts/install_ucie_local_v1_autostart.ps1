@@ -72,7 +72,10 @@ $actionParams = @{
     WorkingDirectory = $root
 }
 $action = New-ScheduledTaskAction @actionParams
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity
+$logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $identity
+# A second trigger recovers after abnormal termination/restart-budget exhaustion.
+# IgnoreNew prevents overlapping processes while the localhost app is running.
+$recoveryTrigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(2)) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
 $settingsParams = @{
     AllowStartIfOnBatteries = $true
@@ -89,7 +92,7 @@ if ($PSCmdlet.ShouldProcess($taskName, 'register UCIE-only at-logon task and req
         TaskName = $taskName
         TaskPath = $taskPath
         Action = $action
-        Trigger = $trigger
+        Trigger = @($logonTrigger, $recoveryTrigger)
         Principal = $principal
         Settings = $settings
         Description = 'UCIE Local V1 only. Logon auto-start; private 127.0.0.1. No cloud/customer release.'
