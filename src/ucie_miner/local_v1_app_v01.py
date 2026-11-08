@@ -25,10 +25,12 @@ APP_SCHEMA = "UCIE_OWNER_LOCAL_FOUR_PILLAR_APP_V01"
 APP_STATUS = "LOCAL_V1_USER_WORKFLOW_IMPLEMENTED_OWNER_ACCEPTANCE_PENDING"
 QUERY = re.compile(r"[A-Za-z0-9_.:/ -]{0,80}\Z")
 BOOK_QUERY = re.compile(r"[\w .-]{0,80}\Z", re.UNICODE)
+PAGE_SIZE = 10
+MAX_PAGE = 500  # 10 at a time; covers the owner public catalog without bulk dumps.
 ROUTES = (
     ("/local/error", "코딩 오류 예방", "승인된 공개 근거 후보, 안전한 수정 방향, 회귀 검토"),
     ("/local/engine", "개발 엔진 · 스킬", "직접 선택해 UCIE 작성 알고리즘 실행"),
-    ("/local/books", "가상도서관 · SkillBook", "본문, 원본 출처, 기계 계약과 검토 상태"),
+    ("/local/library", "통합 가상도서관", "SkillBook·공개 기술 근거·편집 검토를 한 화면에서 탐색"),
     ("/local/evolution", "근거 기반 개선", "UCIE 로컬 공개 변경 이력, 검토 대기와 다음 작업"),
 )
 ALLOWED_SOURCE_PREFIXES = (
@@ -62,13 +64,15 @@ def _params(raw: str, allowed: tuple[str, ...]) -> dict[str, str]:
     return {key: values[0] for key, values in parsed.items()}
 
 
-def _search(root: Path, query: str, *, limit: int = 5) -> dict:
+def _search(root: Path, query: str, *, limit: int = PAGE_SIZE,
+            offset: int = 0) -> dict:
     from .library_search import SCHEMA, search_existing_public_library
 
     if type(query) is not str or QUERY.fullmatch(query) is None:
         raise LocalProductError("invalid public evidence search")
     result = search_existing_public_library(
-        root, query=query, limit=limit, group_revisions=False)
+        root, query=query, limit=limit, group_revisions=False,
+        offset=offset)
     if (type(result) is not dict or result.get("schema") != SCHEMA
             or result.get("status") not in (
                 "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
@@ -79,8 +83,13 @@ def _search(root: Path, query: str, *, limit: int = 5) -> dict:
             or result.get("auto_promoted") is not False):
         raise LocalProductError("public evidence not safely readable")
     items = result.get("items")
-    if type(items) is not list or len(items) > limit:
-        raise LocalProductError("public evidence bound violated")
+    total = result.get("total_matches")
+    if (type(items) is not list or len(items) > limit
+            or type(total) is not int or total < len(items)
+            or type(result.get("returned_count")) is not int
+            or result["returned_count"] != len(items)
+            or (offset and result.get("page_offset") != offset)):
+        raise LocalProductError("public evidence count/pagination contract violated")
     if result["status"] == "SOURCE_LINKAGE_INCOMPLETE_NO_GO" and items:
         raise LocalProductError("incomplete source was presented as evidence")
     for row in items:
@@ -117,8 +126,7 @@ def _page(name: str, main: str) -> str:
         '<h1>UCIE Local V1 · ' + _e(name) + '</h1>'
         '<p>로컬 실사용 제품 우선 · 공개 근거만 사용 · 자동 규칙 승격 없음'
         ' · 소유자 실제 인수 <strong>미완료</strong></p>'
-        '<nav><a href="/local">홈</a>' + nav +
-        '<a href="/catalog">기존 통합 도서관</a></nav></header>'
+        '<nav><a href="/local">홈</a>' + nav + '</nav></header>'
         '<main>' + main + '</main></body></html>'
     )
 
@@ -180,26 +188,72 @@ def _evidence_rows(report: dict, *, guidance: bool = False) -> str:
     return "".join(output)
 
 
+def _page_number(args: dict[str, str]) -> int:
+    raw = args.get("page", "1")
+    if (type(raw) is not str or re.fullmatch(r"[1-9][0-9]{0,2}", raw) is None
+            or not 1 <= int(raw) <= MAX_PAGE):
+        raise LocalProductError("invalid bounded public evidence page")
+    return int(raw)
+
+
+def _paged_evidence(root: Path, query: str, *, page: int,
+                    route: str, guidance: bool = False) -> str:
+    """Keep every approved public candidate accessible in bounded pages."""
+    offset = (page - 1) * PAGE_SIZE
+    report = _search(root, query, limit=PAGE_SIZE, offset=offset)
+    total = report["total_matches"]
+    shown = len(report["items"])
+    if total and offset >= total:
+        raise LocalProductError("requested page outside available public evidence")
+    if report["status"] == "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
+        return _evidence_rows(report, guidance=guidance)
+    start = offset + 1 if shown else 0
+    finish = offset + shown
+    summary = (
+        '<section><p><strong>전체 일치 공개 근거 후보·개정 행: ' + _e(total)
+        + '건</strong> · 현재 ' + _e(start) + '–' + _e(finish)
+        + '건 표시 · 페이지당 최대 ' + _e(PAGE_SIZE) + '건</p>'
+        '<p class="muted">이 값은 미검증 공개 근거 행의 검색 결과입니다.'
+        ' 승인된 규칙이나 SkillBook 개수가 아니며, 색인 실험의 항목 수와'
+        ' 동일한 지표로 비교할 수 없습니다.</p></section>')
+    links = []
+    if page > 1:
+        links.append('<a href="' + route + '?q=' +
+                     quote(query, safe="") + '&page=' + str(page - 1) +
+                     '">이전 ' + str(PAGE_SIZE) + '건</a>')
+    if finish < total:
+        links.append('<a href="' + route + '?q=' +
+                     quote(query, safe="") + '&page=' + str(page + 1) +
+                     '">다음 ' + str(PAGE_SIZE) + '건</a>')
+    navigation = (
+        '<section><nav aria-label="공개 근거 검색 페이지">'
+        + ' · '.join(links) + '</nav></section>' if links else '')
+    return summary + _evidence_rows(report, guidance=guidance) + navigation
+
+
 def _error(root: Path, raw: str) -> str:
     require_local_work("ERROR_PREVENTION")
-    args = _params(raw, ("q",))
+    args = _params(raw, ("q", "page"))
     term = args.get("q", "")
     if QUERY.fullmatch(term) is None:
         raise LocalProductError("invalid error search keyword")
+    page = _page_number(args)
+    if not term and page != 1:
+        raise LocalProductError("query required for non-initial error page")
     body = (
         '<section><h2>코딩 오류 또는 API 패턴 검색</h2>'
         '<form action="/local/error" method="get">'
         '<label>공개 근거 검색어 <input name="q" maxlength="80" value="' +
         _e(term) + '" placeholder="scandir 또는 API_CONTRACT"></label>'
         '<button>검색</button></form>'
-        '<small>실제 기존 UCIE 공개 기술 후보에서 검색합니다.'
-        ' 미검증 수정법을 자동 적용하지 않습니다.</small></section>')
+        '<small>전체 일치 건수를 표시하고 10건씩 이동할 수 있습니다.'
+        ' 모든 후보는 미검증이며 실제 코드를 자동 수정하지 않습니다.</small></section>')
     if term:
-        body += _evidence_rows(_search(root, term), guidance=True)
+        body += _paged_evidence(root, term, page=page,
+                                route="/local/error", guidance=True)
     else:
-        body += '<section>검색어를 입력하면 관련 공개 변경과 안전 검토·회귀 방향을 보여줍니다.</section>'
+        body += '<section>검색어를 입력하면 공개 변경과 UCIE 안전 검토·회귀 방향을 보여줍니다.</section>'
     return _page("오류 예방", body)
-
 
 def _engine(raw: str, *, root: Path | None = None) -> str:
     require_local_work("DEV_ENGINE_SKILL")
