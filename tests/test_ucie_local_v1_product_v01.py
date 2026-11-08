@@ -234,10 +234,12 @@ class LoopbackOwnerAppTests(unittest.TestCase):
         self.assertEqual(headers.get("X-Frame-Options"), "DENY")
         self.assertIn("default-src 'none'",
                       headers.get("Content-Security-Policy", ""))
-        for route in ("/local/error", "/local/engine",
-                      "/local/books", "/local/policy"):
+        for route in ("/local/error", "/local/engine", "/local/policy"):
             status, _, _ = self.request(route)
             self.assertEqual(status, 200, route)
+        status, _, headers = self.request("/local/books?q=Git")
+        self.assertEqual(status, 302)
+        self.assertEqual(headers.get("Location"), "/local/library?q=Git")
 
     def test_dynamic_local_port_identity_and_host_validation(self):
         status, body, headers = self.request("/local/health")
