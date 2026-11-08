@@ -18,8 +18,18 @@ Run on owner Windows PowerShell:
 
     & D:\UCIE\scripts\start_ucie_local_v1.ps1
 
-The foreground app uses the existing UCIE venv and localhost only:
-http://127.0.0.1:8767/local . Ctrl+C stops it. No cloud, external customer code, other-project scans, Windows service installation, privileged deployment or unreviewed code execution.
+The foreground app uses the existing UCIE venv and localhost only.
+The launcher now **automatically selects a free local port** and opens
+the actual product URL in the browser (for example,
+http://127.0.0.1:<assigned-port>/local). Do NOT manually open the old fixed
+http://127.0.0.1:8767/local URL: another service may already own that port and
+return JSON such as {"error":"NOT_FOUND"}. If the browser does not open, copy
+the exact `local_app_url` value printed by the UCIE Python process. Verify
+`/local/health` on the same assigned port: the schema must be
+`UCIE_OWNER_LOCAL_FOUR_PILLAR_APP_V01`. Ctrl+C stops UCIE Local V1.
+This does NOT stop or modify any process already using port 8767.
+There is no cloud, customer code or other-project scan, Windows service
+installation, privileged deployment or unreviewed code execution.
 
 Four real user paths:
 - /local/error : user query -> existing UCIE public evidence -> original URL/version/unverified state -> UCIE safe manual guidance and regression test PLAN (not applied patch).
