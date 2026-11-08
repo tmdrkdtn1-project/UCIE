@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 from html import escape
-from http.server import HTTPServer
+from http.server import ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
@@ -23,6 +23,9 @@ from .local_v1_priority_v01 import (
 
 APP_SCHEMA = "UCIE_OWNER_LOCAL_FOUR_PILLAR_APP_V01"
 APP_STATUS = "LOCAL_V1_OWNER_ACCEPTED_LOCAL_GO_NO_ONLINE_RELEASE"
+# Browser/Edge speculative or unfinished connections must not block /local.
+# This does not change the exact loopback bind or permit online access.
+LOCAL_SERVER_CLASS = ThreadingHTTPServer
 QUERY = re.compile(r"[A-Za-z0-9_.:/ -]{0,80}\Z")
 BOOK_QUERY = re.compile(r"[\w .-]{0,80}\Z", re.UNICODE)
 PAGE_SIZE = 10
@@ -887,7 +890,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         require_local_work("LOCAL_APP")
-        with HTTPServer(("127.0.0.1", args.port), make_handler(root)) as server:
+        with LOCAL_SERVER_CLASS(("127.0.0.1", args.port), make_handler(root)) as server:
             url = "http://127.0.0.1:" + str(server.server_port) + "/local"
             print(json.dumps({
                 "schema": APP_SCHEMA,
