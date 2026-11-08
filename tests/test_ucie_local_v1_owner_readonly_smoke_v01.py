@@ -54,6 +54,9 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
         self.assertFalse(snapshot["customer_distribution_authorized"])
         print("UCIE_LOCAL_V1_OWNER_READONLY_SMOKE=" + json.dumps({
             "status": "FOUR_PRODUCT_ACTION_RENDER_PATHS_OBSERVED_NOT_OWNER_UI_ACCEPTANCE",
+            "real_public_catalog_engine_observed": (
+                "REAL_PUBLIC_METADATA_EXACT_QUERY_EQUIVALENT_UNAPPROVED"
+                in real_engine),
             "error_public_link_displayed": "github.com/" in error,
             "evolution_public_link_displayed": "github.com/" in evolution,
             "existing_public_ledger_snapshot_displayed": True,
