@@ -148,6 +148,24 @@ class UcieLocalAutostartSourceTests(unittest.TestCase):
         self.assertIn("PREVIEW", proc.stdout)
         self.assertNotIn("REGISTERED_START_REQUESTED", proc.stdout)
 
+    @unittest.skipUnless(os.name == "nt", "Owner Windows task health inspection")
+    def test_owner_status_script_is_readonly_and_reports_real_state(self):
+        if ROOT.resolve() != Path("D:/UCIE").resolve():
+            self.skipTest("OWNER_EXACT_D_UCIE_ONLY")
+        proc = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive",
+             "-File", str(SCRIPTS / "status_ucie_local_v1_autostart.ps1")],
+            capture_output=True, text=True, timeout=20, check=False)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        result = json.loads(proc.stdout)
+        self.assertEqual(result["task_name"], "UCIE-LocalV1-Web")
+        self.assertFalse(result["cloudflare_tunnel_inspected_or_modified"])
+        self.assertFalse(result["public_miner_task_modified"])
+        self.assertFalse(result["customer_release_authorized"])
+        self.assertIn(result["health"], (
+            "NOT_RESPONDING", "UCIE_LOCAL_V1_HEALTHY",
+            "FOREIGN_OR_UNEXPECTED_HTTP_RESPONSE"))
+
     @unittest.skipUnless(os.name == "nt", "Windows PowerShell syntax parser only")
     def test_powershell_source_parses_without_executing_any_script(self):
         # ParseFile builds an AST but DOES NOT run, install, query or
