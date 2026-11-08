@@ -97,6 +97,36 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
             "release_approved": False,
         }, sort_keys=True))
 
+    def test_actual_source_bound_manual_review_worksheet(self):
+        root = Path("D:/UCIE")
+        report = search_existing_public_library(
+            root, query="python", limit=10, offset=0)
+        self.assertEqual(
+            report["status"], "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO")
+        self.assertTrue(report["items"], "owner public source catalog is empty")
+        first = report["items"][0]
+        self.assertFalse(first["human_approved"])
+        result = app._review(
+            root, "q=python&page=1&id=" + first["library_item_id"] +
+            "&from=library")
+        self.assertIn(first["public_url"], result)
+        self.assertIn("UNVERIFIED_CANDIDATE_ONLY", result)
+        self.assertIn("NOT_VERIFIED", result)
+        self.assertIn("실제 회귀시험: NOT_EXECUTED", result)
+        self.assertIn("승인: NO", result)
+        self.assertIn("/local/library?q=python", result)
+        print("UCIE_OWNER_REAL_SOURCE_REVIEW=" + json.dumps({
+            "status": "PUBLIC_SOURCE_SELECTED_MANUAL_PLAN_RENDERED",
+            "source": first["source_id"],
+            "pattern": first["purpose_code"],
+            "source_sha256_present": bool(first["evidence_sha256"]),
+            "independent_upstream_regression_observed": False,
+            "automatic_approval": False,
+            "operating_db_writes": 0,
+            "local_owner_gui_acceptance": False,
+        }, sort_keys=True))
+
+
     def test_actual_owner_localhost_browser_routes(self):
         root = Path("D:/UCIE")
         server = HTTPServer(("127.0.0.1", 0), app.make_handler(root))
