@@ -6,9 +6,12 @@ CI on ephemeral cloud machines intentionally skips.
 """
 from __future__ import annotations
 
+from http.server import HTTPServer
+import http.client
 import json
 import os
 from pathlib import Path
+import threading
 import unittest
 
 from ucie_miner import local_v1_app_v01 as app
@@ -56,6 +59,37 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
             "operating_ledger_writes": 0,
             "other_projects_accessed": False,
         }, sort_keys=True))
+
+
+    def test_actual_owner_localhost_browser_routes(self):
+        root = Path("D:/UCIE")
+        server = HTTPServer(("127.0.0.1", 0), app.make_handler(root))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            paths = (
+                "/local", "/local/error?q=python",
+                "/local/engine?purpose=ENGINE_INCREMENTAL_BUILD",
+                "/local/books?q=Git", "/local/evolution?q=python",
+                "/skillbooks",
+            )
+            for route in paths:
+                with self.subTest(route=route):
+                    connection = http.client.HTTPConnection(
+                        "127.0.0.1", server.server_port, timeout=10)
+                    try:
+                        connection.request("GET", route, headers={
+                            "Host": "127.0.0.1:" + str(server.server_port)})
+                        reply = connection.getresponse()
+                        body = reply.read()
+                        self.assertEqual(reply.status, 200)
+                        self.assertLess(len(body), 900_000)
+                    finally:
+                        connection.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
 
 
 if __name__ == "__main__":
