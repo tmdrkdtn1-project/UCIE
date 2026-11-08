@@ -579,7 +579,25 @@ def make_handler(root: Path):
                     html = _error(root, parts.query)
                 elif parts.path == "/local/engine":
                     html = _engine(parts.query, root=root)
-                elif parts.path in ("/local/library", "/local/books"):
+                elif parts.path == "/local/books":
+                    # Existing Local V1 bookmarks converge on ONE library.
+                    old_args = _params(parts.query, ("q", "page"))
+                    term = old_args.get("q", "")
+                    if BOOK_QUERY.fullmatch(term) is None:
+                        raise LocalProductError("invalid legacy library query")
+                    old_page = _page_number(old_args)
+                    destination = "/local/library"
+                    if term or old_page > 1:
+                        destination += "?q=" + quote(term, safe="")
+                        if old_page > 1:
+                            destination += "&page=" + str(old_page)
+                    self.send_response(302)
+                    self.send_header("Location", destination)
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                elif parts.path == "/local/library":
                     html = _library(root, parts.query)
                 elif parts.path == "/local/evolution":
                     html = _evolution(root, parts.query)
