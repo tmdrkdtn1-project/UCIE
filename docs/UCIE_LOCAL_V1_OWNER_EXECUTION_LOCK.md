@@ -4,11 +4,11 @@ Owner decision: 2026-11-08. Executable contract: src/ucie_miner/local_v1_priorit
 
 ## Strict development order
 
-1. LOCAL PRODUCT (mandatory now): L1 one Windows launcher and browser; L2 four real user workflows on UCIE-only public evidence/first-party code; L3 local restart/offline/error owner acceptance.
-2. ONLINE + DESIGNATED CUSTOMER DELIVERY (blocked until local V1 accepted): private distribution, license/signature, online hosting, commercial installer, SBOM/rightsholder/security review and pilot. The separate full commercial release gate remains NO_GO.
-3. PERIPHERAL/EXPANSION (blocked until local V1 accepted): new collectors, scheduler refactors, extra dashboards/platforms/skills, performance tuning, additional proof-only infrastructure.
+1. LOCAL PRODUCT: owner-accepted on 2026-11-08 after L1 browser, L2 four functional tasks and L3 restart/offline/bad-input checks. The local-only signoff is recorded in docs/UCIE_LOCAL_V1_OWNER_ACCEPTANCE_20261108.md.
+2. ONLINE + DESIGNATED CUSTOMER DELIVERY (NEXT but still NOT AUTHORIZED): private distribution, license/signature, online hosting, commercial installer, SBOM/rightsholder/security review and pilot require a separate owner decision and independent acceptance. No implicit GO from Local V1.
+3. PERIPHERAL/EXPANSION (LAST, remains blocked): additional collectors, scheduler refactors, dashboards/platforms/skills, performance improvements and optional proof systems are after commercial delivery preparation and require a separate owner priority decision.
 
-Start no task unless it directly enables an LG1-LG6 local product user action or fixes an observed blocking defect. The source-coded LOCAL_WORK allowlist is mandatory for new local-app entrypoints. Deferred/unknown task requests are denied. Fake web arguments, approval flags or synthetic receipts cannot turn local GO true; owner acceptance must be independently observed and source-reviewed.
+Existing Local V1 tasks remain allowed after actual owner signoff. Source-coded LOCAL_WORK dispatch remains fail-closed for online launch, customer distribution and peripheral work until an independent approved change is made. Deferred/unknown task requests are denied. Fake web arguments, approval flags or synthetic receipts cannot turn local GO true; owner acceptance must be independently observed and source-reviewed.
 
 Enforcement scope: the new Local V1 UI and the priority CLI invoke require_local_work(). This does not claim a host-wide Git permission change, repository branch protection, or control of all legacy scripts. Existing collector and Windows scheduler are deliberately not modified.
 
@@ -34,7 +34,7 @@ installation, privileged deployment or unreviewed code execution.
 Four real user paths:
 - /local/error : user query -> existing UCIE public evidence -> original URL/version/unverified state -> UCIE safe manual guidance and regression test PLAN (not applied patch).
 - /local/engine : choose one of three implemented first-party algorithms -> execute bounded calculation -> show actual numerical result and its synthetic workload limitation.
-- /local/books : search the two existing human-readable SkillBooks -> navigate actual chapter/machine contract and official source -> preserve draft/unapproved/export-disabled state.
+- /local/library : unified search of W04 public source candidates, editorial drafts and two human/machine SkillBooks; the existing /local/books bookmark redirects here. User can invoke only the two existing UCIE-authored disposable/static SkillBook demos via /local/skillbook-run, preserving each book's draft/unapproved/export-disabled state.
 - /local/evolution : read existing genuine UCIE-only public miner ledger inventory and indexed change candidates -> original source, unverified state and next manual review action. No automatic promotion.
 The existing /catalog read-only browser remains accessible in the same local app.
 
@@ -47,7 +47,7 @@ LG4: stop/restart/offline existing-data usage and fail-closed errors.
 LG5: strictly UCIE only; no private/customer/other-project reads, no scheduler, miner or automatic promotion changes.
 LG6: actual owner-host user walkthrough with a reproducible sanitized receipt.
 
-Status is LOCAL_V1_OWNER_ACCEPTANCE_PENDING. Running tests or executing a synthetic recipe is not full owner-operated Local V1 GO; online/customer release is separately NO_GO.
+Status: UCIE_LOCAL_V1_OWNER_ACCEPTED_GO on 2026-11-08, by explicit owner decision (see docs/UCIE_LOCAL_V1_OWNER_ACCEPTANCE_20261108.md and GitHub issue #199). The owner's acceptance is for the local operator product and does not individually approve unverified public candidates, drafted SkillBooks, real-project scanning, external security QA, online/customer release or any other-project access. Commercial/customer release remains NO_GO.
 
 Scope-targeted tests: tests/test_ucie_local_v1_product_v01.py (priority deny, UI route, genuine existing first-party recipe and public evidence contracts), tests/test_ucie_local_v1_owner_readonly_smoke_v01.py (exact-owner live UCIE public read, skipped elsewhere). Existing owner worktree must be preserved; no git reset, clean or mass-stage. Daily 09:00 report remains PAUSED.
 
