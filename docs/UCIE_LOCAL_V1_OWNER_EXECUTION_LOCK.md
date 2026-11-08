@@ -5,8 +5,9 @@ Owner decision: 2026-11-08. Executable contract: src/ucie_miner/local_v1_priorit
 ## Strict development order
 
 1. LOCAL PRODUCT: owner-accepted on 2026-11-08 after L1 browser, L2 four functional tasks and L3 restart/offline/bad-input checks. The local-only signoff is recorded in docs/UCIE_LOCAL_V1_OWNER_ACCEPTANCE_20261108.md.
-2. ONLINE + DESIGNATED CUSTOMER DELIVERY (NEXT but still NOT AUTHORIZED): private distribution, license/signature, online hosting, commercial installer, SBOM/rightsholder/security review and pilot require a separate owner decision and independent acceptance. No implicit GO from Local V1.
-3. PERIPHERAL/EXPANSION (LAST, remains blocked): additional collectors, scheduler refactors, dashboards/platforms/skills, performance improvements and optional proof systems are after commercial delivery preparation and require a separate owner priority decision.
+2. LOCAL AUTO-START + DATA MATURITY (CURRENT): preserve the accepted Local V1 as an auto-started owner-only localhost tool; continue already allowlisted public evidence collection, provenance/version verification and regression quality. No new paid hosting or customer publication while evidence is immature. Autostart guide: docs/UCIE_LOCAL_V1_WINDOWS_AUTOSTART_20261108.md.
+3. ONLINE + DESIGNATED CUSTOMER DELIVERY (DEFERRED): customer hosting, licensing/signature, domain, public Cloudflare routes, independent security/SBOM/rights and pilot require a separate source-reviewed owner decision AFTER data maturity. The existing O1 hosting preparation source is dormant.
+4. PERIPHERAL/EXPANSION (LAST, remains blocked): additional collectors, scheduler refactors, dashboards/platforms/skills, performance improvements and optional proof systems require their own priority decision.
 
 Existing Local V1 tasks remain allowed after actual owner signoff. Source-coded LOCAL_WORK dispatch remains fail-closed for online launch, customer distribution and peripheral work until an independent approved change is made. Deferred/unknown task requests are denied. Fake web arguments, approval flags or synthetic receipts cannot turn local GO true; owner acceptance must be independently observed and source-reviewed.
 
