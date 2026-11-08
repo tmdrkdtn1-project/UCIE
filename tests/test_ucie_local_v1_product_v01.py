@@ -229,7 +229,7 @@ class LoopbackOwnerAppTests(unittest.TestCase):
         status, body, headers = self.request("/local")
         self.assertEqual(status, 200)
         for name in ("/local/error", "/local/engine",
-                     "/local/books", "/local/evolution"):
+                     "/local/library", "/local/evolution"):
             self.assertIn(name, body)
         self.assertEqual(headers.get("X-Frame-Options"), "DENY")
         self.assertIn("default-src 'none'",
