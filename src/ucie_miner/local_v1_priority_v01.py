@@ -13,8 +13,9 @@ import json
 
 SCHEMA = "UCIE_LOCAL_V1_OWNER_PRIORITY_CONTRACT_V01"
 OWNER_DECISION = "2026-11-08_LOCAL_PRODUCT_BEFORE_ONLINE_AND_PERIPHERAL"
-CURRENT_PHASE = "LOCAL_PRODUCT_IMPLEMENTATION"
-LOCAL_V1_ACCEPTED_BY_OWNER = False
+CURRENT_PHASE = "LOCAL_V1_OWNER_ACCEPTED_ONLINE_RELEASE_PREPARATION"
+LOCAL_V1_ACCEPTED_BY_OWNER = True
+LOCAL_V1_OWNER_ACCEPTANCE_RECEIPT = "docs/UCIE_LOCAL_V1_OWNER_ACCEPTANCE_20261108.md"
 ONLINE_RELEASE_AUTHORIZED = False
 PERIPHERAL_EXPANSION_AUTHORIZED = False
 
@@ -61,8 +62,8 @@ def require_local_work(task: str) -> dict:
     pinned hold. Local owner acceptance is deliberately not self-attested.
     """
     if type(task) is not str or task not in LOCAL_WORK:
-        raise LocalPriorityError("WORK_DEFERRED_UNTIL_UCIE_LOCAL_V1_GO")
-    if (LOCAL_V1_ACCEPTED_BY_OWNER is not False
+        raise LocalPriorityError("WORK_REQUIRES_SEPARATE_ONLINE_OR_EXPANSION_APPROVAL")
+    if (LOCAL_V1_ACCEPTED_BY_OWNER is not True
             or ONLINE_RELEASE_AUTHORIZED is not False
             or PERIPHERAL_EXPANSION_AUTHORIZED is not False):
         raise LocalPriorityError("LOCAL_V1_OWNER_GATE_CHANGED_REVIEW_REQUIRED")
@@ -72,8 +73,8 @@ def require_local_work(task: str) -> dict:
         "current_phase": CURRENT_PHASE,
         "task": task,
         "gate": LOCAL_WORK[task],
-        "status": "LOCAL_PRODUCT_TASK_ALLOWED_UNDER_OWNER_PRIORITY",
-        "local_v1_accepted": False,
+        "status": "LOCAL_PRODUCT_TASK_ALLOWED_AFTER_OWNER_ACCEPTANCE",
+        "local_v1_accepted": True,
         "online_release_authorized": False,
         "peripheral_expansion_authorized": False,
         "automatic_rule_promotion": False,
@@ -85,20 +86,21 @@ def roadmap() -> dict:
     require_local_work("LOCAL_APP")
     return {
         "schema": SCHEMA,
-        "status": "UCIE_LOCAL_V1_NOT_YET_OWNER_ACCEPTED",
+        "status": "UCIE_LOCAL_V1_OWNER_ACCEPTED_LOCAL_GO",
         "ordered_phases": [
-            "1_LOCAL_V1_SINGLE_APP_FOUR_JOBS_OWNER_ACCEPTANCE",
+            "1_LOCAL_V1_OWNER_ACCEPTED_GO",
             "2_ONLINE_AND_DESIGNATED_CUSTOMER_DELIVERY",
             "3_PERIPHERAL_DEVELOPMENT_AND_EXPANSION",
         ],
         "allowed_local_work": dict(LOCAL_WORK),
-        "deferred_until_local_v1_go": list(DEFERRED_WORK),
+        "deferred_until_separate_commercial_or_expansion_approval": list(DEFERRED_WORK),
         "local_acceptance_gates": list(LOCAL_ACCEPTANCE_GATES),
-        "local_v1_accepted_by_owner": False,
+        "local_v1_accepted_by_owner": True,
         "online_release_authorized": False,
         "peripheral_expansion_authorized": False,
         "customer_distribution_authorized": False,
-        "owner_acceptance_receipt_generated": False,
+        "owner_acceptance_receipt_generated": True,
+        "owner_acceptance_receipt_path": LOCAL_V1_OWNER_ACCEPTANCE_RECEIPT,
         "daily_0900_report_paused": True,
         "no_other_project_access": True,
         "no_public_collector_or_scheduler_mutation": True,
@@ -116,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     except LocalPriorityError:
         print(json.dumps({
             "schema": SCHEMA,
-            "status": "WORK_DEFERRED_UNTIL_UCIE_LOCAL_V1_GO",
+            "status": "WORK_REQUIRES_SEPARATE_ONLINE_OR_EXPANSION_APPROVAL",
             "local_v1_accepted_by_owner": False,
             "customer_distribution_authorized": False,
         }, sort_keys=True))
