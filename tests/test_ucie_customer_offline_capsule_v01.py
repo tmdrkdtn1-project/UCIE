@@ -5,7 +5,9 @@ commercial distribution. Archive integrity is checked before any approval.
 """
 from __future__ import annotations
 
+import base64
 from contextlib import redirect_stdout
+from hashlib import sha256
 from io import StringIO
 import json
 from pathlib import Path
@@ -19,28 +21,47 @@ from ucie_miner import customer_offline_capsule_v01 as kit
 WHEEL = "ucie_public_only_demo-0.1.0-py3-none-any.whl"
 
 
-def _wheel(root: Path, *, missing: str = "", extra: str = "") -> None:
+def _wheel(root: Path, *, missing: str = "", extra: str = "",
+           crlf: bool = False, forged_record: bool = False) -> None:
     names = sorted(kit.REQUIRED - {missing}) if missing else sorted(kit.REQUIRED)
     metadata = ("Metadata-Version: 2.3\nName: ucie-public-only-demo\n"
                 "Version: 0.1.0\nRequires-Dist: cryptography>=50.0.2,<51\n")
     entrypoint = ("[console_scripts]\n"
                   "ucie-product-preview = ucie_miner.customer_staging_v01:main\n")
+    contents = {}
+    for name in names:
+        if name.endswith("RECORD"):
+            continue
+        if name.endswith("METADATA"):
+            value = metadata
+        elif name.endswith("entry_points.txt"):
+            value = entrypoint
+        elif name.endswith("WHEEL"):
+            value = "Wheel-Version: 1.0\nTag: py3-none-any\n"
+        else:
+            value = "# UCIE synthetic first-party wheel inventory\n"
+        if crlf:
+            value = value.replace("\n", "\r\n")
+        contents[name] = value.encode("utf-8")
+    if extra:
+        contents[extra] = b"FORBIDDEN"
+    if kit.DIST + "RECORD" in names:
+        rows = []
+        for name, data in sorted(contents.items()):
+            digest = base64.urlsafe_b64encode(sha256(data).digest()).rstrip(b"=")
+            rows.append(name + ",sha256=" + digest.decode("ascii") + "," +
+                        str(len(data)))
+        rows.append(kit.DIST + "RECORD,,")
+        record = ("\r\n" if crlf else "\n").join(rows) + (
+            "\r\n" if crlf else "\n")
+        contents[kit.DIST + "RECORD"] = record.encode("utf-8")
+    if forged_record:
+        target = "ucie_miner/capability_trials.py"
+        if target in contents:
+            contents[target] += b"# forged payload after RECORD\n"
     with ZipFile(root / "dist" / WHEEL, "w") as package:
-        for name in names:
-            if name.endswith("METADATA"):
-                value = metadata
-            elif name.endswith("entry_points.txt"):
-                value = entrypoint
-            elif name.endswith("RECORD"):
-                value = "".join(f"{part},,\n" for part in names)
-            elif name.endswith("WHEEL"):
-                value = "Wheel-Version: 1.0\nTag: py3-none-any\n"
-            else:
-                value = "# UCIE synthetic first-party wheel inventory\n"
+        for name, value in sorted(contents.items()):
             package.writestr(name, value)
-        if extra:
-            package.writestr(extra, "FORBIDDEN")
-
 
 class OfflineCapsuleAcceptance(unittest.TestCase):
     def setUp(self):
@@ -114,6 +135,17 @@ class OfflineCapsuleAcceptance(unittest.TestCase):
 
     def test_missing_wheel_module_fails(self):
         _wheel(self.root, missing="ucie_miner/experience_evolution.py")
+        with self.assertRaises(kit.OfflineCapsuleError):
+            self.build()
+
+    def test_windows_crlf_metadata_and_record_are_accepted(self):
+        _wheel(self.root, crlf=True)
+        result = self.build()
+        self.assertTrue(result["payload_sha256_verified"])
+        self.assertEqual(result["status"], kit.STATUS)
+
+    def test_forged_wheel_record_digest_rejected(self):
+        _wheel(self.root, forged_record=True)
         with self.assertRaises(kit.OfflineCapsuleError):
             self.build()
 
