@@ -302,12 +302,12 @@ def _paged_evidence(root: Path, query: str, *, page: int,
     start = offset + 1 if shown else 0
     finish = offset + shown
     summary = (
-        '<section class="result-summary"><p><strong>전체 일치 공개 근거 후보·개정 행: ' + _e(total)
-        + '건</strong> · 현재 ' + _e(start) + '–' + _e(finish)
-        + '건 표시 · 페이지당 최대 ' + _e(PAGE_SIZE) + '건</p>'
-        '<p class="muted">이 값은 미검증 공개 근거 행의 검색 결과입니다.'
-        ' 승인된 규칙이나 SkillBook 개수가 아니며, 색인 실험의 항목 수와'
-        ' 동일한 지표로 비교할 수 없습니다.</p></section>')
+        '<section class="result-summary">'
+        '<p><strong>검색 결과 ' + _e(total) + '건</strong>'
+        ' · ' + _e(start) + '–' + _e(finish) + '건 표시</p>'
+        '<p class="customer-note">공개 기술 자료이며, 각 항목의 출처와'
+        ' 검토 상태는 상세 정보에서 확인하실 수 있습니다.</p></section>'
+    )
     links = []
     if page > 1:
         links.append('<a href="' + route + '?q=' +
@@ -335,18 +335,20 @@ def _error(root: Path, raw: str) -> str:
     if not term and page != 1:
         raise LocalProductError("query required for non-initial error page")
     body = (
-        '<section class="search-panel"><h2>코딩 오류 또는 API 패턴 검색</h2>'
+        '<section class="search-panel"><h2>문제 예방 자료 검색</h2>'
+        '<p>찾고 계신 기술이나 오류 키워드를 입력하세요.</p>'
         '<form action="/local/error" method="get">'
-        '<label>공개 근거 검색어 <input name="q" maxlength="80" value="' +
-        _e(term) + '" placeholder="scandir 또는 API_CONTRACT"></label>'
-        '<button>검색</button></form>'
-        '<small>전체 일치 건수를 표시하고 10건씩 이동할 수 있습니다.'
-        ' 모든 후보는 미검증이며 실제 코드를 자동 수정하지 않습니다.</small></section>')
+        '<label>검색어 <input name="q" maxlength="80" value="' +
+        _e(term) + '" placeholder="예: scandir, API"></label>'
+        '<button type="submit">검색</button></form>'
+        '<small>자료별 출처와 검토 상태를 확인하실 수 있습니다.</small>'
+        '</section>'
+    )
     if term:
         body += _paged_evidence(root, term, page=page,
                                 route="/local/error", guidance=True)
     else:
-        body += '<section>검색어를 입력하면 공개 변경과 UCIE 안전 검토·회귀 방향을 보여줍니다.</section>'
+        body += '<section class="workbench-note"><p>관심 있는 기술명을 검색해 보세요.</p></section>'
     return _page("오류 예방", body)
 
 def _review(root: Path, raw: str) -> str:
