@@ -691,18 +691,18 @@ def _library(root: Path, raw: str) -> str:
 
     body = (
         '<section class="search-panel"><h2>UCIE 통합 가상도서관</h2>'
-        '<p>SkillBook · 편집 검토 기술서적 · 실제 수집된 공개 기술 근거를'
-        ' 한 화면에서 검색합니다. 세 자료는 검증 단위가 달라'
-        ' 개수를 합산하거나 승인된 책/규칙으로 간주하지 않습니다.</p>'
+        '<p>기술서적, 편집 검토 초안, 공개 근거는 서로 다른 검증 단위입니다.'
+        ' 결과를 섞거나 승인된 자료로 합산하지 않습니다.</p>'
         '<form action="/local/library" method="get">'
-        '<label>검색어 <input name="q" maxlength="80" value="' +
+        '<label>자료 검색어 <input name="q" maxlength="80" value="' +
         _e(term) + '" placeholder="Git, Python, scandir"></label>'
-        '<button>통합 검색</button></form>'
-        '<p>모든 자료는 미검증 또는 미승인 상태입니다.'
-        ' 자동 적용·출시·외부 배포는 하지 않습니다.</p></section>'
-        '<section><h2>SkillBook 본문 · 기계 계약 (미승인 초안)</h2>'
+        '<button type="submit">자료 검색</button></form>'
+        '<small>읽기 전용 · SkillBook 미승인 · 공개 근거 미검증 ·'
+        ' 자동 적용·내보내기 불가</small></section>'
+        '<section class="shelf-title"><span class="eyebrow">SHELF / 01</span>'
+        '<h2>SkillBook 본문 · 기계 계약 (미승인 초안)</h2>'
         '<p>일치 초안: ' + _e(len(books)) +
-        '권 · SkillBook 초안은 전체 공개 근거와 별도로 집계합니다.</p></section>'
+        '권 · 기술서적과 미검증 PR 후보의 수를 혼합하지 않습니다.</p></section>'
     )
     for book in books:
         identity = book.get("skillbook_id")
@@ -716,24 +716,36 @@ def _library(root: Path, raw: str) -> str:
             SKILLBOOK_ID as GIT_BOOK_ID,
         )
         if identity == PY_BOOK_ID:
-            demo_link = '<p><a href="/local/skillbook-run?book=python">' + (
-                'Python 기존 스킬 직접 실행해 보기 (UCIE 예제)</a></p>')
+            demo_link = (
+                '<a href="/local/skillbook-run?book=python">'
+                'Python 기존 스킬 직접 실행해 보기 (UCIE 예제) ↗</a>'
+            )
         elif identity == GIT_BOOK_ID:
-            demo_link = '<p><a href="/local/skillbook-run?book=git">' + (
-                'Git 기존 스킬 직접 실행해 보기 (UCIE 예제)</a></p>')
+            demo_link = (
+                '<a href="/local/skillbook-run?book=git">'
+                'Git 기존 스킬 직접 실행해 보기 (UCIE 예제) ↗</a>'
+            )
         else:
             raise LocalProductError("unexpected unregistered SkillBook")
         body += (
-            '<article><h3><a href="/skillbooks/' + quote(identity, safe="") +
+            '<article class="shelf-entry">'
+            '<span class="eyebrow">SKILLBOOK / DRAFT</span>'
+            '<h3><a href="/skillbooks/' + quote(identity, safe="") +
             '">' + _e(book.get("title", "SkillBook")) + '</a></h3>'
             '<p>출처 ' + _e(book.get("source_id")) +
             ' · 적용 범위 ' + _e(book.get("version_scope_claim")) + '</p>'
-            '<p>본문 및 기계 판독 계약 열람 가능 · 미승인 · 내보내기 불가</p>'
-            + demo_link + '</article>')
+            '<p><span class="entry-flag">미승인 · 내보내기 불가</span>'
+            ' · 본문 및 기계 판독 계약 열람 가능</p>'
+            '<p>' + demo_link + '</p></article>'
+        )
     if not books:
-        body += '<section>일치하는 SkillBook 초안이 없습니다.</section>'
+        body += (
+            '<section class="workbench-note"><h2>SkillBook 결과 없음</h2>'
+            '<p>일치하는 SkillBook 초안이 없습니다.</p></section>'
+        )
     body += (
-        '<section><h2>편집·원문 검토 대기 기술서적</h2>'
+        '<section class="shelf-title"><span class="eyebrow">SHELF / 02</span>'
+        '<h2>편집·원문 검토 대기 기술서적</h2>'
         '<p>일치 편집 후보: ' + _e(len(drafts)) +
         '건 · 검토 미완료 · 실행 계약과 승인된 책이 아닙니다.</p></section>'
     )
@@ -742,14 +754,26 @@ def _library(root: Path, raw: str) -> str:
         if type(ident) is not str or re.fullmatch(r"[0-9a-f]{64}", ident) is None:
             raise LocalProductError("invalid reviewed editorial draft reference")
         body += (
-            '<article><a href="/catalog/review?id=' + ident + '">' +
-            _e(draft.get("topic", "검토 대기")) + '</a>'
-            '<p>출처 ' + _e(", ".join(draft.get("source_ids", []))) +
-            ' · 원문·라이선스·QA 미승인</p></article>')
+            '<article class="shelf-entry">'
+            '<span class="eyebrow">EDITORIAL / REVIEW PENDING</span>'
+            '<h3><a href="/catalog/review?id=' + ident + '">' +
+            _e(draft.get("topic", "검토 대기")) + '</a></h3>'
+            '<p>출처 ' + _e(", ".join(draft.get("source_ids", []))) + '</p>'
+            '<p><span class="entry-flag">원문·라이선스·QA 미승인</span></p>'
+            '</article>'
+        )
+    if not drafts:
+        body += (
+            '<section class="workbench-note"><h2>편집 검토 결과 없음</h2>'
+            '<p>현재 검색에 일치하는 편집 후보가 없습니다.</p></section>'
+        )
     body += (
-        '<section><h2>기존 UCIE 공개 근거·코딩 예방 후보</h2>'
-        '<p>원본 공개 변경 링크와 미승인 상태를 표시하며'
-        ' 전체 검색 결과를 페이지별로 탐색할 수 있습니다.</p></section>')
+        '<section class="shelf-title"><span class="eyebrow">SHELF / 03</span>'
+        '<h2>기존 UCIE 공개 근거·코딩 예방 후보</h2>'
+        '<p>승인된 공개 원본의 미검증 개정을 한 페이지에 최대 10건씩'
+        ' 표시합니다. 이곳의 수량은 승인된 규칙이나 SkillBook 수가 아닙니다.'
+        '</p></section>'
+    )
     if term.isascii():
         body += _paged_evidence(
             root, term, page=page, route="/local/library")
@@ -757,10 +781,12 @@ def _library(root: Path, raw: str) -> str:
         if page != 1:
             raise LocalProductError("non-ASCII public evidence paging not supported")
         body += (
-            '<section>공개 근거 W04 검색은 현재 영문 검색어만 지원합니다.'
+            '<section class="workbench-note"><h2>공개 근거 검색어 제한</h2>'
+            '<p>공개 근거 W04 검색은 현재 영문 검색어만 지원합니다.'
             ' SkillBook·편집 자료 검색 결과는 위에 표시했습니다.'
             ' 공개 근거를 보려면 Python, Git 등의 영문 검색어를 사용하세요.'
-            '</section>')
+            '</p></section>'
+        )
     return _page("통합 가상도서관", body)
 
 
