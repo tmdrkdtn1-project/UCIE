@@ -143,7 +143,8 @@ class UcieLocalAutostartSourceTests(unittest.TestCase):
         proc = subprocess.run(
             ["powershell.exe", "-NoProfile", "-NonInteractive",
              "-File", str(SCRIPTS / "install_ucie_local_v1_autostart.ps1")],
-            capture_output=True, text=True, timeout=20, check=False)
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=20, check=False)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("PREVIEW", proc.stdout)
         self.assertNotIn("REGISTERED_START_REQUESTED", proc.stdout)
