@@ -812,6 +812,7 @@ def _library(root: Path, raw: str) -> str:
 
 
 def _evolution(root: Path, raw: str) -> str:
+    """Read-only actual collection inventory, not an approval metric."""
     require_local_work("EVIDENCE_EVOLUTION")
     from .public_collection_inventory_v01 import SCHEMA as INVENTORY_SCHEMA, collection_inventory
 
@@ -820,29 +821,40 @@ def _evolution(root: Path, raw: str) -> str:
     if QUERY.fullmatch(term) is None:
         raise LocalProductError("invalid public change search")
     page = _page_number(args)
-    body = (
-        '<section><h2>현재 UCIE 공개 수집·검토 현황</h2>'
-        '<p>실제 기존 UCIE 공개 기록만 읽습니다. 추가 수집·자동 승격은 하지 않습니다.</p>')
     inventory = collection_inventory(root)
     if (inventory.get("schema") != INVENTORY_SCHEMA
             or inventory.get("operating_database_writes") != 0):
         raise LocalProductError("unexpected UCIE collection inventory")
-    body += (
-        '<p>수집 현황: ' + _e(inventory.get("status")) + '</p>'
-        '<p>관측 시각: ' + _e(inventory.get("captured_utc", "보고되지 않음")) +
-        '</p>'
-        '<p>기존 공개 PR 후보: ' + _e(inventory.get("legacy_miner", {}).get("candidates", "확인 불가")) +
-        ' · Stage10 개정: ' + _e(inventory.get("stage10_public_candidate_staging", {}).get("candidate_revisions", "확인 불가")) + '</p>'
-        '<p>검증 문제: ' + _e(", ".join(inventory.get("issues", []))) +
-        '</p><p>기본 마이너·Stage10 개정·W04 검색 결과는 서로 다른 원장이므로'
-        ' 합산된 제품 규칙 수가 아닙니다.</p></section>'
+    issues = inventory.get("issues", [])
+    body = (
+        '<section class="search-panel">'
+        '<span class="eyebrow">INVENTORY / READ ONLY</span>'
+        '<h2>현재 UCIE 공개 수집·검토 현황</h2>'
+        '<p>실제 기존 UCIE 공개 기록만 읽습니다.'
+        ' 추가 수집·자동 승격은 하지 않습니다.</p>'
+        '<dl class="inventory-grid">'
+        '<div><dt>수집 현황</dt><dd><code>' +
+        _e(inventory.get("status")) + '</code></dd></div>'
+        '<div><dt>관측 시각 UTC</dt><dd><code>' +
+        _e(inventory.get("captured_utc", "보고되지 않음")) + '</code></dd></div>'
+        '<div><dt>기본 수집 기록</dt><dd>기존 공개 PR 후보: ' +
+        _e(inventory.get("legacy_miner", {}).get("candidates", "확인 불가")) +
+        '</dd></div>'
+        '<div><dt>근거 개정 기록</dt><dd>Stage10 개정: ' +
+        _e(inventory.get("stage10_public_candidate_staging", {}).get(
+            "candidate_revisions", "확인 불가")) + '</dd></div>'
+        '<div><dt>현재 검토 문제 기록</dt><dd>검증 문제: ' +
+        _e(", ".join(issues) if issues else "기록 없음") +
+        '</dd></div></dl>'
+        '<p><strong>주의:</strong> 기본 마이너·Stage10 개정·W04 검색 결과는'
+        ' 서로 다른 원장입니다. 합산된 규칙 수가 아닙니다.</p></section>'
         '<section class="search-panel"><h2>개선·검토할 공개 변경 검색</h2>'
         '<form action="/local/evolution" method="get">'
-        '<label>공개 변경 검색어 <input name="q" maxlength="80" value="' + _e(term) +
-        '" placeholder="python/cpython 또는 pattern"></label>'
-        '<button>변경 조회</button></form>'
-        '<p>원본 공개 URL → 검증 미완료 상태 → 원본·중복·버전·회귀시험'
-        ' 수동 검토가 다음 단계입니다.</p></section>'
+        '<label>공개 변경 검색어 <input name="q" maxlength="80" value="' +
+        _e(term) + '" placeholder="python/cpython 또는 pattern"></label>'
+        '<button type="submit">변경 조회</button></form>'
+        '<small>원본 공개 URL → 검증 미완료 → 원본·중복·버전·'
+        '회귀시험 수동 검토 순서입니다.</small></section>'
     )
     body += _paged_evidence(root, term, page=page,
                             route="/local/evolution")
