@@ -33,7 +33,7 @@ Test fails closed for hash mismatch, unexpected class/function AST, malformed so
 |---|---|
 | GitHub exact upstream source and immutable blobs | PINNED |
 | First-party JSON-RPC synthetic scanner (PR #223) | TESTED_FIRST_PARTY, not an upstream claim |
-| Selected upstream Python method AST before/after isolated on disposable CI | pending until exact SHA CI evidence |
+| Selected upstream Python method AST before/after isolated on disposable CI | **8/8 method paths observed in one disposable CI**; full SDK integration not performed |
 | Full installed, pinned SDK `Client` / `MCPServer` `prompts/get` integration for both protocol versions | **NOT_EXECUTED** |
 | First fixed distributed SDK release and supported version ranges | **NOT_VERIFIED** |
 | SDK license source | Repo `LICENSE` for v2.3.0 is MIT with attribution, but per-contribution/dependency/legal review remains pending |
@@ -44,3 +44,7 @@ Do not treat the targeted method probe as full SDK independent QA or apply a fix
 ## Operating and V4 stability
 
 No changes to `/local`, `/local/evolution`, home colors, typography, customer copy, V4 app source, public miner scheduler, database, Windows tasks, cloud tunnel, active server, private materials, other projects, source allowlist, auto-promotion, export or release. The prior owner local dirty UCIE working tree is preserved. The held 09:00 report remains held.
+
+## Observed pinned-method runtime receipt — recorded after first CI run
+
+The GitHub-hosted disposable source-method workflow completed successfully: https://github.com/tmdrkdtn1-project/UCIE/actions/runs/42582727640 . The recorded JSON receipt had `status=PINNED_UPSTREAM_METHOD_PATHS_OBSERVED`, `method_paths_executed=8`, both official exact commits and four Git blob identities matched, before unknown/missing → `ValueError` and after unknown/missing → `MCPError(code=-32602)`. The selected valid argument guards passed and first-party execution-error controls propagated `RuntimeError` on both sources. The receipt explicitly records `sdk_imported=false`, `entire_prompt_renderer_tested=false`, `sdk_transports_tested=false`, `independent_sdk_integration_verified=false`, `rights_and_release_approved=false`. All fetched source snapshots were discarded from the temporary runner. Exact final-head CI status must be checked separately if this document changes.
