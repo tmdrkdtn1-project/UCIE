@@ -23,11 +23,12 @@ from .experience_evolution import (
     _load_events, _workload_id, WORKLOADS, GENESIS,
     OWNER_OBSERVED_REFERENCE, EvolutionError,
 )
+from .public_candidate_staging import MAX_ROWS
 from .library_entry import build_library_entry
 from .verification_handoff import prepare_verification_handoff
 
 SCHEMA = "UCIE_P8_EXPERIENCE_TO_REAL_CATALOG_BRIDGE_V1"
-MAX_CATALOG_ROWS = 1000
+MAX_CATALOG_ROWS = MAX_ROWS
 MIN_QUERIES, MAX_QUERIES = 8, 96
 MAX_REPEATS = 5
 MISSING_PURPOSE = "P8_SYNTHETIC_MISSING_EXACT_KEY"

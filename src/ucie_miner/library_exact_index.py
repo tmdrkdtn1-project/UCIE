@@ -15,13 +15,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from .automated_candidate_qa import _checked_handoff
+from .public_candidate_staging import MAX_ROWS
 from .library_entry import build_library_entry, TOKEN
 from .library_search import ALLOWED_DOMAINS, ALLOWED_KINDS
 from .source_registry import get_source, SourceRegistryError
 from .verification_handoff import prepare_verification_handoff
 
 SCHEMA = "UCIE_W04_EXACT_PUBLIC_LIBRARY_BATCH_INDEX_V1"
-MAX_CATALOG_ROWS = 1000
+MAX_CATALOG_ROWS = MAX_ROWS
 MAX_BATCH = 32
 MAX_RESULTS_PER_QUERY = 20
 
