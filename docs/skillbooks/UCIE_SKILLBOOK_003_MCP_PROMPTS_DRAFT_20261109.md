@@ -2,7 +2,7 @@
 
 - **자산 ID:** `UCIE-SKILLBOOK-MCP-PROMPTS-003`
 - **버전:** `0.1.0-draft`
-- **현재 상태:** `ACTUAL_PINNED_SDK_IN_MEMORY_INTEGRATION_VERIFIED__SKILLBOOK_UNAPPROVED` (PR #225의 실제 SDK 클라이언트·서버 메모리 내 호출 16건 검증, 전체 SDK 보안·권리·고객 승인과 별개)
+- **현재 상태:** `ACTUAL_PINNED_SDK_IN_MEMORY_INTEGRATION_VERIFIED__DEPENDENCY_METADATA_OBSERVED__SKILLBOOK_UNAPPROVED` (PR #225의 실제 SDK 클라이언트·서버 메모리 내 호출 16건 검증, 전체 SDK 보안·권리·고객 승인과 별개)
 - **관계 프로젝트:** UCIE만
 - **고객용 라이브러리 등록:** 미실시; 현재 V4 UI·홈·개선 제안 구성 변경 없음
 - **실제 SDK 전후 회귀시험:** 지정된 두 커밋·두 모드의 메모리 내 통합 호출 검증 완료. **라이선스·의존성 보안 심사, 소유자 승인, 서명, 고객 제공:** 미완료.
@@ -113,3 +113,13 @@ $env:PYTHONPATH = 'D:\UCIE\src'
 - **정확한 버전:** 수정 전 배포판은 `mcp==2.3.0`; 수정 후 시험 환경 패키지의 버전 문자열은 `2.3.1.dev9+754254c`이며 **커밋에서 빌드한 개발버전, 공식 출시는 아님**.
 - **새로 통과한 관문:** `ACTUAL_PINNED_SDK_CLIENT_SERVER_IN_MEMORY_VERIFIED` (제한 범위). 앞선 1차 합성 JSON 검사 및 원본 함수 경로 실행보다 높은 수준이지만, **HTTP/stdio 전송·전체 upstream 테스트·다른 버전의 독립 검증·라이선스/보안·공식 첫 수정 포함 릴리스 확인은 미완료**.
 - **권리 상태:** 원본 저장소 MIT 표시와 각 시점 `uv.lock`로 설치한 런타임 종속성 확인은 증거이지 개별 의존성 권리/보안 검토 완료가 아닙니다. 자동 규칙 승격, 외부 배포, SkillBook 최종 승인, 고객 서비스 적용은 여전히 금지합니다.
+
+## 2026-11-09 — 실제 의존성 메타데이터 검토 (P2, 승인 전)
+
+- **공식 잠금 파일 재검증 및 실제 설치 목록:** `v2.3.0` 134개 잠금 항목 중 실제 설치된 배포 패키지는 30개. 수정 커밋 잠금 항목 138개 중 실제 설치 패키지도 30개. 134/138은 **전체 환경·개발 의존성을 포함한 잠금 파일의 항목 수**로, 사용자가 설치하는 패키지 수가 아닙니다.
+- **30개 실제 설치 배포 패키지의 버전 및 등록 출처**를 각 원본 잠금 파일과 대조했습니다. 양쪽 결과 모두 SPDX 라이선스 표현 메타데이터 25개, 기존 `License` 필드 4개, 분류 표시만 1개입니다. 불확실성은 법적 허가 여부가 아닌 *표기 형식* 기준입니다.
+- **추가 검토할 패키지:** `annotated-types==0.7.0`, `h11==0.16.0`, `pycparser==2.23`, `mcp`, `mcp-types` (후자 두 패키지는 각 시험 시점 버전별).
+- **실제 시험 기록:** https://github.com/tmdrkdtn1-project/UCIE/actions/runs/42587044200
+- **상세 감사 문서:** [공식 잠금 설치 의존성·라이선스·보안 관문](../UCIE_SKILLBOOK003_DEPENDENCY_LICENSE_SECURITY_METADATA_20261109.md)
+- **공식 SDK 보안 권고는 공개 목록으로 별도 검토**했으나, 30개 패키지 전체의 취약점 전수 검사는 실행하지 않았습니다. `v2.3.0`에 알려진 결함이 없다고 인증할 수 없습니다.
+- **법적·보안·고객용 결정:** `LICENSE_REDISTRIBUTION=NOT_APPROVED`, `DEPENDENCY_SECURITY=NOT_VERIFIED`, `human_approved=false`, `export_allowed=false`, `published=false`, `customer_release_authorized=false`. 보안·권리 검토 완료로 간주하지 않으며 자동 승격하지 않습니다.
