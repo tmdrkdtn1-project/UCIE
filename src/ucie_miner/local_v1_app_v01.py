@@ -208,37 +208,27 @@ def _home() -> str:
 def _evidence_rows(report: dict, *, guidance: bool = False,
                    query: str = "", page: int = 1,
                    route: str = "/local/error") -> str:
+    """Readable source metadata, never an automatic fix or approval."""
     from .rule_candidates import GUIDANCE
 
     if report.get("status") == "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
-        return '<section>출처 연결이 불완전하여 검색 결과를 표시하지 않습니다. ' \
-               '운영 원장을 수정하지 않고 수동으로 소스 계보를 확인하세요.</section>'
+        return (
+            '<section class="workbench-note">'
+            '<h2>출처 연결 확인 필요</h2>'
+            '<p>출처 연결이 불완전하여 검색 결과를 표시하지 않습니다. '
+            '운영 원장을 수정하지 않고 수동으로 소스 계보를 확인하세요.'
+            '</p></section>'
+        )
     rows = report.get("items", [])
     if not rows:
-        return '<section>선택한 조건과 일치하는 기존 공개 근거가 없습니다. ' \
-               '검증된 수정 또는 학습 결과를 만들어 내지 않습니다.</section>'
+        return (
+            '<section class="workbench-note"><h2>검색 결과 없음</h2>'
+            '<p>선택한 조건과 일치하는 기존 공개 근거가 없습니다. '
+            '검증된 수정 또는 학습 결과를 만들어 내지 않습니다.</p></section>'
+        )
     output = []
     for row in rows:
         url = row["public_url"]
-        guidance_row = GUIDANCE.get(row.get("purpose_code"))
-        details = (
-            '<p>근거: <a rel="noopener noreferrer" target="_blank" href="'
-            + _e(url) + '">' + _e(url) + '</a></p>'
-            '<p>출처 ' + _e(row.get("source_id", "")) +
-            ' · 기술 ' + _e(row.get("domain", "")) +
-            ' · 버전 ' + _e(row.get("version_scope_claim", "미확인")) +
-            ' · 패턴 ' + _e(row.get("purpose_code", "미확인")) + '</p>'
-            '<p>상태: <strong>UNVERIFIED_CANDIDATE_ONLY</strong>'
-            ' · SHA-256 ' + _e(row.get("evidence_sha256", "")) + '</p>'
-        )
-        if guidance and guidance_row:
-            details += (
-                '<p>UCIE 작성 안전 검토 방향 (승인된 패치 아님): ' +
-                _e(guidance_row[0]) + '</p>'
-                '<p>권장 회귀 확인 계획 (실행 결과 아님): ' +
-                _e(guidance_row[1]) + '</p>')
-        elif guidance:
-            details += '<p>이 패턴에 확인된 수정 안내가 없습니다. 출처 수동 검토가 필요합니다.</p>'
         candidate_id = row.get("library_item_id")
         if (type(candidate_id) is not str
                 or re.fullmatch(r"[0-9a-f]{64}", candidate_id) is None
@@ -250,12 +240,50 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
             "&amp;page=" + str(page) + "&amp;id=" + candidate_id +
             "&amp;from=" + origin
         )
-        details += (
-            '<p><a href="' + target + '"><strong>'
+        pattern = _e(row.get("purpose_code", "공개 근거"))
+        item = (
+            '<article class="evidence-item">'
+            '<header class="evidence-title"><h3>' + pattern + '</h3>'
+            '<span class="record-stamp">PUBLIC / UNVERIFIED</span></header>'
+            '<dl class="evidence-properties">'
+            '<div><dt>출처 / 기술</dt><dd>' + _e(row.get("source_id", "")) +
+            ' · ' + _e(row.get("domain", "")) + '</dd></div>'
+            '<div><dt>적용 버전 주장</dt><dd>' +
+            _e(row.get("version_scope_claim", "미확인")) + '</dd></div>'
+            '<div><dt>원본 공개 근거</dt><dd>'
+            '<a rel="noopener noreferrer" target="_blank" href="' +
+            _e(url) + '">' + _e(url) + '</a></dd></div>'
+            '<div><dt>검증 상태</dt><dd>'
+            '<strong>UNVERIFIED_CANDIDATE_ONLY</strong></dd></div>'
+            '<div><dt>근거 SHA-256</dt><dd><code>' +
+            _e(row.get("evidence_sha256", "")) + '</code></dd></div>'
+            '<div><dt>분류 코드</dt><dd><code>' + pattern +
+            '</code></dd></div></dl>'
+        )
+        if guidance:
+            guidance_row = GUIDANCE.get(row.get("purpose_code"))
+            if guidance_row:
+                item += (
+                    '<div class="evidence-guidance">'
+                    '<p><strong>안전 검토 방향 · 승인된 패치 아님</strong> '
+                    + _e(guidance_row[0]) + '</p>'
+                    '<p><strong>권장 회귀 확인 · 실행 결과 아님</strong> '
+                    + _e(guidance_row[1]) + '</p></div>'
+                )
+            else:
+                item += (
+                    '<div class="evidence-guidance"><p>'
+                    '이 패턴에 확인된 수정 안내가 없습니다.'
+                    ' 출처 수동 검토가 필요합니다.</p></div>'
+                )
+        item += (
+            '<div class="evidence-actions"><a href="' + target + '">'
             '이 후보로 오류 예방·회귀 검토 작업 열기'
-            '</strong></a></p>')
-        output.append('<article class="evidence-item"><h3>' + _e(row.get("purpose_code", "공개 근거"))
-                      + '</h3>' + details + '</article>')
+            '<span aria-hidden="true"> ↗</span></a>'
+            '<span>원본 확인 → 적용 범위 검토 → 회귀 계획</span></div>'
+            '</article>'
+        )
+        output.append(item)
     return "".join(output)
 
 
