@@ -7,6 +7,7 @@ on:
       - 'tests/test_ucie_mcp_installed_sdk_gate_guard_v01.py'
       - '.github/workflows/ucie-mcp-installed-sdk-integration-qa.yml'
       - 'docs/UCIE_MCP_FULL_SDK_INTEGRATION_QA_20261109.md'
+      - 'docs/skillbooks/UCIE_SKILLBOOK_003_MCP_PROMPTS_DRAFT_20261109.md'
   workflow_dispatch:
 
 permissions:
