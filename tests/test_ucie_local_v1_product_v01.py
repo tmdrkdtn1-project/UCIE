@@ -102,8 +102,8 @@ class LocalUserJobsTests(unittest.TestCase):
         with patch.object(app, "_search", return_value=public_rows()):
             html = app._library(Path("UCIE"), "q=")
         self.assertIn("/skillbooks/", html)
-        self.assertIn("미승인", html)
-        self.assertIn("내보내기 불가", html)
+        self.assertIn("검토 중", html)
+        self.assertIn("자료 정보", html)
         self.assertIn("Git", html)
         self.assertIn("Python", html)
 
@@ -123,7 +123,7 @@ class LocalUserJobsTests(unittest.TestCase):
         self.assertIn("기존 공개 PR 후보: 4", html)
         self.assertIn("Stage10 개정: 2", html)
         self.assertIn("github.com/python/cpython/pull/155365", html)
-        self.assertIn("수동 검토", html)
+        self.assertIn("개선 아이디어 찾아보기", html)
         self.assertIn("자동 승격", html)
 
     def test_forged_approval_and_non_allowed_url_fail(self):
@@ -160,11 +160,11 @@ class LocalUserJobsTests(unittest.TestCase):
         report["returned_count"] = 10
         with patch.object(app, "_search", return_value=report) as mock_search:
             page1 = app._error(Path("UCIE"), "q=python")
-            self.assertIn("전체 일치 공개 근거 후보·개정 행: 962건", page1)
-            self.assertIn("현재 1–10건 표시", page1)
+            self.assertIn("검색 결과 962건", page1)
+            self.assertIn("1–10건 표시", page1)
             self.assertIn("/local/error?q=python&page=2", page1.replace("&amp;", "&"))
             page2 = app._error(Path("UCIE"), "q=python&page=2")
-            self.assertIn("현재 11–20건 표시", page2)
+            self.assertIn("11–20건 표시", page2)
             self.assertIn("이전 10건", page2)
             self.assertIn("다음 10건", page2)
             self.assertEqual(mock_search.call_args.kwargs["offset"], 10)
@@ -172,9 +172,9 @@ class LocalUserJobsTests(unittest.TestCase):
     def test_legacy_books_url_is_same_unified_library(self):
         with patch.object(app, "_search", return_value=public_rows()):
             unified = app._library(Path("UCIE"), "q=Git")
-        self.assertIn("UCIE 통합 가상도서관", unified)
-        self.assertIn("SkillBook", unified)
-        self.assertIn("기존 UCIE 공개 근거", unified)
+        self.assertIn("라이브러리 검색", unified)
+        self.assertIn("기술 가이드", unified)
+        self.assertIn("공개 기술 사례", unified)
 
     def test_paging_invalid_or_cross_project_query_fails_closed(self):
         for raw in ("q=python&page=0", "q=python&page=9999",
@@ -186,7 +186,7 @@ class LocalUserJobsTests(unittest.TestCase):
         report = public_rows()
         with patch.object(app, "_search", return_value=report):
             result = app._error(Path("UCIE"), "q=scandir")
-            self.assertIn("이 후보로 오류 예방·회귀 검토 작업 열기", result)
+            self.assertIn("개선 방향 살펴보기", result)
             self.assertIn("/local/review?q=scandir&amp;page=1", result)
             html = app._review(
                 Path("UCIE"), "q=scandir&page=1&id=" + "a" * 64 +
@@ -250,8 +250,8 @@ class LocalUserJobsTests(unittest.TestCase):
         self.assertIn("/local/library", home)
         self.assertNotIn('href="/catalog">기존 통합 도서관', home)
         self.assertIn("/local/evolution", home)
-        self.assertIn("보류", policy_page)
-        self.assertIn("LG6_OWNER_HOST_SIGNOFF_RECEIPT", policy_page)
+        self.assertIn("UCIE는 어떤 서비스인가요?", policy_page)
+        self.assertNotIn("LG6_OWNER_HOST_SIGNOFF_RECEIPT", policy_page)
 
 
 class LoopbackOwnerAppTests(unittest.TestCase):
@@ -340,7 +340,7 @@ class LoopbackOwnerAppTests(unittest.TestCase):
                 "/local/review?q=scandir&page=1&id=" + "a" * 64 +
                 "&from=library")
             self.assertEqual(code, 200)
-            self.assertIn("후보 검토 작업", body)
+            self.assertIn("개선 방향 자세히 보기", body)
             self.assertIn("NOT_VERIFIED", body)
             code, body, _ = self.request(
                 "/local/review?q=scandir&page=1&id=" + "f" * 64)
