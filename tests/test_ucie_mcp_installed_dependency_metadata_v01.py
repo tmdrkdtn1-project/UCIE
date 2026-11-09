@@ -111,7 +111,7 @@ class InstalledDependencyMetadataTests(unittest.TestCase):
         self.assertEqual(m.read_license_marker(fields),
                          ("SPDX_EXPRESSION_DECLARED", "Apache-2.0 OR MIT", 1))
         fields = Message()
-        fields["License"] = "Full license\ntext intentionally not approved"
+        fields["License"] = "X" * 200
         self.assertEqual(m.read_license_marker(fields)[0],
                          "LONG_LICENSE_TEXT_UNREVIEWED")
 
@@ -122,7 +122,7 @@ class InstalledDependencyMetadataTests(unittest.TestCase):
         fields.add_header("Classifier", "License :: OSI Approved :: MIT License")
         self.assertEqual(m.read_license_marker(fields)[0], "LICENSE_CLASSIFIER_ONLY")
         fields = Message()
-        fields["License-Expression"] = "UNTRUSTED_INJECTION_\nIN_LICENSE"
+        fields["License-Expression"] = "UNTRUSTED^SPDX"
         self.assertEqual(m.read_license_marker(fields)[0],
                          "MALFORMED_OR_UNREVIEWED_SPDX")
 
