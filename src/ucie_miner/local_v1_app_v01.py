@@ -401,12 +401,15 @@ def _review(root: Path, raw: str) -> str:
         return_path += "&page=" + str(page)
     markup = [
         '<section class="search-panel">'
-        '<span class="eyebrow">REVIEW / SOURCE BOUND</span>'
-        '<h2>실제 공개 후보 · 오류 예방 검토 작업</h2>'
+        '<span class="eyebrow">TECH REVIEW</span>'
+        '<h2>개선 방향 살펴보기</h2>'
         '<p><a href="' + _e(return_path) +
         '">← 검색 결과로 돌아가기</a></p>'
-        '<p>이미 수집한 공개 근거를 사람이 검토할 수 있도록 정리했습니다.'
-        ' 이 화면에서 코드를 실행하거나 수정·승인하지 않습니다.</p>'
+        '<p>공개된 기술 사례를 바탕으로 참고할 만한 개선 방향과'
+        ' 검토할 사항을 정리했습니다.</p>'
+        '<span class="record-stamp">검토 전 자료</span>'
+        '<details class="technical-details"><summary>'
+        '출처와 검토 정보</summary>'
         '<dl class="inventory-grid">'
         '<div><dt>검토 대상</dt><dd><code>' +
         _e(brief["pattern_code"]) + '</code></dd></div>'
@@ -420,14 +423,17 @@ def _review(root: Path, raw: str) -> str:
         _e(brief["public_url"]) + '">' + _e(brief["public_url"]) +
         '</a></dd></div>'
         '<div><dt>증거 SHA-256</dt><dd><code>' +
-        _e(brief["evidence_sha256"]) + '</code></dd></div></dl></section>',
-        '<section><span class="eyebrow">PLAN / NOT EXECUTED</span>'
-        '<h2>UCIE 작성 안전 수정 방향 (검토안)</h2><p>' +
+        _e(brief["evidence_sha256"]) + '</code></dd></div></dl>'
+        '</details></section>',
+        '<section><span class="eyebrow">SUGGESTED NEXT STEP</span>'
+        '<h2>참고할 개선 방향</h2><p>' +
         _e(brief["safe_fix_guidance"] or
-           "해당 패턴의 전용 수정 지침이 없습니다. 원본 출처와 오류를 수동 분석하세요.") +
-        '</p><h3>회귀시험 구성 계획 (미실행)</h3><p>' +
+           "이 사례의 구체적인 해결 방법은 추가 검토가 필요합니다.") +
+        '</p><h3>확인해 볼 항목</h3><p>' +
         _e(brief["regression_plan"] or
-           "전용 회귀 계획이 없으므로 독립 검증 설계를 먼저 작성해야 합니다.") +
+           "적용 전 확인할 항목을 먼저 정의해 보세요.") +
+        '</p><p class="customer-note">'
+        '참고용 제안입니다. 실제 적용 환경에서 별도로 검증해 주세요.'
         '</p></section>',
     ]
     if brief["fixture_design"] is not None:
@@ -445,16 +451,17 @@ def _review(root: Path, raw: str) -> str:
             ' 공개 변경 내용을 검토하고 독립 회귀시험을 수동 설계해야 합니다.'
             '</p></section>')
     markup.append(
-        '<section><h2>다음 검토 작업 (사람이 수행)</h2><ol class="review-steps">' +
+        '<section><h2>다음에 할 일</h2><ol class="review-steps">' +
         "".join('<li>' + _e(action) + '</li>'
                 for action in brief["manual_actions"]) +
         '</ol></section>')
     markup.append(
-        '<section><h2>승인 전 필수 검증 상태</h2><ul class="review-gates">' +
+        '<section><details class="technical-details">'
+        '<summary>세부 검증 상태</summary><ul class="review-gates">' +
         "".join('<li>' + _e(name) + ': <strong>' + _e(state) +
                 '</strong></li>' for name, state in gates.items()) +
         '</ul><p>실제 회귀시험: NOT_EXECUTED · 승인: NO · 배포: NO</p>'
-        '</section>')
+        '</details></section>')
     return _page("후보 검토 작업", "".join(markup))
 
 
