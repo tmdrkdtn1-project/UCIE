@@ -129,77 +129,64 @@ def _search(root: Path, query: str, *, limit: int = PAGE_SIZE,
 
 
 def _page(name: str, main: str) -> str:
-    """Shared V03 evidence workbench for all existing UCIE local routes."""
-    from .local_v1_design_v03 import render_shell
+    """Premium-dark UCIE UI; internal release gates remain enforced elsewhere."""
+    from .local_v1_design_v04 import render_shell
 
     return render_shell(name, main, ROUTES)
 
 
 def _home() -> str:
-    """An operator-facing work index rather than a decorative AI landing."""
     require_local_work("LOCAL_APP")
+    names = (
+        ("문제 예방", "공개 기술 사례를 살펴보고 해결 방향을 확인하세요."),
+        ("개발 도구", "유용한 개발 도구와 실행 예제를 만나보세요."),
+        ("라이브러리", "기술 가이드와 참고 자료를 한곳에서 찾아보세요."),
+        ("개선 제안", "최근 공개 기술 변경에서 새로운 아이디어를 찾아보세요."),
+    )
     entries = []
-    for number, (href, title, purpose) in enumerate(ROUTES, 1):
+    for i, ((href, _, _), (label, detail)) in enumerate(zip(ROUTES, names), 1):
         entries.append(
             '<a class="pillar-card" href="' + href + '">'
             '<span class="pillar-number" aria-hidden="true">' +
-            str(number).zfill(2) + '</span>'
-            '<span class="pillar-content"><h3>' + _e(title) + '</h3>'
-            '<p>' + _e(purpose) + '</p></span>'
-            '<span class="pillar-arrow" aria-hidden="true">↗</span></a>'
+            str(i).zfill(2) + '</span>'
+            '<span class="pillar-content"><h3>' + _e(label) + '</h3>'
+            '<p>' + _e(detail) + '</p></span>'
+            '<span class="pillar-arrow" aria-hidden="true">→</span></a>'
         )
     body = (
-        '<section class="intro-workbench" aria-labelledby="workbench-title">'
+        '<section class="intro-workbench" aria-labelledby="hero-title">'
         '<div class="intro-text">'
-        '<span class="eyebrow">UCIE / TECHNICAL EVIDENCE WORKBENCH</span>'
-        '<h2 class="intro-title" id="workbench-title">'
-        '근거를 찾고,<br><em>코드를 검토하다.</em></h2>'
-        '<p>오류 예방, 자체 개발 엔진, SkillBook, 근거 개정 관리.'
-        ' 실제 작업을 시작할 수 있는 UCIE 로컬 기술 검토 공간입니다.</p>'
-        '<div class="intro-note"><span>RULE / 01</span>'
-        '<span>수집된 근거는 검증·승인된 규칙이 아닙니다.</span></div>'
+        '<span class="eyebrow">THE UCIE EXPERIENCE</span>'
+        '<h2 class="intro-title" id="hero-title">'
+        '더 좋은 코드를 위한<br><em>더 나은 선택.</em></h2>'
+        '<p>문제를 예방하고, 새로운 방법을 발견하고,'
+        ' 필요한 기술을 더 쉽게 찾아보세요.</p>'
+        '<div class="intro-note"><span>EXPLORE</span>'
+        '<span>관심 있는 기술을 입력해 바로 시작하세요.</span></div>'
         '</div>'
         '<div class="quick-query">'
-        '<span class="eyebrow">01 / QUICK QUERY</span>'
-        '<h3>오류 근거 검색</h3>'
-        '<p>승인된 공개 저장소에서 이미 수집한 기술 후보를 탐색합니다.'
-        ' 검색은 읽기 전용입니다.</p>'
+        '<span class="eyebrow">SEARCH</span>'
+        '<h3>무엇을 찾고 계신가요?</h3>'
+        '<p>기술 이름이나 오류 키워드로 관련 사례를 확인해 보세요.</p>'
         '<form action="/local/error" method="get">'
-        '<label>검색어'
-        '<input name="q" maxlength="80" placeholder="python, API_CONTRACT"'
-        ' aria-label="오류 근거 검색어"></label>'
-        '<button type="submit">근거 검색하기 ↗</button></form>'
-        '<span class="quick-examples">SOURCE-LINKED / UNVERIFIED</span>'
+        '<label>기술 검색'
+        '<input name="q" maxlength="80" placeholder="Python, API, Git"'
+        ' autocomplete="off"></label>'
+        '<button type="submit">검색하기 <span aria-hidden="true">→</span></button>'
+        '</form>'
+        '<span class="quick-examples">PYTHON · GIT · API</span>'
         '</div></section>'
         '<section class="section-heading">'
-        '<span class="eyebrow">INDEX / 4 WORKSPACES</span>'
-        '<h2>로컬 V1 실제 사용자 작업</h2>'
-        '<p>설명 대신 작업으로 들어갑니다. 각 영역의 기능과 승인'
-        ' 상태는 구분해 표시합니다.</p></section>'
-        '<section class="pillar-grid" aria-label="UCIE 4대 핵심 기능">' +
+        '<span class="eyebrow">EXPLORE UCIE</span>'
+        '<h2>주요 기능</h2>'
+        '<p>원하는 작업을 선택하세요.</p></section>'
+        '<section class="pillar-grid" aria-label="UCIE 주요 기능">' +
         ''.join(entries) + '</section>'
-        '<section class="section-heading">'
-        '<span class="eyebrow">TRUST / LOCAL OPERATIONS</span>'
-        '<h2>현재 사용 범위</h2>'
-        '<p>로컬 사용, 근거의 정확성, 외부 출시는 각각 별도 관문입니다.'
-        '</p></section>'
-        '<section class="trust-panel" aria-label="로컬 제품과 공개 근거 상태">'
-        '<div class="trust-item"><span class="trust-label">01 / LOCAL</span>'
-        '<span class="trust-value">소유자 인수 완료 · 로컬 한정</span>'
-        '<span class="trust-detail">현재 PC에서만 접근 가능</span></div>'
-        '<div class="trust-item"><span class="trust-label">02 / EVIDENCE</span>'
-        '<span class="trust-value">출처 연결 ≠ 독립 검증</span>'
-        '<span class="trust-detail">후보는 미승인, 자동 적용 없음</span></div>'
-        '<div class="trust-item"><span class="trust-label">03 / RELEASE</span>'
-        '<span class="trust-value trust-value--hold">'
-        '온라인·고객 출시 보류</span>'
-        '<span class="trust-detail">권리·보안·검증 승인 별도</span></div>'
-        '</section>'
         '<section class="workbench-note">'
-        '<h2>현재 개발 기준</h2>'
-        '<p>로컬 제품 완성 → 안정화·최적화 → 출시 별도 심사.'
-        ' 자동 규칙 승격과 고객 배포는 활성화되지 않았습니다.</p>'
-        '<a href="/local/policy">운영 및 검토 기준 살펴보기 ↗</a>'
+        '<h2>자료를 살펴보실 때</h2>'
+        '<p>공개 기술 자료의 출처와 검토 상태는 상세 화면에서 확인하실 수 있습니다.'
+        ' 모든 제안이 실제 환경에서 검증된 해결책을 의미하지는 않습니다.</p>'
+        '<a href="/local/policy">자료 이용 안내 <span aria-hidden="true">→</span></a>'
         '</section>'
     )
     return _page("시작", body)
@@ -912,16 +899,19 @@ def make_handler(root: Path):
                     and isinstance(content, str)
                     and "</header>" in content
                     and 'data-ucie-local-nav="true"' not in content):
+                friendly = (
+                    ("/local/error", "문제 예방"),
+                    ("/local/engine", "개발 도구"),
+                    ("/local/library", "라이브러리"),
+                    ("/local/evolution", "개선 제안"),
+                )
                 links = "".join(
-                    '<a href="' + href + '">' + _e(title) + '</a> · '
-                    for href, title, _ in ROUTES)
+                    '<a href="' + href + '">' + _e(label) + '</a>'
+                    for href, label in friendly)
                 local_nav = (
-                    '<nav aria-label="UCIE Local V1" data-ucie-local-nav="true" '
-                    'style="margin:12px 0;padding:12px;background:#e9f2f7;'
-                    'border-radius:8px">'
-                    '<strong>UCIE Local V1</strong> · '
-                    '<a href="/local">UCIE 홈</a> · ' + links +
-                    '</nav>'
+                    '<nav aria-label="UCIE 메뉴" data-ucie-local-nav="true">'
+                    '<strong>UCIE</strong>'
+                    '<a href="/local">홈</a>' + links + '</nav>'
                 )
                 content = content.replace("</header>", "</header>" + local_nav, 1)
             if (status == 200 and mime == "text/html; charset=utf-8"
@@ -937,7 +927,7 @@ def make_handler(root: Path):
                     and content.count("</html>") == 1):
                 # Re-skin only the first-party nested page envelope.
                 # Keep base renderer paths, evidence, headers and policies.
-                from .local_v1_design_v03 import skin_nested_local_page
+                from .local_v1_design_v04 import skin_nested_local_page
                 content = skin_nested_local_page(content)
             return super().reply(status, content, mime)
 
