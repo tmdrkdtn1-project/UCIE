@@ -462,13 +462,16 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
     if purpose and purpose not in (*RECIPES, "REAL_PUBLIC_CATALOG"):
         raise LocalProductError("unregistered development engine")
     choices = "".join(
-        '<li><a href="/local/engine?purpose=' + _e(name) + '">' +
-        _e(name) + '</a> - ' + _e(info[0]) + ' (UCIE 합성 워크로드)</li>'
+        '<li><a href="/local/engine?purpose=' + _e(name) + '">'
+        '<span>' + _e(name) + '</span>'
+        '<span class="recipe-copy">' + _e(info[0]) +
+        ' · UCIE 합성 워크로드</span></a></li>'
         for name, info in sorted(RECIPES.items()))
     choices += (
         '<li><a href="/local/engine?purpose=REAL_PUBLIC_CATALOG">'
-        'REAL_PUBLIC_CATALOG</a> - 실제 기존 UCIE 공개 기술 근거의'
-        ' 정확 키 검색 인덱스와 기본 탐색을 비교 (원본 코드 실행 없음)</li>')
+        '<span>REAL_PUBLIC_CATALOG</span>'
+        '<span class="recipe-copy">기존 UCIE 공개 근거의 정확 키 검색과'
+        ' 기본 탐색 비교 · 원본 코드 실행 없음</span></a></li>')
     body = (
         '<section class="search-panel"><h2>UCIE 자체 개발 엔진 선택</h2>'
         '<p>실제 UCIE 알고리즘을 선택해 호출합니다. 아래 공개 근거 엔진은'
@@ -501,16 +504,20 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
                 raise LocalProductError("unsafe real public catalog engine result")
             body += (
                 '<section><h2>실제 UCIE 공개 근거 색인 비교</h2>'
-                '<p>공개 항목 ' + _e(out.get("real_public_catalog_items")) +
-                '건 · 요청 ' + _e(out.get("query_count")) +
-                '회 · 검색 결과 불일치 ' +
-                _e(out.get("mismatched_query_results")) + '건</p>'
-                '<p>기본 탐색 연산: ' + _e(out.get("baseline_scan_operations")) +
-                ' · 색인 구축 포함 연산: ' +
+                '<dl class="inventory-grid">'
+                '<div><dt>공개 항목</dt><dd>' +
+                _e(out.get("real_public_catalog_items")) + '건</dd></div>'
+                '<div><dt>요청</dt><dd>' + _e(out.get("query_count")) + '회</dd></div>'
+                '<div><dt>검색 결과 불일치</dt><dd>' +
+                _e(out.get("mismatched_query_results")) + '건</dd></div>'
+                '<div><dt>기본 탐색 연산</dt><dd>' +
+                _e(out.get("baseline_scan_operations")) + '</dd></div>'
+                '<div><dt>색인 구축 포함 연산</dt><dd>' +
                 _e(out.get("candidate_index_build_and_lookup_operations")) +
-                ' · 소스 집합 SHA-256: ' +
-                _e(out.get("public_catalog_sha256")) + '</p>'
-                '<p>상태: ' + _e(out.get("status")) + '</p>'
+                '</dd></div><div><dt>소스 집합 SHA-256</dt>'
+                '<dd><code>' + _e(out.get("public_catalog_sha256")) +
+                '</code></dd></div></dl>'
+                '<p>상태: <code>' + _e(out.get("status")) + '</code></p>'
                 '<p><strong>한계:</strong> 승인된 로컬 공개 근거 메타데이터의'
                 ' 정확 키 테스트이며, 전체 문자열 검색·원본 코드 실행·'
                 ' 고객 성능 검증·운영 색인 반영이 아닙니다.</p></section>')
@@ -525,12 +532,16 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
             raise LocalProductError("UCIE engine result not safe for local use")
         body += (
             '<section><h2>실행 결과</h2>'
-            '<p>엔진 ID: ' + _e(out.get("recipe_id")) + '</p>'
-            '<p>기준 연산: ' + _e(out.get("baseline_operations")) +
-            ' · 후보 연산: ' + _e(out.get("candidate_operations_including_setup")) +
-            ' · 결과 동등성: ' +
-            _e(out["exact_result_equivalence_observed"]) + '</p>'
-            '<p>상태: ' + _e(out.get("status")) + '</p>'
+            '<p>엔진 ID: <code>' + _e(out.get("recipe_id")) + '</code></p>'
+            '<dl class="inventory-grid">'
+            '<div><dt>기준 연산</dt><dd>' +
+            _e(out.get("baseline_operations")) + '</dd></div>'
+            '<div><dt>후보 연산 · 준비 포함</dt><dd>' +
+            _e(out.get("candidate_operations_including_setup")) + '</dd></div>'
+            '<div><dt>결과 동등성</dt><dd>' +
+            _e(out["exact_result_equivalence_observed"]) + '</dd></div>'
+            '<div><dt>검토 상태</dt><dd><code>' +
+            _e(out.get("status")) + '</code></dd></div></dl>'
             '<p><strong>한계:</strong> 합성 workload 비교입니다.'
             ' 실제 프로젝트 또는 운영환경 개선 효과는 아직 검증하지 않았습니다.</p>'
             '</section>')
