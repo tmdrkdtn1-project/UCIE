@@ -129,78 +129,81 @@ def _search(root: Path, query: str, *, limit: int = PAGE_SIZE,
 
 
 def _page(name: str, main: str) -> str:
-    """One local-only, accessible design system for every product route."""
-    from .local_v1_design_v02 import render_shell
+    """Shared V03 evidence workbench for all existing UCIE local routes."""
+    from .local_v1_design_v03 import render_shell
 
     return render_shell(name, main, ROUTES)
 
 
 def _home() -> str:
+    """An operator-facing work index rather than a decorative AI landing."""
     require_local_work("LOCAL_APP")
-    cards = []
-    for index, (route, title, summary) in enumerate(ROUTES, 1):
-        cards.append(
-            '<a class="pillar-card" href="' + route + '">'
-            '<span class="pillar-top"><span class="pillar-number">' +
-            str(index).zfill(2) + '</span>'
-            '<span class="pillar-arrow" aria-hidden="true">↗</span></span>'
-            '<h3>' + _e(title) + '</h3>'
-            '<p>' + _e(summary) + '</p>'
-            '<span class="pillar-action">워크스페이스 열기 '
-            '<span aria-hidden="true">→</span></span></a>'
+    entries = []
+    for number, (href, title, purpose) in enumerate(ROUTES, 1):
+        entries.append(
+            '<a class="pillar-card" href="' + href + '">'
+            '<span class="pillar-number" aria-hidden="true">' +
+            str(number).zfill(2) + '</span>'
+            '<span class="pillar-content"><h3>' + _e(title) + '</h3>'
+            '<p>' + _e(purpose) + '</p></span>'
+            '<span class="pillar-arrow" aria-hidden="true">↗</span></a>'
         )
     body = (
-        '<section class="hero" aria-labelledby="hero-title">'
-        '<div class="hero-copy"><span class="eyebrow">'
-        'UCIE / PRIVATE LOCAL WORKSPACE</span>'
-        '<h2 id="hero-title">공개 기술 근거를<br>'
-        '<em>재사용할 수 있는 지식으로.</em></h2>'
-        '<p>오류 예방부터 개발 엔진, SkillBook, 자체 개선까지.'
-        ' 출처와 검증 상태를 분리해 기술을 살펴보고 검토합니다.'
-        ' 모든 후보는 별도 검증 전까지 미승인입니다.</p>'
-        '<div class="hero-actions">'
-        '<a class="button-primary" href="/local/library">가상도서관 탐색 '
-        '<span aria-hidden="true">↗</span></a>'
-        '<a class="button-ghost" href="/local/error">오류 근거 검색</a>'
-        '</div></div>'
-        '<div class="hero-visual" aria-hidden="true">'
-        '<span class="hero-node hero-node--a">PREVENT</span>'
-        '<span class="hero-node hero-node--b">BUILD</span>'
-        '<div class="hero-core">UCIE</div>'
-        '<span class="hero-node hero-node--c">LIBRARY</span>'
-        '<span class="hero-node hero-node--d">EVOLVE</span>'
+        '<section class="intro-workbench" aria-labelledby="workbench-title">'
+        '<div class="intro-text">'
+        '<span class="eyebrow">UCIE / TECHNICAL EVIDENCE WORKBENCH</span>'
+        '<h2 class="intro-title" id="workbench-title">'
+        '근거를 찾고,<br><em>코드를 검토하다.</em></h2>'
+        '<p>오류 예방, 자체 개발 엔진, SkillBook, 근거 개정 관리.'
+        ' 실제 작업을 시작할 수 있는 UCIE 로컬 기술 검토 공간입니다.</p>'
+        '<div class="intro-note"><span>RULE / 01</span>'
+        '<span>수집된 근거는 검증·승인된 규칙이 아닙니다.</span></div>'
+        '</div>'
+        '<div class="quick-query">'
+        '<span class="eyebrow">01 / QUICK QUERY</span>'
+        '<h3>오류 근거 검색</h3>'
+        '<p>승인된 공개 저장소에서 이미 수집한 기술 후보를 탐색합니다.'
+        ' 검색은 읽기 전용입니다.</p>'
+        '<form action="/local/error" method="get">'
+        '<label>검색어'
+        '<input name="q" maxlength="80" placeholder="python, API_CONTRACT"'
+        ' aria-label="오류 근거 검색어"></label>'
+        '<button type="submit">근거 검색하기 ↗</button></form>'
+        '<span class="quick-examples">SOURCE-LINKED / UNVERIFIED</span>'
         '</div></section>'
-        '<section class="section-heading"><span class="eyebrow">'
-        'EXPLORE THE FOUR PILLARS</span>'
+        '<section class="section-heading">'
+        '<span class="eyebrow">INDEX / 4 WORKSPACES</span>'
         '<h2>로컬 V1 실제 사용자 작업</h2>'
-        '<p>네 가지 기능을 목적에 맞게 선택하세요.'
-        ' 실제 계산과 아직 필요한 검증을 혼동하지 않습니다.</p></section>'
+        '<p>설명 대신 작업으로 들어갑니다. 각 영역의 기능과 승인'
+        ' 상태는 구분해 표시합니다.</p></section>'
         '<section class="pillar-grid" aria-label="UCIE 4대 핵심 기능">' +
-        ''.join(cards) + '</section>'
-        '<section class="section-heading"><span class="eyebrow">'
-        'TRUST &amp; RELEASE BOUNDARIES</span>'
-        '<h2>작업 상태와 승인 경계</h2>'
-        '<p>사용 가능한 로컬 화면과 외부 배포 가능 여부는 별도입니다.</p>'
-        '</section>'
+        ''.join(entries) + '</section>'
+        '<section class="section-heading">'
+        '<span class="eyebrow">TRUST / LOCAL OPERATIONS</span>'
+        '<h2>현재 사용 범위</h2>'
+        '<p>로컬 사용, 근거의 정확성, 외부 출시는 각각 별도 관문입니다.'
+        '</p></section>'
         '<section class="trust-panel" aria-label="로컬 제품과 공개 근거 상태">'
-        '<div class="trust-item"><span class="trust-label">LOCAL V1</span>'
+        '<div class="trust-item"><span class="trust-label">01 / LOCAL</span>'
         '<span class="trust-value">소유자 인수 완료 · 로컬 한정</span>'
-        '<span class="trust-detail">현재 PC의 127.0.0.1 환경</span></div>'
-        '<div class="trust-item"><span class="trust-label">PUBLIC EVIDENCE</span>'
+        '<span class="trust-detail">현재 PC에서만 접근 가능</span></div>'
+        '<div class="trust-item"><span class="trust-label">02 / EVIDENCE</span>'
         '<span class="trust-value">출처 연결 ≠ 독립 검증</span>'
-        '<span class="trust-detail">미검증 후보는 자동 적용·승격하지 않음</span></div>'
-        '<div class="trust-item"><span class="trust-label">CUSTOMER RELEASE</span>'
-        '<span class="trust-value trust-value--hold">온라인·고객 출시 보류</span>'
-        '<span class="trust-detail">검증·권리·승인 게이트가 별도로 필요</span></div>'
+        '<span class="trust-detail">후보는 미승인, 자동 적용 없음</span></div>'
+        '<div class="trust-item"><span class="trust-label">03 / RELEASE</span>'
+        '<span class="trust-value trust-value--hold">'
+        '온라인·고객 출시 보류</span>'
+        '<span class="trust-detail">권리·보안·검증 승인 별도</span></div>'
         '</section>'
-        '<section><h2>현재 개발 우선순위</h2>'
-        '<p><strong>로컬 제품 완성 → 안정화·최적화 → '
-        '온라인·고객 출시 별도 심사</strong>.'
-        ' 출시 승인·서명·자동 규칙 승격은 보류 중입니다.</p>'
-        '<p><a href="/local/policy">현재 개발 규칙과 인수 조건 자세히 보기 '
-        '<span aria-hidden="true">↗</span></a></p></section>'
+        '<section class="workbench-note">'
+        '<h2>현재 개발 기준</h2>'
+        '<p>로컬 제품 완성 → 안정화·최적화 → 출시 별도 심사.'
+        ' 자동 규칙 승격과 고객 배포는 활성화되지 않았습니다.</p>'
+        '<a href="/local/policy">운영 및 검토 기준 살펴보기 ↗</a>'
+        '</section>'
     )
     return _page("시작", body)
+
 
 def _evidence_rows(report: dict, *, guidance: bool = False,
                    query: str = "", page: int = 1,
@@ -847,7 +850,7 @@ def make_handler(root: Path):
                     and content.count("</html>") == 1):
                 # Re-skin only the first-party nested page envelope.
                 # Keep base renderer paths, evidence, headers and policies.
-                from .local_v1_design_v02 import skin_nested_local_page
+                from .local_v1_design_v03 import skin_nested_local_page
                 content = skin_nested_local_page(content)
             return super().reply(status, content, mime)
 
