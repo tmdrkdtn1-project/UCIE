@@ -12,6 +12,23 @@ Import-Module ScheduledTasks -ErrorAction Stop
 $name = 'UCIE-LocalV1-Web'
 $path = '\'
 $existing = Get-ScheduledTask -TaskName $name -TaskPath $path -ErrorAction SilentlyContinue
+function Test-UcieOwnerSid([string]$TaskPrincipalId) {
+    try {
+        if ($TaskPrincipalId -match '^S-1-[0-9-]+$') {
+            $sid = ([System.Security.Principal.SecurityIdentifier]::new($TaskPrincipalId)).Value
+        }
+        else {
+            $sid = ([System.Security.Principal.NTAccount]::new($TaskPrincipalId)).Translate(
+                [System.Security.Principal.SecurityIdentifier]).Value
+        }
+        return [string]::Equals($sid,
+            [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value,
+            [System.StringComparison]::OrdinalIgnoreCase)
+    }
+    catch {
+        return $false
+    }
+}
 if ($null -eq $existing) {
     Write-Output 'UCIE_LOCAL_V1_AUTOSTART_NOT_REGISTERED_NO_CHANGES'
     return
@@ -35,8 +52,7 @@ if ($actions.Count -ne 1 -or
         'D:\UCIE', [System.StringComparison]::OrdinalIgnoreCase)) {
     throw 'UCIE_AUTOSTART_TASK_IDENTITY_MISMATCH_DO_NOT_REMOVE'
 }
-$user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-if ($existing.Principal.UserId -ne $user) {
+if (-not (Test-UcieOwnerSid ([string]$existing.Principal.UserId))) {
     throw 'UCIE_AUTOSTART_TASK_PRINCIPAL_MISMATCH_DO_NOT_REMOVE'
 }
 if (-not $Apply) {
