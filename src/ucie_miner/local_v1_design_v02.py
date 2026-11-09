@@ -374,7 +374,10 @@ main footer{border-top:1px solid #dfe6f1;padding-top:22px;color:#566981}
 def skin_nested_local_page(content: str) -> str:
     """Apply CSS-only visual parity without changing a single nested route."""
     if (type(content) is not str or not content.startswith("<!doctype html>")
+            or content.count("<head>") != 1
             or content.count("</head>") != 1
+            or content.count("<body>") != 1
+            or content.count("</body>") != 1
             or content.count("</html>") != 1):
         raise ValueError("unexpected UCIE nested HTML envelope")
     if 'data-ucie-nested-theme="v02"' in content:
