@@ -40,7 +40,14 @@ def preflight(stage: str, expected_root: str) -> tuple[str, str]:
     mcp_path = root / ".venv"
     if not mcp_path.is_dir():
         raise ValueError("LOCKED_SDK_VENV_ABSENT")
-    if not Path(sys.executable).resolve().is_relative_to(mcp_path):
+    # venv/bin/python is routinely a symlink to the base interpreter.
+    # The active sys.prefix and *invoked* executable path must belong to
+    # this exact stage's virtual environment; resolving the executable
+    # symlink would incorrectly point outside the venv on hosted runners.
+    expected_env = mcp_path.resolve()
+    if (Path(sys.prefix).resolve() != expected_env
+            or sys.prefix == sys.base_prefix
+            or not Path(sys.executable).absolute().is_relative_to(mcp_path)):
         raise ValueError("PYTHON_NOT_FROM_OWN_PINNED_ENV")
     return str(root), COMMITS[stage]
 
