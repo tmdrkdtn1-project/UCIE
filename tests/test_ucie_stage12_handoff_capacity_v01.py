@@ -13,6 +13,14 @@ import unittest
 
 from ucie_miner.automated_candidate_qa import _checked_handoff
 from ucie_miner.public_candidate_staging import MAX_ROWS
+from ucie_miner.experience_application import (
+    MAX_CATALOG_ROWS as EXPERIENCE_MAX_ROWS,
+    benchmark_existing_ucie_public_catalog,
+)
+from ucie_miner.library_exact_index import (
+    MAX_CATALOG_ROWS as EXACT_LIBRARY_MAX_ROWS,
+    search_exact_existing_public_library,
+)
 from ucie_miner.library_search import (
     search_existing_public_library, search_linked_public_candidates,
 )
@@ -45,6 +53,11 @@ def _synthetic_handoff(count: int) -> dict:
 
 
 class Stage12ConsistentCapacity(unittest.TestCase):
+    def test_all_source_linked_consumers_share_a_single_provenance_capacity(self):
+        self.assertEqual(MAX_ROWS, 10_000)
+        self.assertEqual(EXPERIENCE_MAX_ROWS, MAX_ROWS)
+        self.assertEqual(EXACT_LIBRARY_MAX_ROWS, MAX_ROWS)
+
     def test_1008_linked_unverified_candidates_are_not_invalid(self):
         # First real owner failure occurred at 1,008 verified source links.
         handoff = _synthetic_handoff(1008)
@@ -115,6 +128,37 @@ class ActualStage12LedgerAndSearch(unittest.TestCase):
         self.assertEqual(search["approved_or_exportable_items"], 0)
         self.assertFalse(search["auto_promoted"])
         if complete:
+            # Validate all three first-party consumer paths on the actual
+            # already-source-linked 1,008+ owner-public revision catalog.
+            bench = benchmark_existing_ucie_public_catalog(
+                ROOT, queries=8, repeats=1)
+            self.assertEqual(
+                bench["status"],
+                "REAL_PUBLIC_METADATA_EXACT_QUERY_EQUIVALENT_UNAPPROVED")
+            self.assertEqual(bench["real_public_catalog_items"], len(tasks))
+            self.assertEqual(bench["mismatched_query_results"], 0)
+            self.assertEqual(bench["approved_or_exportable_items"], 0)
+            self.assertEqual(bench["operating_database_writes"], 0)
+            self.assertTrue(search["items"])
+            item = search["items"][0]
+            exact = search_exact_existing_public_library(
+                ROOT,
+                queries=((
+                    item["source_id"], item["domain"],
+                    item["kind"], item["purpose_code"],
+                ),),
+                limit=10,
+            )
+            self.assertEqual(
+                exact["status"],
+                "READ_ONLY_EXACT_PUBLIC_LIBRARY_INDEX_UNVERIFIED_NO_GO")
+            self.assertEqual(exact["catalog_items"], len(tasks))
+            self.assertGreaterEqual(exact["items"][0]["total_matches"], 1)
+            self.assertTrue(all(
+                row["human_approved"] is False
+                and row["export_allowed"] is False
+                for row in exact["items"][0]["items"]))
+            self.assertEqual(exact["operating_database_writes"], 0)
             self.assertEqual(
                 handoff["status"], "LINKED_UNVERIFIED_NO_GO")
             self.assertEqual(
