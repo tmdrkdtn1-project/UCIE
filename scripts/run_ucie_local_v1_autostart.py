@@ -33,11 +33,30 @@ def validate_owner_environment(
             or not (root / "src" / "ucie_miner" / "local_v1_app_v01.py").is_file()
             or not (root / "docs" / "UCIE_LOCAL_V1_OWNER_ACCEPTANCE_20261108.md").is_file()):
         raise AutostartPreflightError("UCIE_EXACT_OWNER_WINDOWS_ROOT_REQUIRED")
-    expected_python = root / ".venv" / "Scripts" / "python.exe"
+    # The exact same owner venv supports console and windowless interpreters.
+    if executable.name.casefold() not in ("python.exe", "pythonw.exe"):
+        raise AutostartPreflightError("UCIE_EXACT_OWNER_VENV_REQUIRED")
+    expected_python = root / ".venv" / "Scripts" / executable.name
     if (not expected_python.is_file()
             or executable.resolve() != expected_python.resolve()):
         raise AutostartPreflightError("UCIE_EXACT_OWNER_VENV_REQUIRED")
     return root / "src"
+
+
+def _configure_windowless_log(root: Path, interpreter: Path) -> Path | None:
+    """Attach a private UCIE log because pythonw has no visible std streams."""
+    if interpreter.name.casefold() != "pythonw.exe":
+        return None
+    log_dir = root / "runtime"
+    if not log_dir.is_dir() or log_dir.is_symlink():
+        raise AutostartPreflightError("UCIE_WINDOWLESS_LOG_DIR_REQUIRED")
+    log_path = log_dir / "ucie_local_v1_windowless.log"
+    if log_path.is_symlink():
+        raise AutostartPreflightError("UCIE_WINDOWLESS_LOG_SYMLINK_BLOCKED")
+    handle = log_path.open("a", encoding="utf-8", buffering=1)
+    sys.stdout = handle
+    sys.stderr = handle
+    return log_path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -54,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         src = validate_owner_environment(root, Path(sys.executable),
                                          platform=os.name)
+        _configure_windowless_log(root, Path(sys.executable))
         # Do not import any unrelated project; no browser launch and no
         # privileged service process. Existing W04 storage remains read-only.
         sys.path.insert(0, str(src))
@@ -62,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         require_local_work("LOCAL_APP")
         print(json.dumps({
             "schema": SCHEMA,
-            "status": "UCIE_LOCAL_V1_AUTOSTART_FOREGROUND_SERVER_BEGIN",
+            "status": "UCIE_LOCAL_V1_AUTOSTART_PRIVATE_LOOPBACK_SERVER_BEGIN",
             "task_name": TASK_NAME,
             "bind_host": "127.0.0.1",
             "bind_port": args.port,
