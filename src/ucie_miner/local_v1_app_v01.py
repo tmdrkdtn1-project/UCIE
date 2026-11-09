@@ -664,6 +664,25 @@ def _skillbook_runner(raw: str) -> str:
                     "conflicted": 1, "untracked": 1, "ignored": 0}):
             raise LocalProductError("Git SkillBook demo scope or result drift")
         html += (
+            '<section><h2>Git 예제 결과</h2>'
+            '<dl class="inventory-grid">'
+            '<div><dt>변경된 항목</dt><dd>' +
+            _e(counts["tracked_changed"]) + '개</dd></div>'
+            '<div><dt>이름이 변경된 항목</dt><dd>' +
+            _e(counts["renamed"]) + '개</dd></div>'
+            '<div><dt>충돌 표시</dt><dd>' +
+            _e(counts["conflicted"]) + '개</dd></div>'
+            '<div><dt>추적하지 않는 항목</dt><dd>' +
+            _e(counts["untracked"]) + '개</dd></div></dl>'
+            '<details class="technical-details"><summary>기술적 실행 정보</summary>'
+            '<p>합성 Git 레코드: ' + _e(out["demo_entries"]) + '건'
+            ' · 추적 변경: ' + _e(counts["tracked_changed"]) +
+            ' · 충돌: ' + _e(counts["conflicted"]) +
+            ' · 저장소 스캔: 없음</p>'
+            '<p>상태 코드: <code>' + _e(out["status"]) +
+            '</code></p></details></section>'
+        )
+    html += (
         '<section class="workbench-note"><h2>참고해 주세요</h2>'
         '<p>이 결과는 준비된 예제만 사용한 결과입니다.'
         ' 실제 코드나 파일은 분석하지 않았으며,'
