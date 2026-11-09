@@ -58,3 +58,28 @@ Latest observed official GitHub release list on 2026-11-09 remains `v2.3.0` (pub
 ## V4 design freeze
 
 Keep `/local` home and `/local/evolution` improvement suggestions visually and semantically unchanged. This PR has no changes in `src/ucie_miner/local_v1_app_v01.py` or `src/ucie_miner/local_v1_design_v04.py`, and does not restart the owner server. Customer release stays NO_GO.
+
+## Observed installed distribution evidence (first CI receipt, 2026-11-09)
+
+Read-only ephemeral source of this observation: https://github.com/tmdrkdtn1-project/UCIE/actions/runs/42587044200 . The CI installed the approved official SDK at both immutable commits, rechecked both Git blob hashes of `uv.lock` and compared *every installed distribution* against its own stage's lock before producing two actual `UCIE_MCP_INSTALLED_DEPENDENCY_METADATA_AUDIT_V01` JSON receipts.
+
+| Measured category | SDK v2.3.0 (`before`) | PR merge build (`after`) |
+|---|---:|---:|
+| Entries in full multi-platform + dev lock (not deployed counts) | 134 | 138 |
+| Installed packages in exact disposable SDK venv | **30** | **30** |
+| With bounded `License-Expression` metadata marker | 25 | 25 |
+| With only legacy `License` field marker | 4 | 4 |
+| With only a license classifier marker | 1 | 1 |
+| Packages outside this stage's locked name/version/source | **0 in successful inventory** | **0 in successful inventory** |
+| Actual vulnerability advisory scan executed by metadata auditor | NO | NO |
+| Redistribution / customer approval | NO | NO |
+
+**Additional legal review priorities**: `annotated-types==0.7.0` (classifier-only), `h11==0.16.0` (legacy field), `pycparser==2.23` (legacy field), and `mcp` / `mcp-types` at the stage-specific installed versions (legacy field). These flags concern **metadata format**, not proof of license noncompliance. The 25 SPDX declarations are also **not** permission or legal attestation. Per-package original license text, notices and actual wheel/SDist/builder artifacts must be examined before any redistribution decision.
+
+### Additional official SDK advisory observation (not a 30-package scan)
+
+The approved official repository's [public security advisory index](https://github.com/modelcontextprotocol/python-sdk/security/advisories) exposed the following ten named published advisories at review time: [GHSA-rwrf-2pqf-9j8j](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-rwrf-2pqf-9j8j), [GHSA-84m7-p3x7-pcfv](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-84m7-p3x7-pcfv), [GHSA-w4fh-qvv9-3v23](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-w4fh-qvv9-3v23), [GHSA-5h93-6whr-6q8j](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-5h93-6whr-6q8j), [GHSA-hvrp-rf83-w775](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-hvrp-rf83-w775), [GHSA-qx49-fqc8-xw99](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-qx49-fqc8-xw99), [GHSA-fmmv-w9g8-j3gc](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-fmmv-w9g8-j3gc), [GHSA-vj7q-gjh5-988w](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-vj7q-gjh5-988w), [GHSA-jpw9-pfvf-9f58](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-jpw9-pfvf-9f58), [GHSA-9h52-p55h-vw2f](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-9h52-p55h-vw2f).
+
+Among reviewed published version ranges, the 2.x affected ranges shown end below 2.2.0 (or below 2.1.0); others apply only to 1.x. That **does not establish zero vulnerabilities in v2.3.0**: the public listing may be incomplete, private advisories are unavailable, later disclosures may arrive, and the 29 other installed distributions were not examined for advisories. For instance the bearer-token advisory `GHSA-w4fh-qvv9-3v23` explicitly notes that upgrading alone does not turn on the added `validate_token_resource` safety setting. No HTTP/OAuth service configuration was tested in our in-memory prompt experiment.
+
+**Therefore final P2 SECURITY = NOT_VERIFIED and LICENSE_REDISTRIBUTION = NOT_APPROVED.** There is no automatic SkillBook promotion or customer release.
