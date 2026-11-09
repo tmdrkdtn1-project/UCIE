@@ -100,3 +100,14 @@ $env:PYTHONPATH = 'D:\UCIE\src'
 - **변경 후:** 미등록/인수 누락 모두 `MCPError(-32602)`; 정상 인수 유효성 통과, 합성 프롬프트 예외는 `RuntimeError`로 유지.
 - **엄격한 제한:** 원본 SDK 모듈 import 없음, `Client`·`MCPServer` 통신·JSON-RPC 프레이밍·전체 `Prompt.render` 메시지 생성/전달을 실행하지 않음. `MCPError` 객체는 UCIE가 작성한 최소한의 예외 스텁이며, 실제 SDK 의존성도 설치하지 않음. GitHub-hosted Linux 임시 실행기에서만 허용된 AST 경로 실행.
 - **제품 의미:** SkillBook의 *소스에 기반한 동작 설명*에 사용할 보조 증거는 확보했지만, 전체 SDK 독립 QA 인증·최초 수정 포함 배포판·권리/보안 승인·고객 제공 가능 여부는 여전히 `NOT_VERIFIED` 또는 `NO_GO`. 이 문서를 기존 가상도서관에 승인된 세 번째 제품으로 자동 등록하지 않음.
+
+## 2026-11-09 — 실제 설치한 SDK 클라이언트·서버의 메모리 내 통합시험
+
+- **실제 실행 영수증:** https://github.com/tmdrkdtn1-project/UCIE/actions/runs/42584866664
+- **UCIE 개발 PR:** https://github.com/tmdrkdtn1-project/UCIE/pull/225
+- **실험 대상:** 승인 공식 `modelcontextprotocol/python-sdk`의 `v2.3.0` 태그 커밋 `2118f14f8a19bc158d8a1cf90af58d85d187f849`과 PR #3696 병합 커밋 `754254c08fe1c3eda18b69da3d336106fe8d72d6`. 해당 원본의 Git 커밋/잠금 파일/핵심 코드 SHA 확인 후, 각 시점의 잠금 의존성으로 일회용 Linux 가상환경에 **실제 SDK 설치 및 Import**.
+- **범위:** 원본 SDK `Client`↔`MCPServer`의 메모리 내 요청·응답. `legacy`(구형)·`2026-07-28`(신형) 모드별 정상 `greet`, 없는 프롬프트, 필수 인수 누락, 프롬프트 예외 **각 4건, 시점별 8건, 총 16건**.
+- **직접 관측:** 수정 전 없는 프롬프트/필수 인수 누락은 구형 `0`, 신형 `-32603`; 수정 후 두 모드 모두 `-32602`. 정상 요청은 `Hello, Ada` 성공, 실행 오류 통제군은 수정 전후 구형 `0`, 신형 `-32603`으로 유지. 상세 보고서 `docs/UCIE_MCP_FULL_SDK_INTEGRATION_QA_20261109.md`.
+- **정확한 버전:** 수정 전 배포판은 `mcp==2.3.0`; 수정 후 시험 환경 패키지의 버전 문자열은 `2.3.1.dev9+754254c`이며 **커밋에서 빌드한 개발버전, 공식 출시는 아님**.
+- **새로 통과한 관문:** `ACTUAL_PINNED_SDK_CLIENT_SERVER_IN_MEMORY_VERIFIED` (제한 범위). 앞선 1차 합성 JSON 검사 및 원본 함수 경로 실행보다 높은 수준이지만, **HTTP/stdio 전송·전체 upstream 테스트·다른 버전의 독립 검증·라이선스/보안·공식 첫 수정 포함 릴리스 확인은 미완료**.
+- **권리 상태:** 원본 저장소 MIT 표시와 각 시점 `uv.lock`로 설치한 런타임 종속성 확인은 증거이지 개별 의존성 권리/보안 검토 완료가 아닙니다. 자동 규칙 승격, 외부 배포, SkillBook 최종 승인, 고객 서비스 적용은 여전히 금지합니다.
