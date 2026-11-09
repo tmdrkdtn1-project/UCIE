@@ -1,0 +1,59 @@
+name: UCIE MCP Pinned Source Method QA (Disposable)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/ucie_mcp_pinned_method_probe_v01.py'
+      - 'tests/test_ucie_mcp_pinned_method_probe_v01.py'
+      - '.github/workflows/ucie-mcp-pinned-source-method-qa.yml'
+      - 'docs/UCIE_MCP_PINNED_METHOD_QA_20261109.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-methods:
+    name: Bounded approved MCP source method paths / Python 3.13
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      UCIE_DISPOSABLE_PINNED_QA: '1'
+    steps:
+      - name: Checkout UCIE first-party test only
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Use isolated Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Read only exact approved upstream file snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ucie-mcp-pinned"
+          old="2118f14f8a19bc158d8a1cf90af58d85d187f849"
+          fixed="754254c08fe1c3eda18b69da3d336106fe8d72d6"
+          url="https://raw.githubusercontent.com/modelcontextprotocol/python-sdk"
+          for file in manager base; do
+            curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+              --max-time 30 --retry 2 \
+              "$url/$old/src/mcp/server/mcpserver/prompts/$file.py" \
+              --output "$RUNNER_TEMP/ucie-mcp-pinned/before_$file.py"
+            curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+              --max-time 30 --retry 2 \
+              "$url/$fixed/src/mcp/server/mcpserver/prompts/$file.py" \
+              --output "$RUNNER_TEMP/ucie-mcp-pinned/after_$file.py"
+          done
+      - name: Execute only SHA-pinned reviewed method AST in an isolated process
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -I -S scripts/ucie_mcp_pinned_method_probe_v01.py "$RUNNER_TEMP/ucie-mcp-pinned"
+      - name: No upstream copied files in published artifacts
+        shell: bash
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/ucie-mcp-pinned"
