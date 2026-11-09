@@ -311,7 +311,7 @@ def _error(root: Path, raw: str) -> str:
     if not term and page != 1:
         raise LocalProductError("query required for non-initial error page")
     body = (
-        '<section><h2>코딩 오류 또는 API 패턴 검색</h2>'
+        '<section class="search-panel"><h2>코딩 오류 또는 API 패턴 검색</h2>'
         '<form action="/local/error" method="get">'
         '<label>공개 근거 검색어 <input name="q" maxlength="80" value="' +
         _e(term) + '" placeholder="scandir 또는 API_CONTRACT"></label>'
@@ -439,7 +439,7 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
         'REAL_PUBLIC_CATALOG</a> - 실제 기존 UCIE 공개 기술 근거의'
         ' 정확 키 검색 인덱스와 기본 탐색을 비교 (원본 코드 실행 없음)</li>')
     body = (
-        '<section><h2>UCIE 자체 개발 엔진 선택</h2>'
+        '<section class="search-panel"><h2>UCIE 자체 개발 엔진 선택</h2>'
         '<p>실제 UCIE 알고리즘을 선택해 호출합니다. 아래 공개 근거 엔진은'
         ' 기존 UCIE 공개 후보의 메타데이터에서 실제 계산을 수행하며,'
         ' 나머지 세 엔진은 명시된 합성 워크로드 실험입니다.</p>'
@@ -659,7 +659,7 @@ def _library(root: Path, raw: str) -> str:
         raise LocalProductError("unbounded unified catalog shelves")
 
     body = (
-        '<section><h2>UCIE 통합 가상도서관</h2>'
+        '<section class="search-panel"><h2>UCIE 통합 가상도서관</h2>'
         '<p>SkillBook · 편집 검토 기술서적 · 실제 수집된 공개 기술 근거를'
         ' 한 화면에서 검색합니다. 세 자료는 검증 단위가 달라'
         ' 개수를 합산하거나 승인된 책/규칙으로 간주하지 않습니다.</p>'
@@ -758,10 +758,10 @@ def _evolution(root: Path, raw: str) -> str:
         '<p>검증 문제: ' + _e(", ".join(inventory.get("issues", []))) +
         '</p><p>기본 마이너·Stage10 개정·W04 검색 결과는 서로 다른 원장이므로'
         ' 합산된 제품 규칙 수가 아닙니다.</p></section>'
-        '<section><h2>개선·검토할 공개 변경 검색</h2>'
+        '<section class="search-panel"><h2>개선·검토할 공개 변경 검색</h2>'
         '<form action="/local/evolution" method="get">'
-        '<input name="q" maxlength="80" value="' + _e(term) +
-        '" placeholder="python/cpython 또는 pattern">'
+        '<label>공개 변경 검색어 <input name="q" maxlength="80" value="' + _e(term) +
+        '" placeholder="python/cpython 또는 pattern"></label>'
         '<button>변경 조회</button></form>'
         '<p>원본 공개 URL → 검증 미완료 상태 → 원본·중복·버전·회귀시험'
         ' 수동 검토가 다음 단계입니다.</p></section>'
