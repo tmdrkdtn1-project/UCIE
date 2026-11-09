@@ -88,3 +88,15 @@ $env:PYTHONPATH = 'D:\UCIE\src'
 3. 공급망/라이선스 검토와 출처·버전별 결과를 독립 리뷰한 뒤에만 SkillBook 및 고객용 지식 반영 여부를 별도 승인합니다. 기존 001/002 또는 PR #3696 기반 기존 근거 개정 2건을 중복 규칙으로 자동 등록하지 않습니다.
 
 이 초안의 출처·소스 검증과 UCIE 자체 합성 시험은 사실대로 보고하되, **실제 SDK 독립 동작 PASS·규칙 승인·출시 GO로 치환하지 않습니다.**
+
+## 2026-11-09 — 선별된 공식 SDK 함수 경로의 격리 실행 기록
+
+- **유형:** `PINNED_UPSTREAM_METHOD_PATHS_OBSERVED`, 전체 SDK 통합시험 아님.
+- **UCIE PR:** https://github.com/tmdrkdtn1-project/UCIE/pull/224
+- **일회용 CI 실행:** https://github.com/tmdrkdtn1-project/UCIE/actions/runs/42582727640
+- **공식 원본:** SDK `v2.3.0` 태그 커밋 `2118f14f8a19bc158d8a1cf90af58d85d187f849`과 PR #3696 병합 커밋 `754254c08fe1c3eda18b69da3d336106fe8d72d6`.
+- **검증 파일:** 두 시점의 `PromptManager`와 `Prompt.render` 원본 파일 4개를 각각 Git blob SHA-1 전체 일치 확인. 미등록 이름·필수 인수 누락·정상 인수 검사·합성 프롬프트 예외 등 시점별 4개씩 8개 **선택된 함수 경로** 실행 성공.
+- **변경 전:** 미등록/인수 누락 모두 `ValueError`.
+- **변경 후:** 미등록/인수 누락 모두 `MCPError(-32602)`; 정상 인수 유효성 통과, 합성 프롬프트 예외는 `RuntimeError`로 유지.
+- **엄격한 제한:** 원본 SDK 모듈 import 없음, `Client`·`MCPServer` 통신·JSON-RPC 프레이밍·전체 `Prompt.render` 메시지 생성/전달을 실행하지 않음. `MCPError` 객체는 UCIE가 작성한 최소한의 예외 스텁이며, 실제 SDK 의존성도 설치하지 않음. GitHub-hosted Linux 임시 실행기에서만 허용된 AST 경로 실행.
+- **제품 의미:** SkillBook의 *소스에 기반한 동작 설명*에 사용할 보조 증거는 확보했지만, 전체 SDK 독립 QA 인증·최초 수정 포함 배포판·권리/보안 승인·고객 제공 가능 여부는 여전히 `NOT_VERIFIED` 또는 `NO_GO`. 이 문서를 기존 가상도서관에 승인된 세 번째 제품으로 자동 등록하지 않음.
