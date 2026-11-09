@@ -593,14 +593,16 @@ def _skillbook_runner(raw: str) -> str:
     )
     back = "/local/library?q=" + book
     html = (
-        '<section><h2>' + _e(title) + '</h2>'
-        '<p><a href="' + back + '">통합 도서관 검색 결과로 돌아가기</a></p>'
-        '<p><strong>UCIE 작성 예제만 실행</strong>: 원본 SkillBook은 미승인 초안이며,'
-        ' 실제 사용자 디렉터리·다른 저장소·민감한 코드·온라인 서비스는 사용하지 않습니다.'
-        ' 승인된 실환경 효능이나 배포 가능 스킬을 의미하지 않습니다.</p>'
-        '<p><a href="/local/skillbook-run?book=' + book +
-        '&amp;run=1"><strong>기존 기계 계약으로 한정형 예제 직접 실행</strong>'
-        '</a></p></section>'
+        '<section class="search-panel"><h2>' + _e(title) + '</h2>'
+        '<p><a href="' + back + '">← 라이브러리로 돌아가기</a></p>'
+        '<p>준비된 예제 데이터로 기능을 체험할 수 있습니다.'
+        ' 개인 파일과 저장소는 분석하지 않습니다.</p>'
+        '<div class="page-controls">'
+        '<a class="button-primary" href="/local/skillbook-run?book=' + book +
+        '&amp;run=1">예제 실행 <span aria-hidden="true">→</span></a>'
+        '</div><p class="customer-note">'
+        '이 예제는 실제 작업 환경에서의 결과를 보장하지 않습니다.'
+        '</p></section>'
     )
     if execution != "1":
         return _page("SkillBook 실행", html)
@@ -625,16 +627,19 @@ def _skillbook_runner(raw: str) -> str:
                 or out.get("relative_path_blocked") is not True):
             raise LocalProductError("Python SkillBook demo scope or result drift")
         html += (
-            '<section><h2>첫 번째 파티 코드 실제 실행 결과</h2>'
-            '<p>합성 폴더의 정규 파일: ' +
-            _e(out["bounded_regular_file_name_count"]) +
-            '개 · 전체 항목 예산: ' + _e(out["directory_entry_budget"]) +
-            '개</p><p>예산 초과 차단: 예 · 잘못된 예산 차단: 예'
-            ' · 상대 경로 차단: 예</p>'
-            '<p>임시 합성 디렉터리 정리: 완료'
-            ' · 소유자 실제 파일 스캔: 없음</p>'
-            '<p>시험 상태: <strong>' + _e(out["status"]) + '</strong></p>'
-            '</section>'
+            '<section><h2>Python 예제 결과</h2>'
+            '<dl class="inventory-grid">'
+            '<div><dt>찾은 파일</dt><dd>' +
+            _e(out["bounded_regular_file_name_count"]) + '개</dd></div>'
+            '<div><dt>탐색한 항목</dt><dd>' +
+            _e(out["directory_entry_budget"]) + '개</dd></div>'
+            '<div><dt>안전 확인</dt><dd>잘못된 입력 및 경로 제한 확인</dd></div>'
+            '<div><dt>예제 정리</dt><dd>완료</dd></div></dl>'
+            '<details class="technical-details"><summary>기술적 실행 정보</summary>'
+            '<p>정규 파일: ' + _e(out["bounded_regular_file_name_count"]) + '개'
+            ' · 상대 경로 차단: 예 · 소유자 실제 파일 스캔: 없음</p>'
+            '<p>상태 코드: <code>' + _e(out["status"]) + '</code></p>'
+            '</details></section>'
         )
     else:
         out = demonstrate_in_memory_consumer()
@@ -659,23 +664,11 @@ def _skillbook_runner(raw: str) -> str:
                     "conflicted": 1, "untracked": 1, "ignored": 0}):
             raise LocalProductError("Git SkillBook demo scope or result drift")
         html += (
-            '<section><h2>Git 기계 계약 실제 파싱 결과</h2>'
-            '<p>UCIE 자체 작성 NUL 구분 합성 Git 레코드: ' +
-            _e(out["demo_entries"]) + '건</p>'
-            '<p>추적 변경: ' + _e(counts["tracked_changed"]) +
-            ' · 이름 변경: ' + _e(counts["renamed"]) +
-            ' · 충돌: ' + _e(counts["conflicted"]) +
-            ' · 미추적: ' + _e(counts["untracked"]) + '</p>'
-            '<p>3건으로 줄인 항목 한도 차단: 예'
-            ' · 실제 Git 프로세스 호출: 없음 · 저장소 스캔: 없음</p>'
-            '<p>시험 상태: <strong>' + _e(out["status"]) + '</strong></p>'
-            '</section>'
-        )
-    html += (
-        '<section><p><strong>검증 범위</strong>: UCIE 한정 예제로 기존'
-        ' 기계 계약의 동작을 실제 실행했습니다. 외부 코드 수정·독립 QA·'
-        ' 실사용 프로젝트 성능·라이선스·보안·승인·배포는 검증하지 않았습니다.'
-        '</p></section>'
+        '<section class="workbench-note"><h2>참고해 주세요</h2>'
+        '<p>이 결과는 준비된 예제만 사용한 결과입니다.'
+        ' 실제 코드나 파일은 분석하지 않았으며,'
+        ' 업무 환경에 적용하기 전에 별도의 확인이 필요합니다.</p>'
+        '</section>'
     )
     return _page("SkillBook 실행 결과", html)
 
