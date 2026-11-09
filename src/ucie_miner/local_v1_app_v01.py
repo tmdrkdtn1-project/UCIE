@@ -831,33 +831,33 @@ def _evolution(root: Path, raw: str) -> str:
     issues = inventory.get("issues", [])
     body = (
         '<section class="search-panel">'
-        '<span class="eyebrow">INVENTORY / READ ONLY</span>'
-        '<h2>현재 UCIE 공개 수집·검토 현황</h2>'
-        '<p>실제 기존 UCIE 공개 기록만 읽습니다.'
-        ' 추가 수집·자동 승격은 하지 않습니다.</p>'
+        '<h2>개선 아이디어 찾아보기</h2>'
+        '<p>공개 기술 변경 사례에서 새로운 방법을 살펴보세요.</p>'
+        '<form action="/local/evolution" method="get">'
+        '<label>검색어 <input name="q" maxlength="80" value="' +
+        _e(term) + '" placeholder="예: python, API"></label>'
+        '<button type="submit">검색</button></form></section>'
+        '<section class="workbench-note">'
+        '<details class="technical-details"><summary>자료 수집 현황 보기'
+        '</summary>'
         '<dl class="inventory-grid">'
         '<div><dt>수집 현황</dt><dd><code>' +
         _e(inventory.get("status")) + '</code></dd></div>'
-        '<div><dt>관측 시각 UTC</dt><dd><code>' +
+        '<div><dt>기록 시각</dt><dd><code>' +
         _e(inventory.get("captured_utc", "보고되지 않음")) + '</code></dd></div>'
-        '<div><dt>기본 수집 기록</dt><dd>기존 공개 PR 후보: ' +
+        '<div><dt>공개 변경 기록</dt><dd>기존 공개 PR 후보: ' +
         _e(inventory.get("legacy_miner", {}).get("candidates", "확인 불가")) +
         '</dd></div>'
-        '<div><dt>근거 개정 기록</dt><dd>Stage10 개정: ' +
+        '<div><dt>근거 개정</dt><dd>Stage10 개정: ' +
         _e(inventory.get("stage10_public_candidate_staging", {}).get(
             "candidate_revisions", "확인 불가")) + '</dd></div>'
-        '<div><dt>현재 검토 문제 기록</dt><dd>검증 문제: ' +
-        _e(", ".join(issues) if issues else "기록 없음") +
+        '<div><dt>확인할 항목</dt><dd>' +
+        _e(", ".join(issues) if issues else "현재 별도 기록 없음") +
         '</dd></div></dl>'
-        '<p><strong>주의:</strong> 기본 마이너·Stage10 개정·W04 검색 결과는'
-        ' 서로 다른 원장입니다. 합산된 규칙 수가 아닙니다.</p></section>'
-        '<section class="search-panel"><h2>개선·검토할 공개 변경 검색</h2>'
-        '<form action="/local/evolution" method="get">'
-        '<label>공개 변경 검색어 <input name="q" maxlength="80" value="' +
-        _e(term) + '" placeholder="python/cpython 또는 pattern"></label>'
-        '<button type="submit">변경 조회</button></form>'
-        '<small>원본 공개 URL → 검증 미완료 → 원본·중복·버전·'
-        '회귀시험 수동 검토 순서입니다.</small></section>'
+        '<p class="customer-note">원본 자료·개정 내역은 서로 다른'
+        ' 기준으로 집계되며, 검증된 해결책의 수를 의미하지 않습니다.'
+        ' 자동 승격은 수행하지 않습니다.</p></details>'
+        '</section>'
     )
     body += _paged_evidence(root, term, page=page,
                             route="/local/evolution")
@@ -866,19 +866,29 @@ def _evolution(root: Path, raw: str) -> str:
 
 def _policy() -> str:
     require_local_work("LOCAL_APP")
-    state = roadmap()
-    items = "".join("<li>" + _e(gate) + "</li>"
-                    for gate in state["local_acceptance_gates"])
     return _page(
-        "개발 규칙", '<section><h2>강제 개발 순서</h2>'
-        '<p>' + _e(" → ".join(state["ordered_phases"])) + '</p>'
-        '<p>LOCAL V1 GO: <strong>소유자 인수 승인 · 로컬 한정</strong></p>'
-        '<p>인수 근거: ' + _e(state["owner_acceptance_receipt_path"]) + '</p>'
-        '<p>온라인·고객 출시: 금지 / 주변 확장: 보류</p>'
-        '<ol>' + items + '</ol>'
-        '<p>2026-11-08 사용자 직접 승인으로 로컬 인수를 기록했습니다.'
-        ' 고객·온라인 출시나 개별 기술 후보/SkillBook 승인과는 별도입니다.</p>'
-        '</section>')
+        "개발 규칙",
+        '<section class="search-panel">'
+        '<h2>UCIE는 어떤 서비스인가요?</h2>'
+        '<p>UCIE는 공개된 기술 자료를 찾고, 개발 도구를 체험하며,'
+        ' 개선 방향을 살펴보는 기술 탐색 공간입니다.</p>'
+        '<div class="page-controls">'
+        '<a href="/local/error">문제 예방 살펴보기 →</a>'
+        '<a href="/local/library">라이브러리 열기 →</a>'
+        '</div></section>'
+        '<section><h2>자료는 어떻게 활용하나요?</h2>'
+        '<p>기술 자료에는 원본 출처와 검토 상태가 함께 제공됩니다.'
+        ' 관심 있는 내용을 살펴보고, 실제 코드에 적용하기 전에'
+        ' 사용 중인 버전과 환경에 맞는 시험을 진행해 주세요.</p>'
+        '<p>검토 전 자료에는 별도 표시가 있습니다.'
+        ' 표시된 안내나 예제는 자동으로 코드를 수정하지 않습니다.</p>'
+        '</section>'
+        '<section><h2>예제 결과는 무엇을 의미하나요?</h2>'
+        '<p>예제는 제한된 시험 조건에서 실행됩니다.'
+        ' 프로젝트 전체의 성능이나 보안을 보증하지 않으므로'
+        ' 실제 환경에서 추가 확인이 필요합니다.</p>'
+        '</section>'
+    )
 
 
 def make_handler(root: Path):
