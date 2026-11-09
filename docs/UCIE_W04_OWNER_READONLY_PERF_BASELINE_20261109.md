@@ -39,3 +39,23 @@ No writes: script does not execute SQL, copy databases, write logs, create index
 - Any candidate optimization must pass exact-head Windows/Ubuntu Py3.13/3.15 CI and owner baseline comparison; accept no performance gain claim on synthetic-only data.
 
 **V04 freeze:** `src/ucie_miner/local_v1_app_v01.py`, `src/ucie_miner/local_v1_design_v04.py`, and particularly `/local` and `/local/evolution` must remain untouched. No customer/online release, TaskScheduler, DB, public miner, cloud or automatic approval changes.
+
+## Actual owner-host measured observation (2026-11-09)
+
+The UCIE-only owner bridge ran `tests/test_ucie_w04_owner_readonly_perf_baseline_v01.py` on the actual Windows `D:/UCIE`, exit 0, **7/7 tests PASS in 3.262s**, captured UTC `2026-11-09T08:52:20.813315+00:00`. Test run duration is **not** the backend latency metric. All three query patterns used the existing source-linked read-only W04 candidate API.
+
+- Total source-linked **public candidate revisions**: 1,016. This is **not** an approved rules count and may change when the public miner records new evidence.
+- Query-specific matching revisions: Python 628, Git 124, API 92. Top 10 returned for each.
+- Source report asserted `operating_database_writes_by_measurer=0`, `external_network_requests_by_measurer=0`, `source_approval_changed=false`, `customer_release_authorized=false`, `ui_modified=false`. This does not prove another concurrent UCIE collector made no changes.
+
+| Search query | Revisions matching | Preloaded handoff filter, 12 samples median (ms) | Complete source/ledger read to search, 4 samples median (ms) |
+|---|---:|---:|---:|
+| `python` | 628 | **21.227** (20.603–30.877) | **121.832** (121.213–125.526) |
+| `git` | 124 | **20.136** (19.727–22.131) | **127.127** (125.012–133.486) |
+| `api` | 92 | **22.210** (20.012–40.523) | **160.358** (146.840–181.327) |
+
+**Meaning:** Across these three real queries, the complete request path is slower than the in-memory search/filter segment. The **difference of median values must not be presented as an isolated measured lineage-verification cost**: full execution also creates/reconstructs its public handoff, repeats normalization and can read evolving ledgers, and the samples are not statistically paired. What is justified is to **profile the full Stage10/12/15 handoff/normalization path next before changing search indexing**, while refusing to skip immutable source linkage, case-folded matching, revision grouping, and nonapproval checks.
+
+**Limits:** single owner-host, one timestamp, small sample counts, no p95, no concurrency, no browser-render timing, no RSS/tracemalloc peak. No performance gain has been implemented or claimed. Existing W04 P8 cost policy and V04 customer interface remain unchanged.
+
+Proof lives in owner `ucie_admin_test_one_file` execution receipt and GitHub exact-head CI for the first-party harness. GitHub cannot reproduce the owner's public ledger without access to D:/UCIE, and its synthetic tests must not be misreported as real owner latency.
