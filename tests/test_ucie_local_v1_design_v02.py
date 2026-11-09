@@ -13,7 +13,7 @@ class LocalVisualDesignTests(unittest.TestCase):
     def test_every_existing_local_page_has_one_shared_accessible_shell(self):
         for title in PAGE_METADATA:
             with self.subTest(title=title):
-                doc = app._page(title, '<section><h2>본문</h2></section>')
+                doc = render_shell(title, '<section><h2>본문</h2></section>', app.ROUTES)
                 self.assertEqual(doc.count('<html'), 1)
                 self.assertEqual(doc.count('</html>'), 1)
                 self.assertEqual(doc.count('<main '), 1)
@@ -28,12 +28,12 @@ class LocalVisualDesignTests(unittest.TestCase):
     def test_four_equal_routes_and_real_home_navigation_are_visible(self):
         doc = app._home()
         self.assertEqual(doc.count('class="pillar-card"'), 4)
-        for href, title, _ in app.ROUTES:
+        for href, _, _ in app.ROUTES:
             self.assertIn('<a class="pillar-card" href="' + href + '">', doc)
+        for title in ("문제 예방", "개발 도구", "라이브러리", "개선 제안"):
             self.assertIn(title, doc)
-        self.assertIn('로컬 V1 실제 사용자 작업', doc)
-        self.assertIn('출처 연결 ≠ 독립 검증', doc)
-        self.assertIn('소유자 인수 완료 · 로컬 한정', doc)
+        self.assertIn('주요 기능', doc)
+        self.assertIn('자료를 살펴보실 때', doc)
         self.assertNotIn('독립 검증 완료', doc)
         self.assertNotIn('고객 출시 승인', doc)
 
@@ -50,7 +50,7 @@ class LocalVisualDesignTests(unittest.TestCase):
         )
         for title, route in cases:
             with self.subTest(title=title):
-                doc = app._page(title, '')
+                doc = render_shell(title, '', app.ROUTES)
                 self.assertIn('href="' + route + '" aria-current="page"', doc)
                 # Only count rendered navigation markup, not the CSS selector.
                 markup = doc.split('</style>', 1)[1]
@@ -65,7 +65,7 @@ class LocalVisualDesignTests(unittest.TestCase):
         self.assertNotIn('https://fonts.', doc)
         self.assertNotIn('http://', doc)
         self.assertNotIn('https://', doc)
-        self.assertIn('LOCAL · 127.0.0.1', doc)
+        self.assertIn('THE UCIE EXPERIENCE', doc)
 
     def test_responsive_focus_reduced_motion_and_contrast_contract(self):
         self.assertIn('@media (max-width:880px)', STYLE)
@@ -81,9 +81,9 @@ class LocalVisualDesignTests(unittest.TestCase):
         error = app._error(Path("UCIE"), "")
         self.assertIn('action="/local/error" method="get"', error)
         self.assertIn('name="q" maxlength="80"', error)
-        self.assertIn('미검증', error)
+        self.assertIn('검토 상태', error)
         self.assertNotIn('method="post"', error.lower())
-        self.assertIn('LOCAL · 127.0.0.1', error)
+        self.assertIn('문제 예방 자료 검색', error)
 
     def test_unknown_page_and_new_public_path_fail_closed(self):
         with self.assertRaises(ValueError):
@@ -97,8 +97,8 @@ class LocalVisualDesignTests(unittest.TestCase):
     def test_rendered_metadata_is_not_an_accuracy_or_release_claim(self):
         doc = app._home()
         self.assertNotIn('1,008', doc)
-        self.assertIn('미승인', doc)
-        self.assertIn('출시 보류', doc)
+        self.assertIn('자료를 살펴보실 때', doc)
+        self.assertNotIn('온라인·고객 출시 보류', doc)
         self.assertIn('/local/policy', doc)
         self.assertNotIn('AUTO_APPROVED', doc)
 

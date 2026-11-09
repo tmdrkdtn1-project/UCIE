@@ -28,33 +28,33 @@ class EvidenceWorkbenchV03Tests(unittest.TestCase):
         self.assertNotIn('class="hero-core"', page)
         self.assertNotIn('radial-gradient', page)
         self.assertNotIn('linear-gradient', page)
-        self.assertIn('근거를 찾고,', page)
-        self.assertIn('코드를 검토하다.', page)
-        self.assertIn('로컬 V1 실제 사용자 작업', page)
-        self.assertIn('출처 연결 ≠ 독립 검증', page)
-        self.assertIn('소유자 인수 완료 · 로컬 한정', page)
-        self.assertIn('온라인·고객 출시 보류', page)
+        self.assertIn('더 좋은 코드를 위한', page)
+        self.assertIn('더 나은 선택.', page)
+        self.assertIn('주요 기능', page)
+        self.assertIn('자료를 살펴보실 때', page)
+        self.assertNotIn('온라인·고객 출시 보류', page)
         self.assertIn('action="/local/error" method="get"', page)
         self.assertNotIn('<script', page)
         self.assertNotIn('method="post"', page.lower())
-        for route, name, _ in app.ROUTES:
+        for route, _, _ in app.ROUTES:
             with self.subTest(route=route):
                 self.assertIn('<a class="pillar-card" href="' + route + '">', page)
-                self.assertIn(name, page)
+        for name in ("문제 예방", "개발 도구", "라이브러리", "개선 제안"):
+            self.assertIn(name, page)
 
     def test_workbench_routes_have_accessible_nav_and_closed_scope(self):
         for title in PAGE_METADATA:
             with self.subTest(title=title):
                 html = app._page(title, '<section>검토</section>')
                 self.assertIn('lang="ko"', html)
-                self.assertIn('UCIE Local V1', html)
+                self.assertIn('UCIE · ', html)
                 self.assertEqual(html.count('<main '), 1)
                 self.assertIn('id="workspace" tabindex="-1"', html)
                 self.assertIn('href="#workspace"', html)
                 self.assertIn('aria-label="주요 기능"', html)
-                self.assertIn('LOCAL · 127.0.0.1', html)
-                self.assertIn('자동 규칙 승격 없음', html)
-                self.assertIn('온라인·고객 출시 보류', html)
+                self.assertNotIn('LOCAL · 127.0.0.1', html)
+                self.assertNotIn('온라인·고객 출시 보류', html)
+                self.assertIn('자료 이용 안내', html)
                 content = html.split('</style>', 1)[1]
                 self.assertEqual(content.count('aria-current="page"'), 1)
         with self.assertRaises(ValueError):
@@ -88,7 +88,7 @@ class EvidenceWorkbenchV03Tests(unittest.TestCase):
 
     def test_empty_and_incomplete_states_do_not_fabricate_evidence(self):
         empty = app._evidence_rows({"items": []})
-        self.assertIn('검색 결과 없음', empty)
+        self.assertIn('검색 결과가 없습니다', empty)
         incomplete = app._evidence_rows({
             "status": "SOURCE_LINKAGE_INCOMPLETE_NO_GO",
             "items": [{"public_url": "https://unapproved.invalid"}],
@@ -101,7 +101,7 @@ class EvidenceWorkbenchV03Tests(unittest.TestCase):
         self.assertIn('class="recipe-list"', html)
         self.assertIn('class="recipe-copy"', html)
         self.assertIn('REAL_PUBLIC_CATALOG', html)
-        self.assertIn('UCIE 합성 워크로드', html)
+        self.assertIn('예제 체험', html)
         self.assertNotIn('method="post"', html.lower())
 
     def test_mobile_and_nested_legacy_readability_are_explicit(self):
@@ -135,7 +135,7 @@ class EvidenceWorkbenchV03Tests(unittest.TestCase):
         html = app._error(Path("UCIE"), "")
         self.assertIn('action="/local/error" method="get"', html)
         self.assertIn('name="q" maxlength="80"', html)
-        self.assertIn('미검증', html)
+        self.assertIn('검토 상태', html)
         self.assertNotIn('method="post"', html.lower())
 
 

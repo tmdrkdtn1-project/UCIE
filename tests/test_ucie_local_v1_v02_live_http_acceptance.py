@@ -71,7 +71,7 @@ class OwnerLiveV02HttpAcceptance(unittest.TestCase):
         self.assertIn('class="pillar-grid"', body)
         self.assertEqual(body.count('class="pillar-card"'), 4)
         self.assertIn('aria-label="주요 기능"', body)
-        self.assertIn("온라인·고객 출시 보류", body)
+        self.assertNotIn("온라인·고객 출시 보류", body)
         self.assertNotIn("<script", body.lower())
         for route in (
                 "/local/error", "/local/engine",
@@ -92,7 +92,7 @@ class OwnerLiveV02HttpAcceptance(unittest.TestCase):
                 self.assertEqual(headers.get("cache-control"), "no-store")
                 self.assertIn('class="app-shell"', body)
                 self.assertIn('class="content-stack"', body)
-                self.assertIn("온라인·고객 출시 보류", body)
+                self.assertNotIn("온라인·고객 출시 보류", body)
                 self.assertNotIn('method="post"', body.lower())
                 self.assertNotIn("CUSTOMER_RELEASE_AUTHORIZED=true", body)
 

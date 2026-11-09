@@ -61,7 +61,7 @@ class BrowserSpeculativeConnectionRegression(unittest.TestCase):
                 response = conn.getresponse()
                 data = response.read()
                 self.assertEqual(response.status, 200)
-                self.assertIn(b"UCIE Local V1", data)
+                self.assertIn(b'class="app-shell"', data)
                 self.assertIn(b"<html", data.lower())
                 self.assertLess(len(data), 100_000)
             finally:

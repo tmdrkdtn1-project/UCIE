@@ -24,7 +24,7 @@ class ExistingSkillbookLocalUserWorkflowTests(unittest.TestCase):
         self.assertIn('/local/skillbook-run?book=python', html)
         self.assertIn('/local/skillbook-run?book=git', html)
         self.assertIn('/skillbooks/', html)
-        self.assertIn("미승인", html)
+        self.assertIn("검토 중", html)
 
     def test_preview_never_executes_recipe(self):
         with (
@@ -35,22 +35,22 @@ class ExistingSkillbookLocalUserWorkflowTests(unittest.TestCase):
         ):
             for book in ("python", "git"):
                 html = app._skillbook_runner("book=" + book)
-                self.assertIn("기존 기계 계약으로 한정형 예제 직접 실행", html)
-                self.assertIn("미승인", html)
+                self.assertIn("예제 실행", html)
+                self.assertIn("실제 작업 환경에서의 결과를 보장하지 않습니다", html)
                 self.assertNotIn("실제 실행 결과", html)
 
     def test_python_first_party_recipe_executed_with_disposable_fixture(self):
         html = app._skillbook_runner("book=python&run=1")
-        self.assertIn("첫 번째 파티 코드 실제 실행 결과", html)
+        self.assertIn("Python 예제 결과", html)
         self.assertIn("정규 파일: 2개", html)
         self.assertIn("상대 경로 차단: 예", html)
         self.assertIn("소유자 실제 파일 스캔: 없음", html)
         self.assertIn("FIRST_PARTY_CONSUMER_EXECUTION_OBSERVED_NO_RELEASE", html)
-        self.assertIn("독립 QA", html)
+        self.assertIn("참고해 주세요", html)
 
     def test_git_first_party_recipe_executed_without_git_or_repo(self):
         html = app._skillbook_runner("book=git&run=1")
-        self.assertIn("Git 기계 계약 실제 파싱 결과", html)
+        self.assertIn("Git 예제 결과", html)
         self.assertIn("합성 Git 레코드: 4건", html)
         self.assertIn("추적 변경: 1", html)
         self.assertIn("충돌: 1", html)
@@ -117,9 +117,9 @@ class LocalSkillbookHttpTests(unittest.TestCase):
                 status, html = self.request(
                     "/local/skillbook-run?book=" + book + "&run=1")
                 self.assertEqual(status, 200)
-                self.assertIn("UCIE 작성 예제만 실행", html)
-                self.assertIn("실제 실행 결과" if book == "python"
-                              else "Git 기계 계약 실제 파싱 결과", html)
+                self.assertIn("준비된 예제 데이터로 기능을 체험할 수 있습니다", html)
+                self.assertIn("Python 예제 결과" if book == "python"
+                              else "Git 예제 결과", html)
         status, body = self.request("/local/skillbook-run?book=unknown&run=1")
         self.assertEqual(status, 400)
         self.assertIn("FAIL_CLOSED", body)

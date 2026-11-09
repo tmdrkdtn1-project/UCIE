@@ -129,77 +129,64 @@ def _search(root: Path, query: str, *, limit: int = PAGE_SIZE,
 
 
 def _page(name: str, main: str) -> str:
-    """Shared V03 evidence workbench for all existing UCIE local routes."""
-    from .local_v1_design_v03 import render_shell
+    """Premium-dark UCIE UI; internal release gates remain enforced elsewhere."""
+    from .local_v1_design_v04 import render_shell
 
     return render_shell(name, main, ROUTES)
 
 
 def _home() -> str:
-    """An operator-facing work index rather than a decorative AI landing."""
     require_local_work("LOCAL_APP")
+    names = (
+        ("문제 예방", "공개 기술 사례를 살펴보고 해결 방향을 확인하세요."),
+        ("개발 도구", "유용한 개발 도구와 실행 예제를 만나보세요."),
+        ("라이브러리", "기술 가이드와 참고 자료를 한곳에서 찾아보세요."),
+        ("개선 제안", "최근 공개 기술 변경에서 새로운 아이디어를 찾아보세요."),
+    )
     entries = []
-    for number, (href, title, purpose) in enumerate(ROUTES, 1):
+    for i, ((href, _, _), (label, detail)) in enumerate(zip(ROUTES, names), 1):
         entries.append(
             '<a class="pillar-card" href="' + href + '">'
             '<span class="pillar-number" aria-hidden="true">' +
-            str(number).zfill(2) + '</span>'
-            '<span class="pillar-content"><h3>' + _e(title) + '</h3>'
-            '<p>' + _e(purpose) + '</p></span>'
-            '<span class="pillar-arrow" aria-hidden="true">↗</span></a>'
+            str(i).zfill(2) + '</span>'
+            '<span class="pillar-content"><h3>' + _e(label) + '</h3>'
+            '<p>' + _e(detail) + '</p></span>'
+            '<span class="pillar-arrow" aria-hidden="true">→</span></a>'
         )
     body = (
-        '<section class="intro-workbench" aria-labelledby="workbench-title">'
+        '<section class="intro-workbench" aria-labelledby="hero-title">'
         '<div class="intro-text">'
-        '<span class="eyebrow">UCIE / TECHNICAL EVIDENCE WORKBENCH</span>'
-        '<h2 class="intro-title" id="workbench-title">'
-        '근거를 찾고,<br><em>코드를 검토하다.</em></h2>'
-        '<p>오류 예방, 자체 개발 엔진, SkillBook, 근거 개정 관리.'
-        ' 실제 작업을 시작할 수 있는 UCIE 로컬 기술 검토 공간입니다.</p>'
-        '<div class="intro-note"><span>RULE / 01</span>'
-        '<span>수집된 근거는 검증·승인된 규칙이 아닙니다.</span></div>'
+        '<span class="eyebrow">THE UCIE EXPERIENCE</span>'
+        '<h2 class="intro-title" id="hero-title">'
+        '더 좋은 코드를 위한<br><em>더 나은 선택.</em></h2>'
+        '<p>문제를 예방하고, 새로운 방법을 발견하고,'
+        ' 필요한 기술을 더 쉽게 찾아보세요.</p>'
+        '<div class="intro-note"><span>EXPLORE</span>'
+        '<span>관심 있는 기술을 입력해 바로 시작하세요.</span></div>'
         '</div>'
         '<div class="quick-query">'
-        '<span class="eyebrow">01 / QUICK QUERY</span>'
-        '<h3>오류 근거 검색</h3>'
-        '<p>승인된 공개 저장소에서 이미 수집한 기술 후보를 탐색합니다.'
-        ' 검색은 읽기 전용입니다.</p>'
+        '<span class="eyebrow">SEARCH</span>'
+        '<h3>무엇을 찾고 계신가요?</h3>'
+        '<p>기술 이름이나 오류 키워드로 관련 사례를 확인해 보세요.</p>'
         '<form action="/local/error" method="get">'
-        '<label>검색어'
-        '<input name="q" maxlength="80" placeholder="python, API_CONTRACT"'
-        ' aria-label="오류 근거 검색어"></label>'
-        '<button type="submit">근거 검색하기 ↗</button></form>'
-        '<span class="quick-examples">SOURCE-LINKED / UNVERIFIED</span>'
+        '<label>기술 검색'
+        '<input name="q" maxlength="80" placeholder="Python, API, Git"'
+        ' autocomplete="off"></label>'
+        '<button type="submit">검색하기 <span aria-hidden="true">→</span></button>'
+        '</form>'
+        '<span class="quick-examples">PYTHON · GIT · API</span>'
         '</div></section>'
         '<section class="section-heading">'
-        '<span class="eyebrow">INDEX / 4 WORKSPACES</span>'
-        '<h2>로컬 V1 실제 사용자 작업</h2>'
-        '<p>설명 대신 작업으로 들어갑니다. 각 영역의 기능과 승인'
-        ' 상태는 구분해 표시합니다.</p></section>'
-        '<section class="pillar-grid" aria-label="UCIE 4대 핵심 기능">' +
+        '<span class="eyebrow">EXPLORE UCIE</span>'
+        '<h2>주요 기능</h2>'
+        '<p>원하는 작업을 선택하세요.</p></section>'
+        '<section class="pillar-grid" aria-label="UCIE 주요 기능">' +
         ''.join(entries) + '</section>'
-        '<section class="section-heading">'
-        '<span class="eyebrow">TRUST / LOCAL OPERATIONS</span>'
-        '<h2>현재 사용 범위</h2>'
-        '<p>로컬 사용, 근거의 정확성, 외부 출시는 각각 별도 관문입니다.'
-        '</p></section>'
-        '<section class="trust-panel" aria-label="로컬 제품과 공개 근거 상태">'
-        '<div class="trust-item"><span class="trust-label">01 / LOCAL</span>'
-        '<span class="trust-value">소유자 인수 완료 · 로컬 한정</span>'
-        '<span class="trust-detail">현재 PC에서만 접근 가능</span></div>'
-        '<div class="trust-item"><span class="trust-label">02 / EVIDENCE</span>'
-        '<span class="trust-value">출처 연결 ≠ 독립 검증</span>'
-        '<span class="trust-detail">후보는 미승인, 자동 적용 없음</span></div>'
-        '<div class="trust-item"><span class="trust-label">03 / RELEASE</span>'
-        '<span class="trust-value trust-value--hold">'
-        '온라인·고객 출시 보류</span>'
-        '<span class="trust-detail">권리·보안·검증 승인 별도</span></div>'
-        '</section>'
         '<section class="workbench-note">'
-        '<h2>현재 개발 기준</h2>'
-        '<p>로컬 제품 완성 → 안정화·최적화 → 출시 별도 심사.'
-        ' 자동 규칙 승격과 고객 배포는 활성화되지 않았습니다.</p>'
-        '<a href="/local/policy">운영 및 검토 기준 살펴보기 ↗</a>'
+        '<h2>자료를 살펴보실 때</h2>'
+        '<p>공개 기술 자료의 출처와 검토 상태는 상세 화면에서 확인하실 수 있습니다.'
+        ' 모든 제안이 실제 환경에서 검증된 해결책을 의미하지는 않습니다.</p>'
+        '<a href="/local/policy">자료 이용 안내 <span aria-hidden="true">→</span></a>'
         '</section>'
     )
     return _page("시작", body)
@@ -208,23 +195,21 @@ def _home() -> str:
 def _evidence_rows(report: dict, *, guidance: bool = False,
                    query: str = "", page: int = 1,
                    route: str = "/local/error") -> str:
-    """Readable source metadata, never an automatic fix or approval."""
+    """Display a clear customer summary; preserve inspectable evidence."""
     from .rule_candidates import GUIDANCE
 
     if report.get("status") == "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
         return (
-            '<section class="workbench-note">'
-            '<h2>출처 연결 확인 필요</h2>'
-            '<p>출처 연결이 불완전하여 검색 결과를 표시하지 않습니다. '
-            '운영 원장을 수정하지 않고 수동으로 소스 계보를 확인하세요.'
-            '</p></section>'
+            '<section class="workbench-note"><h2>자료를 불러오지 못했습니다</h2>'
+            '<p>출처 연결이 불완전하여 검색 결과를 표시하지 않습니다.'
+            ' 잠시 후 다시 확인해 주세요.</p></section>'
         )
     rows = report.get("items", [])
     if not rows:
         return (
-            '<section class="workbench-note"><h2>검색 결과 없음</h2>'
-            '<p>선택한 조건과 일치하는 기존 공개 근거가 없습니다. '
-            '검증된 수정 또는 학습 결과를 만들어 내지 않습니다.</p></section>'
+            '<section class="workbench-note"><h2>검색 결과가 없습니다</h2>'
+            '<p>다른 기술명이나 오류 키워드로 다시 검색해 보세요.</p>'
+            '</section>'
         )
     output = []
     for row in rows:
@@ -240,11 +225,23 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
             "&amp;page=" + str(page) + "&amp;id=" + candidate_id +
             "&amp;from=" + origin
         )
-        pattern = _e(row.get("purpose_code", "공개 근거"))
+        source = str(row.get("source_id", "")).removeprefix("repo:")
+        pattern = _e(row.get("purpose_code", "기술 사례"))
         item = (
             '<article class="evidence-item">'
-            '<header class="evidence-title"><h3>' + pattern + '</h3>'
-            '<span class="record-stamp">PUBLIC / UNVERIFIED</span></header>'
+            '<header class="evidence-title"><div>'
+            '<span class="card-kicker">' + _e(source) + '</span>'
+            '<h3>' + pattern + '</h3>'
+            '<p class="customer-note">공개된 기술 변경을 바탕으로 정리한 참고 사례입니다.</p>'
+            '</div><span class="record-stamp">검토 전</span></header>'
+            '<div class="evidence-actions">'
+            '<a href="' + target + '">개선 방향 살펴보기'
+            '<span aria-hidden="true"> →</span></a>'
+            '<a href="' + _e(url) + '" target="_blank"'
+            ' rel="noopener noreferrer">원문 보기 ↗</a>'
+            '</div>'
+            '<details class="technical-details"><summary>'
+            '출처·버전·기술 정보 보기</summary>'
             '<dl class="evidence-properties">'
             '<div><dt>출처 / 기술</dt><dd>' + _e(row.get("source_id", "")) +
             ' · ' + _e(row.get("domain", "")) + '</dd></div>'
@@ -254,35 +251,31 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
             '<a rel="noopener noreferrer" target="_blank" href="' +
             _e(url) + '">' + _e(url) + '</a></dd></div>'
             '<div><dt>검증 상태</dt><dd>'
-            '<strong>UNVERIFIED_CANDIDATE_ONLY</strong></dd></div>'
+            '<strong>UNVERIFIED_CANDIDATE_ONLY</strong>'
+            ' · 실제 적용 전 별도 확인이 필요한 자료</dd></div>'
             '<div><dt>근거 SHA-256</dt><dd><code>' +
             _e(row.get("evidence_sha256", "")) + '</code></dd></div>'
             '<div><dt>분류 코드</dt><dd><code>' + pattern +
-            '</code></dd></div></dl>'
+            '</code></dd></div></dl></details>'
         )
         if guidance:
             guidance_row = GUIDANCE.get(row.get("purpose_code"))
+            item += (
+                '<details class="technical-details"><summary>'
+                '검토 가이드 보기</summary>'
+                '<div class="evidence-guidance">'
+            )
             if guidance_row:
                 item += (
-                    '<div class="evidence-guidance">'
-                    '<p><strong>안전 검토 방향 · 승인된 패치 아님</strong> '
-                    + _e(guidance_row[0]) + '</p>'
-                    '<p><strong>권장 회귀 확인 · 실행 결과 아님</strong> '
-                    + _e(guidance_row[1]) + '</p></div>'
+                    '<p><strong>안전 검토 방향 · 승인된 패치 아님</strong> ' +
+                    _e(guidance_row[0]) + '</p>'
+                    '<p><strong>권장 회귀 확인 · 실행 결과 아님</strong> ' +
+                    _e(guidance_row[1]) + '</p>'
                 )
             else:
-                item += (
-                    '<div class="evidence-guidance"><p>'
-                    '이 패턴에 확인된 수정 안내가 없습니다.'
-                    ' 출처 수동 검토가 필요합니다.</p></div>'
-                )
-        item += (
-            '<div class="evidence-actions"><a href="' + target + '">'
-            '이 후보로 오류 예방·회귀 검토 작업 열기'
-            '<span aria-hidden="true"> ↗</span></a>'
-            '<span>원본 확인 → 적용 범위 검토 → 회귀 계획</span></div>'
-            '</article>'
-        )
+                item += '<p>이 자료의 개별 검토 안내는 아직 준비되지 않았습니다.</p>'
+            item += '</div></details>'
+        item += '</article>'
         output.append(item)
     return "".join(output)
 
@@ -309,12 +302,12 @@ def _paged_evidence(root: Path, query: str, *, page: int,
     start = offset + 1 if shown else 0
     finish = offset + shown
     summary = (
-        '<section class="result-summary"><p><strong>전체 일치 공개 근거 후보·개정 행: ' + _e(total)
-        + '건</strong> · 현재 ' + _e(start) + '–' + _e(finish)
-        + '건 표시 · 페이지당 최대 ' + _e(PAGE_SIZE) + '건</p>'
-        '<p class="muted">이 값은 미검증 공개 근거 행의 검색 결과입니다.'
-        ' 승인된 규칙이나 SkillBook 개수가 아니며, 색인 실험의 항목 수와'
-        ' 동일한 지표로 비교할 수 없습니다.</p></section>')
+        '<section class="result-summary">'
+        '<p><strong>검색 결과 ' + _e(total) + '건</strong>'
+        ' · ' + _e(start) + '–' + _e(finish) + '건 표시</p>'
+        '<p class="customer-note">공개 기술 자료이며, 각 항목의 출처와'
+        ' 검토 상태는 상세 정보에서 확인하실 수 있습니다.</p></section>'
+    )
     links = []
     if page > 1:
         links.append('<a href="' + route + '?q=' +
@@ -342,18 +335,20 @@ def _error(root: Path, raw: str) -> str:
     if not term and page != 1:
         raise LocalProductError("query required for non-initial error page")
     body = (
-        '<section class="search-panel"><h2>코딩 오류 또는 API 패턴 검색</h2>'
+        '<section class="search-panel"><h2>문제 예방 자료 검색</h2>'
+        '<p>찾고 계신 기술이나 오류 키워드를 입력하세요.</p>'
         '<form action="/local/error" method="get">'
-        '<label>공개 근거 검색어 <input name="q" maxlength="80" value="' +
-        _e(term) + '" placeholder="scandir 또는 API_CONTRACT"></label>'
-        '<button>검색</button></form>'
-        '<small>전체 일치 건수를 표시하고 10건씩 이동할 수 있습니다.'
-        ' 모든 후보는 미검증이며 실제 코드를 자동 수정하지 않습니다.</small></section>')
+        '<label>검색어 <input name="q" maxlength="80" value="' +
+        _e(term) + '" placeholder="예: scandir, API"></label>'
+        '<button type="submit">검색</button></form>'
+        '<small>자료별 출처와 검토 상태를 확인하실 수 있습니다.</small>'
+        '</section>'
+    )
     if term:
         body += _paged_evidence(root, term, page=page,
                                 route="/local/error", guidance=True)
     else:
-        body += '<section>검색어를 입력하면 공개 변경과 UCIE 안전 검토·회귀 방향을 보여줍니다.</section>'
+        body += '<section class="workbench-note"><p>관심 있는 기술명을 검색해 보세요.</p></section>'
     return _page("오류 예방", body)
 
 def _review(root: Path, raw: str) -> str:
@@ -406,12 +401,15 @@ def _review(root: Path, raw: str) -> str:
         return_path += "&page=" + str(page)
     markup = [
         '<section class="search-panel">'
-        '<span class="eyebrow">REVIEW / SOURCE BOUND</span>'
-        '<h2>실제 공개 후보 · 오류 예방 검토 작업</h2>'
+        '<span class="eyebrow">TECH REVIEW</span>'
+        '<h2>개선 방향 살펴보기</h2>'
         '<p><a href="' + _e(return_path) +
         '">← 검색 결과로 돌아가기</a></p>'
-        '<p>이미 수집한 공개 근거를 사람이 검토할 수 있도록 정리했습니다.'
-        ' 이 화면에서 코드를 실행하거나 수정·승인하지 않습니다.</p>'
+        '<p>공개된 기술 사례를 바탕으로 참고할 만한 개선 방향과'
+        ' 검토할 사항을 정리했습니다.</p>'
+        '<span class="record-stamp">검토 전 자료</span>'
+        '<details class="technical-details"><summary>'
+        '출처와 검토 정보</summary>'
         '<dl class="inventory-grid">'
         '<div><dt>검토 대상</dt><dd><code>' +
         _e(brief["pattern_code"]) + '</code></dd></div>'
@@ -425,14 +423,17 @@ def _review(root: Path, raw: str) -> str:
         _e(brief["public_url"]) + '">' + _e(brief["public_url"]) +
         '</a></dd></div>'
         '<div><dt>증거 SHA-256</dt><dd><code>' +
-        _e(brief["evidence_sha256"]) + '</code></dd></div></dl></section>',
-        '<section><span class="eyebrow">PLAN / NOT EXECUTED</span>'
-        '<h2>UCIE 작성 안전 수정 방향 (검토안)</h2><p>' +
+        _e(brief["evidence_sha256"]) + '</code></dd></div></dl>'
+        '</details></section>',
+        '<section><span class="eyebrow">SUGGESTED NEXT STEP</span>'
+        '<h2>참고할 개선 방향</h2><p>' +
         _e(brief["safe_fix_guidance"] or
-           "해당 패턴의 전용 수정 지침이 없습니다. 원본 출처와 오류를 수동 분석하세요.") +
-        '</p><h3>회귀시험 구성 계획 (미실행)</h3><p>' +
+           "이 사례의 구체적인 해결 방법은 추가 검토가 필요합니다.") +
+        '</p><h3>확인해 볼 항목</h3><p>' +
         _e(brief["regression_plan"] or
-           "전용 회귀 계획이 없으므로 독립 검증 설계를 먼저 작성해야 합니다.") +
+           "적용 전 확인할 항목을 먼저 정의해 보세요.") +
+        '</p><p class="customer-note">'
+        '참고용 제안입니다. 실제 적용 환경에서 별도로 검증해 주세요.'
         '</p></section>',
     ]
     if brief["fixture_design"] is not None:
@@ -450,16 +451,17 @@ def _review(root: Path, raw: str) -> str:
             ' 공개 변경 내용을 검토하고 독립 회귀시험을 수동 설계해야 합니다.'
             '</p></section>')
     markup.append(
-        '<section><h2>다음 검토 작업 (사람이 수행)</h2><ol class="review-steps">' +
+        '<section><h2>다음에 할 일</h2><ol class="review-steps">' +
         "".join('<li>' + _e(action) + '</li>'
                 for action in brief["manual_actions"]) +
         '</ol></section>')
     markup.append(
-        '<section><h2>승인 전 필수 검증 상태</h2><ul class="review-gates">' +
+        '<section><details class="technical-details">'
+        '<summary>세부 검증 상태</summary><ul class="review-gates">' +
         "".join('<li>' + _e(name) + ': <strong>' + _e(state) +
                 '</strong></li>' for name, state in gates.items()) +
         '</ul><p>실제 회귀시험: NOT_EXECUTED · 승인: NO · 배포: NO</p>'
-        '</section>')
+        '</details></section>')
     return _page("후보 검토 작업", "".join(markup))
 
 
@@ -471,23 +473,28 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
     purpose = args.get("purpose", "")
     if purpose and purpose not in (*RECIPES, "REAL_PUBLIC_CATALOG"):
         raise LocalProductError("unregistered development engine")
+    friendly = {
+        "ENGINE_INCREMENTAL_BUILD": ("증분 빌드 실험", "변경된 부분만 다시 계산하는 방법"),
+        "SKILL_TEST_AUTOMATION": ("테스트 탐색 도구", "필요한 테스트를 더 빠르게 찾아보는 방법"),
+        "LEARNING_FEEDBACK_LOOP": ("피드백 분석 예제", "변경된 결과를 효율적으로 모으는 방법"),
+    }
     choices = "".join(
         '<li><a href="/local/engine?purpose=' + _e(name) + '">'
-        '<span>' + _e(name) + '</span>'
-        '<span class="recipe-copy">' + _e(info[0]) +
-        ' · UCIE 합성 워크로드</span></a></li>'
-        for name, info in sorted(RECIPES.items()))
+        '<span>' + _e(friendly[name][0]) + '</span>'
+        '<span class="recipe-copy">' + _e(friendly[name][1]) +
+        ' · 예제 체험</span></a></li>'
+        for name in sorted(RECIPES))
     choices += (
         '<li><a href="/local/engine?purpose=REAL_PUBLIC_CATALOG">'
-        '<span>REAL_PUBLIC_CATALOG</span>'
-        '<span class="recipe-copy">기존 UCIE 공개 근거의 정확 키 검색과'
-        ' 기본 탐색 비교 · 원본 코드 실행 없음</span></a></li>')
+        '<span>기술 자료 검색 비교</span>'
+        '<span class="recipe-copy">기존 공개 기술 자료의 검색 방법을 비교해 보세요.'
+        '</span></a></li>')
     body = (
-        '<section class="search-panel"><h2>UCIE 자체 개발 엔진 선택</h2>'
-        '<p>실제 UCIE 알고리즘을 선택해 호출합니다. 아래 공개 근거 엔진은'
-        ' 기존 UCIE 공개 후보의 메타데이터에서 실제 계산을 수행하며,'
-        ' 나머지 세 엔진은 명시된 합성 워크로드 실험입니다.</p>'
-        '<ul class="recipe-list">' + choices + '</ul></section>')
+        '<section class="search-panel"><h2>개발 도구 선택</h2>'
+        '<p>관심 있는 기능을 선택해 사용 방법과 예제 결과를 살펴보세요.</p>'
+        '<ul class="recipe-list">' + choices + '</ul>'
+        '<p class="customer-note">예제의 결과는 실제 작업 환경에서'
+        ' 동일한 성능을 보장하지 않습니다.</p></section>')
     if purpose == "REAL_PUBLIC_CATALOG":
         from .experience_application import (
             SCHEMA as PUBLIC_ENGINE_SCHEMA,
@@ -586,14 +593,16 @@ def _skillbook_runner(raw: str) -> str:
     )
     back = "/local/library?q=" + book
     html = (
-        '<section><h2>' + _e(title) + '</h2>'
-        '<p><a href="' + back + '">통합 도서관 검색 결과로 돌아가기</a></p>'
-        '<p><strong>UCIE 작성 예제만 실행</strong>: 원본 SkillBook은 미승인 초안이며,'
-        ' 실제 사용자 디렉터리·다른 저장소·민감한 코드·온라인 서비스는 사용하지 않습니다.'
-        ' 승인된 실환경 효능이나 배포 가능 스킬을 의미하지 않습니다.</p>'
-        '<p><a href="/local/skillbook-run?book=' + book +
-        '&amp;run=1"><strong>기존 기계 계약으로 한정형 예제 직접 실행</strong>'
-        '</a></p></section>'
+        '<section class="search-panel"><h2>' + _e(title) + '</h2>'
+        '<p><a href="' + back + '">← 라이브러리로 돌아가기</a></p>'
+        '<p>준비된 예제 데이터로 기능을 체험할 수 있습니다.'
+        ' 개인 파일과 저장소는 분석하지 않습니다.</p>'
+        '<div class="page-controls">'
+        '<a class="button-primary" href="/local/skillbook-run?book=' + book +
+        '&amp;run=1">예제 실행 <span aria-hidden="true">→</span></a>'
+        '</div><p class="customer-note">'
+        '이 예제는 실제 작업 환경에서의 결과를 보장하지 않습니다.'
+        '</p></section>'
     )
     if execution != "1":
         return _page("SkillBook 실행", html)
@@ -618,16 +627,19 @@ def _skillbook_runner(raw: str) -> str:
                 or out.get("relative_path_blocked") is not True):
             raise LocalProductError("Python SkillBook demo scope or result drift")
         html += (
-            '<section><h2>첫 번째 파티 코드 실제 실행 결과</h2>'
-            '<p>합성 폴더의 정규 파일: ' +
-            _e(out["bounded_regular_file_name_count"]) +
-            '개 · 전체 항목 예산: ' + _e(out["directory_entry_budget"]) +
-            '개</p><p>예산 초과 차단: 예 · 잘못된 예산 차단: 예'
-            ' · 상대 경로 차단: 예</p>'
-            '<p>임시 합성 디렉터리 정리: 완료'
-            ' · 소유자 실제 파일 스캔: 없음</p>'
-            '<p>시험 상태: <strong>' + _e(out["status"]) + '</strong></p>'
-            '</section>'
+            '<section><h2>Python 예제 결과</h2>'
+            '<dl class="inventory-grid">'
+            '<div><dt>찾은 파일</dt><dd>' +
+            _e(out["bounded_regular_file_name_count"]) + '개</dd></div>'
+            '<div><dt>탐색한 항목</dt><dd>' +
+            _e(out["directory_entry_budget"]) + '개</dd></div>'
+            '<div><dt>안전 확인</dt><dd>잘못된 입력 및 경로 제한 확인</dd></div>'
+            '<div><dt>예제 정리</dt><dd>완료</dd></div></dl>'
+            '<details class="technical-details"><summary>기술적 실행 정보</summary>'
+            '<p>정규 파일: ' + _e(out["bounded_regular_file_name_count"]) + '개'
+            ' · 상대 경로 차단: 예 · 소유자 실제 파일 스캔: 없음</p>'
+            '<p>상태 코드: <code>' + _e(out["status"]) + '</code></p>'
+            '</details></section>'
         )
     else:
         out = demonstrate_in_memory_consumer()
@@ -652,23 +664,30 @@ def _skillbook_runner(raw: str) -> str:
                     "conflicted": 1, "untracked": 1, "ignored": 0}):
             raise LocalProductError("Git SkillBook demo scope or result drift")
         html += (
-            '<section><h2>Git 기계 계약 실제 파싱 결과</h2>'
-            '<p>UCIE 자체 작성 NUL 구분 합성 Git 레코드: ' +
-            _e(out["demo_entries"]) + '건</p>'
-            '<p>추적 변경: ' + _e(counts["tracked_changed"]) +
-            ' · 이름 변경: ' + _e(counts["renamed"]) +
+            '<section><h2>Git 예제 결과</h2>'
+            '<dl class="inventory-grid">'
+            '<div><dt>변경된 항목</dt><dd>' +
+            _e(counts["tracked_changed"]) + '개</dd></div>'
+            '<div><dt>이름이 변경된 항목</dt><dd>' +
+            _e(counts["renamed"]) + '개</dd></div>'
+            '<div><dt>충돌 표시</dt><dd>' +
+            _e(counts["conflicted"]) + '개</dd></div>'
+            '<div><dt>추적하지 않는 항목</dt><dd>' +
+            _e(counts["untracked"]) + '개</dd></div></dl>'
+            '<details class="technical-details"><summary>기술적 실행 정보</summary>'
+            '<p>합성 Git 레코드: ' + _e(out["demo_entries"]) + '건'
+            ' · 추적 변경: ' + _e(counts["tracked_changed"]) +
             ' · 충돌: ' + _e(counts["conflicted"]) +
-            ' · 미추적: ' + _e(counts["untracked"]) + '</p>'
-            '<p>3건으로 줄인 항목 한도 차단: 예'
-            ' · 실제 Git 프로세스 호출: 없음 · 저장소 스캔: 없음</p>'
-            '<p>시험 상태: <strong>' + _e(out["status"]) + '</strong></p>'
-            '</section>'
+            ' · 저장소 스캔: 없음</p>'
+            '<p>상태 코드: <code>' + _e(out["status"]) +
+            '</code></p></details></section>'
         )
     html += (
-        '<section><p><strong>검증 범위</strong>: UCIE 한정 예제로 기존'
-        ' 기계 계약의 동작을 실제 실행했습니다. 외부 코드 수정·독립 QA·'
-        ' 실사용 프로젝트 성능·라이선스·보안·승인·배포는 검증하지 않았습니다.'
-        '</p></section>'
+        '<section class="workbench-note"><h2>참고해 주세요</h2>'
+        '<p>이 결과는 준비된 예제만 사용한 결과입니다.'
+        ' 실제 코드나 파일은 분석하지 않았으며,'
+        ' 업무 환경에 적용하기 전에 별도의 확인이 필요합니다.</p>'
+        '</section>'
     )
     return _page("SkillBook 실행 결과", html)
 
@@ -711,19 +730,15 @@ def _library(root: Path, raw: str) -> str:
         raise LocalProductError("unbounded unified catalog shelves")
 
     body = (
-        '<section class="search-panel"><h2>UCIE 통합 가상도서관</h2>'
-        '<p>기술서적, 편집 검토 초안, 공개 근거는 서로 다른 검증 단위입니다.'
-        ' 결과를 섞거나 승인된 자료로 합산하지 않습니다.</p>'
+        '<section class="search-panel"><h2>라이브러리 검색</h2>'
+        '<p>기술 가이드, 참고 자료, 공개 기술 사례를 한곳에서 찾아보세요.</p>'
         '<form action="/local/library" method="get">'
-        '<label>자료 검색어 <input name="q" maxlength="80" value="' +
-        _e(term) + '" placeholder="Git, Python, scandir"></label>'
-        '<button type="submit">자료 검색</button></form>'
-        '<small>읽기 전용 · SkillBook 미승인 · 공개 근거 미검증 ·'
-        ' 자동 적용·내보내기 불가</small></section>'
-        '<section class="shelf-title"><span class="eyebrow">SHELF / 01</span>'
-        '<h2>SkillBook 본문 · 기계 계약 (미승인 초안)</h2>'
-        '<p>일치 초안: ' + _e(len(books)) +
-        '권 · 기술서적과 미검증 PR 후보의 수를 혼합하지 않습니다.</p></section>'
+        '<label>자료 검색 <input name="q" maxlength="80" value="' +
+        _e(term) + '" placeholder="예: Git, Python, scandir"></label>'
+        '<button type="submit">검색</button></form></section>'
+        '<section class="shelf-title"><span class="eyebrow">GUIDES</span>'
+        '<h2>기술 가이드</h2>'
+        '<p>' + _e(len(books)) + '개 자료</p></section>'
     )
     for book in books:
         identity = book.get("skillbook_id")
@@ -733,42 +748,41 @@ def _library(root: Path, raw: str) -> str:
                 or book.get("export_allowed") is not False):
             raise LocalProductError("forged or unsafe SkillBook")
         from .skillbook_product_v01 import SKILLBOOK_ID as PY_BOOK_ID
-        from .skillbook_git_porcelain_product_v01 import (
-            SKILLBOOK_ID as GIT_BOOK_ID,
-        )
+        from .skillbook_git_porcelain_product_v01 import SKILLBOOK_ID as GIT_BOOK_ID
         if identity == PY_BOOK_ID:
             demo_link = (
                 '<a href="/local/skillbook-run?book=python">'
-                'Python 기존 스킬 직접 실행해 보기 (UCIE 예제) ↗</a>'
+                'Python 예제 체험 →</a>'
             )
         elif identity == GIT_BOOK_ID:
             demo_link = (
                 '<a href="/local/skillbook-run?book=git">'
-                'Git 기존 스킬 직접 실행해 보기 (UCIE 예제) ↗</a>'
+                'Git 예제 체험 →</a>'
             )
         else:
             raise LocalProductError("unexpected unregistered SkillBook")
         body += (
             '<article class="shelf-entry">'
-            '<span class="eyebrow">SKILLBOOK / DRAFT</span>'
+            '<span class="card-kicker">GUIDE · 검토 중</span>'
             '<h3><a href="/skillbooks/' + quote(identity, safe="") +
-            '">' + _e(book.get("title", "SkillBook")) + '</a></h3>'
-            '<p>출처 ' + _e(book.get("source_id")) +
-            ' · 적용 범위 ' + _e(book.get("version_scope_claim")) + '</p>'
-            '<p><span class="entry-flag">미승인 · 내보내기 불가</span>'
-            ' · 본문 및 기계 판독 계약 열람 가능</p>'
-            '<p>' + demo_link + '</p></article>'
+            '">' + _e(book.get("title", "기술 가이드")) + '</a></h3>'
+            '<p>기술 내용을 살펴보고 예제를 확인해 보세요.</p>'
+            '<div class="page-controls">' + demo_link + '</div>'
+            '<details class="technical-details"><summary>'
+            '자료 정보</summary><p>출처 ' + _e(book.get("source_id")) +
+            ' · 적용 범위 ' + _e(book.get("version_scope_claim")) +
+            '</p><p>검토 중인 초안 · 외부 배포 가능한 완성본이 아닙니다.</p>'
+            '</details></article>'
         )
     if not books:
         body += (
-            '<section class="workbench-note"><h2>SkillBook 결과 없음</h2>'
-            '<p>일치하는 SkillBook 초안이 없습니다.</p></section>'
+            '<section class="workbench-note"><h2>일치하는 가이드가 없습니다</h2>'
+            '<p>검색어를 바꿔 다시 확인해 보세요.</p></section>'
         )
     body += (
-        '<section class="shelf-title"><span class="eyebrow">SHELF / 02</span>'
-        '<h2>편집·원문 검토 대기 기술서적</h2>'
-        '<p>일치 편집 후보: ' + _e(len(drafts)) +
-        '건 · 검토 미완료 · 실행 계약과 승인된 책이 아닙니다.</p></section>'
+        '<section class="shelf-title"><span class="eyebrow">READING</span>'
+        '<h2>검토 중인 자료</h2><p>' + _e(len(drafts)) +
+        '개 자료 · 준비 중인 초안</p></section>'
     )
     for draft in drafts:
         ident = draft.get("draft_sha256")
@@ -776,24 +790,26 @@ def _library(root: Path, raw: str) -> str:
             raise LocalProductError("invalid reviewed editorial draft reference")
         body += (
             '<article class="shelf-entry">'
-            '<span class="eyebrow">EDITORIAL / REVIEW PENDING</span>'
+            '<span class="card-kicker">ARTICLE · 검토 중</span>'
             '<h3><a href="/catalog/review?id=' + ident + '">' +
-            _e(draft.get("topic", "검토 대기")) + '</a></h3>'
-            '<p>출처 ' + _e(", ".join(draft.get("source_ids", []))) + '</p>'
-            '<p><span class="entry-flag">원문·라이선스·QA 미승인</span></p>'
-            '</article>'
+            _e(draft.get("topic", "기술 자료")) + '</a></h3>'
+            '<p>내용을 검토하고 있는 자료입니다.</p>'
+            '<details class="technical-details"><summary>'
+            '자료 출처</summary><p>' +
+            _e(", ".join(draft.get("source_ids", []))) +
+            '</p><p>원문·권리·정확성 추가 확인 필요</p></details></article>'
         )
     if not drafts:
         body += (
-            '<section class="workbench-note"><h2>편집 검토 결과 없음</h2>'
-            '<p>현재 검색에 일치하는 편집 후보가 없습니다.</p></section>'
+            '<section class="workbench-note"><h2>일치하는 자료가 없습니다</h2>'
+            '<p>다른 키워드로 검색해 보세요.</p></section>'
         )
     body += (
-        '<section class="shelf-title"><span class="eyebrow">SHELF / 03</span>'
-        '<h2>기존 UCIE 공개 근거·코딩 예방 후보</h2>'
-        '<p>승인된 공개 원본의 미검증 개정을 한 페이지에 최대 10건씩'
-        ' 표시합니다. 이곳의 수량은 승인된 규칙이나 SkillBook 수가 아닙니다.'
-        '</p></section>'
+        '<section class="shelf-title" data-shelf="public">'
+        '<span class="eyebrow">SOURCES</span>'
+        '<h2>공개 기술 사례</h2>'
+        '<p>공개 저장소의 변경 사례를 찾아보고 원문을 확인하세요.'
+        ' 검토 전 자료는 따로 표시됩니다.</p></section>'
     )
     if term.isascii():
         body += _paged_evidence(
@@ -802,10 +818,9 @@ def _library(root: Path, raw: str) -> str:
         if page != 1:
             raise LocalProductError("non-ASCII public evidence paging not supported")
         body += (
-            '<section class="workbench-note"><h2>공개 근거 검색어 제한</h2>'
-            '<p>공개 근거 W04 검색은 현재 영문 검색어만 지원합니다.'
-            ' SkillBook·편집 자료 검색 결과는 위에 표시했습니다.'
-            ' 공개 근거를 보려면 Python, Git 등의 영문 검색어를 사용하세요.'
+            '<section class="workbench-note"><h2>검색어 안내</h2>'
+            '<p>공개 기술 사례는 현재 영문 검색어로 찾아보실 수 있습니다.'
+            ' Python 또는 Git 등의 키워드를 사용해 주세요.'
             '</p></section>'
         )
     return _page("통합 가상도서관", body)
@@ -828,33 +843,33 @@ def _evolution(root: Path, raw: str) -> str:
     issues = inventory.get("issues", [])
     body = (
         '<section class="search-panel">'
-        '<span class="eyebrow">INVENTORY / READ ONLY</span>'
-        '<h2>현재 UCIE 공개 수집·검토 현황</h2>'
-        '<p>실제 기존 UCIE 공개 기록만 읽습니다.'
-        ' 추가 수집·자동 승격은 하지 않습니다.</p>'
+        '<h2>개선 아이디어 찾아보기</h2>'
+        '<p>공개 기술 변경 사례에서 새로운 방법을 살펴보세요.</p>'
+        '<form action="/local/evolution" method="get">'
+        '<label>검색어 <input name="q" maxlength="80" value="' +
+        _e(term) + '" placeholder="예: python, API"></label>'
+        '<button type="submit">검색</button></form></section>'
+        '<section class="workbench-note">'
+        '<details class="technical-details"><summary>자료 수집 현황 보기'
+        '</summary>'
         '<dl class="inventory-grid">'
         '<div><dt>수집 현황</dt><dd><code>' +
         _e(inventory.get("status")) + '</code></dd></div>'
-        '<div><dt>관측 시각 UTC</dt><dd><code>' +
+        '<div><dt>기록 시각</dt><dd><code>' +
         _e(inventory.get("captured_utc", "보고되지 않음")) + '</code></dd></div>'
-        '<div><dt>기본 수집 기록</dt><dd>기존 공개 PR 후보: ' +
+        '<div><dt>공개 변경 기록</dt><dd>기존 공개 PR 후보: ' +
         _e(inventory.get("legacy_miner", {}).get("candidates", "확인 불가")) +
         '</dd></div>'
-        '<div><dt>근거 개정 기록</dt><dd>Stage10 개정: ' +
+        '<div><dt>근거 개정</dt><dd>Stage10 개정: ' +
         _e(inventory.get("stage10_public_candidate_staging", {}).get(
             "candidate_revisions", "확인 불가")) + '</dd></div>'
-        '<div><dt>현재 검토 문제 기록</dt><dd>검증 문제: ' +
-        _e(", ".join(issues) if issues else "기록 없음") +
+        '<div><dt>확인할 항목</dt><dd>' +
+        _e(", ".join(issues) if issues else "현재 별도 기록 없음") +
         '</dd></div></dl>'
-        '<p><strong>주의:</strong> 기본 마이너·Stage10 개정·W04 검색 결과는'
-        ' 서로 다른 원장입니다. 합산된 규칙 수가 아닙니다.</p></section>'
-        '<section class="search-panel"><h2>개선·검토할 공개 변경 검색</h2>'
-        '<form action="/local/evolution" method="get">'
-        '<label>공개 변경 검색어 <input name="q" maxlength="80" value="' +
-        _e(term) + '" placeholder="python/cpython 또는 pattern"></label>'
-        '<button type="submit">변경 조회</button></form>'
-        '<small>원본 공개 URL → 검증 미완료 → 원본·중복·버전·'
-        '회귀시험 수동 검토 순서입니다.</small></section>'
+        '<p class="customer-note">원본 자료·개정 내역은 서로 다른'
+        ' 기준으로 집계되며, 검증된 해결책의 수를 의미하지 않습니다.'
+        ' 자동 승격은 수행하지 않습니다.</p></details>'
+        '</section>'
     )
     body += _paged_evidence(root, term, page=page,
                             route="/local/evolution")
@@ -863,19 +878,29 @@ def _evolution(root: Path, raw: str) -> str:
 
 def _policy() -> str:
     require_local_work("LOCAL_APP")
-    state = roadmap()
-    items = "".join("<li>" + _e(gate) + "</li>"
-                    for gate in state["local_acceptance_gates"])
     return _page(
-        "개발 규칙", '<section><h2>강제 개발 순서</h2>'
-        '<p>' + _e(" → ".join(state["ordered_phases"])) + '</p>'
-        '<p>LOCAL V1 GO: <strong>소유자 인수 승인 · 로컬 한정</strong></p>'
-        '<p>인수 근거: ' + _e(state["owner_acceptance_receipt_path"]) + '</p>'
-        '<p>온라인·고객 출시: 금지 / 주변 확장: 보류</p>'
-        '<ol>' + items + '</ol>'
-        '<p>2026-11-08 사용자 직접 승인으로 로컬 인수를 기록했습니다.'
-        ' 고객·온라인 출시나 개별 기술 후보/SkillBook 승인과는 별도입니다.</p>'
-        '</section>')
+        "개발 규칙",
+        '<section class="search-panel">'
+        '<h2>UCIE는 어떤 서비스인가요?</h2>'
+        '<p>UCIE는 공개된 기술 자료를 찾고, 개발 도구를 체험하며,'
+        ' 개선 방향을 살펴보는 기술 탐색 공간입니다.</p>'
+        '<div class="page-controls">'
+        '<a href="/local/error">문제 예방 살펴보기 →</a>'
+        '<a href="/local/library">라이브러리 열기 →</a>'
+        '</div></section>'
+        '<section><h2>자료는 어떻게 활용하나요?</h2>'
+        '<p>기술 자료에는 원본 출처와 검토 상태가 함께 제공됩니다.'
+        ' 관심 있는 내용을 살펴보고, 실제 코드에 적용하기 전에'
+        ' 사용 중인 버전과 환경에 맞는 시험을 진행해 주세요.</p>'
+        '<p>검토 전 자료에는 별도 표시가 있습니다.'
+        ' 표시된 안내나 예제는 자동으로 코드를 수정하지 않습니다.</p>'
+        '</section>'
+        '<section><h2>예제 결과는 무엇을 의미하나요?</h2>'
+        '<p>예제는 제한된 시험 조건에서 실행됩니다.'
+        ' 프로젝트 전체의 성능이나 보안을 보증하지 않으므로'
+        ' 실제 환경에서 추가 확인이 필요합니다.</p>'
+        '</section>'
+    )
 
 
 def make_handler(root: Path):
@@ -912,16 +937,19 @@ def make_handler(root: Path):
                     and isinstance(content, str)
                     and "</header>" in content
                     and 'data-ucie-local-nav="true"' not in content):
+                friendly = (
+                    ("/local/error", "문제 예방"),
+                    ("/local/engine", "개발 도구"),
+                    ("/local/library", "라이브러리"),
+                    ("/local/evolution", "개선 제안"),
+                )
                 links = "".join(
-                    '<a href="' + href + '">' + _e(title) + '</a> · '
-                    for href, title, _ in ROUTES)
+                    '<a href="' + href + '">' + _e(label) + '</a>'
+                    for href, label in friendly)
                 local_nav = (
-                    '<nav aria-label="UCIE Local V1" data-ucie-local-nav="true" '
-                    'style="margin:12px 0;padding:12px;background:#e9f2f7;'
-                    'border-radius:8px">'
-                    '<strong>UCIE Local V1</strong> · '
-                    '<a href="/local">UCIE 홈</a> · ' + links +
-                    '</nav>'
+                    '<nav aria-label="UCIE 메뉴" data-ucie-local-nav="true">'
+                    '<strong>UCIE</strong>'
+                    '<a href="/local">홈</a>' + links + '</nav>'
                 )
                 content = content.replace("</header>", "</header>" + local_nav, 1)
             if (status == 200 and mime == "text/html; charset=utf-8"
@@ -937,7 +965,7 @@ def make_handler(root: Path):
                     and content.count("</html>") == 1):
                 # Re-skin only the first-party nested page envelope.
                 # Keep base renderer paths, evidence, headers and policies.
-                from .local_v1_design_v03 import skin_nested_local_page
+                from .local_v1_design_v04 import skin_nested_local_page
                 content = skin_nested_local_page(content)
             return super().reply(status, content, mime)
 
