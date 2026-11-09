@@ -20,7 +20,7 @@ def handoff(*, count=2):
             "evidence_sha256": f"{index + 101:064x}",
             "source": SOURCE,
             "reference": f"pr:153462:{SHA}",
-            "skill_id": "python-concurrency",
+            "skill_id": "python-runtime-safety",
             "pattern_code": "CONCURRENCY",
             "stage6_candidate": None,
             "status": "UNVERIFIED_CANDIDATE_ONLY",
