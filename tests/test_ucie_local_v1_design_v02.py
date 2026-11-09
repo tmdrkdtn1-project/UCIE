@@ -79,9 +79,9 @@ class LocalVisualDesignTests(unittest.TestCase):
         error = app._error(Path("UCIE"), "")
         self.assertIn('action="/local/error" method="get"', error)
         self.assertIn('name="q" maxlength="80"', error)
-        self.assertIn('UNVERIFIED', error.upper() if 'UNVERIFIED' in error.upper() else app._home())
+        self.assertIn('미검증', error)
         self.assertNotIn('method="post"', error.lower())
-        self.assertIn('워크스페이스', error)
+        self.assertIn('LOCAL · 127.0.0.1', error)
 
     def test_unknown_page_and_new_public_path_fail_closed(self):
         with self.assertRaises(ValueError):
