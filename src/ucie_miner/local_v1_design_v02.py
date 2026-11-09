@@ -308,3 +308,79 @@ def render_shell(name: str, content: str, routes: tuple) -> str:
         '<a href="/local/policy">운영·승인 기준 확인</a>'
         '</footer></div></div></body></html>'
     )
+
+
+# Nested public Library/SkillBook pages are produced by the existing source-
+# validating browser. Only append a skin to their already-generated HTML;
+# never parse, rewrite, execute, or reinterpret their public candidate data.
+LEGACY_STYLE = """
+:root{color-scheme:light;color:#162640;font-family:system-ui,-apple-system,
+  "Segoe UI","Malgun Gothic",sans-serif}
+body{background:#f4f7fc;color:#162640}
+main{width:100%;max-width:1280px;margin:auto;padding:35px clamp(18px,4vw,55px) 60px}
+main>header{position:relative;padding:30px clamp(22px,3vw,40px);
+  background:linear-gradient(118deg,#142843,#173955 70%,#17586a);
+  border:1px solid #284763;border-radius:20px;color:#effaff;
+  box-shadow:0 12px 38px rgba(15,46,80,.1)}
+main>header h1{font-size:clamp(25px,3vw,36px);font-weight:820;
+  letter-spacing:-.045em;color:#fff;line-height:1.3;margin:8px 0}
+main>header .subtitle{color:#c5dfed}
+main a{color:#2459be;text-decoration-thickness:1px;text-underline-offset:3px}
+main a:focus-visible,main button:focus-visible,main input:focus-visible,
+main select:focus-visible{outline:3px solid #ee9a4d;outline-offset:3px}
+.panel,.item,.empty,.detail,.v11-item{background:#fff;border:1px solid #dfe6f1;
+  border-radius:16px;box-shadow:0 10px 34px rgba(27,52,85,.055)}
+.panel{padding:clamp(20px,3vw,30px)}
+.panel h2{font-weight:790;letter-spacing:-.03em;font-size:21px}
+.panel p,.item p,.detail p{color:#526782;line-height:1.75}
+main form{gap:12px}
+main input,main select{min-height:45px;border:1px solid #cdd9e9;
+  border-radius:11px;color:#1b2f4c;background:#fff}
+main button{min-height:45px;padding:10px 18px;background:#255cd8;
+  border:1px solid #255cd8;border-radius:11px;color:#fff;font-weight:770}
+main button:hover{background:#194aaa}
+.chip,.toolbar a,.pages a{border-radius:999px}
+.chip.active{background:#e8f1ff;border-color:#abc6ec;color:#19489c}
+.note{border-left:4px solid #255cd8;background:#eef5ff;color:#2d4f7a}
+nav[data-ucie-local-nav="true"]{display:flex;align-items:center;gap:10px;
+  flex-wrap:wrap;margin:15px 0!important;padding:14px 19px!important;
+  background:#18324f!important;border:1px solid #264765!important;
+  border-radius:14px!important;color:#effaff!important}
+nav[data-ucie-local-nav="true"] strong{color:#d6f4ee}
+nav[data-ucie-local-nav="true"] a{color:#e8f7ff;font-size:13px}
+nav[data-ucie-local-nav="true"] a:focus-visible{outline:3px solid #ee9a4d;
+  outline-offset:3px}
+main table{width:100%;border-collapse:collapse;font-size:13px;
+  display:block;overflow-x:auto;max-width:100%}
+main th,main td{border-bottom:1px solid #e5ebf4;padding:12px;text-align:left}
+main th{background:#f4f8fe;white-space:nowrap;color:#405677}
+main code,main pre{overflow-wrap:anywhere;white-space:pre-wrap}
+main details{border:1px solid #dee7f3;border-radius:10px;padding:9px 13px}
+main summary{cursor:pointer}
+main footer{border-top:1px solid #dfe6f1;padding-top:22px;color:#566981}
+@media(max-width:760px){
+  main{padding:18px 13px 34px}
+  main>header{padding:23px 18px;border-radius:15px}
+  main form{grid-template-columns:1fr}
+  .panel{padding:19px}
+  .items{grid-template-columns:1fr}
+  nav[data-ucie-local-nav="true"]{gap:8px;padding:12px!important}
+  main input,main select,main button{max-width:100%;width:100%}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+"""
+
+
+def skin_nested_local_page(content: str) -> str:
+    """Apply CSS-only visual parity without changing a single nested route."""
+    if (type(content) is not str or not content.startswith("<!doctype html>")
+            or content.count("</head>") != 1
+            or content.count("</html>") != 1):
+        raise ValueError("unexpected UCIE nested HTML envelope")
+    if 'data-ucie-nested-theme="v02"' in content:
+        return content
+    return content.replace(
+        "</head>",
+        '<style data-ucie-nested-theme="v02">' + LEGACY_STYLE +
+        '</style></head>', 1,
+    )
