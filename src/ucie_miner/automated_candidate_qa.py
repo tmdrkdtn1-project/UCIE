@@ -23,6 +23,7 @@ from ucie_public.mixed_release import (
     PROFILES, FOURTH_CI, _fourth_ci,
 )
 from ucie_public.policy import PolicyError
+from .public_candidate_staging import MAX_ROWS
 from .static_rule_bridge import SOURCE_BINDINGS
 from .verification_handoff import (
     PR_REF, FIX_PR_REF, PINNED_RULES, prepare_verification_handoff,
@@ -68,7 +69,7 @@ def _checked_handoff(handoff: object) -> tuple[bool, list[dict]]:
             or handoff.get("production_approved") is not False
             or handoff.get("deploy_allowed") is not False
             or type(handoff.get("tasks")) is not list
-            or len(handoff["tasks"]) > 1000):
+            or len(handoff["tasks"]) > MAX_ROWS):
         raise PolicyError("invalid public candidate review ledger")
     complete = handoff["status"] == "LINKED_UNVERIFIED_NO_GO"
     if complete:
