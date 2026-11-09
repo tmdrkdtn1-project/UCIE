@@ -7,6 +7,7 @@ on:
       - 'tests/test_ucie_mcp_pinned_method_probe_v01.py'
       - '.github/workflows/ucie-mcp-pinned-source-method-qa.yml'
       - 'docs/UCIE_MCP_PINNED_METHOD_QA_20261109.md'
+      - 'docs/skillbooks/UCIE_SKILLBOOK_003_MCP_PROMPTS_DRAFT_20261109.md'
   workflow_dispatch:
 
 permissions:
