@@ -9,7 +9,10 @@ from __future__ import annotations
 from contextlib import redirect_stdout
 import importlib.util
 import json
+import http.client
 import os
+import socket
+import time
 from pathlib import Path
 import subprocess
 import sys
@@ -167,6 +170,60 @@ class WindowlessOwnerTaskTest(unittest.TestCase):
             data = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(data["exe"], "pythonw.exe")
             self.assertEqual(data["os_name"], "nt")
+
+    @unittest.skipUnless(os.name == "nt", "Exact owner Windows disposable app")
+    def test_pythonw_runs_actual_ucie_health_on_a_separate_temporary_port(self):
+        if ROOT.resolve() != Path("D:/UCIE").resolve():
+            self.skipTest("EXACT_OWNER_D_UCIE_ONLY")
+        pyw = ROOT / ".venv" / "Scripts" / "pythonw.exe"
+        launcher = SCRIPTS / "run_ucie_local_v1_autostart.py"
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        if port in (8767, 18767):
+            self.skipTest("RANDOM_PORT_UNSUITABLE")
+        process = subprocess.Popen(
+            [str(pyw), "-B", str(launcher), "--port", str(port)],
+            cwd=str(ROOT), stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            healthy = False
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                self.assertIsNone(
+                    process.poll(),
+                    "windowless owner app exited before internal health response")
+                try:
+                    conn = http.client.HTTPConnection(
+                        "127.0.0.1", port, timeout=1)
+                    try:
+                        conn.request("GET", "/local/health", headers={
+                            "Host": f"127.0.0.1:{port}",
+                            "Connection": "close",
+                        })
+                        resp = conn.getresponse()
+                        payload = json.loads(resp.read())
+                        if (resp.status == 200
+                                and payload.get("schema")
+                                == "UCIE_OWNER_LOCAL_FOUR_PILLAR_APP_V01"
+                                and payload.get("online_release_authorized")
+                                is False):
+                            healthy = True
+                            break
+                    finally:
+                        conn.close()
+                except (OSError, ValueError, http.client.HTTPException):
+                    time.sleep(0.2)
+            self.assertTrue(
+                healthy, "pythonw localhost health did not start within bound")
+        finally:
+            if process.poll() is None:
+                process.terminate()
+            try:
+                process.wait(timeout=4)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=4)
 
     @unittest.skipUnless(os.name == "nt", "Exact owner Windows dry-run only")
     def test_real_owner_migration_preview_never_changes_task(self):
