@@ -834,6 +834,18 @@ def make_handler(root: Path):
                     '</nav>'
                 )
                 content = content.replace("</header>", "</header>" + local_nav, 1)
+            if (status == 200 and mime == "text/html; charset=utf-8"
+                    and type(content) is str
+                    and (route in ("/catalog", "/catalog/review")
+                         or route.startswith("/skillbooks")
+                         or route.startswith("/item/"))
+                    and content.startswith("<!doctype html>")
+                    and content.count("</head>") == 1
+                    and content.count("</html>") == 1):
+                # Re-skin only the first-party nested page envelope.
+                # Keep base renderer paths, evidence, headers and policies.
+                from .local_v1_design_v02 import skin_nested_local_page
+                content = skin_nested_local_page(content)
             return super().reply(status, content, mime)
 
         def do_POST(self):
