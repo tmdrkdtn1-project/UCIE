@@ -32,6 +32,23 @@ $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 if ([string]::IsNullOrWhiteSpace($identity)) { throw 'UCIE_OWNER_IDENTITY_UNKNOWN' }
 
 $existing = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue
+function Test-UcieOwnerSid([string]$TaskPrincipalId) {
+    try {
+        if ($TaskPrincipalId -match '^S-1-[0-9-]+$') {
+            $sid = ([System.Security.Principal.SecurityIdentifier]::new($TaskPrincipalId)).Value
+        }
+        else {
+            $sid = ([System.Security.Principal.NTAccount]::new($TaskPrincipalId)).Translate(
+                [System.Security.Principal.SecurityIdentifier]).Value
+        }
+        return [string]::Equals($sid,
+            [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value,
+            [System.StringComparison]::OrdinalIgnoreCase)
+    }
+    catch {
+        return $false
+    }
+}
 if ($null -ne $existing) {
     $actions = @($existing.Actions)
     $isWindowless = [string]::Equals($actions[0].Execute, $python,
@@ -43,7 +60,7 @@ if ($null -ne $existing) {
         $actions[0].Arguments -ne $arguments -or
         -not [string]::Equals($actions[0].WorkingDirectory, $root,
             [System.StringComparison]::OrdinalIgnoreCase) -or
-        $existing.Principal.UserId -ne $identity) {
+        -not (Test-UcieOwnerSid ([string]$existing.Principal.UserId))) {
         throw 'UCIE_AUTOSTART_TASK_NAME_CONFLICT_NO_OVERWRITE'
     }
     if (-not $Apply) {
