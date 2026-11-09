@@ -840,7 +840,10 @@ def make_handler(root: Path):
                          or route.startswith("/skillbooks")
                          or route.startswith("/item/"))
                     and content.startswith("<!doctype html>")
+                    and content.count("<head>") == 1
                     and content.count("</head>") == 1
+                    and content.count("<body>") == 1
+                    and content.count("</body>") == 1
                     and content.count("</html>") == 1):
                 # Re-skin only the first-party nested page envelope.
                 # Keep base renderer paths, evidence, headers and policies.
