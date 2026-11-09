@@ -86,6 +86,10 @@ summary:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
   font-weight:860;line-height:1.25;margin:8px 0 9px;word-break:keep-all}
 .page-lede{font-size:14px;line-height:1.65;max-width:70ch;margin:0;color:var(--muted);
   word-break:keep-all}
+.page-header--home{display:block;padding:0 0 12px;margin-bottom:16px;
+  border-bottom:1px solid #b6bfb5}
+.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .page-reference{align-self:end;text-align:right;font:750 11px/1.5 ui-monospace,
   Consolas,monospace;color:#667971;letter-spacing:.06em}
 .content-stack{display:grid;gap:18px;min-width:0;align-content:start}
@@ -294,6 +298,12 @@ summary:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
   .page-footer{padding:15px;display:block}
   .page-footer a{display:inline-block;margin-top:9px}
 }
+@media (max-width:400px){
+  .intro-title{font-size:29px;overflow-wrap:anywhere}
+  .page-header h1{font-size:28px}
+  .pillar-card{gap:7px}
+  .pillar-card p{font-size:12px}
+}
 @media (prefers-reduced-motion:reduce){
  html{scroll-behavior:auto}
 }
@@ -329,6 +339,22 @@ def render_shell(name: str, content: str, routes: tuple) -> str:
         '><span class="nav-icon" aria-hidden="true">05</span>'
         '<span>운영 기준</span></a>'
     )
+    if name == "시작":
+        # Retain a semantic h1 without repeating a large generic "Start".
+        page_heading = (
+            '<div class="page-header page-header--home">'
+            '<div><span class="eyebrow">WORK INDEX / 00</span>'
+            '<h1 class="visually-hidden">UCIE 작업 개요</h1></div></div>'
+        )
+    else:
+        page_heading = (
+            '<div class="page-header"><div>'
+            '<span class="eyebrow">' + escape(eyebrow, quote=True) + '</span>'
+            '<h1>' + escape(name, quote=True) + '</h1>'
+            '<p class="page-lede">' + escape(description, quote=True) +
+            '</p></div><span class="page-reference" aria-hidden="true">'
+            'UCIE / OWNER LOCAL<br>READ ONLY WORKSPACE</span></div>'
+        )
     return (
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -355,14 +381,8 @@ def render_shell(name: str, content: str, routes: tuple) -> str:
         '<span class="status-tag">LOCAL · 127.0.0.1</span>'
         '<span class="status-tag status-tag--hold">온라인·고객 출시 보류</span>'
         '</div></header>'
-        '<main class="workspace" id="workspace" tabindex="-1">'
-        '<div class="page-header"><div>'
-        '<span class="eyebrow">' + escape(eyebrow, quote=True) + '</span>'
-        '<h1>' + escape(name, quote=True) + '</h1>'
-        '<p class="page-lede">' + escape(description, quote=True) + '</p>'
-        '</div><span class="page-reference" aria-hidden="true">'
-        'UCIE / OWNER LOCAL<br>READ ONLY WORKSPACE</span></div>'
-        '<div class="content-stack">' + content +
+        '<main class="workspace" id="workspace" tabindex="-1">' +
+        page_heading + '<div class="content-stack">' + content +
         '</div></main><footer class="page-footer">'
         '<span>UCIE Local V1 · 공개 근거만 사용 · 자동 규칙 승격 없음</span>'
         '<a href="/local/policy">운영·승인 기준 확인</a>'
