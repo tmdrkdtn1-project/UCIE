@@ -52,7 +52,9 @@ class LocalVisualDesignTests(unittest.TestCase):
             with self.subTest(title=title):
                 doc = app._page(title, '')
                 self.assertIn('href="' + route + '" aria-current="page"', doc)
-                self.assertEqual(doc.count('aria-current="page"'), 1)
+                # Only count rendered navigation markup, not the CSS selector.
+                markup = doc.split('</style>', 1)[1]
+                self.assertEqual(markup.count('aria-current="page"'), 1)
 
     def test_no_remote_assets_scripts_or_mutating_actions_in_shell(self):
         doc = app._home()
