@@ -10,7 +10,7 @@ from html import escape
 STYLE = """
 :root{
   color-scheme:light;
-  --ink:#162640;--ink-2:#344762;--muted:#687994;
+  --ink:#162640;--ink-2:#344762;--muted:#566981;
   --navy:#111d34;--navy-2:#1a2b48;--surface:#ffffff;
   --canvas:#f4f7fc;--line:#dfe6f1;--blue:#255cd8;
   --blue-dark:#1d4ebb;--aqua:#74e0ca;--warning:#9e551c;
@@ -168,16 +168,16 @@ main pre{white-space:pre-wrap}
 .pillar-card:nth-child(3) .pillar-number{background:#e6f6f1;color:#137665}
 .pillar-arrow{font-size:24px;color:#8c9db7;line-height:1}
 .pillar-card h3{font-size:20px;font-weight:810;margin:19px 0 5px;color:#1a2e4b}
-.pillar-card p{color:#61748f;font-size:13px;line-height:1.68;flex:1;margin:0 0 12px}
+.pillar-card p{color:#566981;font-size:13px;line-height:1.68;flex:1;margin:0 0 12px}
 .pillar-action{display:inline-flex;gap:8px;color:var(--blue);font-size:12px;font-weight:800}
 .content-stack>.trust-panel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
   padding:0;gap:0;overflow:hidden}
 .trust-item{padding:23px 25px;border-right:1px solid var(--line)}
 .trust-item:last-child{border-right:0}
-.trust-label{display:block;color:#7a8ba3;font-size:11px;font-weight:780;margin-bottom:6px}
+.trust-label{display:block;color:#566981;font-size:11px;font-weight:780;margin-bottom:6px}
 .trust-value{display:block;font-weight:850;font-size:15px;color:#1b3354}
 .trust-value--hold{color:#a36228}
-.trust-detail{display:block;margin-top:3px;color:#75849b;font-size:11px;line-height:1.5}
+.trust-detail{display:block;margin-top:3px;color:#607187;font-size:11px;line-height:1.5}
 .content-stack .result-summary{background:#f7faff;border-color:#ceddf7;box-shadow:none}
 .content-stack nav.pagination{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .content-stack nav.pagination a{display:inline-flex;padding:8px 14px;border-radius:10px;
@@ -190,7 +190,7 @@ main pre{white-space:pre-wrap}
 .recipe-list a{display:inline-block;font-weight:790;letter-spacing:.01em}
 .page-footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
   padding:20px clamp(23px,3.5vw,58px) 28px;border-top:1px solid var(--line);
-  color:#8694a8;font-size:11px}
+  color:#566981;font-size:11px}
 .page-footer a{color:#526e9f}
 @media (max-width:1100px){
   .app-shell{grid-template-columns:222px minmax(0,1fr)}
