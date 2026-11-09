@@ -1,0 +1,110 @@
+name: UCIE MCP Actual SDK In-Memory Integration (Disposable)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/ucie_mcp_installed_sdk_client_server_gate_v01.py'
+      - 'tests/test_ucie_mcp_installed_sdk_gate_guard_v01.py'
+      - '.github/workflows/ucie-mcp-installed-sdk-integration-qa.yml'
+      - 'docs/UCIE_MCP_FULL_SDK_INTEGRATION_QA_20261109.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installed-sdk:
+    name: Pinned full MCP client-server / Ubuntu Python 3.13
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      UV_NO_PROGRESS: '1'
+      UCIE_DISPOSABLE_SDK_GATE: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Provision exact isolated lockfile resolver (not evidence source)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --no-deps --only-binary=:all: 'uv==0.9.5'
+      - name: Sparse retrieve only approved upstream SDK source and workspace manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo='https://github.com/modelcontextprotocol/python-sdk.git'
+          old='2118f14f8a19bc158d8a1cf90af58d85d187f849'
+          fixed='754254c08fe1c3eda18b69da3d336106fe8d72d6'
+          for stage in before after; do
+            if [ "$stage" = before ]; then sha="$old"; else sha="$fixed"; fi
+            dir="$RUNNER_TEMP/ucie-mcp-sdk-$stage"
+            git init -q "$dir"
+            git -C "$dir" remote add origin "$repo"
+            git -C "$dir" sparse-checkout init --no-cone
+            git -C "$dir" sparse-checkout set \
+              '/pyproject.toml' '/uv.lock' '/README.md' '/LICENSE' \
+              '/src/mcp/**' '/src/mcp-types/**' \
+              '/examples/**/pyproject.toml' '/examples/pyproject.toml'
+            git -C "$dir" -c protocol.version=2 fetch --no-tags --filter=blob:none --depth=256 origin "$sha"
+            git -C "$dir" -c advice.detachedHead=false checkout --detach FETCH_HEAD
+            git -C "$dir" -c protocol.version=2 fetch --filter=blob:none --depth=1 origin \
+              'refs/tags/v2.3.0:refs/tags/v2.3.0'
+            test "$(git -C "$dir" rev-parse HEAD)" = "$sha"
+            if [ "$stage" = before ]; then
+              lock='73fcc3331a93fc9442d8c2b2f85312d7cb389fbd'
+              project='8148505417b4ff5ed543dfdff39c9bf4ff7d4f2b'
+              types='4f3500c2913b8e183b3cd9a6ae15776bd79ea049'
+              manager='01a0823bf74c72c2197b846bf94a5f0ff00dfcea'
+              base='a13b72f1aa0eb4f15dddc42b4442a4246479cf6b'
+              client='8c7d372431219c1e60b6e14fd94e80b58efc10f2'
+            else
+              lock='fd2dcb85f9923798334ea6259522ae4ae84185f8'
+              project='6d7626d79b4a78c66e5dd1837b28530e677a0d34'
+              types='b5a980802196d70dfa373a5b646b353b2a243aa0'
+              manager='6ad5dfb8c654c2f965c5e25424a588a771e3c858'
+              base='32372a527a6e9b7d352b5371d524288342fd99b2'
+              client='099dcbb874fe1b49137bc2fe5667b0c81338d33b'
+            fi
+            test "$(git -C "$dir" hash-object uv.lock)" = "$lock"
+            test "$(git -C "$dir" hash-object pyproject.toml)" = "$project"
+            test "$(git -C "$dir" hash-object src/mcp-types/pyproject.toml)" = "$types"
+            test "$(git -C "$dir" hash-object src/mcp/server/mcpserver/prompts/manager.py)" = "$manager"
+            test "$(git -C "$dir" hash-object src/mcp/server/mcpserver/prompts/base.py)" = "$base"
+            test "$(git -C "$dir" hash-object src/mcp/client/client.py)" = "$client"
+            echo "UCIE_SDK_PINNED_SOURCE_OK stage=$stage commit=$sha"
+          done
+      - name: Install only package dependencies from each upstream exact uv.lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          for stage in before after; do
+            dir="$RUNNER_TEMP/ucie-mcp-sdk-$stage"
+            (cd "$dir" && uv sync --locked --no-default-groups --no-editable --python python3.13)
+            test -x "$dir/.venv/bin/python"
+            echo "UCIE_SDK_LOCKED_ENV_READY stage=$stage"
+          done
+      - name: Exercise real installed SDK Client and MCPServer in memory
+        shell: bash
+        run: |
+          set -euo pipefail
+          old='2118f14f8a19bc158d8a1cf90af58d85d187f849'
+          fixed='754254c08fe1c3eda18b69da3d336106fe8d72d6'
+          for stage in before after; do
+            dir="$RUNNER_TEMP/ucie-mcp-sdk-$stage"
+            if [ "$stage" = before ]; then sha="$old"; else sha="$fixed"; fi
+            test "$(git -C "$dir" rev-parse HEAD)" = "$sha"
+            UCIE_EXACT_UPSTREAM_COMMIT="$sha" \
+              "$dir/.venv/bin/python" -I -B \
+              "$GITHUB_WORKSPACE/scripts/ucie_mcp_installed_sdk_client_server_gate_v01.py" \
+              --stage "$stage" --checkout "$dir"
+          done
+      - name: Remove all temporary upstream code and SDK environments
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/ucie-mcp-sdk-before" "$RUNNER_TEMP/ucie-mcp-sdk-after"
