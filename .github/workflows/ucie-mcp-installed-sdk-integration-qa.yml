@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - 'scripts/ucie_mcp_installed_sdk_client_server_gate_v01.py'
+      - 'scripts/ucie_mcp_installed_dependency_metadata_v01.py'
       - 'tests/test_ucie_mcp_installed_sdk_gate_guard_v01.py'
+      - 'tests/test_ucie_mcp_installed_dependency_metadata_v01.py'
       - '.github/workflows/ucie-mcp-installed-sdk-integration-qa.yml'
       - 'docs/UCIE_MCP_FULL_SDK_INTEGRATION_QA_20261109.md'
       - 'docs/skillbooks/UCIE_SKILLBOOK_003_MCP_PROMPTS_DRAFT_20261109.md'
@@ -102,6 +104,21 @@ jobs:
             UCIE_EXACT_UPSTREAM_COMMIT="$sha" \
               "$dir/.venv/bin/python" -I -B \
               "$GITHUB_WORKSPACE/scripts/ucie_mcp_installed_sdk_client_server_gate_v01.py" \
+              --stage "$stage" --checkout "$dir"
+          done
+      - name: Audit actual installed package metadata against exact upstream lock (no rights claims)
+        shell: bash
+        run: |
+          set -euo pipefail
+          old='2118f14f8a19bc158d8a1cf90af58d85d187f849'
+          fixed='754254c08fe1c3eda18b69da3d336106fe8d72d6'
+          for stage in before after; do
+            dir="$RUNNER_TEMP/ucie-mcp-sdk-$stage"
+            if [ "$stage" = before ]; then sha="$old"; else sha="$fixed"; fi
+            test "$(git -C "$dir" rev-parse HEAD)" = "$sha"
+            UCIE_EXACT_UPSTREAM_COMMIT="$sha" \
+              "$dir/.venv/bin/python" -I -B \
+              "$GITHUB_WORKSPACE/scripts/ucie_mcp_installed_dependency_metadata_v01.py" \
               --stage "$stage" --checkout "$dir"
           done
       - name: Remove all temporary upstream code and SDK environments
