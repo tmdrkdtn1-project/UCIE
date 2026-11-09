@@ -33,13 +33,19 @@ Import-Module ScheduledTasks -ErrorAction Stop
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $task = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction Stop
 $actions = @($task.Actions)
-if ($actions.Count -ne 1 -or
-    $actions[0].Arguments -ne $expectedArgs -or
-    -not [string]::Equals($actions[0].WorkingDirectory, $root,
-        [System.StringComparison]::OrdinalIgnoreCase) -or
-    -not [string]::Equals($task.Principal.UserId, $identity,
-        [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw 'UCIE_WINDOWLESS_TASK_IDENTITY_OR_ACTION_MISMATCH'
+$actionCountMatches = ($actions.Count -eq 1)
+$argumentsMatch = ($actionCountMatches -and $actions[0].Arguments -eq $expectedArgs)
+$workingDirectoryMatches = ($actionCountMatches -and [string]::Equals(
+    $actions[0].WorkingDirectory, $root, [System.StringComparison]::OrdinalIgnoreCase))
+$principalMatches = [string]::Equals(
+    $task.Principal.UserId, $identity, [System.StringComparison]::OrdinalIgnoreCase)
+if (-not ($actionCountMatches -and $argumentsMatch -and
+          $workingDirectoryMatches -and $principalMatches)) {
+    throw ('UCIE_WINDOWLESS_TASK_IDENTITY_OR_ACTION_MISMATCH;' +
+        ' action_count_ok=' + $actionCountMatches +
+        ' arguments_ok=' + $argumentsMatch +
+        ' working_directory_ok=' + $workingDirectoryMatches +
+        ' principal_ok=' + $principalMatches)
 }
 $isConsole = [string]::Equals(
     $actions[0].Execute, $pythonConsole,
