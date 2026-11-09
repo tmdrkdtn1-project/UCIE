@@ -136,7 +136,8 @@ class WindowlessOwnerTaskTest(unittest.TestCase):
                 result = subprocess.run(
                     ["powershell.exe", "-NoProfile", "-NonInteractive",
                      "-Command", command],
-                    capture_output=True, text=True, timeout=20, check=False)
+                    capture_output=True, text=True, encoding="utf-8",
+                    errors="replace", timeout=20, check=False)
                 self.assertEqual(
                     result.returncode, 0, result.stdout + result.stderr)
 
@@ -158,7 +159,8 @@ class WindowlessOwnerTaskTest(unittest.TestCase):
             )
             result = subprocess.run(
                 [str(pyw), "-B", "-c", program, str(output)],
-                capture_output=True, text=True, timeout=12, check=False)
+                capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=12, check=False)
             self.assertEqual(
                 result.returncode, 0, result.stdout + result.stderr)
             self.assertTrue(output.is_file())
@@ -173,7 +175,8 @@ class WindowlessOwnerTaskTest(unittest.TestCase):
         result = subprocess.run(
             ["powershell.exe", "-NoProfile", "-NonInteractive", "-File",
              str(SCRIPTS / "set_ucie_local_v1_windowless.ps1")],
-            capture_output=True, text=True, timeout=20, check=False)
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=20, check=False)
         self.assertEqual(
             result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(
