@@ -195,23 +195,21 @@ def _home() -> str:
 def _evidence_rows(report: dict, *, guidance: bool = False,
                    query: str = "", page: int = 1,
                    route: str = "/local/error") -> str:
-    """Readable source metadata, never an automatic fix or approval."""
+    """Display a clear customer summary; preserve inspectable evidence."""
     from .rule_candidates import GUIDANCE
 
     if report.get("status") == "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
         return (
-            '<section class="workbench-note">'
-            '<h2>출처 연결 확인 필요</h2>'
-            '<p>출처 연결이 불완전하여 검색 결과를 표시하지 않습니다. '
-            '운영 원장을 수정하지 않고 수동으로 소스 계보를 확인하세요.'
-            '</p></section>'
+            '<section class="workbench-note"><h2>자료를 불러오지 못했습니다</h2>'
+            '<p>출처 연결이 불완전하여 검색 결과를 표시하지 않습니다.'
+            ' 잠시 후 다시 확인해 주세요.</p></section>'
         )
     rows = report.get("items", [])
     if not rows:
         return (
-            '<section class="workbench-note"><h2>검색 결과 없음</h2>'
-            '<p>선택한 조건과 일치하는 기존 공개 근거가 없습니다. '
-            '검증된 수정 또는 학습 결과를 만들어 내지 않습니다.</p></section>'
+            '<section class="workbench-note"><h2>검색 결과가 없습니다</h2>'
+            '<p>다른 기술명이나 오류 키워드로 다시 검색해 보세요.</p>'
+            '</section>'
         )
     output = []
     for row in rows:
@@ -227,11 +225,23 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
             "&amp;page=" + str(page) + "&amp;id=" + candidate_id +
             "&amp;from=" + origin
         )
-        pattern = _e(row.get("purpose_code", "공개 근거"))
+        source = str(row.get("source_id", "")).removeprefix("repo:")
+        pattern = _e(row.get("purpose_code", "기술 사례"))
         item = (
             '<article class="evidence-item">'
-            '<header class="evidence-title"><h3>' + pattern + '</h3>'
-            '<span class="record-stamp">PUBLIC / UNVERIFIED</span></header>'
+            '<header class="evidence-title"><div>'
+            '<span class="card-kicker">' + _e(source) + '</span>'
+            '<h3>' + pattern + '</h3>'
+            '<p class="customer-note">공개된 기술 변경을 바탕으로 정리한 참고 사례입니다.</p>'
+            '</div><span class="record-stamp">검토 전</span></header>'
+            '<div class="evidence-actions">'
+            '<a href="' + target + '">개선 방향 살펴보기'
+            '<span aria-hidden="true"> →</span></a>'
+            '<a href="' + _e(url) + '" target="_blank"'
+            ' rel="noopener noreferrer">원문 보기 ↗</a>'
+            '</div>'
+            '<details class="technical-details"><summary>'
+            '출처·버전·기술 정보 보기</summary>'
             '<dl class="evidence-properties">'
             '<div><dt>출처 / 기술</dt><dd>' + _e(row.get("source_id", "")) +
             ' · ' + _e(row.get("domain", "")) + '</dd></div>'
@@ -241,35 +251,31 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
             '<a rel="noopener noreferrer" target="_blank" href="' +
             _e(url) + '">' + _e(url) + '</a></dd></div>'
             '<div><dt>검증 상태</dt><dd>'
-            '<strong>UNVERIFIED_CANDIDATE_ONLY</strong></dd></div>'
+            '<strong>UNVERIFIED_CANDIDATE_ONLY</strong>'
+            ' · 실제 적용 전 별도 확인이 필요한 자료</dd></div>'
             '<div><dt>근거 SHA-256</dt><dd><code>' +
             _e(row.get("evidence_sha256", "")) + '</code></dd></div>'
             '<div><dt>분류 코드</dt><dd><code>' + pattern +
-            '</code></dd></div></dl>'
+            '</code></dd></div></dl></details>'
         )
         if guidance:
             guidance_row = GUIDANCE.get(row.get("purpose_code"))
+            item += (
+                '<details class="technical-details"><summary>'
+                '검토 가이드 보기</summary>'
+                '<div class="evidence-guidance">'
+            )
             if guidance_row:
                 item += (
-                    '<div class="evidence-guidance">'
-                    '<p><strong>안전 검토 방향 · 승인된 패치 아님</strong> '
-                    + _e(guidance_row[0]) + '</p>'
-                    '<p><strong>권장 회귀 확인 · 실행 결과 아님</strong> '
-                    + _e(guidance_row[1]) + '</p></div>'
+                    '<p><strong>안전 검토 방향 · 승인된 패치 아님</strong> ' +
+                    _e(guidance_row[0]) + '</p>'
+                    '<p><strong>권장 회귀 확인 · 실행 결과 아님</strong> ' +
+                    _e(guidance_row[1]) + '</p>'
                 )
             else:
-                item += (
-                    '<div class="evidence-guidance"><p>'
-                    '이 패턴에 확인된 수정 안내가 없습니다.'
-                    ' 출처 수동 검토가 필요합니다.</p></div>'
-                )
-        item += (
-            '<div class="evidence-actions"><a href="' + target + '">'
-            '이 후보로 오류 예방·회귀 검토 작업 열기'
-            '<span aria-hidden="true"> ↗</span></a>'
-            '<span>원본 확인 → 적용 범위 검토 → 회귀 계획</span></div>'
-            '</article>'
-        )
+                item += '<p>이 자료의 개별 검토 안내는 아직 준비되지 않았습니다.</p>'
+            item += '</div></details>'
+        item += '</article>'
         output.append(item)
     return "".join(output)
 
