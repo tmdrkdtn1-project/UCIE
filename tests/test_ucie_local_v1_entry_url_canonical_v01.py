@@ -46,7 +46,7 @@ class UCIEEntryUrlCanonicalRegression(unittest.TestCase):
     def test_exact_local_url_remains_normal_html(self):
         status, body, headers = self.get("/local")
         self.assertEqual(status, 200)
-        self.assertIn(b"UCIE Local V1", body)
+        self.assertIn(b'class="app-shell"', body)
         self.assertIn(b"<html", body.lower())
         self.assertIn("default-src 'none'",
                       headers.get("Content-Security-Policy", ""))
