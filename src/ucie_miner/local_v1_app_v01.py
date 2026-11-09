@@ -473,23 +473,28 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
     purpose = args.get("purpose", "")
     if purpose and purpose not in (*RECIPES, "REAL_PUBLIC_CATALOG"):
         raise LocalProductError("unregistered development engine")
+    friendly = {
+        "ENGINE_INCREMENTAL_BUILD": ("증분 빌드 실험", "변경된 부분만 다시 계산하는 방법"),
+        "SKILL_TEST_AUTOMATION": ("테스트 탐색 도구", "필요한 테스트를 더 빠르게 찾아보는 방법"),
+        "LEARNING_FEEDBACK_LOOP": ("피드백 분석 예제", "변경된 결과를 효율적으로 모으는 방법"),
+    }
     choices = "".join(
         '<li><a href="/local/engine?purpose=' + _e(name) + '">'
-        '<span>' + _e(name) + '</span>'
-        '<span class="recipe-copy">' + _e(info[0]) +
-        ' · UCIE 합성 워크로드</span></a></li>'
-        for name, info in sorted(RECIPES.items()))
+        '<span>' + _e(friendly[name][0]) + '</span>'
+        '<span class="recipe-copy">' + _e(friendly[name][1]) +
+        ' · 예제 체험</span></a></li>'
+        for name in sorted(RECIPES))
     choices += (
         '<li><a href="/local/engine?purpose=REAL_PUBLIC_CATALOG">'
-        '<span>REAL_PUBLIC_CATALOG</span>'
-        '<span class="recipe-copy">기존 UCIE 공개 근거의 정확 키 검색과'
-        ' 기본 탐색 비교 · 원본 코드 실행 없음</span></a></li>')
+        '<span>기술 자료 검색 비교</span>'
+        '<span class="recipe-copy">기존 공개 기술 자료의 검색 방법을 비교해 보세요.'
+        '</span></a></li>')
     body = (
-        '<section class="search-panel"><h2>UCIE 자체 개발 엔진 선택</h2>'
-        '<p>실제 UCIE 알고리즘을 선택해 호출합니다. 아래 공개 근거 엔진은'
-        ' 기존 UCIE 공개 후보의 메타데이터에서 실제 계산을 수행하며,'
-        ' 나머지 세 엔진은 명시된 합성 워크로드 실험입니다.</p>'
-        '<ul class="recipe-list">' + choices + '</ul></section>')
+        '<section class="search-panel"><h2>개발 도구 선택</h2>'
+        '<p>관심 있는 기능을 선택해 사용 방법과 예제 결과를 살펴보세요.</p>'
+        '<ul class="recipe-list">' + choices + '</ul>'
+        '<p class="customer-note">예제의 결과는 실제 작업 환경에서'
+        ' 동일한 성능을 보장하지 않습니다.</p></section>')
     if purpose == "REAL_PUBLIC_CATALOG":
         from .experience_application import (
             SCHEMA as PUBLIC_ENGINE_SCHEMA,
