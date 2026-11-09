@@ -274,7 +274,7 @@ def render_shell(name: str, content: str, routes: tuple) -> str:
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         '<meta name="color-scheme" content="light">'
-        '<title>UCIE · ' + escape(name, quote=True) + '</title><style>' +
+        '<title>UCIE Local V1 · ' + escape(name, quote=True) + '</title><style>' +
         STYLE + '</style></head><body>'
         '<a class="skip-link" href="#workspace">본문으로 건너뛰기</a>'
         '<div class="app-shell"><aside class="sidebar" aria-label="UCIE 작업 공간">'
