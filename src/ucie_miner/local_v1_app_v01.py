@@ -405,19 +405,29 @@ def _review(root: Path, raw: str) -> str:
     if page > 1:
         return_path += "&page=" + str(page)
     markup = [
-        '<section><h2>실제 공개 후보 · 오류 예방 검토 작업</h2>'
-        '<p><a href="' + _e(return_path) + '">검색 결과로 돌아가기</a></p>'
-        '<p>이 화면은 이미 수집된 공개 근거를 사람이 검토할 수 있는'
-        ' 작업으로 정리합니다. 새로운 코드 실행·자동 승인·수정은 없습니다.</p>'
-        '<p>검토 대상: <strong>' + _e(brief["pattern_code"]) + '</strong>'
-        ' · 출처: ' + _e(brief["source_id"]) + '</p>'
-        '<p>원본: <a target="_blank" rel="noopener noreferrer" href="' +
-        _e(brief["public_url"]) + '">' + _e(brief["public_url"]) + '</a></p>'
-        '<p>적용 버전 주장: ' + _e(brief["version_scope_claim"]) +
-        ' · 상태: <strong>UNVERIFIED_CANDIDATE_ONLY</strong></p>'
-        '<p>증거 SHA-256: <code>' + _e(brief["evidence_sha256"]) +
-        '</code></p></section>',
-        '<section><h2>UCIE 작성 안전 수정 방향 (검토안)</h2><p>' +
+        '<section class="search-panel">'
+        '<span class="eyebrow">REVIEW / SOURCE BOUND</span>'
+        '<h2>실제 공개 후보 · 오류 예방 검토 작업</h2>'
+        '<p><a href="' + _e(return_path) +
+        '">← 검색 결과로 돌아가기</a></p>'
+        '<p>이미 수집한 공개 근거를 사람이 검토할 수 있도록 정리했습니다.'
+        ' 이 화면에서 코드를 실행하거나 수정·승인하지 않습니다.</p>'
+        '<dl class="inventory-grid">'
+        '<div><dt>검토 대상</dt><dd><code>' +
+        _e(brief["pattern_code"]) + '</code></dd></div>'
+        '<div><dt>출처</dt><dd>' + _e(brief["source_id"]) + '</dd></div>'
+        '<div><dt>적용 버전 주장</dt><dd>' +
+        _e(brief["version_scope_claim"]) + '</dd></div>'
+        '<div><dt>검증 상태</dt><dd>'
+        'UNVERIFIED_CANDIDATE_ONLY</dd></div>'
+        '<div><dt>원본 공개 근거</dt><dd>'
+        '<a target="_blank" rel="noopener noreferrer" href="' +
+        _e(brief["public_url"]) + '">' + _e(brief["public_url"]) +
+        '</a></dd></div>'
+        '<div><dt>증거 SHA-256</dt><dd><code>' +
+        _e(brief["evidence_sha256"]) + '</code></dd></div></dl></section>',
+        '<section><span class="eyebrow">PLAN / NOT EXECUTED</span>'
+        '<h2>UCIE 작성 안전 수정 방향 (검토안)</h2><p>' +
         _e(brief["safe_fix_guidance"] or
            "해당 패턴의 전용 수정 지침이 없습니다. 원본 출처와 오류를 수동 분석하세요.") +
         '</p><h3>회귀시험 구성 계획 (미실행)</h3><p>' +
@@ -440,12 +450,12 @@ def _review(root: Path, raw: str) -> str:
             ' 공개 변경 내용을 검토하고 독립 회귀시험을 수동 설계해야 합니다.'
             '</p></section>')
     markup.append(
-        '<section><h2>다음 검토 작업 (사람이 수행)</h2><ol>' +
+        '<section><h2>다음 검토 작업 (사람이 수행)</h2><ol class="review-steps">' +
         "".join('<li>' + _e(action) + '</li>'
                 for action in brief["manual_actions"]) +
         '</ol></section>')
     markup.append(
-        '<section><h2>승인 전 필수 검증 상태</h2><ul>' +
+        '<section><h2>승인 전 필수 검증 상태</h2><ul class="review-gates">' +
         "".join('<li>' + _e(name) + ': <strong>' + _e(state) +
                 '</strong></li>' for name, state in gates.items()) +
         '</ul><p>실제 회귀시험: NOT_EXECUTED · 승인: NO · 배포: NO</p>'
