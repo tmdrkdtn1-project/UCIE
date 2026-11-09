@@ -129,53 +129,78 @@ def _search(root: Path, query: str, *, limit: int = PAGE_SIZE,
 
 
 def _page(name: str, main: str) -> str:
-    nav = "".join(
-        '<a href="' + href + '">' + _e(title) + "</a>"
-        for href, title, _ in ROUTES)
-    return (
-        '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<title>UCIE Local V1 - ' + _e(name) + '</title>'
-        '<style>body{font-family:system-ui,Malgun Gothic,sans-serif;'
-        'max-width:1000px;margin:0 auto;padding:22px;background:#f8fafc;color:#17263b}'
-        'header{border-bottom:2px solid #0e7490;padding-bottom:13px}'
-        'nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}'
-        'nav a,button{background:#075985;color:#fff;border-radius:6px;'
-        'padding:9px 12px;text-decoration:none;border:0;cursor:pointer}'
-        'main{line-height:1.65}section,article{background:white;margin:14px 0;'
-        'border:1px solid #cbd5e1;padding:14px;border-radius:8px}'
-        'input,select{padding:8px;max-width:95%;margin:5px}'
-        'small,.muted{color:#475569}code,pre{white-space:pre-wrap;overflow-wrap:anywhere}'
-        'a{overflow-wrap:anywhere}h1{font-size:1.6rem}'
-        '</style></head><body><header>'
-        '<h1>UCIE Local V1 · ' + _e(name) + '</h1>'
-        '<p>로컬 실사용 제품 우선 · 공개 근거만 사용 · 자동 규칙 승격 없음'
-        ' · 로컬 V1 소유자 인수 <strong>완료</strong>'
-        ' · 온라인·고객 배포 <strong>미승인</strong></p>'
-        '<nav><a href="/local">홈</a>' + nav + '</nav></header>'
-        '<main>' + main + '</main></body></html>'
-    )
+    """One local-only, accessible design system for every product route."""
+    from .local_v1_design_v02 import render_shell
+
+    return render_shell(name, main, ROUTES)
 
 
 def _home() -> str:
     require_local_work("LOCAL_APP")
-    blocks = []
-    for route, title, summary in ROUTES:
-        blocks.append(
-            '<article><h2><a href="' + route + '">' + _e(title)
-            + '</a></h2><p>' + _e(summary) + '</p></article>')
+    cards = []
+    for index, (route, title, summary) in enumerate(ROUTES, 1):
+        cards.append(
+            '<a class="pillar-card" href="' + route + '">'
+            '<span class="pillar-top"><span class="pillar-number">' +
+            str(index).zfill(2) + '</span>'
+            '<span class="pillar-arrow" aria-hidden="true">↗</span></span>'
+            '<h3>' + _e(title) + '</h3>'
+            '<p>' + _e(summary) + '</p>'
+            '<span class="pillar-action">워크스페이스 열기 '
+            '<span aria-hidden="true">→</span></span></a>'
+        )
     body = (
-        '<section><h2>로컬 V1 실제 사용자 작업</h2>'
-        '<p>아래 네 기능을 직접 실행하세요. 과거의 합성 테스트 통과를'
-        ' 로컬 제품 인수로 표시하지 않습니다.</p></section>'
-        + "".join(blocks) +
-        '<section><h2>개발 우선순위 잠금</h2><p>'
-        '1. 로컬 제품 완성 → 2. 온라인·고객 전용 출시'
-        ' → 3. 주변 확장. 출시 승인·서명·자동 승격은 모두 보류.</p>'
-        '<a href="/local/policy">현재 하드코딩된 규칙과 인수 조건 보기</a></section>'
+        '<section class="hero" aria-labelledby="hero-title">'
+        '<div class="hero-copy"><span class="eyebrow">'
+        'UCIE / PRIVATE LOCAL WORKSPACE</span>'
+        '<h2 id="hero-title">공개 기술 근거를<br>'
+        '<em>재사용할 수 있는 지식으로.</em></h2>'
+        '<p>오류 예방부터 개발 엔진, SkillBook, 자체 개선까지.'
+        ' 출처와 검증 상태를 분리해 기술을 살펴보고 검토합니다.'
+        ' 모든 후보는 별도 검증 전까지 미승인입니다.</p>'
+        '<div class="hero-actions">'
+        '<a class="button-primary" href="/local/library">가상도서관 탐색 '
+        '<span aria-hidden="true">↗</span></a>'
+        '<a class="button-ghost" href="/local/error">오류 근거 검색</a>'
+        '</div></div>'
+        '<div class="hero-visual" aria-hidden="true">'
+        '<span class="hero-node hero-node--a">PREVENT</span>'
+        '<span class="hero-node hero-node--b">BUILD</span>'
+        '<div class="hero-core">UCIE</div>'
+        '<span class="hero-node hero-node--c">LIBRARY</span>'
+        '<span class="hero-node hero-node--d">EVOLVE</span>'
+        '</div></section>'
+        '<section class="section-heading"><span class="eyebrow">'
+        'EXPLORE THE FOUR PILLARS</span>'
+        '<h2>로컬 V1 실제 사용자 작업</h2>'
+        '<p>네 가지 기능을 목적에 맞게 선택하세요.'
+        ' 실제 계산과 아직 필요한 검증을 혼동하지 않습니다.</p></section>'
+        '<section class="pillar-grid" aria-label="UCIE 4대 핵심 기능">' +
+        ''.join(cards) + '</section>'
+        '<section class="section-heading"><span class="eyebrow">'
+        'TRUST &amp; RELEASE BOUNDARIES</span>'
+        '<h2>작업 상태와 승인 경계</h2>'
+        '<p>사용 가능한 로컬 화면과 외부 배포 가능 여부는 별도입니다.</p>'
+        '</section>'
+        '<section class="trust-panel" aria-label="로컬 제품과 공개 근거 상태">'
+        '<div class="trust-item"><span class="trust-label">LOCAL V1</span>'
+        '<span class="trust-value">소유자 인수 완료 · 로컬 한정</span>'
+        '<span class="trust-detail">현재 PC의 127.0.0.1 환경</span></div>'
+        '<div class="trust-item"><span class="trust-label">PUBLIC EVIDENCE</span>'
+        '<span class="trust-value">출처 연결 ≠ 독립 검증</span>'
+        '<span class="trust-detail">미검증 후보는 자동 적용·승격하지 않음</span></div>'
+        '<div class="trust-item"><span class="trust-label">CUSTOMER RELEASE</span>'
+        '<span class="trust-value trust-value--hold">온라인·고객 출시 보류</span>'
+        '<span class="trust-detail">검증·권리·승인 게이트가 별도로 필요</span></div>'
+        '</section>'
+        '<section><h2>현재 개발 우선순위</h2>'
+        '<p><strong>로컬 제품 완성 → 안정화·최적화 → '
+        '온라인·고객 출시 별도 심사</strong>.'
+        ' 출시 승인·서명·자동 규칙 승격은 보류 중입니다.</p>'
+        '<p><a href="/local/policy">현재 개발 규칙과 인수 조건 자세히 보기 '
+        '<span aria-hidden="true">↗</span></a></p></section>'
     )
     return _page("시작", body)
-
 
 def _evidence_rows(report: dict, *, guidance: bool = False,
                    query: str = "", page: int = 1,
@@ -226,7 +251,7 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
             '<p><a href="' + target + '"><strong>'
             '이 후보로 오류 예방·회귀 검토 작업 열기'
             '</strong></a></p>')
-        output.append('<article><h3>' + _e(row.get("purpose_code", "공개 근거"))
+        output.append('<article class="evidence-item"><h3>' + _e(row.get("purpose_code", "공개 근거"))
                       + '</h3>' + details + '</article>')
     return "".join(output)
 
@@ -253,7 +278,7 @@ def _paged_evidence(root: Path, query: str, *, page: int,
     start = offset + 1 if shown else 0
     finish = offset + shown
     summary = (
-        '<section><p><strong>전체 일치 공개 근거 후보·개정 행: ' + _e(total)
+        '<section class="result-summary"><p><strong>전체 일치 공개 근거 후보·개정 행: ' + _e(total)
         + '건</strong> · 현재 ' + _e(start) + '–' + _e(finish)
         + '건 표시 · 페이지당 최대 ' + _e(PAGE_SIZE) + '건</p>'
         '<p class="muted">이 값은 미검증 공개 근거 행의 검색 결과입니다.'
@@ -269,7 +294,7 @@ def _paged_evidence(root: Path, query: str, *, page: int,
                      quote(query, safe="") + '&page=' + str(page + 1) +
                      '">다음 ' + str(PAGE_SIZE) + '건</a>')
     navigation = (
-        '<section><nav aria-label="공개 근거 검색 페이지">'
+        '<section class="pager-box"><nav class="pagination" aria-label="공개 근거 검색 페이지">'
         + ' · '.join(links) + '</nav></section>' if links else '')
     return (summary + _evidence_rows(
         report, guidance=guidance, query=query, page=page, route=route)
@@ -286,7 +311,7 @@ def _error(root: Path, raw: str) -> str:
     if not term and page != 1:
         raise LocalProductError("query required for non-initial error page")
     body = (
-        '<section><h2>코딩 오류 또는 API 패턴 검색</h2>'
+        '<section class="search-panel"><h2>코딩 오류 또는 API 패턴 검색</h2>'
         '<form action="/local/error" method="get">'
         '<label>공개 근거 검색어 <input name="q" maxlength="80" value="' +
         _e(term) + '" placeholder="scandir 또는 API_CONTRACT"></label>'
@@ -414,11 +439,11 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
         'REAL_PUBLIC_CATALOG</a> - 실제 기존 UCIE 공개 기술 근거의'
         ' 정확 키 검색 인덱스와 기본 탐색을 비교 (원본 코드 실행 없음)</li>')
     body = (
-        '<section><h2>UCIE 자체 개발 엔진 선택</h2>'
+        '<section class="search-panel"><h2>UCIE 자체 개발 엔진 선택</h2>'
         '<p>실제 UCIE 알고리즘을 선택해 호출합니다. 아래 공개 근거 엔진은'
         ' 기존 UCIE 공개 후보의 메타데이터에서 실제 계산을 수행하며,'
         ' 나머지 세 엔진은 명시된 합성 워크로드 실험입니다.</p>'
-        '<ul>' + choices + '</ul></section>')
+        '<ul class="recipe-list">' + choices + '</ul></section>')
     if purpose == "REAL_PUBLIC_CATALOG":
         from .experience_application import (
             SCHEMA as PUBLIC_ENGINE_SCHEMA,
@@ -634,7 +659,7 @@ def _library(root: Path, raw: str) -> str:
         raise LocalProductError("unbounded unified catalog shelves")
 
     body = (
-        '<section><h2>UCIE 통합 가상도서관</h2>'
+        '<section class="search-panel"><h2>UCIE 통합 가상도서관</h2>'
         '<p>SkillBook · 편집 검토 기술서적 · 실제 수집된 공개 기술 근거를'
         ' 한 화면에서 검색합니다. 세 자료는 검증 단위가 달라'
         ' 개수를 합산하거나 승인된 책/규칙으로 간주하지 않습니다.</p>'
@@ -733,10 +758,10 @@ def _evolution(root: Path, raw: str) -> str:
         '<p>검증 문제: ' + _e(", ".join(inventory.get("issues", []))) +
         '</p><p>기본 마이너·Stage10 개정·W04 검색 결과는 서로 다른 원장이므로'
         ' 합산된 제품 규칙 수가 아닙니다.</p></section>'
-        '<section><h2>개선·검토할 공개 변경 검색</h2>'
+        '<section class="search-panel"><h2>개선·검토할 공개 변경 검색</h2>'
         '<form action="/local/evolution" method="get">'
-        '<input name="q" maxlength="80" value="' + _e(term) +
-        '" placeholder="python/cpython 또는 pattern">'
+        '<label>공개 변경 검색어 <input name="q" maxlength="80" value="' + _e(term) +
+        '" placeholder="python/cpython 또는 pattern"></label>'
         '<button>변경 조회</button></form>'
         '<p>원본 공개 URL → 검증 미완료 상태 → 원본·중복·버전·회귀시험'
         ' 수동 검토가 다음 단계입니다.</p></section>'
