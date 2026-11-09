@@ -11,17 +11,26 @@ $task = Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction Silentl
 $taskState = 'NOT_REGISTERED'
 $lastResult = $null
 $expectedAction = $false
+$windowless = $false
+$consoleMode = $false
 if ($null -ne $task) {
     $taskState = [string] $task.State
     $info = Get-ScheduledTaskInfo -TaskName $taskName -TaskPath '\' -ErrorAction Stop
     $lastResult = $info.LastTaskResult
     $actions = @($task.Actions)
-    $expectedAction = ($actions.Count -eq 1 -and
-        [string]::Equals($actions[0].Execute,
+    if ($actions.Count -eq 1) {
+        $consoleMode = [string]::Equals($actions[0].Execute,
             'D:\UCIE\.venv\Scripts\python.exe',
-            [System.StringComparison]::OrdinalIgnoreCase) -and
-        $actions[0].Arguments -eq
-            ('-B "D:\UCIE\scripts\run_ucie_local_v1_autostart.py" --port ' + $Port))
+            [System.StringComparison]::OrdinalIgnoreCase)
+        $windowless = [string]::Equals($actions[0].Execute,
+            'D:\UCIE\.venv\Scripts\pythonw.exe',
+            [System.StringComparison]::OrdinalIgnoreCase)
+        $expectedAction = (($consoleMode -or $windowless) -and
+            $actions[0].Arguments -eq
+                ('-B "D:\UCIE\scripts\run_ucie_local_v1_autostart.py" --port ' + $Port) -and
+            [string]::Equals($actions[0].WorkingDirectory,
+                'D:\UCIE', [System.StringComparison]::OrdinalIgnoreCase))
+    }
 }
 $health = 'NOT_RESPONDING'
 $schema = $null
@@ -45,6 +54,8 @@ catch {
     task_name = $taskName
     task_state = $taskState
     task_action_matches_exact_ucie = $expectedAction
+    windowless_background_mode = ($expectedAction -and $windowless)
+    console_mode = ($expectedAction -and $consoleMode)
     last_task_result = $lastResult
     health = $health
     app_schema = $schema

@@ -9,14 +9,15 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = 'D:\UCIE'
-$python = 'D:\UCIE\.venv\Scripts\python.exe'
+$python = 'D:\UCIE\.venv\Scripts\pythonw.exe'
+$consolePython = 'D:\UCIE\.venv\Scripts\python.exe'
 $launcher = 'D:\UCIE\scripts\run_ucie_local_v1_autostart.py'
 $taskName = 'UCIE-LocalV1-Web'
 $taskPath = '\'
 $arguments = '-B "' + $launcher + '" --port ' + $Port
 
 if ($Port -eq 8767) { throw 'UCIE_AUTOSTART_LEGACY_8767_PORT_REJECTED' }
-foreach ($path in @($python, $launcher, (Join-Path $root '.git'),
+foreach ($path in @($python, $consolePython, $launcher, (Join-Path $root '.git'),
                     (Join-Path $root 'src'),
                     (Join-Path $root 'docs\UCIE_LOCAL_V1_OWNER_ACCEPTANCE_20261108.md'))) {
     if (-not (Test-Path -LiteralPath $path)) {
@@ -31,18 +32,48 @@ $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 if ([string]::IsNullOrWhiteSpace($identity)) { throw 'UCIE_OWNER_IDENTITY_UNKNOWN' }
 
 $existing = Get-ScheduledTask -TaskName $taskName -TaskPath $taskPath -ErrorAction SilentlyContinue
+function Test-UcieOwnerSid([string]$TaskPrincipalId) {
+    try {
+        if ($TaskPrincipalId -match '^S-1-[0-9-]+$') {
+            $sid = ([System.Security.Principal.SecurityIdentifier]::new($TaskPrincipalId)).Value
+        }
+        else {
+            $sid = ([System.Security.Principal.NTAccount]::new($TaskPrincipalId)).Translate(
+                [System.Security.Principal.SecurityIdentifier]).Value
+        }
+        return [string]::Equals($sid,
+            [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value,
+            [System.StringComparison]::OrdinalIgnoreCase)
+    }
+    catch {
+        return $false
+    }
+}
 if ($null -ne $existing) {
     $actions = @($existing.Actions)
+    $isWindowless = [string]::Equals($actions[0].Execute, $python,
+        [System.StringComparison]::OrdinalIgnoreCase)
+    $isLegacyConsole = [string]::Equals($actions[0].Execute, $consolePython,
+        [System.StringComparison]::OrdinalIgnoreCase)
     if ($actions.Count -ne 1 -or
-        -not [string]::Equals($actions[0].Execute, $python,
-            [System.StringComparison]::OrdinalIgnoreCase) -or
+        (-not $isWindowless -and -not $isLegacyConsole) -or
         $actions[0].Arguments -ne $arguments -or
-        $existing.Principal.UserId -ne $identity) {
+        -not [string]::Equals($actions[0].WorkingDirectory, $root,
+            [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-UcieOwnerSid ([string]$existing.Principal.UserId))) {
         throw 'UCIE_AUTOSTART_TASK_NAME_CONFLICT_NO_OVERWRITE'
     }
     if (-not $Apply) {
-        Write-Output 'UCIE_LOCAL_V1_AUTOSTART_ALREADY_REGISTERED_PREVIEW_ONLY'
+        if ($isLegacyConsole) {
+            Write-Output 'UCIE_LOCAL_V1_CONSOLE_TASK_PREVIEW_USE_WINDOWLESS_MIGRATION'
+        }
+        else {
+            Write-Output 'UCIE_LOCAL_V1_AUTOSTART_ALREADY_REGISTERED_PREVIEW_ONLY'
+        }
         return
+    }
+    if ($isLegacyConsole) {
+        throw 'UCIE_CONSOLE_TASK_USE_SET_UCIE_LOCAL_V1_WINDOWLESS_PS1'
     }
     if ($PSCmdlet.ShouldProcess($taskName, 'start existing verified UCIE task')) {
         if ($existing.State -ne 'Running') {
