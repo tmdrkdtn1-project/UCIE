@@ -47,3 +47,20 @@ Workflow `.github/workflows/ucie-mcp-installed-sdk-integration-qa.yml` has read-
 - **V4 UI design freeze:** no code modifications under `src/ucie_miner/local_v1_app_v01.py`, `src/ucie_miner/local_v1_design_v04.py` or anything rendering `/local` and `/local/evolution`. No operating database, Windows scheduler, public miner, Cloudflare, connectivity, dashboard, auto rule promotion, or customer release changes.
 
 If the upstream lock install fails or a protocol mode has a different API surface, record the exact failure as **NO_GO**, keep the previous method-path proof, and make only a scoped follow-up patch. Do not substitute synthetic fixtures or disable a failing case to obtain a green badge.
+
+## Actual disposable installed-SDK CI observation (2026-11-09)
+
+GitHub Actions run: https://github.com/tmdrkdtn1-project/UCIE/actions/runs/42584866664 (job completed **success** on exact source SHA `ad3b1ca7468a859ca7ed95767147233f27135e2c`). This result is **real installed MCP SDK in-memory Client/MCPServer** behavior, not the previous AST or synthetic-only fixture.
+
+| Source | Distribution observed in isolated venv | SDK mode | Valid result | Unknown prompt code | Missing required-arg code | Function-exception code |
+|---|---|---|---|---:|---:|---:|
+| pre-fix tag `2118f14` | `mcp==2.3.0`, `mcp-types==2.3.0` | `legacy` | `Hello, Ada` | `0` | `0` | `0` |
+| pre-fix tag `2118f14` | same | `2026-07-28` | `Hello, Ada` | `-32603` | `-32603` | `-32603` |
+| merged PR `754254c` | `mcp==2.3.1.dev9+754254c`, `mcp-types==2.3.1.dev9+754254c` | `legacy` | `Hello, Ada` | **`-32602`** | **`-32602`** | `0` |
+| merged PR `754254c` | same | `2026-07-28` | `Hello, Ada` | **`-32602`** | **`-32602`** | `-32603` |
+
+Both exact upstream Git commits, original `uv.lock` hashes, root/types manifests, manager/base/client code blobs passed immutable identity verification **before** installing either stage. Both real SDK environments were installed with original locked dependency graphs, and their Client↔MCPServer interactions passed all 16 bounded first-party requests (4 cases × 2 modes × 2 source points) with recorded exception codes. The test connects SDK components **in memory**, not over HTTP/stdio; this is not a security/rights approval.
+
+**Important version distinction:** `2.3.1.dev9+754254c` is the *dynamically generated version label of this local build from a PR commit*. It is **not proof of an officially published `v2.3.1` release**. The first fixed published release is still `NOT_VERIFIED`. Dependency wheels were used under the official lock inside disposable runner only; independent rights/security assessments and pinned `uv` wheel hash review are outstanding.
+
+The first workflow attempt failed during *UCIE's own Python-vs-venv symlink preflight* after both SDK source/lock verifications and installs had completed. Fix commit `ad3b1ca` checks `sys.prefix` and the invoked executable's lexical venv path instead of resolving the venv Python symlink to the base interpreter. This was **not** an SDK regression; the corrected exact run passed. Standard multi-platform PR CI is a separate gate.
