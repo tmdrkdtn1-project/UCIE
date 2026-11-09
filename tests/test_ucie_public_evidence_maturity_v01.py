@@ -94,7 +94,8 @@ class PublicEvidenceMaturityTests(unittest.TestCase):
     def test_unchanged_count_required_and_bounded_preview(self):
         h = handoff()
         h["linked_revisions"] = 1
-        with self.assertRaises(EvidenceMaturityError):
+        # Existing source-linked validation rejects inconsistent counts first.
+        with self.assertRaises(PolicyError):
             assess_public_evidence_maturity(h)
         for limit in (0, 13, True, 1.0):
             with self.assertRaises(EvidenceMaturityError):
