@@ -28,6 +28,11 @@ APP_STATUS = "LOCAL_V1_OWNER_ACCEPTED_LOCAL_GO_NO_ONLINE_RELEASE"
 LOCAL_SERVER_CLASS = ThreadingHTTPServer
 QUERY = re.compile(r"[A-Za-z0-9_.:/ -]{0,80}\Z")
 BOOK_QUERY = re.compile(r"[\w .-]{0,80}\Z", re.UNICODE)
+# Entry-link tracking is dropped, never reflected or interpreted as approval.
+HOME_TRACKING_FIELDS = frozenset((
+    "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+))
+HOME_TRACKING_VALUE = re.compile(r"[A-Za-z0-9._:/+-]{1,80}\Z")
 PAGE_SIZE = 10
 MAX_PAGE = 500  # 10 at a time; covers the owner public catalog without bulk dumps.
 ROUTES = (
@@ -51,6 +56,23 @@ class LocalProductError(ValueError):
 
 def _e(value: object) -> str:
     return escape(str(value), quote=True)
+
+
+def _is_benign_home_tracking(raw: str) -> bool:
+    """Only bounded UTM fields can be discarded at the local entry URL."""
+    if type(raw) is not str or not raw or len(raw) > 240:
+        return False
+    try:
+        fields = parse_qs(
+            raw, keep_blank_values=True, strict_parsing=True,
+            max_num_fields=5, encoding="utf-8", errors="strict",
+        )
+    except (ValueError, UnicodeError):
+        return False
+    return bool(fields) and set(fields).issubset(HOME_TRACKING_FIELDS) and all(
+        len(values) == 1 and HOME_TRACKING_VALUE.fullmatch(values[0]) is not None
+        for values in fields.values()
+    )
 
 
 def _params(raw: str, allowed: tuple[str, ...]) -> dict[str, str]:
@@ -796,7 +818,7 @@ def make_handler(root: Path):
         def do_GET(self):
             parts = urlsplit(self.path)
             if parts.path not in (
-                    "/", "/local", "/local/health", "/local/error",
+                    "/", "/local", "/local/", "/local/health", "/local/error",
                     "/local/engine", "/local/books", "/local/library",
                     "/local/evolution", "/local/review", "/local/policy",
                     "/local/skillbook-run"):
@@ -821,9 +843,22 @@ def make_handler(root: Path):
                         "online_release_authorized": False,
                         "operating_database_writes": 0,
                     }, sort_keys=True), "application/json; charset=utf-8")
-                if parts.path in ("/", "/local"):
-                    if parts.query:
+                if parts.path in ("/", "/local", "/local/"):
+                    if parts.query and not (
+                        parts.path in ("/local", "/local/")
+                        and _is_benign_home_tracking(parts.query)
+                    ):
                         raise LocalProductError("local home cannot take query")
+                    if parts.path == "/local/" or parts.query:
+                        # Normalize only the local landing path: no query
+                        # values reflected, no customer/approval bypass.
+                        self.send_response(302)
+                        self.send_header("Location", "/local")
+                        self.send_header("Cache-Control", "no-store")
+                        self.send_header("Content-Length", "0")
+                        self.send_header("X-Content-Type-Options", "nosniff")
+                        self.end_headers()
+                        return
                     html = _home()
                 elif parts.path == "/local/error":
                     html = _error(root, parts.query)
