@@ -622,7 +622,9 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
             '미확인입니다. 자동 승인 및 고객 배포는 금지됩니다.</p>'
             '<p><a href="/local/guide/mcp-prompts">'
             '출처·수정 전후 근거와 SkillBook 003 검토 가이드 보기 →'
-            '</a></p></section>'
+            '</a></p>'
+            '<p><a href="/local/evolution?q=MCP">'
+            '공개 기술 변경 전후 비교 보기 →</a></p></section>'
         )
     elif purpose:
         out = evaluate_ucie_owned_recipe(
@@ -996,6 +998,97 @@ def _library(root: Path, raw: str) -> str:
     return _page("통합 가상도서관", body)
 
 
+def _mcp_evolution_comparison() -> str:
+    """Source-pinned fixed example; preserve historical vs synthetic QA scope."""
+    require_local_work("EVIDENCE_EVOLUTION")
+    from .mcp_prompts_guide_v01 import (
+        SCHEMA as GUIDE_SCHEMA, STATUS as GUIDE_STATUS,
+        SKILLBOOK_ID as GUIDE_ID, build_readonly_guide,
+    )
+    from .mcp_prompt_regression_v01 import (
+        SCHEMA as WIRE_SCHEMA, SOURCE_PR, UPSTREAM_MERGE_SHA,
+        synthetic_demonstration,
+    )
+    guide = build_readonly_guide()
+    trial = synthetic_demonstration()
+    evidence = guide.get("source_evidence") if type(guide) is dict else None
+    gates = guide.get("review_gates") if type(guide) is dict else None
+    if (type(guide) is not dict or guide.get("schema") != GUIDE_SCHEMA
+            or guide.get("status") != GUIDE_STATUS
+            or guide.get("skillbook_id") != GUIDE_ID
+            or guide.get("export_allowed") is not False
+            or guide.get("auto_promoted") is not False
+            or guide.get("network_requests") != 0
+            or guide.get("operating_database_writes") != 0
+            or guide.get("other_project_access") is not False
+            or type(evidence) is not dict
+            or evidence.get("official_repository") !=
+            "modelcontextprotocol/python-sdk"
+            or evidence.get("pr_url") != SOURCE_PR
+            or evidence.get("pre_fix_tag") != "v2.3.0"
+            or evidence.get("patch_merge_commit") != UPSTREAM_MERGE_SHA
+            or evidence.get("observed_cases") != 16
+            or evidence.get("first_published_fixed_version") != "NOT_VERIFIED"
+            or evidence.get("source_code_redistributed") is not False
+            or type(gates) is not dict or not gates
+            or any(value is not False for value in gates.values())
+            or type(trial) is not dict or trial.get("schema") != WIRE_SCHEMA
+            or trial.get("status") !=
+            "SYNTHETIC_WIRE_CONTRACT_ONLY_NO_SDK_EXECUTION"
+            or trial.get("source_pr") != SOURCE_PR
+            or trial.get("source_merge_sha") != UPSTREAM_MERGE_SHA
+            or trial.get("first_fixed_release") != "NOT_VERIFIED"
+            or trial.get("cases") != 8
+            or trial.get("contract_matches") != 6
+            or trial.get("non_input_controls") != 2
+            or trial.get("synthetic_pre_fix_violations_detected") != 4
+            or trial.get("independent_sdk_regression") != "NOT_EXECUTED"
+            or trial.get("per_revision_rights_approved") is not False
+            or trial.get("auto_promoted") is not False
+            or trial.get("customer_release_authorized") is not False
+            or trial.get("network_requests") != 0
+            or trial.get("persistent_writes") != 0):
+        raise LocalProductError("MCP change comparison source or release gate drift")
+    return (
+        '<section class="shelf-entry">'
+        '<span class="eyebrow">PINNED CHANGE · REVIEW ONLY</span>'
+        '<h2>MCP prompts/get 오류: 수정 전후 실제 관측 비교</h2>'
+        '<p>공식 Python SDK v2.3.0과 PR #3696 병합 커밋을 '
+        '격리 환경에서 비교한 기존 근거입니다. 미등록 프롬프트와 '
+        '필수 인수 누락, 두 입력 오류에 한정됩니다.</p>'
+        '<dl class="inventory-grid">'
+        '<div><dt>수정 전 · 2025-11-25 모드</dt><dd><code>0'
+        '</code> (비표준 입력 오류)</dd></div>'
+        '<div><dt>수정 전 · 2026-07-28 모드</dt><dd><code>-32603'
+        '</code> (서버 내부 오류로 분류)</dd></div>'
+        '<div><dt>수정 후 · 두 모드</dt><dd><code>-32602'
+        '</code> (잘못된 입력)</dd></div>'
+        '<div><dt>기존 설치 SDK 관측</dt><dd>' +
+        _e(evidence["observed_cases"]) +
+        '개 한정 사례 · 전후 커밋 고정</dd></div></dl>'
+        '<p><strong>이번 화면에서 다시 실행한 검사:</strong> '
+        'UCIE가 작성한 JSON-RPC 합성 사례 ' + _e(trial["cases"]) +
+        '건 중 계약 일치 ' + _e(trial["contract_matches"]) +
+        '건, 서버 실행 오류 대조 ' +
+        _e(trial["non_input_controls"]) + '건, '
+        '가상 수정 전 위반 감지 ' +
+        _e(trial["synthetic_pre_fix_violations_detected"]) +
+        '건. 이는 실제 SDK를 재실행한 결과가 아닙니다.</p>'
+        '<p><a href="' + _e(evidence["pr_url"]) +
+        '" rel="noopener noreferrer" target="_blank">'
+        '공식 공개 수정 PR #3696 근거 보기</a></p>'
+        '<div class="page-controls">'
+        '<a href="/local/engine?purpose=MCP_PROMPTS_CONTRACT">'
+        'UCIE 자체 계약 검사 결과 보기 →</a>'
+        '<a href="/local/guide/mcp-prompts">'
+        'SkillBook 003 적용 조건·한계 확인 →</a></div>'
+        '<p class="customer-note">공식 최초 수정 포함 배포판, '
+        '재배포 권리·의존성 보안·고객 출시 승인 모두 미확인입니다. '
+        '검토 전 자료이며 자동 승인이나 운영 코드 변경은 없습니다.</p>'
+        '</section>'
+    )
+
+
 def _evolution(root: Path, raw: str) -> str:
     """Read-only actual collection inventory, not an approval metric."""
     require_local_work("EVIDENCE_EVOLUTION")
@@ -1041,6 +1134,9 @@ def _evolution(root: Path, raw: str) -> str:
         ' 자동 승격은 수행하지 않습니다.</p></details>'
         '</section>'
     )
+    if page == 1 and term.casefold().strip() in (
+            "mcp", "prompts/get", "prompt", "-32602"):
+        body += _mcp_evolution_comparison()
     body += _paged_evidence(root, term, page=page,
                             route="/local/evolution")
     return _page("근거 기반 개선", body)
