@@ -53,3 +53,23 @@ Observed linked public review rows: **1,063**. This is a count of source-linked 
 **Diagnostic interpretation:** source load/validation appears ~4.9x slower than a single already-loaded W04 substring query on this tiny observation set. This identifies the first *inspection target*, not a proven root cause, user HTTP latency, reproducible speedup, or an SLO violation. The P8 exact-key inner timings describe a different workload and do not license a W04 index swap. Next stage: targeted breakdown of the existing validation pipeline, source SHA/owner safeguards, and a separate regression-backed optimization proposal *only if* additional equivalent-workload evidence warrants it.
 
 **Release:** exact new HEAD CI remains to be verified; PR stays DRAFT. Commercial/customer online release, SkillBook promotion, signing and redistribution remain NO_GO.
+
+## 2026-11-10 source-linkage read-only phase attribution (second owner test)
+
+The separately bounded, owner-only Windows test `tests/test_ucie_p3_owner_handoff_phase_v01.py` returned **1/1 PASS**, preserving and calling the original Stage10/15 readers, review proposal builder and source-linkage validator. It used one warmup plus two recorded samples. The function-wrappers are process-local and restored immediately; no production implementation or trust gate was replaced.
+
+| Phase from the existing public-only handoff | Median | Maximum |
+| --- | ---: | ---: |
+| Full source-linked handoff | 105.556 ms | 106.171 ms |
+| Entire Stage10/15 source map + reconstruction | 96.438 ms | 97.319 ms |
+| Stage10 public candidate reader | 1.841 ms | 1.859 ms |
+| **Stage15 public fix-evidence reader** | **89.452 ms** | 90.313 ms |
+| Other source-map bookkeeping | 5.145 ms | 5.182 ms |
+| Review ledger cross-check + task rendering | 9.118 ms | 9.384 ms |
+| Within source-map: review proposal construction (nested) | 4.853 ms | 4.859 ms |
+
+The Stage15 reader took ~84.7% of the measured full handoff duration. This isolates the **first credible optimization investigation target**. The approved public Stage15 reader currently calls `audit_external_evidence_chain(root)` (which reads the Stage13 history and Stage15 fix ledger), then calls `_history(root)` and `_fix(root)` a second time. The repeated reads are visible in the current source, but **we have not independently measured their individual contribution or proven a safe substitute**. Do not skip the cross-ledger audit, immutable identity linkage, opt-in marker check, SQLite identity/schema/quick_check or fail-closed behavior. A future refactor must retain all these validations and demonstrate equivalence under concurrent ledger updates, tampering, missing ledgers, duplicate source rows and owner-host regression testing.
+
+This owner test measured **1,063** source-linked public revision rows, stable across its three reads. The internal untrusted public task-ID digest is `29b550afd19db15378e938dda61009573110e4f53b370c0af28108d05e7c395f`; this is a local consistency marker and not an approval or distribution signature.
+
+**Current decision:** Stage15 is a candidate for a separately reviewed lossless read-path refactor. No performance optimization has yet been applied; V04 presentation, original public reader, runtime SQLite, operating scheduler, C40 and customer release state remain unchanged.
