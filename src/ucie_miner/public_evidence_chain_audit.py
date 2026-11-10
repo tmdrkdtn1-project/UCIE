@@ -132,15 +132,13 @@ def _valid_fix(row):
     )
 
 
-def audit_external_evidence_chain(root):
+def _audit_loaded_public_evidence(history, fixes):
     """Cross-check exact Stage 13 fingerprints; do not query any remote API.
 
     An index match can only establish internal provenance consistency. Stage
     15 captured at most 30 files, did not attest the upstream merge a second
     time and never proved a published-release inclusion or a regression.
     """
-    history = _history(root)
-    fixes = _fix(root)
     missing = [
         stage for stage, rows in (("stage13", history), ("stage15", fixes))
         if rows is None
@@ -186,3 +184,28 @@ def audit_external_evidence_chain(root):
         "license_approved": False, "approved_rules": 0,
         "model_weights_updated": False, "production_approved": False,
     }
+
+
+def audit_external_evidence_chain(root):
+    """Preserve the original public Stage16 audit response and safety checks."""
+    return _audit_loaded_public_evidence(_history(root), _fix(root))
+
+
+def read_audited_public_evidence_snapshot(root):
+    """Read each UCIE public ledger once and return only a fully audited snapshot.
+
+    Original source DB identity/schema/integrity checks still run in _history
+    and _fix; the unverified cross-ledger identity and row checks run in the
+    same Stage16 audit logic. A missing, mismatched, or malformed source cannot
+    escape as a valid handoff. This is not a cross-file ACID snapshot.
+    """
+    from types import MappingProxyType
+
+    history = _history(root)
+    fixes = _fix(root)
+    result = _audit_loaded_public_evidence(history, fixes)
+    if (result["status"] != "STAGE16_LOCALLY_LINKED_BUT_UNVERIFIED_NO_GO"
+            or history is None or fixes is None
+            or result["local_identity_links"] != len(fixes)):
+        raise DiscoveryError("Stage 13/15 public evidence chain is not consistent")
+    return MappingProxyType(history), tuple(fixes)
