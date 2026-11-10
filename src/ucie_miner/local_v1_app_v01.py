@@ -692,6 +692,78 @@ def _skillbook_runner(raw: str) -> str:
     return _page("SkillBook 실행 결과", html)
 
 
+def _mcp_review_guide(raw: str, *, json_mode: bool = False) -> str:
+    """Local V04-shell reading only; NO book activation or browser execution."""
+    require_local_work("VIRTUAL_LIBRARY")
+    if raw:
+        raise LocalProductError("MCP guide detail cannot have query arguments")
+    from .mcp_prompts_guide_v01 import (
+        build_readonly_guide, SCHEMA as MCP_SCHEMA, STATUS as MCP_STATUS,
+        SKILLBOOK_ID as MCP_ID,
+    )
+    guide = build_readonly_guide()
+    gates = guide.get("review_gates")
+    source = guide.get("source_evidence")
+    if (guide.get("schema") != MCP_SCHEMA
+            or guide.get("skillbook_id") != MCP_ID
+            or guide.get("status") != MCP_STATUS
+            or guide.get("export_allowed") is not False
+            or guide.get("auto_promoted") is not False
+            or guide.get("network_requests") != 0
+            or guide.get("operating_database_writes") != 0
+            or type(gates) is not dict
+            or any(value is not False for value in gates.values())
+            or type(source) is not dict
+            or source.get("official_repository") != "modelcontextprotocol/python-sdk"
+            or source.get("patch_merge_commit") !=
+            "754254c08fe1c3eda18b69da3d336106fe8d72d6"
+            or type(guide.get("chapters")) is not list
+            or len(guide["chapters"]) != 5):
+        raise LocalProductError("unapproved SkillBook 003 state drift")
+    if json_mode:
+        return json.dumps(guide, ensure_ascii=False, sort_keys=True)
+    body = (
+        '<section class="search-panel"><span class="eyebrow">'
+        'SKILLBOOK 003 · REVIEW ONLY</span>'
+        '<h2>' + _e(guide["title"]) + '</h2>'
+        '<p>실제 공개 SDK 전후 검증에 근거한 UCIE 작성 기술 가이드입니다. '
+        '미승인 초안이며 재배포·자동 실행·출시가 허용되지 않습니다.</p>'
+        '<div class="page-controls"><a href="/local/library?q=MCP">'
+        '도서관으로 돌아가기</a></div></section>'
+        '<section class="shelf-entry"><h3>공식 근거·검증 범위</h3>'
+        '<p><a href="' + _e(source["pr_url"]) +
+        '" rel="noopener noreferrer" target="_blank">'
+        '공식 MCP SDK 수정 PR #3696</a></p>'
+        '<p>수정 전 ' + _e(source["pre_fix_tag"]) +
+        ' · 수정 병합 ' + _e(source["patch_merge_commit"]) + '</p>'
+        '<p>실제 설치 SDK 메모리 내 테스트: ' +
+        _e(source["observed_cases"]) + '건(두 시점·두 프로토콜). '
+        '공식 최초 수정 포함 배포판: 미확인.</p></section>'
+    )
+    for chapter in guide["chapters"]:
+        if (type(chapter) is not dict
+                or set(chapter) != {"heading", "text", "claim_scope"}
+                or any(type(value) is not str or not value
+                       for value in chapter.values())):
+            raise LocalProductError("unexpected MCP guide chapter")
+        body += (
+            '<section class="shelf-entry"><h3>' + _e(chapter["heading"]) +
+            '</h3><p>' + _e(chapter["text"]) +
+            '</p><details class="technical-details"><summary>근거 범위'
+            '</summary><code>' + _e(chapter["claim_scope"]) +
+            '</code></details></section>'
+        )
+    body += (
+        '<section class="shelf-entry"><h3>재사용 인터페이스</h3>'
+        '<p><code>' + _e(guide["machine_skill_contract"]["callable"]) +
+        '</code> · 제한된 호출 자료만 검사; 브라우저에서는 실행하지 않습니다.</p>'
+        '<p><a href="/local/guide/mcp-prompts.json">계약 및 근거 JSON 보기</a></p>'
+        '<p>의존성 보안·사용권·소유자 승인·고객 배포는 모두 NO-GO입니다.</p>'
+        '</section>'
+    )
+    return _page("MCP SkillBook 003 · 검토 중", body)
+
+
 def _library(root: Path, raw: str) -> str:
     """One user-facing UCIE library: SkillBooks, editorial drafts and all W04 pages.
 
@@ -779,11 +851,22 @@ def _library(root: Path, raw: str) -> str:
             '<section class="workbench-note"><h2>일치하는 가이드가 없습니다</h2>'
             '<p>검색어를 바꿔 다시 확인해 보세요.</p></section>'
         )
+    from .mcp_prompts_guide_v01 import matches as matches_mcp_guide
+    mcp_guide_visible = matches_mcp_guide(term)
     body += (
         '<section class="shelf-title"><span class="eyebrow">READING</span>'
-        '<h2>검토 중인 자료</h2><p>' + _e(len(drafts)) +
+        '<h2>검토 중인 자료</h2><p>' + _e(len(drafts) + int(mcp_guide_visible)) +
         '개 자료 · 준비 중인 초안</p></section>'
     )
+    if mcp_guide_visible:
+        body += (
+            '<article class="shelf-entry">'
+            '<span class="card-kicker">SKILLBOOK 003 · 미승인 초안</span>'
+            '<h3><a href="/local/guide/mcp-prompts">'
+            'MCP prompts/get 입력 오류와 실행 오류 구분</a></h3>'
+            '<p>실제 SDK 16개 호출 전후 비교 근거 · 안전한 오류 구분 · '
+            '제한된 기계 판독 계약 · 재배포 불가</p></article>'
+        )
     for draft in drafts:
         ident = draft.get("draft_sha256")
         if type(ident) is not str or re.fullmatch(r"[0-9a-f]{64}", ident) is None:
@@ -799,7 +882,7 @@ def _library(root: Path, raw: str) -> str:
             _e(", ".join(draft.get("source_ids", []))) +
             '</p><p>원문·권리·정확성 추가 확인 필요</p></details></article>'
         )
-    if not drafts:
+    if not drafts and not mcp_guide_visible:
         body += (
             '<section class="workbench-note"><h2>일치하는 자료가 없습니다</h2>'
             '<p>다른 키워드로 검색해 보세요.</p></section>'
@@ -979,7 +1062,8 @@ def make_handler(root: Path):
                     "/", "/local", "/local/", "/local/health", "/local/error",
                     "/local/engine", "/local/books", "/local/library",
                     "/local/evolution", "/local/review", "/local/policy",
-                    "/local/skillbook-run"):
+                    "/local/skillbook-run", "/local/guide/mcp-prompts",
+                    "/local/guide/mcp-prompts.json"):
                 return super().do_GET()
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
                 return self.reply(403, "LOOPBACK_ONLY",
@@ -1046,6 +1130,13 @@ def make_handler(root: Path):
                     html = _library(root, parts.query)
                 elif parts.path == "/local/skillbook-run":
                     html = _skillbook_runner(parts.query)
+                elif parts.path in ("/local/guide/mcp-prompts",
+                                    "/local/guide/mcp-prompts.json"):
+                    is_json = parts.path.endswith(".json")
+                    value = _mcp_review_guide(parts.query, json_mode=is_json)
+                    return self.reply(200, value,
+                                      "application/json; charset=utf-8" if is_json
+                                      else "text/html; charset=utf-8")
                 elif parts.path == "/local/evolution":
                     html = _evolution(root, parts.query)
                 else:
