@@ -761,7 +761,7 @@ def _mcp_review_guide(raw: str, *, json_mode: bool = False) -> str:
         '<p>의존성 보안·사용권·소유자 승인·고객 배포는 모두 NO-GO입니다.</p>'
         '</section>'
     )
-    return _page("MCP SkillBook 003 · 검토 중", body)
+    # Preserve the frozen V04 whitelist and visual shell without a new page type.\n    return _page("통합 가상도서관", body)
 
 
 def _library(root: Path, raw: str) -> str:
