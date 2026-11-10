@@ -344,6 +344,37 @@ def _error(root: Path, raw: str) -> str:
         '<small>자료별 출처와 검토 상태를 확인하실 수 있습니다.</small>'
         '</section>'
     )
+    # Guided bridge from a concrete public MCP error to its UCIE-authored
+    # source-pinned review-only SkillBook. This is NOT an automatic fix,
+    # generic MCP certification, rule promotion or a change to V04 styling.
+    if page == 1 and term.casefold().strip() in (
+            "mcp", "prompts/get", "prompt", "-32602"):
+        from .mcp_prompts_guide_v01 import (
+            build_readonly_guide, SCHEMA as GUIDE_SCHEMA,
+            STATUS as GUIDE_STATUS, SKILLBOOK_ID as GUIDE_ID,
+        )
+        guide = build_readonly_guide()
+        if (guide.get("schema") != GUIDE_SCHEMA
+                or guide.get("skillbook_id") != GUIDE_ID
+                or guide.get("status") != GUIDE_STATUS
+                or guide.get("export_allowed") is not False
+                or guide.get("auto_promoted") is not False
+                or type(guide.get("review_gates")) is not dict
+                or any(x is not False for x in guide["review_gates"].values())
+                or guide.get("network_requests") != 0
+                or guide.get("operating_database_writes") != 0):
+            raise LocalProductError("MCP prevention guide is not safe to display")
+        body += (
+            '<section class="workbench-note">'
+            '<span class="eyebrow">SOURCE-LINKED REVIEW</span>'
+            '<h2>MCP prompts/get 입력 오류와 서버 실행 오류 구분</h2>'
+            '<p>공식 Python SDK의 고정된 수정 전후 소스로 확인한 사례입니다. '
+            '요청·응답의 오류 코드(-32602), 필수 인수, 수정 조건과 '
+            '실제 시험 범위를 자세히 확인할 수 있습니다.</p>'
+            '<p>검토 중인 기술 자료이며 자동 수정·승인·배포 기능은 아닙니다.</p>'
+            '<p><a href="/local/guide/mcp-prompts">'
+            '오류 구분 기술 가이드 보기 →</a></p></section>'
+        )
     if term:
         body += _paged_evidence(root, term, page=page,
                                 route="/local/error", guidance=True)
