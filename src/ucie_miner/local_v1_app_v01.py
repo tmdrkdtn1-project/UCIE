@@ -520,7 +520,7 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
         '<li><a href="/local/engine?purpose=MCP_PROMPTS_CONTRACT">'
         '<span>MCP 입력 오류 계약 체험</span>'
         '<span class="recipe-copy">UCIE 자체 생성 JSON-RPC 사례로 '
-        '오류 분류 계약을 검사해 보세요. 실제 SDK 실행 아님.'</span></a></li>'
+        '오류 분류 계약을 검사해 보세요. 실제 SDK 실행 아님.</span></a></li>'
         '<li><a href="/local/engine?purpose=REAL_PUBLIC_CATALOG">'
         '<span>기술 자료 검색 비교</span>'
         '<span class="recipe-copy">기존 공개 기술 자료의 검색 방법을 비교해 보세요.'
