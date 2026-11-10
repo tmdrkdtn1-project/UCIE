@@ -134,15 +134,11 @@ def _rows_from_stage15(root):
     if not fix_path(root).exists():
         return []
     from .public_evidence_chain_audit import (
-        _history, _fix, _valid_fix, audit_external_evidence_chain,
+        _valid_fix, read_audited_public_evidence_snapshot,
     )
-    chain = audit_external_evidence_chain(root)
-    if chain["status"] != "STAGE16_LOCALLY_LINKED_BUT_UNVERIFIED_NO_GO":
-        raise DiscoveryError("Stage 13/15 public evidence chain is not consistent")
-    historical = _history(root)
-    records = _fix(root)
-    if historical is None or records is None:
-        raise DiscoveryError("missing opted-in public fix evidence ledger")
+    # Reuse the very same source rows already validated by Stage16.
+    # Do not run a second set of Stage13/15 DB reads after the audit.
+    historical, records = read_audited_public_evidence_snapshot(root)
     rows = []
     for record in records:
         if not _valid_fix(record):
