@@ -502,7 +502,8 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
 
     args = _params(raw, ("purpose",))
     purpose = args.get("purpose", "")
-    if purpose and purpose not in (*RECIPES, "REAL_PUBLIC_CATALOG"):
+    if purpose and purpose not in (*RECIPES, "REAL_PUBLIC_CATALOG",
+                                   "MCP_PROMPTS_CONTRACT"):
         raise LocalProductError("unregistered development engine")
     friendly = {
         "ENGINE_INCREMENTAL_BUILD": ("증분 빌드 실험", "변경된 부분만 다시 계산하는 방법"),
@@ -516,6 +517,10 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
         ' · 예제 체험</span></a></li>'
         for name in sorted(RECIPES))
     choices += (
+        '<li><a href="/local/engine?purpose=MCP_PROMPTS_CONTRACT">'
+        '<span>MCP 입력 오류 계약 체험</span>'
+        '<span class="recipe-copy">UCIE 자체 생성 JSON-RPC 사례로 '
+        '오류 분류 계약을 검사해 보세요. 실제 SDK 실행 아님.</span></a></li>'
         '<li><a href="/local/engine?purpose=REAL_PUBLIC_CATALOG">'
         '<span>기술 자료 검색 비교</span>'
         '<span class="recipe-copy">기존 공개 기술 자료의 검색 방법을 비교해 보세요.'
@@ -571,6 +576,54 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
                 ' 고객 성능 검증·운영 색인 반영이 아닙니다.</p></section>')
         else:
             raise LocalProductError("real public catalog result requires review")
+    elif purpose == "MCP_PROMPTS_CONTRACT":
+        from .mcp_prompt_regression_v01 import (
+            SCHEMA as MCP_WIRE_SCHEMA, SOURCE_PR as MCP_SOURCE_PR,
+            UPSTREAM_MERGE_SHA as MCP_MERGE_SHA,
+            synthetic_demonstration,
+        )
+        trial = synthetic_demonstration()
+        if (type(trial) is not dict
+                or trial.get("schema") != MCP_WIRE_SCHEMA
+                or trial.get("status") !=
+                "SYNTHETIC_WIRE_CONTRACT_ONLY_NO_SDK_EXECUTION"
+                or trial.get("source_pr") != MCP_SOURCE_PR
+                or trial.get("source_merge_sha") != MCP_MERGE_SHA
+                or trial.get("cases") != 8
+                or trial.get("contract_matches") != 6
+                or trial.get("non_input_controls") != 2
+                or trial.get("synthetic_pre_fix_violations_detected") != 4
+                or trial.get("independent_sdk_regression") != "NOT_EXECUTED"
+                or trial.get("first_fixed_release") != "NOT_VERIFIED"
+                or trial.get("per_revision_rights_approved") is not False
+                or trial.get("auto_promoted") is not False
+                or trial.get("customer_release_authorized") is not False
+                or trial.get("network_requests") != 0
+                or trial.get("persistent_writes") != 0):
+            raise LocalProductError("unsafe synthetic MCP contract trial")
+        body += (
+            '<section class="shelf-entry"><span class="eyebrow">'
+            'UCIE FIRST-PARTY TEST</span>'
+            '<h2>입력 오류 분류 계약 · 자체 예제 결과</h2>'
+            '<dl class="inventory-grid">'
+            '<div><dt>UCIE 자체 사례</dt><dd>' +
+            _e(trial["cases"]) + '건</dd></div>'
+            '<div><dt>계약 일치</dt><dd>' +
+            _e(trial["contract_matches"]) + '건</dd></div>'
+            '<div><dt>서버 실행 오류 대조</dt><dd>' +
+            _e(trial["non_input_controls"]) + '건</dd></div>'
+            '<div><dt>수정 전 합성 오류 탐지</dt><dd>' +
+            _e(trial["synthetic_pre_fix_violations_detected"]) +
+            '건</dd></div></dl>'
+            '<p>검사 기준: 입력 오류 -32602. 현재 실행은 UCIE가 만든 '
+            '고정 JSON-RPC 사례의 검사이며 실제 MCP SDK·네트워크·'
+            '고객 코드 실행 결과가 아닙니다.</p>'
+            '<p>공식 최초 수정 포함 배포판·독립 보안 검토·배포 권리는 '
+            '미확인입니다. 자동 승인 및 고객 배포는 금지됩니다.</p>'
+            '<p><a href="/local/guide/mcp-prompts">'
+            '출처·수정 전후 근거와 SkillBook 003 검토 가이드 보기 →'
+            '</a></p></section>'
+        )
     elif purpose:
         out = evaluate_ucie_owned_recipe(
             purpose, rows=128, queries=16, repeats=2)
@@ -789,6 +842,8 @@ def _mcp_review_guide(raw: str, *, json_mode: bool = False) -> str:
         '<p><code>' + _e(guide["machine_skill_contract"]["callable"]) +
         '</code> · 제한된 호출 자료만 검사; 브라우저에서는 실행하지 않습니다.</p>'
         '<p><a href="/local/guide/mcp-prompts.json">계약 및 근거 JSON 보기</a></p>'
+        '<p><a href="/local/engine?purpose=MCP_PROMPTS_CONTRACT">'
+        'UCIE 자체 오류 분류 계약 예제 실행하기 →</a></p>'
         '<p>의존성 보안·사용권·소유자 승인·고객 배포는 모두 NO-GO입니다.</p>'
         '</section>'
     )
