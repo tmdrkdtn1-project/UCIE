@@ -33,3 +33,23 @@ tests/test_ucie_p3_readonly_latency_v01.py checks bounded inputs, stable snapsho
 
 NEXT_OWNER=UCIE integrated development workroom / owner Windows read-only acceptance.
 RELEASE=NO_GO.
+
+## 2026-11-10 Windows owner one-file read-only acceptance
+
+A separately approved UCIE-only test at the exact `D:/UCIE` Windows owner checkout ran `tests/test_ucie_p3_owner_readonly_latency_v01.py` **once**, with one warmup plus two measurements. The owner run completed 1/1 PASS in Python 3.15.0 and reported only aggregate public UCIE metadata; the synthetic unit suite separately passed 11/11.
+
+| Stage (different workloads) | Median | Max | Bound |
+| --- | ---: | ---: | --- |
+| Existing Stage10/12/15 handoff load + linkage validation | 102.290 ms | 104.190 ms | 2 measured samples |
+| W04 substring `python`, loaded handoff only | 21.030 ms | 21.416 ms | 649 matches |
+| W04 substring `git`, loaded handoff only | 20.107 ms | 20.302 ms | 129 matches |
+| W04 empty query, loaded handoff only | 21.196 ms | 21.350 ms | 1,063 matches |
+| P8 exact-key public catalog full call (24 queries, 2 internal repeats) | 23.872 ms | 24.012 ms | 2 measured samples |
+| P8 internal linear scan, same exact-key work | 1.476 ms | 1.503 ms | internal median per call |
+| P8 internal ephemeral index INCLUDING build | 0.165 ms | 0.166 ms | internal median per call |
+
+Observed linked public review rows: **1,063**. This is a count of source-linked review revisions, not 1,063 distinct upstream PRs or approved SkillBooks. Stable, same-run public catalog SHA-256: `da434686551b810708e5f9b6d04a1a697387e4964953889a0dc7cf7ce253aaf1`. Receipt status: `OBSERVATIONAL_BASELINE_ONLY_NO_OPTIMIZATION`; owner host scope `EXACT_D_UCIE_WINDOWS_SINGLE_TEST_FILE`. Owner test returned `exit_code=0`; no network requests, operating DB writes, index persistence, rule promotion or UI changes reported.
+
+**Diagnostic interpretation:** source load/validation appears ~4.9x slower than a single already-loaded W04 substring query on this tiny observation set. This identifies the first *inspection target*, not a proven root cause, user HTTP latency, reproducible speedup, or an SLO violation. The P8 exact-key inner timings describe a different workload and do not license a W04 index swap. Next stage: targeted breakdown of the existing validation pipeline, source SHA/owner safeguards, and a separate regression-backed optimization proposal *only if* additional equivalent-workload evidence warrants it.
+
+**Release:** exact new HEAD CI remains to be verified; PR stays DRAFT. Commercial/customer online release, SkillBook promotion, signing and redistribution remain NO_GO.
