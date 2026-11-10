@@ -80,6 +80,13 @@ def _check_search(result: dict, query: str, source_count: int | None) -> int:
             or (source_count is not None
                 and result["source_linked_count"] != source_count)):
         raise BaselineError("W04 source/safety/count contract unavailable")
+    if any(
+            type(item) is not dict
+            or item.get("lifecycle") != "UNVERIFIED_CANDIDATE_ONLY"
+            or item.get("human_approved") is not False
+            or item.get("export_allowed") is not False
+            for item in result["items"]):
+        raise BaselineError("W04 returned unapproved/public candidate state drift")
     return result["source_linked_count"]
 
 
