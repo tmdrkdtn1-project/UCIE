@@ -7,6 +7,11 @@ from __future__ import annotations
 
 import unittest
 from unittest.mock import patch
+from contextlib import closing
+from http.client import HTTPConnection
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+from threading import Thread
 
 from ucie_miner import local_v1_app_v01 as app
 from ucie_miner import mcp_prompt_regression_v01 as wire
@@ -64,6 +69,44 @@ class MCPContractEngineTests(unittest.TestCase):
             with self.subTest(query=query):
                 with self.assertRaises(app.LocalProductError):
                     app._engine(query)
+
+    def test_real_one_shot_loopback_http_engine_route(self):
+        root = Path(__file__).resolve().parents[1]
+        if not (root / ".git").is_dir():
+            self.skipTest("requires actual UCIE checkout")
+        server = ThreadingHTTPServer(("127.0.0.1", 0),
+                                     app.make_handler(root))
+        server.daemon_threads = True
+        worker = Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            def probe(method, path):
+                with closing(HTTPConnection(
+                        "127.0.0.1", server.server_port, timeout=10)) as conn:
+                    conn.request(method, path)
+                    result = conn.getresponse()
+                    self.assertLessEqual(int(result.getheader(
+                        "Content-Length", "0")), 1_000_000)
+                    body = result.read(1_000_001)
+                    self.assertLessEqual(len(body), 1_000_000)
+                    return result.status, body
+            status, body = probe(
+                "GET", "/local/engine?purpose=MCP_PROMPTS_CONTRACT")
+            self.assertEqual(status, 200)
+            self.assertIn("UCIE 자체 사례".encode(), body)
+            self.assertIn(b"-32602", body)
+            self.assertIn(b"/local/guide/mcp-prompts", body)
+            self.assertIn("고객 배포".encode(), body)
+            status, _ = probe(
+                "GET", "/local/engine?purpose=UNAPPROVED_EXTERNAL_SDK")
+            self.assertEqual(status, 400)
+            status, _ = probe(
+                "POST", "/local/engine?purpose=MCP_PROMPTS_CONTRACT")
+            self.assertEqual(status, 405)
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=5)
 
     def test_guide_links_to_engine_but_stays_unapproved(self):
         guide = app._mcp_review_guide("")
