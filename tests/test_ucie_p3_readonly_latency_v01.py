@@ -39,7 +39,8 @@ class P3ReadOnlyLatencyTests(unittest.TestCase):
             "query": query,
             "source_linked_count": 6,
             "total_matches": {"python": 3, "git": 2, "": 6}[query],
-            "items": [{"unverified": True}],
+            "items": [{"lifecycle": "UNVERIFIED_CANDIDATE_ONLY",
+                       "human_approved": False, "export_allowed": False}],
             "returned_count": 1,
             "network_requests": 0,
             "operating_database_writes": 0,
@@ -130,6 +131,26 @@ class P3ReadOnlyLatencyTests(unittest.TestCase):
         def unsafe(handoff, **kwargs):
             report = self.search(handoff, **kwargs)
             report["approved_or_exportable_items"] = 1
+            return report
+        with self.assertRaises(BaselineError):
+            self.run_fixture(search=unsafe)
+
+    def test_w04_per_item_forged_approval_fails_closed(self):
+        for key, value in (("lifecycle", "PUBLISHED"),
+                           ("human_approved", True),
+                           ("export_allowed", True)):
+            with self.subTest(key=key):
+                def unsafe(handoff, **kwargs):
+                    report = self.search(handoff, **kwargs)
+                    report["items"][0][key] = value
+                    return report
+                with self.assertRaises(BaselineError):
+                    self.run_fixture(search=unsafe)
+
+    def test_w04_incomplete_item_fails_closed(self):
+        def unsafe(handoff, **kwargs):
+            report = self.search(handoff, **kwargs)
+            report["items"] = [{}]
             return report
         with self.assertRaises(BaselineError):
             self.run_fixture(search=unsafe)
