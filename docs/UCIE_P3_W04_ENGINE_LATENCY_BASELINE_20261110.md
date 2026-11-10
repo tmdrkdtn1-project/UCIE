@@ -73,3 +73,19 @@ The Stage15 reader took ~84.7% of the measured full handoff duration. This isola
 This owner test measured **1,063** source-linked public revision rows, stable across its three reads. The internal untrusted public task-ID digest is `29b550afd19db15378e938dda61009573110e4f53b370c0af28108d05e7c395f`; this is a local consistency marker and not an approval or distribution signature.
 
 **Current decision:** Stage15 is a candidate for a separately reviewed lossless read-path refactor. No performance optimization has yet been applied; V04 presentation, original public reader, runtime SQLite, operating scheduler, C40 and customer release state remain unchanged.
+
+## 2026-11-10 Stage15 repeated-read attribution: one-shot Windows follow-up
+
+An additional **owner-host read-only one-file test** (`tests/test_ucie_p3_owner_stage15_duplicate_read_v01.py`) observed the existing Stage16 auditor and the two source readers exactly as-is. It ran one warmup and two measured samples and returned 1/1 PASS. The original `_history` and `_fix` readers were observed **twice each** in a single Stage15 read (first for audit, then after audit). Wrappers were temporary/pass-through, never a bypass or production change.
+
+| Stage15 public-only phase | Median elapsed |
+| --- | ---: |
+| Full Stage15 reader | 83.984 ms |
+| Initial Stage13 history read inside the audit | 23.912 ms |
+| Initial Stage15 fix-evidence read inside the audit | 4.939 ms |
+| **Second Stage13 + Stage15 read after the audit** | **28.780 ms** |
+| Audit validation plus subsequent row processing | 26.353 ms |
+
+The second Stage13/15 read accounted for ~34.3% of the observed Stage15 duration in this run, representing a **measured read-path duplication candidate**, not a guaranteed savings if removed. Within 925 Stage15 unverified public evidence revisions, the stable same-run source snapshot SHA-256 was `7805952bf29d2523becbe67bbc229dd3d97e53567efb0cd1029f047f99b013bd`. No network requests or operating DB writes were invoked.
+
+**Do not remove any validation now.** A safe Stage15 refactor must share one fully validated immutable snapshot while preserving the exact original Stage13 and Stage15 DB identity, schema, integrity, linkage, row guards, opt-in marker and missing/corrupt-source failure semantics. Prove equivalence against tampering, source changes, missing files and source-revision drift on isolated fixtures and then Windows owner-host exact-source acceptance before any production change. All P3 performance findings remain observations with no speedup guarantee or customer HTTP benchmark.
