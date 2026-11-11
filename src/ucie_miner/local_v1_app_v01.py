@@ -660,7 +660,10 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
             review_case, SCHEMA as PLAYBOOK_SCHEMA, STATUS as PLAYBOOK_STATUS,
             CASE_IDS as PLAYBOOK_CASE_IDS,
         )
-        playbook = review_case(selected_case or "shared_guarded")
+        try:
+            playbook = review_case(selected_case or "shared_guarded")
+        except ValueError as exc:
+            raise LocalProductError("unregistered Python safe-use case") from exc
         pinned = playbook.get("source_evidence")
         if (type(playbook) is not dict
                 or playbook.get("schema") != PLAYBOOK_SCHEMA
