@@ -98,6 +98,39 @@ class UCIEPortableC1RuntimeClosureTests(unittest.TestCase):
         with self.assertRaises(closure.ClosurePreviewError):
             closure.inspect_static_runtime_closure(self.root)
 
+    def test_stage_rejects_unsafe_names_before_any_write(self):
+        bad_names = (
+            "../other_project.py",
+            "src/ucie_miner/../../other_project.py",
+            "src\\\\ucie_miner\\\\name.py",
+            "src/ucie_miner/unknown.txt",
+            ".git/config",
+            "runtime/operating.sqlite3",
+            "src/ucie_miner/evil\\x00name.py",
+        )
+        for name in bad_names:
+            with self.subTest(name=repr(name)):
+                with TemporaryDirectory(prefix="UCIE_C1_FAIL_PATH_") as folder:
+                    root = Path(folder) / "UCIE"
+                    with self.assertRaises(closure.ClosurePreviewError):
+                        closure._stage(
+                            root, {name: b"UCIE INERT TEXT"},
+                            closure.REVISION_A
+                        )
+                    self.assertFalse(root.exists())
+
+    def test_nonempty_git_history_never_accepted_as_disposable_marker(self):
+        with TemporaryDirectory(prefix="UCIE_C1_GIT_MARKER_") as folder:
+            root = Path(folder) / "UCIE"
+            (root / ".git").mkdir(parents=True)
+            (root / ".git" / "config").write_text("UCIE TEST ONLY")
+            (root / preview.MARKER_NAME).write_bytes(preview.MARKER_BYTES)
+            source = root / "src" / "ucie_miner" / "local_v1_app_v01.py"
+            source.parent.mkdir(parents=True)
+            source.write_text("# UCIE inert source")
+            with self.assertRaises(preview.PortablePreviewError):
+                preview.probe_preview_root(root)
+
     def test_same_bytes_not_mislabeled_real_revision(self):
         src = {closure.PREVIEW_SOURCE: (
             b'REVISION = "UCIE_C1_DISPOSABLE_GENERATION_A"\n')}
@@ -139,6 +172,13 @@ class UCIEPortableC1RuntimeClosureTests(unittest.TestCase):
         if real.name.casefold() != "ucie" or not (real / ".git").is_dir():
             self.skipTest("exact UCIE checkout required")
         before = closure.inspect_static_runtime_closure(real)
+        print("UCIE_C1_STATIC_CLOSURE_COUNTS=" + str({
+            "indexed": before["all_python_modules_indexed"],
+            "reachable": before["statically_reachable_first_party_modules"],
+            "dynamic_sites": len(before["dynamic_import_sites"]),
+            "missing_first_party": len(before["missing_first_party_imports"]),
+            "external_roots": len(before["external_import_roots"]),
+        }))
         self.assertFalse(before["customer_distribution_authorized"])
         outcome = closure.exercise_real_revision_ab_preview(real)
         self.assertEqual(outcome["schema"], closure.SCHEMA)
