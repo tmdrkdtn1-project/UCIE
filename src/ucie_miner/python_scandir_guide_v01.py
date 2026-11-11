@@ -14,6 +14,7 @@ from .python_scandir_pinned_playbook_v02 import (
     pinned_source_snapshot, DOC_BLOB as PINNED_DOC_BLOB,
     LICENSE_BLOB as PINNED_LICENSE_BLOB,
     TAG_COMMIT as PINNED_TAG_COMMIT,
+    CASE_IDS as PINNED_CASE_IDS,
 )
 
 SCHEMA = "UCIE_PYTHON_SCANDIR_SKILLBOOK_REVIEW_V01"
@@ -121,6 +122,9 @@ def build_readonly_guide() -> dict:
             "trial_executed_on_guide_view": False,
             "arbitrary_customer_code_access": False,
             "automatic_patch_applied": False,
+            "playbook_callable": "ucie_miner.python_scandir_pinned_playbook_v02.review_case",
+            "playbook_case_ids": list(PINNED_CASE_IDS),
+            "playbook_example_auto_executed": False,
         },
         "review_gates": {
             "human_approved": False,
