@@ -348,7 +348,17 @@ def _probe_child(root: Path, revision: str) -> dict:
         timeout=CHILD_TIMEOUT, check=False,
     )
     if (process.returncode != 0 or len(process.stdout) > MAX_CHILD_STDOUT):
-        raise ClosurePreviewError("isolated UCIE portable localhost probe failed")
+        tail = process.stderr.strip().splitlines()[-1:] or ["NO_CHILD_STDERR"]
+        status = "FAIL_CLOSED"
+        try:
+            status = json.loads(process.stdout).get("status", "NON_JSON")
+        except (ValueError, AttributeError):
+            status = "NON_JSON"
+        raise ClosurePreviewError(
+            "isolated UCIE portable localhost probe failed: RC=" +
+            str(process.returncode) + " STATUS=" + str(status)[:90] +
+            " EXC=" + str(tail[0])[-200:]
+        )
     try:
         result = json.loads(process.stdout)
     except (json.JSONDecodeError, UnicodeError) as exc:
