@@ -54,7 +54,12 @@ def _check_http(connection: HTTPConnection, route: str,
     if (response.status not in allowed or len(content) > 400_000
             or marker not in content
             or (route.endswith(".json") and "application/json" not in mime)):
-        raise PortablePreviewError("disposable UCIE localhost HTTP contract drift")
+        raise PortablePreviewError(
+            "disposable UCIE localhost HTTP contract drift route=" +
+            route[:70] + " status=" + str(response.status) +
+            " marker=" + str(marker in content) +
+            " json_mime=" + str("application/json" in mime)
+        )
     return response.status
 
 
@@ -125,10 +130,12 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(__file__).resolve().parents[2]
     try:
         result = probe_preview_root(root)
-    except (PortablePreviewError, OSError, RuntimeError, ValueError):
+    except (PortablePreviewError, OSError, RuntimeError, ValueError) as exc:
         print(json.dumps({
             "schema": SCHEMA,
             "status": "UCIE_C1_PORTABLE_PREVIEW_FAIL_CLOSED_CUSTOMER_NO_GO",
+            "reason": str(exc)[:220] if isinstance(exc, PortablePreviewError)
+                      else type(exc).__name__,
             "customer_distribution_authorized": False,
         }, sort_keys=True))
         return 2
