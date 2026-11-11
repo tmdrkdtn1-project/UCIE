@@ -90,14 +90,16 @@ def _params(raw: str, allowed: tuple[str, ...]) -> dict[str, str]:
 
 
 def _search(root: Path, query: str, *, limit: int = PAGE_SIZE,
-            offset: int = 0) -> dict:
+            offset: int = 0, source_id: str | None = None) -> dict:
     from .library_search import SCHEMA, search_existing_public_library
 
     if type(query) is not str or QUERY.fullmatch(query) is None:
         raise LocalProductError("invalid public evidence search")
-    result = search_existing_public_library(
-        root, query=query, limit=limit, group_revisions=False,
-        offset=offset)
+    kwargs = {"query": query, "limit": limit,
+              "group_revisions": False, "offset": offset}
+    if source_id is not None:
+        kwargs["source_id"] = source_id
+    result = search_existing_public_library(root, **kwargs)
     if (type(result) is not dict or result.get("schema") != SCHEMA
             or result.get("status") not in (
                 "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
@@ -194,7 +196,8 @@ def _home() -> str:
 
 def _evidence_rows(report: dict, *, guidance: bool = False,
                    query: str = "", page: int = 1,
-                   route: str = "/local/error") -> str:
+                   route: str = "/local/error",
+                   source_filter: str = "") -> str:
     """Display a clear customer summary; preserve inspectable evidence."""
     from .rule_candidates import GUIDANCE
 
@@ -223,7 +226,9 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
         target = (
             "/local/review?q=" + quote(query, safe="") +
             "&amp;page=" + str(page) + "&amp;id=" + candidate_id +
-            "&amp;from=" + origin
+            "&amp;from=" + origin +
+            ("&amp;source=" + quote(source_filter, safe="")
+             if source_filter else "")
         )
         source = str(row.get("source_id", "")).removeprefix("repo:")
         pattern = _e(row.get("purpose_code", "기술 사례"))
@@ -290,11 +295,17 @@ def _page_number(args: dict[str, str]) -> int:
 
 def _paged_evidence(root: Path, query: str, *, page: int,
                     route: str, guidance: bool = False,
-                    report: dict | None = None) -> str:
+                    report: dict | None = None,
+                    source_filter: str = "") -> str:
     """Keep public candidates paged, reusing only validated W04 snapshots."""
     offset = (page - 1) * PAGE_SIZE
+    if source_filter and route != "/local/library":
+        raise LocalProductError("source-specific paging only in Library")
     if report is None:
-        report = _search(root, query, limit=PAGE_SIZE, offset=offset)
+        kwargs = {"limit": PAGE_SIZE, "offset": offset}
+        if source_filter:
+            kwargs["source_id"] = "repo:" + source_filter
+        report = _search(root, query, **kwargs)
     else:
         from .library_search import SCHEMA as W04_SCHEMA
         if (type(report) is not dict or report.get("schema") != W04_SCHEMA
@@ -313,10 +324,14 @@ def _paged_evidence(root: Path, query: str, *, page: int,
     shown = len(report["items"])
     if total and offset >= total:
         raise LocalProductError("requested page outside available public evidence")
-    # The official-document recipe is independent of the public PR ledger.
-    # Compare against the SAME source-linked W04 page, without querying twice.
-    recipe_html = (_python_reference_recipe_shelf(query, report)
-                   if route == "/local/library" else "")
+    # Official documentation and W04 PR metadata remain different evidence
+    # types. The SAME validated W04 page feeds display and bounded comparison.
+    recipe_html = ""
+    if route == "/local/library":
+        if not source_filter or source_filter == "python/cpython":
+            recipe_html += _python_reference_recipe_shelf(query, report)
+        recipe_html += _approved_document_references_html(
+            query, report, source_filter=source_filter)
     if report["status"] == "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
         return recipe_html + _evidence_rows(report, guidance=guidance)
     start = offset + 1 if shown else 0
@@ -329,19 +344,22 @@ def _paged_evidence(root: Path, query: str, *, page: int,
         ' 검토 상태는 상세 정보에서 확인하실 수 있습니다.</p></section>'
     )
     links = []
+    scoped = ("&amp;source=" + quote(source_filter, safe="")
+              if source_filter else "")
     if page > 1:
         links.append('<a href="' + route + '?q=' +
                      quote(query, safe="") + '&page=' + str(page - 1) +
-                     '">이전 ' + str(PAGE_SIZE) + '건</a>')
+                     scoped + '">이전 ' + str(PAGE_SIZE) + '건</a>')
     if finish < total:
         links.append('<a href="' + route + '?q=' +
                      quote(query, safe="") + '&page=' + str(page + 1) +
-                     '">다음 ' + str(PAGE_SIZE) + '건</a>')
+                     scoped + '">다음 ' + str(PAGE_SIZE) + '건</a>')
     navigation = (
         '<section class="pager-box"><nav class="pagination" aria-label="공개 근거 검색 페이지">'
         + ' · '.join(links) + '</nav></section>' if links else '')
     return (recipe_html + summary + _evidence_rows(
-        report, guidance=guidance, query=query, page=page, route=route)
+        report, guidance=guidance, query=query, page=page, route=route,
+        source_filter=source_filter)
         + navigation)
 
 
@@ -409,18 +427,29 @@ def _review(root: Path, raw: str) -> str:
         SCHEMA as REVIEW_SCHEMA, create_review_worksheet,
     )
 
-    args = _params(raw, ("q", "page", "id", "from"))
+    args = _params(raw, ("q", "page", "id", "from", "source"))
     term = args.get("q", "")
     page = _page_number(args)
     candidate_id = args.get("id", "")
     origin = args.get("from", "error")
+    source_filter = args.get("source", "")
+    if source_filter:
+        if origin != "library":
+            raise LocalProductError("source selection only in Library")
+        from .library_approved_document_shelf_v01 import approved_source_filter
+        try:
+            approved_source_filter(source_filter)
+        except ValueError as exc:
+            raise LocalProductError("unapproved public source selection") from exc
     if (QUERY.fullmatch(term) is None
             or type(candidate_id) is not str
             or re.fullmatch(r"[0-9a-f]{64}", candidate_id) is None
             or origin not in ("error", "evolution", "library")):
         raise LocalProductError("invalid source-bound review selection")
-    search = _search(root, term, limit=PAGE_SIZE,
-                     offset=(page - 1) * PAGE_SIZE)
+    kwargs = {"limit": PAGE_SIZE, "offset": (page - 1) * PAGE_SIZE}
+    if source_filter:
+        kwargs["source_id"] = "repo:" + source_filter
+    search = _search(root, term, **kwargs)
     if search["status"] != "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO":
         raise LocalProductError("source provenance unavailable for review")
     matches = [
@@ -450,6 +479,8 @@ def _review(root: Path, raw: str) -> str:
     return_path = "/local/" + origin + "?q=" + quote(term, safe="")
     if page > 1:
         return_path += "&page=" + str(page)
+    if source_filter:
+        return_path += "&source=" + quote(source_filter, safe="")
     markup = [
         '<section class="search-panel">'
         '<span class="eyebrow">TECH REVIEW</span>'
@@ -1050,6 +1081,122 @@ def _python_reference_recipe_shelf(term: str,
     return html + '</details></article>'
 
 
+def _approved_document_references_html(term: str,
+                                       public_report: dict | None,
+                                       *, source_filter: str = "") -> str:
+    """W01 source selection -> W02 public metadata -> W04 bounded comparison.
+
+    Document pointers are not validated upstream fixes or executable skills.
+    Search never runs a trial, a collector or a new network request.
+    """
+    from .library_approved_document_shelf_v01 import (
+        SCHEMA as DOC_SCHEMA, STATUS as DOC_STATUS, NONE as DOC_NONE,
+        PR_PAGE, INCOMPLETE, UNREQUESTED, search_approved_document_references,
+        compare_public_prs_by_source,
+    )
+    report = search_approved_document_references(
+        term, source=source_filter)
+    compared = compare_public_prs_by_source(report, public_report)
+    items = report.get("items")
+    if (report.get("schema") != DOC_SCHEMA
+            or report.get("status") not in (DOC_STATUS, DOC_NONE)
+            or type(items) is not list or len(items) > 4
+            or report.get("returned_count") != len(items)
+            or report.get("network_requests") != 0
+            or report.get("operating_database_writes") != 0
+            or report.get("source_executed") is not False
+            or report.get("trial_executed_during_search") is not False
+            or report.get("human_approved") is not False
+            or report.get("export_allowed") is not False
+            or report.get("auto_promoted") is not False
+            or compared.get("schema") != DOC_SCHEMA
+            or compared.get("status") not in (PR_PAGE, INCOMPLETE, UNREQUESTED)
+            or compared.get("same_source_is_same_fix") is not False
+            or compared.get("independent_version_or_licence_verified") is not False
+            or compared.get("network_requests") != 0
+            or compared.get("operating_database_writes") != 0
+            or compared.get("auto_promoted") is not False):
+        raise LocalProductError("untrusted approved public document catalog")
+    if not items:
+        return ""
+    html = (
+        '<section class="shelf-title" data-shelf="official-document-references">'
+        '<span class="eyebrow">OFFICIAL PUBLIC REFERENCES</span>'
+        '<h2>승인 공급원의 공식 문서 참조</h2>'
+        '<p>공식 자료의 주소를 확인하는 검토 목록입니다.'
+        ' 실제 수정 검증·재사용 승인·고객 배포를 의미하지 않습니다.</p>'
+        '</section>'
+    )
+    by_source = compared.get("public_pr_items_per_source")
+    if type(by_source) is not dict or len(by_source) > 4:
+        raise LocalProductError("invalid bounded same-source PR result")
+    for item in items:
+        repo = item.get("related_repo")
+        if (type(repo) is not str
+                or type(item.get("library_item_id")) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", item["library_item_id"]) is None
+                or item.get("source_id") != "doc:" + repo
+                or item.get("kind") != "PUBLIC_TECHNICAL_EVIDENCE"
+                or item.get("revision_hint") != "PUBLIC_DOCUMENT_REVISION_NOT_PINNED"
+                or item.get("source_license_status") != "NOT_ATTESTED_PER_REVISION"
+                or item.get("version_scope_claim") != "UNDETERMINED"
+                or item.get("reference_digest_scope")
+                    != "UCIE_REFERENCE_STRING_ONLY_NOT_DOCUMENT_BYTES"
+                or item.get("lifecycle") != "UNVERIFIED_CANDIDATE_ONLY"
+                or item.get("human_approved") is not False
+                or item.get("export_allowed") is not False
+                or item.get("trial_executed") is not False):
+            raise LocalProductError("invalid unapproved official document item")
+        html += (
+            '<article class="shelf-entry">'
+            '<span class="card-kicker">OFFICIAL DOC · 검토 전</span>'
+            '<h3>' + _e(item["title"]) + '</h3>'
+            '<p>공식 자료의 위치와 출처를 보여줍니다.'
+            ' 현재 페이지에서는 외부 코드를 실행하지 않습니다.</p>'
+            '<p><a href="' + _e(item["public_url"]) + '"'
+            ' target="_blank" rel="noopener noreferrer">'
+            '공식 문서 원문 보기 ↗</a></p>'
+            '<details class="technical-details"><summary>'
+            '공급원 · 적용 범위 · 공개 변경 근거</summary>'
+            '<dl class="evidence-properties">'
+            '<div><dt>공식 출처</dt><dd>' + _e(item["source_id"]) + '</dd></div>'
+            '<div><dt>연관 저장소</dt><dd>' + _e(repo) + '</dd></div>'
+            '<div><dt>문서 개정</dt><dd>PUBLIC_DOCUMENT_REVISION_NOT_PINNED'
+            '</dd></div><div><dt>지원 버전</dt><dd>UNDETERMINED · 미확인</dd></div>'
+            '<div><dt>버전별 사용권</dt><dd>NOT_ATTESTED_PER_REVISION</dd></div>'
+            '<div><dt>식별자</dt><dd><code>' +
+            _e(item["library_item_id"]) + '</code></dd></div>'
+            '<div><dt>참조 해시 범위</dt><dd>'
+            'UCIE_REFERENCE_STRING_ONLY_NOT_DOCUMENT_BYTES</dd></div>'
+            '</dl>'
+        )
+        if compared["status"] == PR_PAGE:
+            related = by_source.get(repo, [])
+            if type(related) is not list or len(related) > 3:
+                raise LocalProductError("unbounded same-source public PR links")
+            html += (
+                '<p><strong>별도 공개 변경 근거:</strong>'
+                ' 현재 검색 페이지에서 같은 승인 저장소의 후보 ' +
+                _e(len(related)) + '건.'
+                ' 같은 공급원이라는 사실만으로 동일 문제·수정 효과는'
+                ' 증명되지 않습니다.</p>'
+            )
+            for pr in related:
+                html += (
+                    '<p><a href="' + _e(pr["public_url"]) +
+                    '" target="_blank" rel="noopener noreferrer">'
+                    '관련 공개 변경 후보 ↗</a>'
+                    ' · UNVERIFIED_CANDIDATE_ONLY</p>'
+                )
+        elif compared["status"] == INCOMPLETE:
+            html += (
+                '<p>공개 PR 출처 연결이 불완전하여 비교를 보류합니다.'
+                ' 공식 문서 자체도 검증 완료로 승격하지 않습니다.</p>'
+            )
+        html += '</details></article>'
+    return html
+
+
 def _library(root: Path, raw: str) -> str:
     """One user-facing UCIE library: SkillBooks, editorial drafts and all W04 pages.
 
@@ -1062,11 +1209,17 @@ def _library(root: Path, raw: str) -> str:
         SCHEMA as FEDERATED_SCHEMA, search_federated,
     )
 
-    args = _params(raw, ("q", "page"))
+    args = _params(raw, ("q", "page", "source"))
     term = args.get("q", "")
     if BOOK_QUERY.fullmatch(term) is None:
         raise LocalProductError("invalid unified library query")
     page = _page_number(args)
+    source_filter = args.get("source", "")
+    from .library_approved_document_shelf_v01 import approved_source_filter
+    try:
+        approved_source_filter(source_filter)
+    except ValueError as exc:
+        raise LocalProductError("unapproved public source selection") from exc
     catalog = search_federated(root, filters={
         "query": term, "shelf": "skillbooks", "kind": "",
         "domain": "", "limit": 20,
@@ -1087,13 +1240,24 @@ def _library(root: Path, raw: str) -> str:
             or type(drafts) is not list or len(drafts) > 20):
         raise LocalProductError("unbounded unified catalog shelves")
 
+    from .product_plan import APPROVED_REPOSITORIES
+    source_options = ['<option value="">전체 승인 공급원</option>']
+    for option in APPROVED_REPOSITORIES:
+        selected = ' selected' if option == source_filter else ''
+        source_options.append('<option value="' + _e(option) + '"' +
+                              selected + '>' + _e(option) + '</option>')
+
     body = (
         '<section class="search-panel"><h2>라이브러리 검색</h2>'
         '<p>기술 가이드, 참고 자료, 공개 기술 사례를 한곳에서 찾아보세요.</p>'
         '<form action="/local/library" method="get">'
         '<label>자료 검색 <input name="q" maxlength="80" value="' +
         _e(term) + '" placeholder="예: Git, Python, scandir"></label>'
-        '<button type="submit">검색</button></form></section>'
+        '<label>공개 출처 <select name="source">' +
+        ''.join(source_options) + '</select></label>'
+        '<button type="submit">검색</button></form>'
+        '<small>출처 선택은 공식 문서와 공개 변경 자료에만 적용됩니다.'
+        ' 기존 기술 가이드는 기존 분류대로 검색됩니다.</small></section>'
         '<section class="shelf-title"><span class="eyebrow">GUIDES</span>'
         '<h2>기술 가이드</h2>'
         '<p>' + _e(len(books)) + '개 자료</p></section>'
@@ -1182,12 +1346,17 @@ def _library(root: Path, raw: str) -> str:
     )
     if term.isascii():
         body += _paged_evidence(
-            root, term, page=page, route="/local/library")
+            root, term, page=page, route="/local/library",
+            source_filter=source_filter)
     else:
         if page != 1:
             raise LocalProductError("non-ASCII public evidence paging not supported")
-        # Korean first-party recipe search needs no unapproved W04 text index.
-        body += _python_reference_recipe_shelf(term, None)
+        # Korean keywords match only UCIE first-party reference metadata.
+        # No extra W04/collector search or external text is read.
+        if not source_filter or source_filter == "python/cpython":
+            body += _python_reference_recipe_shelf(term, None)
+        body += _approved_document_references_html(
+            term, None, source_filter=source_filter)
         body += (
             '<section class="workbench-note"><h2>검색어 안내</h2>'
             '<p>공개 기술 사례는 현재 영문 검색어로 찾아보실 수 있습니다.'
