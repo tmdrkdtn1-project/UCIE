@@ -503,7 +503,8 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
     args = _params(raw, ("purpose",))
     purpose = args.get("purpose", "")
     if purpose and purpose not in (*RECIPES, "REAL_PUBLIC_CATALOG",
-                                   "MCP_PROMPTS_CONTRACT"):
+                                   "MCP_PROMPTS_CONTRACT",
+                                   "PYTHON_SCANDIR_SAFE"):
         raise LocalProductError("unregistered development engine")
     friendly = {
         "ENGINE_INCREMENTAL_BUILD": ("증분 빌드 실험", "변경된 부분만 다시 계산하는 방법"),
@@ -524,7 +525,12 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
         '<li><a href="/local/engine?purpose=REAL_PUBLIC_CATALOG">'
         '<span>기술 자료 검색 비교</span>'
         '<span class="recipe-copy">기존 공개 기술 자료의 검색 방법을 비교해 보세요.'
-        '</span></a></li>')
+        '</span></a></li>'
+        '<li><a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE">'
+        '<span>Python 반복자 안전 사용</span>'
+        '<span class="recipe-copy">공식 os.scandir 문서의 출처를 확인하고'
+        ' UCIE 작성 파일에서 두 스레드의 안전한 열거를 시험합니다.</span>'
+        '</a></li>')
     body = (
         '<section class="search-panel"><h2>개발 도구 선택</h2>'
         '<p>관심 있는 기능을 선택해 사용 방법과 예제 결과를 살펴보세요.</p>'
@@ -576,6 +582,74 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
                 ' 고객 성능 검증·운영 색인 반영이 아닙니다.</p></section>')
         else:
             raise LocalProductError("real public catalog result requires review")
+    elif purpose == "PYTHON_SCANDIR_SAFE":
+        # This is a second approved-public-source, cross-pillar workflow.
+        # A document reference is NOT a version-pinned upstream fix;
+        # this executes only a UCIE-authored disposable synthetic fixture.
+        from .python_scandir_review_v01 import (
+            run_python_scandir_review, SCHEMA as PY_SCANDIR_SCHEMA,
+        )
+        from .public_evidence_routes import DOC_ENDPOINTS
+        out = run_python_scandir_review()
+        audit = out.get("synthetic_trial")
+        if (out.get("schema") != PY_SCANDIR_SCHEMA
+                or out.get("status")
+                    != "UCIE_OWNED_SYNTHETIC_SCANDIR_TRIAL_PASS_NOT_APPROVED"
+                or out.get("source_id") != "doc:python/cpython"
+                or out.get("official_document_url")
+                    != DOC_ENDPOINTS["python/cpython"][0]
+                or out.get("documentation_revision_status")
+                    != "PUBLIC_DOCUMENT_REVISION_NOT_PINNED"
+                or out.get("source_license_status")
+                    != "NOT_ATTESTED_PER_REVISION"
+                or out.get("evidence_fingerprint_scope")
+                    != "UCIE_REFERENCE_STRING_ONLY_NOT_DOCUMENT_BYTES"
+                or out.get("library_kind") != "TEST_RECIPE"
+                or out.get("purpose_code") != "SCANDIR_SERIALIZED_ITERATION"
+                or out.get("candidate_status") != "UNVERIFIED_CANDIDATE_ONLY"
+                or out.get("version_applicability_verified") is not False
+                or out.get("human_approved") is not False
+                or out.get("export_allowed") is not False
+                or out.get("auto_promoted") is not False
+                or out.get("source_executed") is not False
+                or out.get("customer_release_authorized") is not False
+                or out.get("network_requests") != 0
+                or out.get("operating_database_writes") != 0
+                or out.get("scheduler_changes") != 0
+                or type(audit) is not dict
+                or audit.get("synthetic_file_count") != 4
+                or audit.get("concurrent_guarded_consumers") != 2
+                or any(audit.get(k) is not True for k in (
+                    "unique_entries_match", "sequential_control_match",
+                    "closed_iterator_stops",
+                    "temporary_synthetic_files_removed"))
+                or audit.get("unsafe_raw_iterator_race_executed") is not False
+                or audit.get("customer_or_other_project_files_opened") is not False):
+            raise LocalProductError("unverified Python source/trial cannot appear as safe")
+        body += (
+            '<section class="shelf-entry"><span class="eyebrow">'
+            'OFFICIAL SOURCE · UCIE FIRST-PARTY TEST</span>'
+            '<h2>Python os.scandir 반복자 안전 사용 검토</h2>'
+            '<p>공식 Python 문서에 연결된 미승인 시험 레시피입니다.'
+            ' 실제 외부 PR 코드·고객 프로젝트 파일은 사용하지 않았습니다.</p>'
+            '<dl class="inventory-grid">'
+            '<div><dt>합성 파일</dt><dd>' +
+            _e(audit["synthetic_file_count"]) + '개</dd></div>'
+            '<div><dt>안전한 동시 소비자</dt><dd>' +
+            _e(audit["concurrent_guarded_consumers"]) + '개</dd></div>'
+            '<div><dt>누락·중복 여부</dt><dd>없음 · 합성 시험</dd></div>'
+            '<div><dt>종료 후 재호출</dt><dd>StopIteration 확인</dd></div>'
+            '</dl><p>안전 호출 원칙: ' + _e(out["safe_call"]) + '</p>'
+            '<p>원본 문서 개정·영향 Python 버전·사용권·독립 검증은'
+            ' 아직 완료되지 않았습니다. 자동 승인·배포되지 않습니다.</p>'
+            '<p><a target="_blank" rel="noopener noreferrer" '
+            'href="https://docs.python.org/3/library/os.html">'
+            '승인된 Python 공식 문서 보기 →</a></p>'
+            '<p><a href="/local/error?q=Python">오류 예방 근거 보기 →</a>'
+            ' · <a href="/local/library?q=Python">도서관에서 검색 →</a>'
+            ' · <a href="/local/evolution?q=Python">'
+            '개선 근거 검토 →</a></p></section>'
+        )
     elif purpose == "MCP_PROMPTS_CONTRACT":
         from .mcp_prompt_regression_v01 import (
             SCHEMA as MCP_WIRE_SCHEMA, SOURCE_PR as MCP_SOURCE_PR,
