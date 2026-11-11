@@ -351,7 +351,9 @@ def _probe_child(root: Path, revision: str) -> dict:
         tail = process.stderr.strip().splitlines()[-1:] or ["NO_CHILD_STDERR"]
         status = "FAIL_CLOSED"
         try:
-            status = json.loads(process.stdout).get("status", "NON_JSON")
+            payload = json.loads(process.stdout)
+            status = (str(payload.get("status", "NON_JSON")) + " " +
+                      str(payload.get("reason", "UNKNOWN"))[:170])
         except (ValueError, AttributeError):
             status = "NON_JSON"
         raise ClosurePreviewError(
