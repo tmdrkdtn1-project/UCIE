@@ -369,10 +369,15 @@ def main(argv: list[str] | None = None) -> int:
             result = verify_local(root)
         else:
             result = plan(root)
-    except (WheelAcquisitionError, OSError, ValueError, EOFError):
+    except (WheelAcquisitionError, OSError, ValueError, EOFError) as exc:
+        # Stable, bounded first-party refusal reason; never return pip logs,
+        # external package code, user files or traceback in a release receipt.
+        reason = (str(exc)[:150] if isinstance(exc, WheelAcquisitionError)
+                  else type(exc).__name__)
         result = {
             "schema": SCHEMA,
             "status": "UCIE_C1_WHEELHOUSE_NO_GO_OR_OWNER_GATE_FAILED",
+            "failure_reason": reason,
             "customer_distribution_authorized": False,
             "packages_installed_or_executed": False,
         }
