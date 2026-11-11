@@ -188,9 +188,11 @@ class UCIEC1OfflineDependencyAndDynamicTests(unittest.TestCase):
 
     def test_exact_fixed_stdlib_import_calls_are_classified_but_not_approved(self):
         target = self.root / "src" / "ucie_miner" / "local_v1_app_v01.py"
-        target.write_text(
-            'x = __import__("os")\\n'
-            'y = __import__("argparse")\\n', encoding="utf-8")
+        target.write_text(chr(10).join([
+            'x = __import__("os")',
+            'y = __import__("argparse")',
+            '',
+        ]), encoding="utf-8")
         report = gate.dynamic_import_risks(self.root)
         self.assertEqual(report["source_site_count"], 2)
         self.assertEqual(report["unresolved_dynamic_targets"], 0)
