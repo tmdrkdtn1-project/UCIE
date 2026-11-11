@@ -872,6 +872,85 @@ def _skillbook_runner(raw: str) -> str:
     return _page("SkillBook 실행 결과", html)
 
 
+def _python_guide_data() -> dict:
+    from .python_scandir_guide_v01 import (
+        SCHEMA as PY_SCHEMA, GUIDE_ID, STATUS as PY_STATUS,
+        build_readonly_guide,
+    )
+    out = build_readonly_guide()
+    src, gates = out.get("source_evidence"), out.get("review_gates")
+    machine = out.get("machine_skill_contract")
+    if (type(out) is not dict or out.get("schema") != PY_SCHEMA
+            or out.get("skillbook_id") != GUIDE_ID
+            or out.get("status") != PY_STATUS
+            or out.get("export_allowed") is not False
+            or out.get("auto_promoted") is not False
+            or out.get("customer_release_authorized") is not False
+            or out.get("other_project_access") is not False
+            or out.get("network_requests") != 0
+            or out.get("operating_database_writes") != 0
+            or type(src) is not dict
+            or src.get("source_id") != "doc:python/cpython"
+            or src.get("official_url") != "https://docs.python.org/3/library/os.html"
+            or src.get("document_revision") != "PUBLIC_DOCUMENT_REVISION_NOT_PINNED"
+            or src.get("source_license_status") != "NOT_ATTESTED_PER_REVISION"
+            or src.get("upstream_race_fix_independently_reproduced") is not False
+            or type(machine) is not dict
+            or machine.get("trial_executed_on_guide_view") is not False
+            or machine.get("trial_requires_explicit_engine_click") is not True
+            or machine.get("automatic_patch_applied") is not False
+            or type(gates) is not dict or len(gates) != 6
+            or any(x is not False for x in gates.values())
+            or type(out.get("chapters")) is not list or len(out["chapters"]) != 5):
+        raise LocalProductError("Python guide approval gate drift")
+    return out
+
+
+def _python_review_guide(raw: str, *, json_mode: bool = False) -> str:
+    require_local_work("VIRTUAL_LIBRARY")
+    if raw:
+        raise LocalProductError("Python guide query not permitted")
+    guide = _python_guide_data()
+    if json_mode:
+        return json.dumps(guide, ensure_ascii=False, sort_keys=True)
+    body = (
+        '<section class="search-panel"><span class="eyebrow">'
+        'PYTHON · REVIEW ONLY</span><h2>' + _e(guide["title"]) + '</h2>'
+        '<p>공식 문서 개정, 적용 버전, 재배포 권리와 독립 검증은 미완료입니다.'
+        ' UCIE 자체 기술 안내이며 승인된 규칙이 아닙니다.</p>'
+        '<div class="page-controls"><a href="/local/library?q=Python">'
+        '도서관으로 돌아가기</a></div></section>'
+        '<section class="shelf-entry"><h3>공식 출처</h3>'
+        '<p><a href="https://docs.python.org/3/library/os.html" '
+        'target="_blank" rel="noopener noreferrer">Python 공식 os 문서</a></p>'
+        '<p>PUBLIC_DOCUMENT_REVISION_NOT_PINNED · '
+        'NOT_ATTESTED_PER_REVISION · UNDETERMINED</p></section>'
+    )
+    for chapter in guide["chapters"]:
+        if (type(chapter) is not dict
+                or set(chapter) != {"heading", "text", "claim_scope"}
+                or any(type(x) is not str or not x for x in chapter.values())):
+            raise LocalProductError("unsafe Python guide chapter")
+        body += (
+            '<section class="shelf-entry"><h3>' + _e(chapter["heading"]) +
+            '</h3><p>' + _e(chapter["text"]) + '</p>'
+            '<details class="technical-details"><summary>근거 범위'
+            '</summary><code>' + _e(chapter["claim_scope"]) +
+            '</code></details></section>'
+        )
+    body += (
+        '<section class="shelf-entry"><h3>재사용 인터페이스</h3>'
+        '<p><code>' + _e(guide["machine_skill_contract"]["callable"]) +
+        '</code> · 고객 파일 입력 없는 UCIE 자체 합성시험</p>'
+        '<p><a href="/local/guide/python-scandir.json">기계 계약 JSON</a></p>'
+        '<p><a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE">'
+        '사용자 명시 합성시험 실행 →</a></p>'
+        '<p>가이드를 읽는 것만으로 실행·승인·승격·배포하지 않습니다.</p>'
+        '</section>'
+    )
+    return _page("통합 가상도서관", body)
+
+
 def _mcp_review_guide(raw: str, *, json_mode: bool = False) -> str:
     """Local V04-shell reading only; NO book activation or browser execution."""
     require_local_work("VIRTUAL_LIBRARY")
@@ -1445,7 +1524,9 @@ def make_handler(root: Path):
                     "/local/engine", "/local/books", "/local/library",
                     "/local/evolution", "/local/review", "/local/policy",
                     "/local/skillbook-run", "/local/guide/mcp-prompts",
-                    "/local/guide/mcp-prompts.json"):
+                    "/local/guide/mcp-prompts.json",
+                    "/local/guide/python-scandir",
+                    "/local/guide/python-scandir.json"):
                 return super().do_GET()
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
                 return self.reply(403, "LOOPBACK_ONLY",
@@ -1516,6 +1597,14 @@ def make_handler(root: Path):
                                     "/local/guide/mcp-prompts.json"):
                     is_json = parts.path.endswith(".json")
                     value = _mcp_review_guide(parts.query, json_mode=is_json)
+                    return self.reply(200, value,
+                                      "application/json; charset=utf-8" if is_json
+                                      else "text/html; charset=utf-8")
+                elif parts.path in ("/local/guide/python-scandir",
+                                    "/local/guide/python-scandir.json"):
+                    is_json = parts.path.endswith(".json")
+                    value = _python_review_guide(parts.query,
+                                                 json_mode=is_json)
                     return self.reply(200, value,
                                       "application/json; charset=utf-8" if is_json
                                       else "text/html; charset=utf-8")
