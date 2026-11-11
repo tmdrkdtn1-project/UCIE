@@ -62,7 +62,7 @@ It therefore will not launch on the operational owner `D:\\UCIE`.
 
 `exercise_real_revision_ab_preview()` creates two *new* UCIE-named
 directories under one temporary folder. Both start from the same source
-closure and fixed approved-first-party file census.
+bounded UCIE first-party **entire Python source index** (including\noptional modules absent from the static reachability graph), plus the\nfixed approved-first-party 23-path C0 file census. This does not mean\nthird-party/runtime-data closure is accepted.
 
 - **A:** the real source `customer_portable_preview_v01.py` contains
   `UCIE_C1_DISPOSABLE_GENERATION_A`.
