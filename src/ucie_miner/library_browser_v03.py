@@ -278,7 +278,37 @@ def make_handler(root: Path, *, explorer=None, comparer=None):
             self.wfile.write(body)
 
         def do_POST(self):
-            self.reply(405, "GET_ONLY", "text/plain; charset=utf-8")
+            # A rejected POST can reset the peer on Windows if the request
+            # body remains unread when HTTP/1.0 closes the connection.
+            # Consume only bounded inert bytes before returning the same 405.
+            length = self.headers.get("Content-Length", "0")
+            if (self.headers.get("Transfer-Encoding") is not None
+                    or not length.isascii() or not length.isdecimal()
+                    or len(length) > 5):
+                self.close_connection = True
+                return self.reply(400, "INVALID_POST_LENGTH",
+                                  "text/plain; charset=utf-8")
+            size = int(length)
+            if size > 16384:
+                self.close_connection = True
+                return self.reply(413, "POST_BODY_TOO_LARGE",
+                                  "text/plain; charset=utf-8")
+            original_timeout = self.connection.gettimeout()
+            self.connection.settimeout(2.0)
+            try:
+                if len(self.rfile.read(size)) != size:
+                    self.close_connection = True
+                    return
+            except (OSError, TimeoutError):
+                self.close_connection = True
+                return
+            finally:
+                self.connection.settimeout(original_timeout)
+            if size > 8192:
+                self.close_connection = True
+                return self.reply(413, "POST_BODY_TOO_LARGE",
+                                  "text/plain; charset=utf-8")
+            return self.reply(405, "GET_ONLY", "text/plain; charset=utf-8")
 
         def do_GET(self):
             if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
