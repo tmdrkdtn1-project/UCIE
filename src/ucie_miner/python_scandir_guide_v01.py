@@ -10,6 +10,11 @@ from __future__ import annotations
 from .python_scandir_review_v01 import (
     PURPOSE, SOURCE_ID, SCHEMA as TRIAL_SCHEMA, _source_bound_entry,
 )
+from .python_scandir_pinned_playbook_v02 import (
+    pinned_source_snapshot, DOC_BLOB as PINNED_DOC_BLOB,
+    LICENSE_BLOB as PINNED_LICENSE_BLOB,
+    TAG_COMMIT as PINNED_TAG_COMMIT,
+)
 
 SCHEMA = "UCIE_PYTHON_SCANDIR_SKILLBOOK_REVIEW_V01"
 GUIDE_ID = "UCIE-PYTHON-SCANDIR-REVIEW-004"
@@ -39,10 +44,11 @@ CHAPTERS = (
      "가이드 페이지와 JSON 조회는 이 함수를 실행하지 않습니다.",
      "FIRST_PARTY_ZERO_USER_INPUT_SYNTHETIC_INTERFACE"),
     ("버전·출처·사용권·승인 한계",
-     "공식 Python os 문서의 URL만 승인된 참고 출처이며 문서의 정확한 개정 SHA는 고정되지 "
-     "않았습니다. 특정 CPython 릴리스의 race 존재 또는 수정 효과는 독립 재현되지 않았고 "
-     "해당 문서 개정의 재배포 사용권도 검증되지 않았습니다. 공개 PR 후보는 다른 종류의 "
-     "근거로 취급합니다. 사람 검수·보안·권리·고객 배포 승인 모두 미완료입니다.",
+     "변경되는 docs.python.org URL 자체는 개정 SHA가 고정되지 않습니다. 별도로 CPython "
+     "v3.15.0 공식 태그의 Doc/library/os.rst 및 LICENSE Git blob을 확인해 보존했습니다. "
+     "공식 문서에는 반복자의 with/close가 명시돼 있으나 UCIE 동시성 패턴은 자체 제안입니다. "
+     "라이선스 원문은 관측했어도 고객 재배포 권리·버전별 race 수정·독립 재현은 승인 전입니다. "
+     "사람 검수·보안·권리·고객 배포 승인 모두 미완료입니다.",
      "SOURCE_REVISION_RIGHTS_INDEPENDENT_QA_RELEASE_NO_GO"),
 )
 
@@ -71,6 +77,18 @@ def build_readonly_guide() -> dict:
             or entry.get("export_allowed") is not False
             or entry.get("auto_promoted") is not False):
         raise PythonScandirGuideError("unverified official Python reference drift")
+    tagged = pinned_source_snapshot()
+    if (tagged.get("source_id") != SOURCE_ID
+            or tagged.get("tag_commit_sha1") != PINNED_TAG_COMMIT
+            or tagged.get("doc_blob_sha1") != PINNED_DOC_BLOB
+            or tagged.get("license_blob_sha1") != PINNED_LICENSE_BLOB
+            or tagged.get("live_doc_revision_pinned") is not False
+            or tagged.get("tagged_doc_reference_observed") is not True
+            or tagged.get("upstream_race_behavior_independently_reproduced") is not False
+            or tagged.get("per_revision_redistribution_clearance") is not False
+            or tagged.get("owner_licensing_signoff") is not False
+            or tagged.get("new_fetch_authority") is not False):
+        raise PythonScandirGuideError("tagged Python source cannot be approved")
     return {
         "schema": SCHEMA,
         "skillbook_id": GUIDE_ID,
@@ -88,6 +106,7 @@ def build_readonly_guide() -> dict:
             "public_pr_equivalent_to_document": False,
             "upstream_code_executed": False,
         },
+        "tagged_source_snapshot": tagged,
         "chapters": [
             {"heading": heading, "text": text, "claim_scope": scope}
             for heading, text, scope in CHAPTERS
