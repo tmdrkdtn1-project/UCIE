@@ -563,8 +563,11 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
     require_local_work("DEV_ENGINE_SKILL")
     from .capability_trials import RECIPES, evaluate_ucie_owned_recipe
 
-    args = _params(raw, ("purpose",))
+    args = _params(raw, ("purpose", "case"))
     purpose = args.get("purpose", "")
+    selected_case = args.get("case", "")
+    if selected_case and purpose != "PYTHON_SCANDIR_SAFE":
+        raise LocalProductError("Python-only selectable use case")
     if purpose and purpose not in (*RECIPES, "REAL_PUBLIC_CATALOG",
                                    "MCP_PROMPTS_CONTRACT",
                                    "PYTHON_SCANDIR_SAFE"):
@@ -653,6 +656,40 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
             run_python_scandir_review, SCHEMA as PY_SCANDIR_SCHEMA,
         )
         from .public_evidence_routes import DOC_ENDPOINTS
+        from .python_scandir_pinned_playbook_v02 import (
+            review_case, SCHEMA as PLAYBOOK_SCHEMA, STATUS as PLAYBOOK_STATUS,
+            CASE_IDS as PLAYBOOK_CASE_IDS,
+        )
+        playbook = review_case(selected_case or "shared_guarded")
+        pinned = playbook.get("source_evidence")
+        if (type(playbook) is not dict
+                or playbook.get("schema") != PLAYBOOK_SCHEMA
+                or playbook.get("status") != PLAYBOOK_STATUS
+                or playbook.get("case_id") not in PLAYBOOK_CASE_IDS
+                or playbook.get("example_executed_by_view") is not False
+                or playbook.get("selected_case_changes_underlying_trial") is not False
+                or playbook.get("arbitrary_paths_accepted") is not False
+                or playbook.get("customer_files_read") is not False
+                or playbook.get("upstream_code_executed") is not False
+                or playbook.get("human_approved") is not False
+                or playbook.get("export_allowed") is not False
+                or playbook.get("auto_promoted") is not False
+                or playbook.get("customer_release_authorized") is not False
+                or playbook.get("network_requests") != 0
+                or playbook.get("operating_database_writes") != 0
+                or type(pinned) is not dict
+                or pinned.get("source_tag") != "v3.15.0"
+                or pinned.get("doc_blob_sha1")
+                    != "74419ee7f3588f1baec83c85b05716e6388719e3"
+                or pinned.get("license_blob_sha1")
+                    != "20cf39097c68baa17cc566b64e76d34ebf034044"
+                or pinned.get("live_doc_revision_pinned") is not False
+                or pinned.get("per_revision_redistribution_clearance") is not False
+                or pinned.get("owner_licensing_signoff") is not False
+                or type(playbook.get("safe_example")) is not str
+                or not playbook["safe_example"].startswith("import os\n")
+                or len(playbook["safe_example"]) > 1800):
+            raise LocalProductError("untrusted Python pinned source playbook")
         out = run_python_scandir_review()
         audit = out.get("synthetic_trial")
         if (out.get("schema") != PY_SCANDIR_SCHEMA
@@ -714,6 +751,39 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
             '개선 근거 검토 →</a>'
             ' · <a href="/local/guide/python-scandir">'
             'Python 검토용 기술 가이드 →</a></p></section>'
+        )
+        body += (
+            '<section class="shelf-entry">'
+            '<span class="eyebrow">SOURCE-PINNED PLAYBOOK · REVIEW ONLY</span>'
+            '<h3>안전 사용 상황 선택</h3>'
+            '<p>실행 흐름에 맞는 UCIE 자체 코드 예제를 확인하세요.'
+            ' 선택은 설명과 예제만 변경하며, 실행되는 합성시험은'
+            ' 동일한 UCIE 전용 4개 파일·2개 소비자 종합시험입니다.</p>'
+            '<div class="page-controls">'
+            '<a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE&amp;case=single_owner">'
+            '단일 소비자 예제</a>'
+            '<a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE&amp;case=shared_guarded">'
+            '잠금 보호 2개 소비자 예제</a></div>'
+            '<h3>' + _e(playbook["case_title"]) + '</h3>'
+            '<p>' + _e(playbook["purpose"]) + '</p>'
+            '<pre><code>' + _e(playbook["safe_example"]) + '</code></pre>'
+            '<p><strong>피할 사용 방식:</strong> ' +
+            _e(playbook["avoid_as_text_only"]) + '</p>'
+            '<p>예제는 화면에 텍스트로만 표시되며 실제 사용자 파일에'
+            ' 적용하거나 실행하지 않습니다.</p>'
+            '<details class="technical-details"><summary>'
+            'Python 3.15.0 원본 문서·사용권 출처</summary>'
+            '<p><a href="' + _e(pinned["tagged_doc_url"]) +
+            '" target="_blank" rel="noopener noreferrer">'
+            'CPython v3.15.0 공식 문서 정본 보기</a></p>'
+            '<p>Doc/library/os.rst blob: <code>' +
+            _e(pinned["doc_blob_sha1"]) + '</code></p>'
+            '<p><a href="' + _e(pinned["tagged_license_url"]) +
+            '" target="_blank" rel="noopener noreferrer">'
+            '동일 태그 LICENSE 원문</a></p>'
+            '<p>사용권 문구 확인: PSF License Version 2 / 문서 예제 0BSD.'
+            ' 재배포 권리·사용자 승인·독립 회귀 시험은 미완료입니다.</p>'
+            '</details></section>'
         )
     elif purpose == "MCP_PROMPTS_CONTRACT":
         from .mcp_prompt_regression_v01 import (
