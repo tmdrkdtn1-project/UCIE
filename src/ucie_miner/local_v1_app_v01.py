@@ -289,16 +289,36 @@ def _page_number(args: dict[str, str]) -> int:
 
 
 def _paged_evidence(root: Path, query: str, *, page: int,
-                    route: str, guidance: bool = False) -> str:
-    """Keep every approved public candidate accessible in bounded pages."""
+                    route: str, guidance: bool = False,
+                    report: dict | None = None) -> str:
+    """Keep public candidates paged, reusing only validated W04 snapshots."""
     offset = (page - 1) * PAGE_SIZE
-    report = _search(root, query, limit=PAGE_SIZE, offset=offset)
+    if report is None:
+        report = _search(root, query, limit=PAGE_SIZE, offset=offset)
+    else:
+        from .library_search import SCHEMA as W04_SCHEMA
+        if (type(report) is not dict or report.get("schema") != W04_SCHEMA
+                or report.get("status") not in (
+                    "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO",
+                    "SOURCE_LINKAGE_INCOMPLETE_NO_GO")
+                or report.get("network_requests") != 0
+                or report.get("operating_database_writes") != 0
+                or report.get("approved_or_exportable_items") != 0
+                or report.get("auto_promoted") is not False
+                or type(report.get("items")) is not list
+                or report.get("returned_count") != len(report["items"])
+                or (offset and report.get("page_offset") != offset)):
+            raise LocalProductError("unverified W04 page reuse refused")
     total = report["total_matches"]
     shown = len(report["items"])
     if total and offset >= total:
         raise LocalProductError("requested page outside available public evidence")
+    # The official-document recipe is independent of the public PR ledger.
+    # Compare against the SAME source-linked W04 page, without querying twice.
+    recipe_html = (_python_reference_recipe_shelf(query, report)
+                   if route == "/local/library" else "")
     if report["status"] == "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
-        return _evidence_rows(report, guidance=guidance)
+        return recipe_html + _evidence_rows(report, guidance=guidance)
     start = offset + 1 if shown else 0
     finish = offset + shown
     summary = (
@@ -320,7 +340,7 @@ def _paged_evidence(root: Path, query: str, *, page: int,
     navigation = (
         '<section class="pager-box"><nav class="pagination" aria-label="공개 근거 검색 페이지">'
         + ' · '.join(links) + '</nav></section>' if links else '')
-    return (summary + _evidence_rows(
+    return (recipe_html + summary + _evidence_rows(
         report, guidance=guidance, query=query, page=page, route=route)
         + navigation)
 
@@ -927,6 +947,109 @@ def _mcp_review_guide(raw: str, *, json_mode: bool = False) -> str:
     return _page("통합 가상도서관", body)
 
 
+def _python_reference_recipe_shelf(term: str,
+                                   public_report: dict | None) -> str:
+    """W03/W04 cross-shelf source comparison; never run a trial on search."""
+    from .library_python_recipe_shelf_v01 import (
+        SCHEMA as RECIPE_SCHEMA, SHELF_STATUS, NOT_FOUND,
+        COMPARISON_STATUS, search_python_reference_recipe,
+        compare_with_w04_window,
+    )
+    recipe = search_python_reference_recipe(term)
+    compared = compare_with_w04_window(recipe, public_report)
+    if (recipe.get("schema") != RECIPE_SCHEMA
+            or recipe.get("status") not in (SHELF_STATUS, NOT_FOUND)
+            or recipe.get("network_requests") != 0
+            or recipe.get("operating_database_writes") != 0
+            or recipe.get("human_approved") is not False
+            or recipe.get("export_allowed") is not False
+            or recipe.get("auto_promoted") is not False
+            or type(recipe.get("items")) is not list
+            or recipe.get("returned_count") != len(recipe["items"])
+            or len(recipe["items"]) > 1
+            or compared.get("schema") != RECIPE_SCHEMA
+            or compared.get("network_requests") != 0
+            or compared.get("operating_database_writes") != 0
+            or compared.get("auto_promoted") is not False
+            or compared.get("comparison_is_upstream_fix_validation") is not False
+            or compared.get("different_evidence_types") is not True):
+        raise LocalProductError("untrusted W03/W04 Python recipe search")
+    if not recipe["items"]:
+        return ""
+    entry = recipe["items"][0]
+    if (entry.get("title") != "Python os.scandir 반복자 안전 사용 · UCIE 합성시험"
+            or type(entry.get("library_item_id")) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", entry["library_item_id"]) is None
+            or entry.get("kind") != "TEST_RECIPE"
+            or entry.get("source_id") != "doc:python/cpython"
+            or entry.get("public_url") != "https://docs.python.org/3/library/os.html"
+            or entry.get("revision_hint") != "PUBLIC_DOCUMENT_REVISION_NOT_PINNED"
+            or entry.get("source_license_status") != "NOT_ATTESTED_PER_REVISION"
+            or entry.get("reference_digest_scope")
+                != "UCIE_REFERENCE_STRING_ONLY_NOT_DOCUMENT_BYTES"
+            or entry.get("engine_route")
+                != "/local/engine?purpose=PYTHON_SCANDIR_SAFE"
+            or entry.get("human_approved") is not False
+            or entry.get("export_allowed") is not False):
+        raise LocalProductError("forged Python official documentation recipe")
+    html = (
+        '<section class="shelf-title" data-shelf="ucie-first-party-recipes">'
+        '<span class="eyebrow">RESEARCH · FIRST-PARTY TEST</span>'
+        '<h2>검토용 기술 실험</h2>'
+        '<p>공식 자료와 UCIE 자체 시험을 분리해 확인할 수 있습니다.</p>'
+        '</section>'
+        '<article class="shelf-entry">'
+        '<span class="card-kicker">TEST_RECIPE · 미승인</span>'
+        '<h3>' + _e(entry["title"]) + '</h3>'
+        '<p>공식 Python 문서 참조를 기반으로 구성한 UCIE 자체 실험입니다.'
+        ' 원본 수정 코드나 검증된 배포 패키지는 아닙니다.</p>'
+        '<div class="page-controls">'
+        '<a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE">'
+        '안전한 합성시험 확인 →</a></div>'
+        '<details class="technical-details"><summary>'
+        '공식 출처 · 적용 버전 · 공개 PR 비교</summary>'
+        '<dl class="evidence-properties">'
+        '<div><dt>출처</dt><dd>' + _e(entry["source_id"]) + '</dd></div>'
+        '<div><dt>자료 구분</dt><dd>' + _e(entry["kind"]) + '</dd></div>'
+        '<div><dt>검증 상태</dt><dd>UNVERIFIED_CANDIDATE_ONLY</dd></div>'
+        '<div><dt>적용 버전</dt><dd>' +
+        _e(entry["version_scope_claim"]) + ' · 확인 전</dd></div>'
+        '<div><dt>문서 개정</dt><dd>PUBLIC_DOCUMENT_REVISION_NOT_PINNED</dd></div>'
+        '<div><dt>사용권</dt><dd>NOT_ATTESTED_PER_REVISION</dd></div>'
+        '<div><dt>증거 해시 범위</dt><dd>'
+        'UCIE_REFERENCE_STRING_ONLY_NOT_DOCUMENT_BYTES</dd></div>'
+        '</dl><p><a href="https://docs.python.org/3/library/os.html"'
+        ' target="_blank" rel="noopener noreferrer">'
+        'Python 공식 os.scandir 문서 보기 ↗</a></p>'
+    )
+    state = compared.get("status")
+    if state == COMPARISON_STATUS:
+        prs = compared.get("relevant_public_prs")
+        if (type(prs) is not list or len(prs) > 3
+                or len(prs) != compared.get("relevant_public_pr_count_in_page")):
+            raise LocalProductError("unbounded W04 public comparison")
+        html += (
+            '<p><strong>비교:</strong> 현재 공개 근거 검색 페이지의'
+            ' 별도 PR 후보 ' + _e(len(prs)) + '건.'
+            ' 공식 문서와 공개 PR은 서로 다른 근거이며,'
+            ' 동일한 수정·버전 지원을 증명하지 않습니다.</p>'
+        )
+        for row in prs:
+            html += (
+                '<p><a rel="noopener noreferrer" target="_blank" href="' +
+                _e(row["public_url"]) + '">관련 공개 PR 후보 보기 ↗</a>'
+                ' · UNVERIFIED_CANDIDATE_ONLY</p>'
+            )
+    elif state == "W04_SOURCE_LINKAGE_INCOMPLETE_NO_COMPARISON":
+        html += (
+            '<p>기존 공개 PR 출처 연결이 불완전합니다.'
+            ' 비교를 보류하며 공식 문서의 검증 상태를 승격하지 않습니다.</p>'
+        )
+    elif state != "W04_NOT_REQUESTED_OR_NO_RECIPE":
+        raise LocalProductError("unrecognized W04 comparison gate")
+    return html + '</details></article>'
+
+
 def _library(root: Path, raw: str) -> str:
     """One user-facing UCIE library: SkillBooks, editorial drafts and all W04 pages.
 
@@ -1063,6 +1186,8 @@ def _library(root: Path, raw: str) -> str:
     else:
         if page != 1:
             raise LocalProductError("non-ASCII public evidence paging not supported")
+        # Korean first-party recipe search needs no unapproved W04 text index.
+        body += _python_reference_recipe_shelf(term, None)
         body += (
             '<section class="workbench-note"><h2>검색어 안내</h2>'
             '<p>공개 기술 사례는 현재 영문 검색어로 찾아보실 수 있습니다.'
