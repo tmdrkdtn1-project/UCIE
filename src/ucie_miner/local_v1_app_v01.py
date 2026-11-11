@@ -395,6 +395,18 @@ def _error(root: Path, raw: str) -> str:
             '<p><a href="/local/guide/mcp-prompts">'
             '오류 구분 기술 가이드 보기 →</a></p></section>'
         )
+    if page == 1 and term.casefold().strip() in (
+            "python", "os.scandir", "scandir", "반복자", "스레드"):
+        guide = _python_guide_data()
+        body += (
+            '<section class="workbench-note">'
+            '<span class="eyebrow">OFFICIAL DOC · REVIEW ONLY</span>'
+            '<h2>Python os.scandir 반복자 안전 호출</h2>'
+            '<p>반복자 공유 시 next()와 close()를 직렬화하는'
+            ' UCIE 자체 작성 기술 안내입니다. 버전·권리·독립 검증은 미완료.</p>'
+            '<p><a href="/local/guide/python-scandir">' +
+            _e(guide["title"]) + ' 읽기 →</a></p></section>'
+        )
     if term:
         body += _paged_evidence(root, term, page=page,
                                 route="/local/error", guidance=True)
@@ -668,7 +680,9 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
             '<p><a href="/local/error?q=Python">오류 예방 근거 보기 →</a>'
             ' · <a href="/local/library?q=Python">도서관에서 검색 →</a>'
             ' · <a href="/local/evolution?q=Python">'
-            '개선 근거 검토 →</a></p></section>'
+            '개선 근거 검토 →</a>'
+            ' · <a href="/local/guide/python-scandir">'
+            'Python 검토용 기술 가이드 →</a></p></section>'
         )
     elif purpose == "MCP_PROMPTS_CONTRACT":
         from .mcp_prompt_regression_v01 import (
@@ -1084,7 +1098,9 @@ def _python_reference_recipe_shelf(term: str,
         ' 원본 수정 코드나 검증된 배포 패키지는 아닙니다.</p>'
         '<div class="page-controls">'
         '<a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE">'
-        '안전한 합성시험 확인 →</a></div>'
+        '안전한 합성시험 확인 →</a>'
+        '<a href="/local/guide/python-scandir">'
+        'Python 안전 호출 및 기계 계약 가이드 →</a></div>'
         '<details class="technical-details"><summary>'
         '공식 출처 · 적용 버전 · 공개 PR 비교</summary>'
         '<dl class="evidence-properties">'
@@ -1415,6 +1431,24 @@ def _evolution(root: Path, raw: str) -> str:
     if page == 1 and term.casefold().strip() in (
             "mcp", "prompts/get", "prompt", "-32602"):
         body += _mcp_evolution_comparison()
+    if page == 1 and term.casefold().strip() in (
+            "python", "os.scandir", "scandir"):
+        guide = _python_guide_data()
+        body += (
+            '<section class="shelf-entry">'
+            '<span class="eyebrow">PUBLIC REFERENCE · REVIEW ONLY</span>'
+            '<h2>Python 반복자 개선 근거 검토</h2>'
+            '<p>공식 Python 문서와 출처 연결된 공개 PR은 서로 다른 근거입니다.'
+            ' 문서 개정·버전·권리·수정 효과는 미검증입니다.</p>'
+            '<div class="page-controls">'
+            '<a href="/local/library?q=Python">공식 문서와 PR 비교 →</a>'
+            '<a href="/local/guide/python-scandir">' +
+            _e(guide["title"]) + ' →</a>'
+            '<a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE">'
+            'UCIE 합성 시험 보기 →</a></div>'
+            '<p class="customer-note">자동 승인·승격·출시는 없습니다.</p>'
+            '</section>'
+        )
     body += _paged_evidence(root, term, page=page,
                             route="/local/evolution")
     return _page("근거 기반 개선", body)
