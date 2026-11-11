@@ -131,6 +131,33 @@ class UCIEPortableC1RuntimeClosureTests(unittest.TestCase):
             with self.assertRaises(preview.PortablePreviewError):
                 preview.probe_preview_root(root)
 
+    def test_optional_ucie_module_is_staged_even_when_not_static_reachable(self):
+        uncalled = self.root / "src" / "ucie_miner" / "unreachable_optional.py"
+        uncalled.write_text("# UCIE inert first-party optional source\\n",
+                            encoding="utf-8")
+        for relative in closure.CENSUS_FILES:
+            target = self.root.joinpath(*relative.split("/"))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.exists():
+                target.write_text("# UCIE synthetic inventory only\\n",
+                                  encoding="utf-8")
+        graph = closure.inspect_static_runtime_closure(self.root)
+        optional = "src/ucie_miner/unreachable_optional.py"
+        self.assertIn(optional, graph["all_first_party_python_source_files"])
+        self.assertNotIn(optional, graph["reachable_files"])
+        copied = closure._copy_payload(self.root, graph)
+        self.assertIn(optional, copied)
+        self.assertEqual(len(graph["all_first_party_python_source_files"]),
+                         graph["all_python_modules_indexed"])
+
+    def test_spoofed_static_inventory_does_not_stage(self):
+        graph = closure.inspect_static_runtime_closure(self.root)
+        forged = dict(graph, all_first_party_python_source_files=[
+            "src/ucie_miner/../../../outside.py"
+        ])
+        with self.assertRaises(closure.ClosurePreviewError):
+            closure._copy_payload(self.root, forged)
+
     def test_same_bytes_not_mislabeled_real_revision(self):
         src = {closure.PREVIEW_SOURCE: (
             b'REVISION = "UCIE_C1_DISPOSABLE_GENERATION_A"\n')}
