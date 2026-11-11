@@ -251,6 +251,27 @@ class UCIEOwnerWheelAcquisitionV01Tests(unittest.TestCase):
         with self.assertRaises(owner.WheelAcquisitionError):
             owner.plan(self.root)
 
+    def test_main_preview_and_unavailable_verify_are_bounded(self):
+        from contextlib import redirect_stdout
+        path = self.root / "src" / "ucie_miner" / "customer_owner_wheelhouse_acquire_v01.py"
+        with patch.object(owner, "__file__", str(path)), patch(
+            "subprocess.run", side_effect=AssertionError("no pip")), patch(
+            "urllib.request.urlopen", side_effect=AssertionError("no network")
+        ):
+            preview_log = io.StringIO()
+            with redirect_stdout(preview_log):
+                rc = owner.main([])
+            self.assertEqual(rc, 0)
+            self.assertEqual(json.loads(preview_log.getvalue())["mode"], "OFFLINE_PREVIEW")
+            fail_log = io.StringIO()
+            with redirect_stdout(fail_log):
+                rc = owner.main(["--verify"])
+            self.assertEqual(rc, 2)
+            failed = json.loads(fail_log.getvalue())
+            self.assertFalse(failed["customer_distribution_authorized"])
+            self.assertIn("wheelhouse and bounded receipt",
+                          failed["failure_reason"])
+
     def test_owner_current_checkout_preview_is_no_go(self):
         real = Path(__file__).resolve().parents[1]
         if real.name.casefold() != "ucie" or not (real / ".git").is_dir():
