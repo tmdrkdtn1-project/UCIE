@@ -228,7 +228,7 @@ def inspect_static_runtime_closure(root: Path) -> dict:
 
 
 def _copy_payload(root: Path, closure: dict) -> dict[str, bytes]:
-    """Exact first-party fixed file set + only statically referenced Python."""
+    """Stage the entire UCIE first-party Python source index plus C0 census."""
     # Preserve optional/dynamic first-party Python modules, not just the
     # statically visited subset. It is a source inventory, not execution.
     all_python = closure.get("all_first_party_python_source_files")
