@@ -563,8 +563,11 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
     require_local_work("DEV_ENGINE_SKILL")
     from .capability_trials import RECIPES, evaluate_ucie_owned_recipe
 
-    args = _params(raw, ("purpose",))
+    args = _params(raw, ("purpose", "case"))
     purpose = args.get("purpose", "")
+    selected_case = args.get("case", "")
+    if selected_case and purpose != "PYTHON_SCANDIR_SAFE":
+        raise LocalProductError("Python-only selectable use case")
     if purpose and purpose not in (*RECIPES, "REAL_PUBLIC_CATALOG",
                                    "MCP_PROMPTS_CONTRACT",
                                    "PYTHON_SCANDIR_SAFE"):
@@ -653,6 +656,43 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
             run_python_scandir_review, SCHEMA as PY_SCANDIR_SCHEMA,
         )
         from .public_evidence_routes import DOC_ENDPOINTS
+        from .python_scandir_pinned_playbook_v02 import (
+            review_case, SCHEMA as PLAYBOOK_SCHEMA, STATUS as PLAYBOOK_STATUS,
+            CASE_IDS as PLAYBOOK_CASE_IDS,
+        )
+        try:
+            playbook = review_case(selected_case or "shared_guarded")
+        except ValueError as exc:
+            raise LocalProductError("unregistered Python safe-use case") from exc
+        pinned = playbook.get("source_evidence")
+        if (type(playbook) is not dict
+                or playbook.get("schema") != PLAYBOOK_SCHEMA
+                or playbook.get("status") != PLAYBOOK_STATUS
+                or playbook.get("case_id") not in PLAYBOOK_CASE_IDS
+                or playbook.get("example_executed_by_view") is not False
+                or playbook.get("selected_case_changes_underlying_trial") is not False
+                or playbook.get("arbitrary_paths_accepted") is not False
+                or playbook.get("customer_files_read") is not False
+                or playbook.get("upstream_code_executed") is not False
+                or playbook.get("human_approved") is not False
+                or playbook.get("export_allowed") is not False
+                or playbook.get("auto_promoted") is not False
+                or playbook.get("customer_release_authorized") is not False
+                or playbook.get("network_requests") != 0
+                or playbook.get("operating_database_writes") != 0
+                or type(pinned) is not dict
+                or pinned.get("source_tag") != "v3.15.0"
+                or pinned.get("doc_blob_sha1")
+                    != "74419ee7f3588f1baec83c85b05716e6388719e3"
+                or pinned.get("license_blob_sha1")
+                    != "20cf39097c68baa17cc566b64e76d34ebf034044"
+                or pinned.get("live_doc_revision_pinned") is not False
+                or pinned.get("per_revision_redistribution_clearance") is not False
+                or pinned.get("owner_licensing_signoff") is not False
+                or type(playbook.get("safe_example")) is not str
+                or not playbook["safe_example"].startswith("import os\n")
+                or len(playbook["safe_example"]) > 1800):
+            raise LocalProductError("untrusted Python pinned source playbook")
         out = run_python_scandir_review()
         audit = out.get("synthetic_trial")
         if (out.get("schema") != PY_SCANDIR_SCHEMA
@@ -714,6 +754,39 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
             '개선 근거 검토 →</a>'
             ' · <a href="/local/guide/python-scandir">'
             'Python 검토용 기술 가이드 →</a></p></section>'
+        )
+        body += (
+            '<section class="shelf-entry">'
+            '<span class="eyebrow">SOURCE-PINNED PLAYBOOK · REVIEW ONLY</span>'
+            '<h3>안전 사용 상황 선택</h3>'
+            '<p>실행 흐름에 맞는 UCIE 자체 코드 예제를 확인하세요.'
+            ' 선택은 설명과 예제만 변경하며, 실행되는 합성시험은'
+            ' 동일한 UCIE 전용 4개 파일·2개 소비자 종합시험입니다.</p>'
+            '<div class="page-controls">'
+            '<a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE&amp;case=single_owner">'
+            '단일 소비자 예제</a>'
+            '<a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE&amp;case=shared_guarded">'
+            '잠금 보호 2개 소비자 예제</a></div>'
+            '<h3>' + _e(playbook["case_title"]) + '</h3>'
+            '<p>' + _e(playbook["purpose"]) + '</p>'
+            '<pre><code>' + _e(playbook["safe_example"]) + '</code></pre>'
+            '<p><strong>피할 사용 방식:</strong> ' +
+            _e(playbook["avoid_as_text_only"]) + '</p>'
+            '<p>예제는 화면에 텍스트로만 표시되며 실제 사용자 파일에'
+            ' 적용하거나 실행하지 않습니다.</p>'
+            '<details class="technical-details"><summary>'
+            'Python 3.15.0 원본 문서·사용권 출처</summary>'
+            '<p><a href="' + _e(pinned["tagged_doc_url"]) +
+            '" target="_blank" rel="noopener noreferrer">'
+            'CPython v3.15.0 공식 문서 정본 보기</a></p>'
+            '<p>Doc/library/os.rst blob: <code>' +
+            _e(pinned["doc_blob_sha1"]) + '</code></p>'
+            '<p><a href="' + _e(pinned["tagged_license_url"]) +
+            '" target="_blank" rel="noopener noreferrer">'
+            '동일 태그 LICENSE 원문</a></p>'
+            '<p>사용권 문구 확인: PSF License Version 2 / 문서 예제 0BSD.'
+            ' 재배포 권리·사용자 승인·독립 회귀 시험은 미완료입니다.</p>'
+            '</details></section>'
         )
     elif purpose == "MCP_PROMPTS_CONTRACT":
         from .mcp_prompt_regression_v01 import (
@@ -925,6 +998,7 @@ def _python_guide_data() -> dict:
     out = build_readonly_guide()
     src, gates = out.get("source_evidence"), out.get("review_gates")
     machine = out.get("machine_skill_contract")
+    tagged = out.get("tagged_source_snapshot")
     if (type(out) is not dict or out.get("schema") != PY_SCHEMA
             or out.get("skillbook_id") != GUIDE_ID
             or out.get("status") != PY_STATUS
@@ -944,6 +1018,25 @@ def _python_guide_data() -> dict:
             or machine.get("trial_executed_on_guide_view") is not False
             or machine.get("trial_requires_explicit_engine_click") is not True
             or machine.get("automatic_patch_applied") is not False
+            or machine.get("playbook_case_ids")
+                != ["single_owner", "shared_guarded"]
+            or machine.get("playbook_example_auto_executed") is not False
+            or type(tagged) is not dict
+            or tagged.get("source_id") != "doc:python/cpython"
+            or tagged.get("source_tag") != "v3.15.0"
+            or tagged.get("tag_commit_sha1")
+                != "d220409a13b77de7a6c30abe16ea90db01528edc"
+            or tagged.get("doc_blob_sha1")
+                != "74419ee7f3588f1baec83c85b05716e6388719e3"
+            or tagged.get("license_blob_sha1")
+                != "20cf39097c68baa17cc566b64e76d34ebf034044"
+            or tagged.get("live_doc_revision_pinned") is not False
+            or tagged.get("tagged_doc_reference_observed") is not True
+            or tagged.get("per_revision_redistribution_clearance") is not False
+            or tagged.get("upstream_race_behavior_independently_reproduced")
+                is not False
+            or tagged.get("owner_licensing_signoff") is not False
+            or tagged.get("new_fetch_authority") is not False
             or type(gates) is not dict or len(gates) != 6
             or any(x is not False for x in gates.values())
             or type(out.get("chapters")) is not list or len(out["chapters"]) != 5):
@@ -961,8 +1054,9 @@ def _python_review_guide(raw: str, *, json_mode: bool = False) -> str:
     body = (
         '<section class="search-panel"><span class="eyebrow">'
         'PYTHON · REVIEW ONLY</span><h2>' + _e(guide["title"]) + '</h2>'
-        '<p>공식 문서 개정, 적용 버전, 재배포 권리와 독립 검증은 미완료입니다.'
-        ' UCIE 자체 기술 안내이며 승인된 규칙이 아닙니다.</p>'
+        '<p>일반 공식 문서 URL의 개정은 미고정이지만 CPython v3.15.0'
+        ' 태그 소스는 별도 고정했습니다. 사용권 승인·독립 수정효과'
+        ' 검증·고객 출시는 미완료입니다. UCIE 자체 기술 안내입니다.</p>'
         '<div class="page-controls"><a href="/local/library?q=Python">'
         '도서관으로 돌아가기</a></div></section>'
         '<section class="shelf-entry"><h3>공식 출처</h3>'
@@ -970,6 +1064,29 @@ def _python_review_guide(raw: str, *, json_mode: bool = False) -> str:
         'target="_blank" rel="noopener noreferrer">Python 공식 os 문서</a></p>'
         '<p>PUBLIC_DOCUMENT_REVISION_NOT_PINNED · '
         'NOT_ATTESTED_PER_REVISION · UNDETERMINED</p></section>'
+    )
+    tagged = guide["tagged_source_snapshot"]
+    body += (
+        '<section class="shelf-entry">'
+        '<span class="eyebrow">EXACT OFFICIAL TAG · RIGHTS REVIEW ONLY</span>'
+        '<h3>원본 출처 고정: CPython v3.15.0</h3>'
+        '<p><a href="' + _e(tagged["tagged_doc_url"]) +
+        '" target="_blank" rel="noopener noreferrer">'
+        '공식 os.scandir 소스 문서 정본</a> · Git blob <code>' +
+        _e(tagged["doc_blob_sha1"]) + '</code></p>'
+        '<p><a href="' + _e(tagged["tagged_license_url"]) +
+        '" target="_blank" rel="noopener noreferrer">'
+        '동일 태그 사용권 원문</a> · Git blob <code>' +
+        _e(tagged["license_blob_sha1"]) + '</code></p>'
+        '<p>문서에는 with 및 close()가 명시되어 있습니다.'
+        ' PSF-2.0/문서 예제 0BSD 문구를 관측했지만'
+        ' 고객별 사용권·제품 재배포 심사는 완료되지 않았습니다.</p>'
+        '<div class="page-controls">'
+        '<a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE&amp;case=single_owner">'
+        '단일 소비자 예제 보기</a>'
+        '<a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE&amp;case=shared_guarded">'
+        '2개 소비자 잠금 예제 보기</a></div>'
+        '</section>'
     )
     for chapter in guide["chapters"]:
         if (type(chapter) is not dict
