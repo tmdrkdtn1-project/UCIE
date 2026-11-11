@@ -214,8 +214,13 @@ class UCIEPortableC1RuntimeClosureTests(unittest.TestCase):
         self.assertTrue(outcome["first_party_preview_executable_bytes_differ"])
         self.assertTrue(outcome["all_indexed_first_party_python_modules_staged"])
         self.assertFalse(outcome["third_party_code_staged"])
-        self.assertEqual(outcome["staged_python_module_files"],
+        self.assertEqual(outcome["staged_first_party_package_module_files"],
                          before["all_python_modules_indexed"])
+        self.assertEqual(
+            outcome["staged_python_module_files"],
+            outcome["staged_first_party_package_module_files"] +
+            outcome["staged_c0_owner_python_scripts"]
+        )
         self.assertTrue(set(before["reachable_files"]).issubset(
             before["all_first_party_python_source_files"]))
         self.assertTrue(outcome["a_portable_loopback_probe_pass"])
