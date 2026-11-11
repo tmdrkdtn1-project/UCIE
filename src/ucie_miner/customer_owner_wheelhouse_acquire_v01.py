@@ -35,7 +35,7 @@ PINNED = (
 )
 PINNED_NAMES = tuple(name for name, _ in PINNED)
 PYPI = "https://pypi.org"
-RECEIPT = ".ucie_c1_wheelhouse_receipt_preview.json"
+RECEIPT = "downloaded/ucie_c1_wheelhouse_receipt_preview.json"
 CONSENT = "ACQUIRE_UCIE_C1_WIN315_WHEELS_ONCE"
 HOST_ROOT = Path("D:/UCIE")
 MAX_PYPI_JSON = 2_500_000
@@ -82,7 +82,9 @@ def plan(root: Path) -> dict:
     root = _locked_root(root)
     destination = root / WHEELHOUSE
     receipt = root / RECEIPT
-    if destination.is_symlink() or receipt.is_symlink():
+    if (destination.is_symlink() or receipt.is_symlink()
+            or destination.parent.is_symlink()
+            or (destination.parent.exists() and not destination.parent.is_dir())):
         raise WheelAcquisitionError("UCIE quarantine path symlink forbidden")
     return {
         "schema": SCHEMA,
@@ -287,6 +289,13 @@ def _owner_gate(root: Path) -> Path:
     if importlib.util.find_spec("pip") is None:
         raise WheelAcquisitionError("owner venv pip not present")
     destination, receipt = root / WHEELHOUSE, root / RECEIPT
+    if (destination.parent.is_symlink()
+            or (destination.parent.exists() and not destination.parent.is_dir())):
+        raise WheelAcquisitionError("UCIE quarantine parent unsafe")
+    ignore = root / ".gitignore"
+    if (ignore.is_symlink() or not ignore.is_file()
+            or "downloaded/" not in ignore.read_text(encoding="utf-8").splitlines()):
+        raise WheelAcquisitionError("downloaded/ must be Git-ignored before any vendor fetch")
     if (destination.exists() or destination.is_symlink()
             or receipt.exists() or receipt.is_symlink()):
         raise WheelAcquisitionError("existing quarantine/receipt will never be overwritten")
@@ -298,7 +307,11 @@ def acquire_once(root: Path, *, typed: str) -> dict:
     if typed != CONSENT:
         raise WheelAcquisitionError("owner explicit consent was not provided")
     python = _owner_gate(root)
-    with TemporaryDirectory(prefix=".ucie_c1_wheel_stage_", dir=root) as tmp:
+    parent = root / "downloaded"
+    if parent.is_symlink() or (parent.exists() and not parent.is_dir()):
+        raise WheelAcquisitionError("UCIE downloaded directory cannot be linked")
+    parent.mkdir(exist_ok=True)
+    with TemporaryDirectory(prefix="ucie_c1_wheel_stage_", dir=parent) as tmp:
         scratch = Path(tmp) / "wheels"
         scratch.mkdir()
         args = _command(python, scratch)
