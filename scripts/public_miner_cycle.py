@@ -66,6 +66,9 @@ def main() -> int:
                 "stage16_safe_qa_status",
                 "stage16_safe_qa_templates",
                 "stage16_safe_qa_gets_upper_bound",
+                "stage17_quality_status",
+                "stage17_quality_candidate_count",
+                "stage17_quality_candidate_delta",
             ) if k in stage10}
                if stage10["status"] in (
                    "STAGE10_UNVERIFIED_STAGED_NO_GO",
