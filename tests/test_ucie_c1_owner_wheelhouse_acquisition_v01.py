@@ -181,6 +181,28 @@ class UCIEOwnerWheelAcquisitionV01Tests(unittest.TestCase):
         with self.assertRaises(owner.WheelAcquisitionError):
             owner.verify_local(self.root)
 
+    def test_symlinked_download_parent_is_rejected_without_offproject_read(self):
+        # No symlink traversal into any real user path; all fixtures UCIE-only.
+        linked = self.root / "downloaded"
+        target = self.root / "synthetic_container"
+        target.mkdir()
+        try:
+            linked.symlink_to(target, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("Windows symlink permissions unavailable")
+        with self.assertRaises(owner.WheelAcquisitionError):
+            owner.plan(self.root)
+        with self.assertRaises(owner.WheelAcquisitionError):
+            owner.verify_local(self.root)
+
+    def test_real_ucie_gitignore_covers_quarantine(self):
+        real = Path(__file__).resolve().parents[1]
+        if real.name.casefold() != "ucie" or not (real / ".git").is_dir():
+            self.skipTest("exact UCIE checkout only")
+        ignore = real / ".gitignore"
+        self.assertTrue(ignore.is_file())
+        self.assertIn("downloaded/", ignore.read_text(encoding="utf-8").splitlines())
+
     def test_pypi_release_json_constrained_to_exact_identity(self):
         class FakeResponse:
             status = 200
