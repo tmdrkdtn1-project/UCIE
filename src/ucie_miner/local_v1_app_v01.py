@@ -995,6 +995,7 @@ def _python_guide_data() -> dict:
     out = build_readonly_guide()
     src, gates = out.get("source_evidence"), out.get("review_gates")
     machine = out.get("machine_skill_contract")
+    tagged = out.get("tagged_source_snapshot")
     if (type(out) is not dict or out.get("schema") != PY_SCHEMA
             or out.get("skillbook_id") != GUIDE_ID
             or out.get("status") != PY_STATUS
@@ -1014,6 +1015,25 @@ def _python_guide_data() -> dict:
             or machine.get("trial_executed_on_guide_view") is not False
             or machine.get("trial_requires_explicit_engine_click") is not True
             or machine.get("automatic_patch_applied") is not False
+            or machine.get("playbook_case_ids")
+                != ["single_owner", "shared_guarded"]
+            or machine.get("playbook_example_auto_executed") is not False
+            or type(tagged) is not dict
+            or tagged.get("source_id") != "doc:python/cpython"
+            or tagged.get("source_tag") != "v3.15.0"
+            or tagged.get("tag_commit_sha1")
+                != "d220409a13b77de7a6c30abe16ea90db01528edc"
+            or tagged.get("doc_blob_sha1")
+                != "74419ee7f3588f1baec83c85b05716e6388719e3"
+            or tagged.get("license_blob_sha1")
+                != "20cf39097c68baa17cc566b64e76d34ebf034044"
+            or tagged.get("live_doc_revision_pinned") is not False
+            or tagged.get("tagged_doc_reference_observed") is not True
+            or tagged.get("per_revision_redistribution_clearance") is not False
+            or tagged.get("upstream_race_behavior_independently_reproduced")
+                is not False
+            or tagged.get("owner_licensing_signoff") is not False
+            or tagged.get("new_fetch_authority") is not False
             or type(gates) is not dict or len(gates) != 6
             or any(x is not False for x in gates.values())
             or type(out.get("chapters")) is not list or len(out["chapters"]) != 5):
@@ -1031,8 +1051,9 @@ def _python_review_guide(raw: str, *, json_mode: bool = False) -> str:
     body = (
         '<section class="search-panel"><span class="eyebrow">'
         'PYTHON · REVIEW ONLY</span><h2>' + _e(guide["title"]) + '</h2>'
-        '<p>공식 문서 개정, 적용 버전, 재배포 권리와 독립 검증은 미완료입니다.'
-        ' UCIE 자체 기술 안내이며 승인된 규칙이 아닙니다.</p>'
+        '<p>일반 공식 문서 URL의 개정은 미고정이지만 CPython v3.15.0'
+        ' 태그 소스는 별도 고정했습니다. 사용권 승인·독립 수정효과'
+        ' 검증·고객 출시는 미완료입니다. UCIE 자체 기술 안내입니다.</p>'
         '<div class="page-controls"><a href="/local/library?q=Python">'
         '도서관으로 돌아가기</a></div></section>'
         '<section class="shelf-entry"><h3>공식 출처</h3>'
@@ -1040,6 +1061,29 @@ def _python_review_guide(raw: str, *, json_mode: bool = False) -> str:
         'target="_blank" rel="noopener noreferrer">Python 공식 os 문서</a></p>'
         '<p>PUBLIC_DOCUMENT_REVISION_NOT_PINNED · '
         'NOT_ATTESTED_PER_REVISION · UNDETERMINED</p></section>'
+    )
+    tagged = guide["tagged_source_snapshot"]
+    body += (
+        '<section class="shelf-entry">'
+        '<span class="eyebrow">EXACT OFFICIAL TAG · RIGHTS REVIEW ONLY</span>'
+        '<h3>원본 출처 고정: CPython v3.15.0</h3>'
+        '<p><a href="' + _e(tagged["tagged_doc_url"]) +
+        '" target="_blank" rel="noopener noreferrer">'
+        '공식 os.scandir 소스 문서 정본</a> · Git blob <code>' +
+        _e(tagged["doc_blob_sha1"]) + '</code></p>'
+        '<p><a href="' + _e(tagged["tagged_license_url"]) +
+        '" target="_blank" rel="noopener noreferrer">'
+        '동일 태그 사용권 원문</a> · Git blob <code>' +
+        _e(tagged["license_blob_sha1"]) + '</code></p>'
+        '<p>문서에는 with 및 close()가 명시되어 있습니다.'
+        ' PSF-2.0/문서 예제 0BSD 문구를 관측했지만'
+        ' 고객별 사용권·제품 재배포 심사는 완료되지 않았습니다.</p>'
+        '<div class="page-controls">'
+        '<a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE&amp;case=single_owner">'
+        '단일 소비자 예제 보기</a>'
+        '<a href="/local/engine?purpose=PYTHON_SCANDIR_SAFE&amp;case=shared_guarded">'
+        '2개 소비자 잠금 예제 보기</a></div>'
+        '</section>'
     )
     for chapter in guide["chapters"]:
         if (type(chapter) is not dict
