@@ -221,7 +221,8 @@ def verify_local(root: Path) -> dict:
     """No network. Receipt is recorded metadata, not a signature."""
     root = _locked_root(root)
     store, manifest_file = root / WHEELHOUSE, root / RECEIPT
-    if (store.is_symlink() or not store.is_dir() or manifest_file.is_symlink()
+    if (store.parent.is_symlink() or store.is_symlink()
+            or not store.is_dir() or manifest_file.is_symlink()
             or not manifest_file.is_file() or manifest_file.stat().st_size > 15_000):
         raise WheelAcquisitionError("wheelhouse and bounded receipt not both available")
     try:
