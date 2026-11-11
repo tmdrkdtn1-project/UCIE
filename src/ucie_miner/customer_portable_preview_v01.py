@@ -8,6 +8,7 @@ All HTTP traffic is in-process to 127.0.0.1 using an OS-allocated port.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 from http.client import HTTPConnection
 import json
 from pathlib import Path
@@ -69,7 +70,7 @@ def probe_preview_root(root: Path) -> dict:
         thread.start()
         try:
             port = server.server_port
-            with HTTPConnection(BOUND_HOST, port, timeout=6) as conn:
+            with closing(HTTPConnection(BOUND_HOST, port, timeout=6)) as conn:
                 _check_http(conn, "/local/health", APP_SCHEMA.encode("ascii"))
                 _check_http(conn, "/local", b"/local/library")
                 _check_http(conn, "/local/guide/python-scandir.json",
