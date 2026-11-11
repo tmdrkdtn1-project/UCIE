@@ -490,6 +490,10 @@ def exercise_real_revision_ab_preview(root: Path) -> dict:
         "staged_total_first_party_files": len(src),
         "staged_python_module_files":
             sum(name.endswith(".py") for name in src),
+        "staged_first_party_package_module_files":
+            len(closure["all_first_party_python_source_files"]),
+        "staged_c0_owner_python_scripts":
+            sum(name.startswith("scripts/") and name.endswith(".py") for name in src),
         "all_indexed_first_party_python_modules_staged":
             set(closure["all_first_party_python_source_files"]).issubset(src),
         "third_party_code_staged": False,
