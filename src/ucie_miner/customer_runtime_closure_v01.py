@@ -275,6 +275,9 @@ def _stage(root: Path, payloads: dict[str, bytes], revision: str) -> dict:
     if (root.exists() or root.is_symlink() or root.name.casefold() != "ucie"):
         raise ClosurePreviewError("generation must be a new UCIE directory")
     root.mkdir()
+    # Existing V04 handlers require a checkout-shaped root. The only .git
+    # artifact here is an EMPTY throwaway directory, never repository history.
+    (root / ".git").mkdir()
     entries = []
     for name in sorted(payloads):
         file = root.joinpath(*name.split("/"))
@@ -304,6 +307,10 @@ def _verify(root: Path, manifest: dict) -> None:
             or manifest.get("customer_distribution_authorized") is not False
             or manifest.get("signed_by_owner") is not False):
         raise ClosurePreviewError("invalid C1 staging identity")
+    git_marker = root / ".git"
+    if (git_marker.is_symlink() or not git_marker.is_dir()
+            or any(git_marker.iterdir())):
+        raise ClosurePreviewError("staging git marker must be empty")
     names = {e["name"] for e in manifest["entries"]}
     if (len(names) != len(manifest["entries"])
             or manifest.get("source_sha256") != _digest(_json(manifest["entries"]))):
