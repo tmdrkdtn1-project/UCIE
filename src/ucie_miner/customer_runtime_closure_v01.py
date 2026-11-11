@@ -208,6 +208,10 @@ def inspect_static_runtime_closure(root: Path) -> dict:
         "all_python_modules_indexed": len(index),
         "statically_reachable_first_party_modules": len(visited),
         "reachable_files": paths,
+        "all_first_party_python_source_files": sorted(
+            item[0] for item in index.values()
+        ),
+        "conservative_all_first_party_staging_required": True,
         "external_import_roots": sorted(external),
         "missing_first_party_imports": sorted(missing),
         "dynamic_import_sites": sorted(dynamic),
@@ -225,7 +229,16 @@ def inspect_static_runtime_closure(root: Path) -> dict:
 
 def _copy_payload(root: Path, closure: dict) -> dict[str, bytes]:
     """Exact first-party fixed file set + only statically referenced Python."""
-    candidates = sorted(set(CENSUS_FILES) | set(closure["reachable_files"]))
+    # Preserve optional/dynamic first-party Python modules, not just the
+    # statically visited subset. It is a source inventory, not execution.
+    all_python = closure.get("all_first_party_python_source_files")
+    reachable = closure.get("reachable_files")
+    if (type(all_python) is not list or type(reachable) is not list
+            or len(all_python) != closure.get("all_python_modules_indexed")
+            or len(set(all_python)) != len(all_python)
+            or not set(reachable).issubset(all_python)):
+        raise ClosurePreviewError("untrusted all-module staging inventory")
+    candidates = sorted(set(CENSUS_FILES) | set(all_python))
     data: dict[str, bytes] = {}
     total = 0
     for name in candidates:
@@ -477,6 +490,9 @@ def exercise_real_revision_ab_preview(root: Path) -> dict:
         "staged_total_first_party_files": len(src),
         "staged_python_module_files":
             sum(name.endswith(".py") for name in src),
+        "all_indexed_first_party_python_modules_staged":
+            set(closure["all_first_party_python_source_files"]).issubset(src),
+        "third_party_code_staged": False,
         "revision_a_source_sha256": _digest(one[PREVIEW_SOURCE]),
         "revision_b_source_sha256": _digest(two[PREVIEW_SOURCE]),
         "first_party_preview_executable_bytes_differ": True,
