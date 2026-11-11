@@ -271,16 +271,39 @@ def _version_payload(source: dict[str, bytes], revision: str) -> dict[str, bytes
     return out
 
 
+def _stage_path(root: Path, name: str) -> Path:
+    """Disallow traversal or extra-file writes even by private staging helper."""
+    if (type(name) is not str or not name or name.startswith("/")
+            or "\\\\" in name or "\\x00" in name
+            or any(p in ("", ".", "..") for p in name.split("/"))
+            or not (name in CENSUS_FILES or
+                    (name.startswith(("src/ucie_miner/", "src/ucie_public/"))
+                     and name.endswith(".py")))):
+        raise ClosurePreviewError("unauthorized C1 first-party stage path")
+    return root.joinpath(*name.split("/"))
+
+
 def _stage(root: Path, payloads: dict[str, bytes], revision: str) -> dict:
-    if (root.exists() or root.is_symlink() or root.name.casefold() != "ucie"):
-        raise ClosurePreviewError("generation must be a new UCIE directory")
+    if (root.exists() or root.is_symlink() or root.name.casefold() != "ucie"
+            or revision not in (REVISION_A, REVISION_B)
+            or type(payloads) is not dict or not payloads
+            or len(payloads) > MAX_SOURCE_FILES + len(CENSUS_FILES)):
+        raise ClosurePreviewError("invalid UCIE preview generation")
+    total = 0
+    for name, raw in payloads.items():
+        _stage_path(root, name)
+        if type(raw) is not bytes or not 0 < len(raw) <= MAX_FILE_BYTES:
+            raise ClosurePreviewError("invalid first-party stage file bytes")
+        total += len(raw)
+    if total > MAX_STAGE_BYTES:
+        raise ClosurePreviewError("oversized first-party staging")
     root.mkdir()
     # Existing V04 handlers require a checkout-shaped root. The only .git
     # artifact here is an EMPTY throwaway directory, never repository history.
     (root / ".git").mkdir()
     entries = []
     for name in sorted(payloads):
-        file = root.joinpath(*name.split("/"))
+        file = _stage_path(root, name)
         file.parent.mkdir(parents=True, exist_ok=True)
         file.write_bytes(payloads[name])
         entries.append({"name": name, "sha256": _digest(payloads[name]),
@@ -303,6 +326,8 @@ def _stage(root: Path, payloads: dict[str, bytes], revision: str) -> dict:
 
 def _verify(root: Path, manifest: dict) -> None:
     if (not root.is_dir() or root.is_symlink()
+            or root.name.casefold() != "ucie"
+            or type(manifest) is not dict
             or manifest.get("status") != STATE
             or manifest.get("customer_distribution_authorized") is not False
             or manifest.get("signed_by_owner") is not False):
@@ -311,7 +336,20 @@ def _verify(root: Path, manifest: dict) -> None:
     if (git_marker.is_symlink() or not git_marker.is_dir()
             or any(git_marker.iterdir())):
         raise ClosurePreviewError("staging git marker must be empty")
-    names = {e["name"] for e in manifest["entries"]}
+    if (type(manifest.get("entries")) is not list
+            or len(manifest["entries"]) > MAX_SOURCE_FILES + len(CENSUS_FILES)
+            or not manifest["entries"]):
+        raise ClosurePreviewError("invalid first-party stage entries")
+    names = set()
+    for entry in manifest["entries"]:
+        if (type(entry) is not dict or set(entry) != {"name", "bytes", "sha256"}
+                or type(entry["bytes"]) is not int
+                or not 0 < entry["bytes"] <= MAX_FILE_BYTES
+                or type(entry["sha256"]) is not str or
+                len(entry["sha256"]) != 64):
+            raise ClosurePreviewError("malformed staged source receipt")
+        _stage_path(root, entry["name"])
+        names.add(entry["name"])
     if (len(names) != len(manifest["entries"])
             or manifest.get("source_sha256") != _digest(_json(manifest["entries"]))):
         raise ClosurePreviewError("invalid C1 content manifest")
@@ -329,7 +367,7 @@ def _verify(root: Path, manifest: dict) -> None:
     if (root / "c1-preview-manifest.json").read_bytes() != _json(manifest):
         raise ClosurePreviewError("C1 manifest tampered")
     for entry in manifest["entries"]:
-        target = root.joinpath(*entry["name"].split("/"))
+        target = _stage_path(root, entry["name"])
         raw = target.read_bytes()
         if len(raw) != entry["bytes"] or _digest(raw) != entry["sha256"]:
             raise ClosurePreviewError("C1 file content or length mismatch")
