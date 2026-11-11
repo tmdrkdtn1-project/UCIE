@@ -177,6 +177,26 @@ class UCIEC1OfflineDependencyAndDynamicTests(unittest.TestCase):
         self.assertFalse(result["runtime_dynamic_imports_fully_resolved"])
         self.assertTrue(all(not x["dynamic_approval"] for x in result["sites"]))
 
+    def test_incompatible_cryptography_version_is_not_accepted(self):
+        folder = self.root / gate.WHEELHOUSE
+        _create_inert_wheel(folder, version="49.0.0")
+        result = gate.inspect_offline_dependency_gate(self.root)
+        self.assertFalse(result["declared_requirement_wheel_observed"])
+        self.assertIn("DECLARED_CRYPTOGRAPHY_VERSION_UNSATISFIED",
+                      result["blockers"])
+        self.assertFalse(result["customer_release_authorized"])
+
+    def test_exact_fixed_stdlib_import_calls_are_classified_but_not_approved(self):
+        target = self.root / "src" / "ucie_miner" / "local_v1_app_v01.py"
+        target.write_text(
+            'x = __import__("os")\\n'
+            'y = __import__("argparse")\\n', encoding="utf-8")
+        report = gate.dynamic_import_risks(self.root)
+        self.assertEqual(report["source_site_count"], 2)
+        self.assertEqual(report["unresolved_dynamic_targets"], 0)
+        self.assertTrue(report["fixed_stdlib_import_sites_only"])
+        self.assertFalse(report["runtime_dynamic_imports_fully_resolved"])
+
     def test_no_network_pip_process_or_other_project_read(self):
         with patch("subprocess.run", side_effect=AssertionError("no subprocess")), patch(
             "socket.create_connection", side_effect=AssertionError("no network")
