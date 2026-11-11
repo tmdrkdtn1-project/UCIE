@@ -230,6 +230,7 @@ def dynamic_import_risks(root: Path, closure: dict | None = None) -> dict:
             "line": int(line),
             "constant_target": target if target and len(target) < 100 else None,
             "static_target_known_in_ucie": bool(target in index),
+            "literal_stdlib_target": bool(target in sys.stdlib_module_names),
             "runtime_variable_import_requires_review": target is None,
             "source_reaches_dynamic_import": True,
             "dynamic_approval": False,
@@ -239,9 +240,24 @@ def dynamic_import_risks(root: Path, closure: dict | None = None) -> dict:
         "source_site_count": len(risk),
         "variable_sites": sum(bool(x["runtime_variable_import_requires_review"])
                               for x in risk),
+        "fixed_stdlib_import_sites_only": bool(risk) and all(
+            x["literal_stdlib_target"] for x in risk
+        ),
+        "unresolved_dynamic_targets": sum(
+            not (x["literal_stdlib_target"] or
+                 x["static_target_known_in_ucie"]) for x in risk
+        ),
         "runtime_dynamic_imports_fully_resolved": False,
         "first_party_source_only": True,
     }
+
+
+def _cryptography_constraint_satisfied(version: str) -> bool:
+    """Only the reviewed pyproject >=50.0.2,<51 numeric-stable range."""
+    if type(version) is not str or re.fullmatch(r"\\d+\\.\\d+\\.\\d+", version) is None:
+        return False
+    major, minor, patch = (int(x) for x in version.split("."))
+    return major == 50 and (minor, patch) >= (0, 2)
 
 
 def inspect_offline_dependency_gate(root: Path) -> dict:
@@ -270,16 +286,21 @@ def inspect_offline_dependency_gate(root: Path) -> dict:
     names = [v["name"] for v in wheels]
     if len(set(names)) != len(names):
         raise OfflineDependencyError("ambiguous duplicate wheel distributions")
-    declared_wheel_present = EXPECTED_DISTRIBUTION in names
     observed_versions = [x["version"] for x in wheels
                          if x["name"] == EXPECTED_DISTRIBUTION]
+    declared_wheel_present = any(
+        _cryptography_constraint_satisfied(v) for v in observed_versions)
     blockers = []
-    if not declared_wheel_present:
+    if not observed_versions:
         blockers.append("DECLARED_CRYPTOGRAPHY_WHEEL_NOT_PRESENT")
+    elif not declared_wheel_present:
+        blockers.append("DECLARED_CRYPTOGRAPHY_VERSION_UNSATISFIED")
     if not wheels:
         blockers.append("NO_OFFLINE_WHEELHOUSE_BUNDLED")
-    if dynamic["source_site_count"]:
-        blockers.append("DYNAMIC_IMPORT_SITES_REVIEW_PENDING")
+    if dynamic["unresolved_dynamic_targets"]:
+        blockers.append("DYNAMIC_IMPORT_RUNTIME_TARGET_UNRESOLVED")
+    elif dynamic["source_site_count"]:
+        blockers.append("FIXED_DYNAMIC_IMPORTS_RUNTIME_QA_PENDING")
     blockers.extend((
         "THIRD_PARTY_WHEEL_TRANSITIVE_DEPENDENCIES_UNRESOLVED",
         "CROSS_PYTHON_PLATFORM_WHEEL_TAGS_NOT_ATTESTED",
