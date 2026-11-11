@@ -230,8 +230,7 @@ def _copy_payload(root: Path, closure: dict) -> dict[str, bytes]:
     total = 0
     for name in candidates:
         parts = name.split("/")
-        if (not name or name.startswith("/") or "\\" in name
-                or any(x in ("", ".", "..") for x in parts)
+            or chr(92) in name or chr(0) in name
                 or not (name.startswith(("src/ucie_miner/",
                                          "src/ucie_public/"))
                         or name in CENSUS_FILES)):
