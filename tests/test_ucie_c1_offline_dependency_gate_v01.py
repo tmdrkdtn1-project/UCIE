@@ -208,6 +208,20 @@ class UCIEC1OfflineDependencyAndDynamicTests(unittest.TestCase):
             self.assertFalse(out["pip_no_index_install_executed"])
             self.assertFalse(out["other_project_access"])
 
+    def test_source_bound_cli_never_calls_pip_or_returns_release_go(self):
+        from contextlib import redirect_stdout
+        from unittest.mock import patch
+        log = io.StringIO()
+        mock_src = self.root / "src" / "ucie_miner" / "customer_offline_dependency_gate_v01.py"
+        with patch.object(gate, "__file__", str(mock_src)), redirect_stdout(log):
+            code = gate.main(["--inspect"])
+        self.assertEqual(code, 2)
+        result = __import__("json").loads(log.getvalue())
+        self.assertEqual(result["schema"], gate.SCHEMA)
+        self.assertFalse(result["customer_release_authorized"])
+        self.assertFalse(result["dependency_wheels_executed_or_installed"])
+        self.assertFalse(result["pip_no_index_install_executed"])
+
     def test_real_ucie_checkout_annotates_pending_dynamic_and_wheels(self):
         real = Path(__file__).resolve().parents[1]
         if real.name.casefold() != "ucie" or not (real / ".git").is_dir():
@@ -225,6 +239,8 @@ class UCIEC1OfflineDependencyAndDynamicTests(unittest.TestCase):
                       result["project"]["declared_runtime_requirements"])
         self.assertFalse(result["customer_release_authorized"])
         self.assertFalse(result["complete_transitive_dependency_closure_attested"])
+        self.assertTrue(result["dynamic_import_risk"]["fixed_stdlib_import_sites_only"])
+        self.assertEqual(result["dynamic_import_risk"]["unresolved_dynamic_targets"], 0)
         self.assertFalse(result["dependency_wheels_executed_or_installed"])
         self.assertFalse(result["pip_no_index_install_executed"])
         self.assertEqual(result["operating_database_writes"], 0)
