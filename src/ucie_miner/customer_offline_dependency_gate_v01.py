@@ -7,6 +7,7 @@ The resulting evidence is NOT an SPDX/SBOM/legal/signature customer approval.
 """
 from __future__ import annotations
 
+import argparse
 import ast
 import base64
 from hashlib import sha256
@@ -331,3 +332,29 @@ def inspect_offline_dependency_gate(root: Path) -> dict:
         "customer_release_authorized": False,
         "blockers": blockers,
     }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """User-facing read-only UCIE checkout preflight; always customer NO-GO."""
+    parser = argparse.ArgumentParser(
+        description="UCIE C1 offline-only dependency metadata preflight; no pip"
+    )
+    parser.add_argument("--inspect", required=True, action="store_true")
+    parser.parse_args(argv)
+    # Do not accept any caller path: inspect exactly this running UCIE source.
+    root = Path(__file__).resolve().parents[2]
+    try:
+        result = inspect_offline_dependency_gate(root)
+    except (OfflineDependencyError, OSError, ValueError):
+        result = {
+            "schema": SCHEMA,
+            "status": "UCIE_C1_OFFLINE_DEPENDENCY_PREFLIGHT_FAILED_CLOSED",
+            "customer_release_authorized": False,
+            "pip_no_index_install_executed": False,
+        }
+    print(json.dumps(result, ensure_ascii=True, sort_keys=True))
+    return 2  # A metadata preflight NEVER clears commercial C0-C5 gates.
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
