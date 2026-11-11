@@ -2,7 +2,8 @@
 
 This module is deliberately NOT an approved customer launcher. It can run only
 from an exact UCIE-named disposable staging root with the immutable C1 marker,
-without .git, without owner task registration and without public interfaces.
+with only an EMPTY synthetic .git directory, never owner Git history,
+without owner task registration or public interfaces.
 All HTTP traffic is in-process to 127.0.0.1 using an OS-allocated port.
 """
 from __future__ import annotations
