@@ -22,7 +22,7 @@
 2. **New** `customer_offline_dependency_gate_v01.py`: a callable,
    source-bound, read-only offline dependency preflight. Only the
    checkout's own `pyproject.toml` and optional fixed path
-   `.ucie_c1_offline_wheelhouse_preview/` may be inspected.
+    `downloaded/ucie_c1_offline_wheelhouse_preview/` may be inspected.
    - The declaration is currently `cryptography>=50.0.2,<51` and
      `setuptools>=68` for the build system. These are declared
      ranges, NOT platform-specific locked/pinned wheels or SBOM.
@@ -52,7 +52,7 @@
      platform/feature runtime acceptance and do not attest absence of
      other dynamic resources, imports, package data or plugin entry
      points.
-   - at time of check, the optional bounded UCIE wheelhouse folder is
+   - at time of check, the optional bounded UCIE wheelhouse folder under Git-ignored `downloaded/` is
      **absent**. No dependency has been downloaded or silently
      accepted. Exact source snapshot/line numbers may differ between
      historical owner checkout and current GitHub main; each current

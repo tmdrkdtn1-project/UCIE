@@ -40,7 +40,7 @@ def _create_inert_wheel(
     requires_dist: str = "",
     extra_member: str | None = None,
 ) -> Path:
-    wheelhouse.mkdir(exist_ok=True)
+    wheelhouse.mkdir(parents=True, exist_ok=True)
     filename = file_name or (
         f"{distribution}-{version}-py3-none-any.whl"
     )
@@ -142,7 +142,7 @@ class UCIEC1OfflineDependencyAndDynamicTests(unittest.TestCase):
 
     def test_unknown_and_linked_wheelhouse_rejected(self):
         folder = self.root / gate.WHEELHOUSE
-        folder.mkdir()
+        folder.mkdir(parents=True)
         (folder / "unexpected.txt").write_text("DO NOT INSTALL")
         with self.assertRaises(gate.OfflineDependencyError):
             gate.inspect_offline_dependency_gate(self.root)

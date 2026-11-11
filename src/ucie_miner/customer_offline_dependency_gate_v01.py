@@ -26,7 +26,7 @@ from .customer_runtime_closure_v01 import (
 
 SCHEMA = "UCIE_C1_OFFLINE_DEPENDENCIES_AND_DYNAMIC_SITES_PREVIEW_V01"
 STATUS = "C1_METADATA_ONLY_OFFLINE_NO_CUSTOMER_RELEASE"
-WHEELHOUSE = ".ucie_c1_offline_wheelhouse_preview"
+WHEELHOUSE = "downloaded/ucie_c1_offline_wheelhouse_preview"
 MAX_WHEELS = 12
 MAX_WHEEL_BYTES = 20_000_000
 MAX_ZIP_ENTRIES = 1100
@@ -273,6 +273,9 @@ def inspect_offline_dependency_gate(root: Path) -> dict:
     if any(_normal_name(x) != EXPECTED_DISTRIBUTION for x in external):
         raise OfflineDependencyError("undeclared external import encountered")
     wheel_dir = root / WHEELHOUSE
+    if (wheel_dir.parent.is_symlink()
+            or (wheel_dir.parent.exists() and not wheel_dir.parent.is_dir())):
+        raise OfflineDependencyError("unsafe UCIE-only downloaded quarantine parent")
     wheels = []
     if wheel_dir.exists() or wheel_dir.is_symlink():
         if wheel_dir.is_symlink() or not wheel_dir.is_dir():
