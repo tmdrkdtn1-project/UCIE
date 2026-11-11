@@ -236,6 +236,32 @@ def make_handler(root: Path, *, searcher=None):
             self.wfile.write(data)
 
         def do_POST(self):
+            # Reject every write, and drain only a bounded, declared request
+            # body before closing HTTP/1.0. On Windows 3.15 closing a socket
+            # with unread POST bytes can reset the peer before its 405 arrives.
+            # Never store, parse as data, echo or forward these bytes.
+            raw_length = self.headers.get("Content-Length", "0")
+            if (not raw_length.isascii() or not raw_length.isdecimal()
+                    or len(raw_length) > 5):
+                self.close_connection = True
+                self._reply(400, b"INVALID_BODY_LENGTH", "text/plain; charset=utf-8")
+                return
+            length = int(raw_length)
+            if length > 16384 or self.headers.get("Transfer-Encoding"):
+                self.close_connection = True
+                self._reply(413, b"BOUNDED_BODY_ONLY", "text/plain; charset=utf-8")
+                return
+            if length:
+                self.connection.settimeout(2)
+                try:
+                    # Read at most the declared 16 KiB, without buffering or
+                    # processing untrusted payload as application content.
+                    if len(self.rfile.read(length)) != length:
+                        self.close_connection = True
+                        return
+                except (OSError, TimeoutError):
+                    self.close_connection = True
+                    return
             self._reply(405, b"READ_ONLY_GET_ONLY", "text/plain; charset=utf-8")
 
         def do_GET(self):
