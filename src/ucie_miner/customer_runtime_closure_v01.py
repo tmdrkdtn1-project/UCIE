@@ -230,7 +230,8 @@ def _copy_payload(root: Path, closure: dict) -> dict[str, bytes]:
     total = 0
     for name in candidates:
         parts = name.split("/")
-            or chr(92) in name or chr(0) in name
+        if (not name or name.startswith("/") or "\\" in name
+                or any(x in ("", ".", "..") for x in parts)
                 or not (name.startswith(("src/ucie_miner/",
                                          "src/ucie_public/"))
                         or name in CENSUS_FILES)):
@@ -273,7 +274,7 @@ def _version_payload(source: dict[str, bytes], revision: str) -> dict[str, bytes
 def _stage_path(root: Path, name: str) -> Path:
     """Disallow traversal or extra-file writes even by private staging helper."""
     if (type(name) is not str or not name or name.startswith("/")
-            or "\\\\" in name or "\\x00" in name
+            or chr(92) in name or chr(0) in name
             or any(p in ("", ".", "..") for p in name.split("/"))
             or not (name in CENSUS_FILES or
                     (name.startswith(("src/ucie_miner/", "src/ucie_public/"))
