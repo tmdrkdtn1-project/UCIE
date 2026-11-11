@@ -36,6 +36,13 @@ class CompleteComponentLifecycleTests(unittest.TestCase):
         self.assertEqual(snapshot["four_pillars_present_in_census"],
                          list(pkg.PILLARS))
         self.assertEqual(set(snapshot["groups"]), set(pkg.GROUPS))
+        self.assertEqual(set(snapshot["pillar_gap_matrix"]), set(pkg.PILLARS))
+        for entry in snapshot["pillar_gap_matrix"].values():
+            self.assertTrue(entry["first_party_source_present_in_census"])
+            self.assertFalse(entry["independent_behavior_qa_attested_by_census"])
+            self.assertFalse(entry["approved_non_draft_output_attested_by_census"])
+            self.assertFalse(entry["rights_and_security_cleared"])
+            self.assertFalse(entry["customer_accepted"])
         self.assertTrue(snapshot["includes_local_ui_sources"])
         self.assertFalse(snapshot["windows_owner_scripts_customer_portable"])
         self.assertFalse(snapshot["transitive_python_package_closure_attested"])
