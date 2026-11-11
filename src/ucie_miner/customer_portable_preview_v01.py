@@ -90,7 +90,7 @@ def probe_preview_root(root: Path) -> dict:
                     conn, "/local/engine?purpose=PYTHON_SCANDIR_SAFE&case=shared_guarded",
                     b"UCIE FIRST-PARTY TEST"
                 )
-            with HTTPConnection(BOUND_HOST, port, timeout=6) as conn:
+            with closing(HTTPConnection(BOUND_HOST, port, timeout=6)) as conn:
                 conn.request("POST", "/local/guide/python-scandir",
                              headers={"Host": f"{BOUND_HOST}:{port}"})
                 response = conn.getresponse()
