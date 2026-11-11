@@ -156,6 +156,7 @@ class UCIEOwnerWheelAcquisitionV01Tests(unittest.TestCase):
         stage, official = self._wheels()
         receipt = owner.validate_candidate(stage, official)
         store = self.root / owner.WHEELHOUSE
+        store.parent.mkdir(parents=True, exist_ok=True)
         stage.rename(store)
         (self.root / owner.RECEIPT).write_text(
             json.dumps(receipt, sort_keys=True), encoding="ascii")
@@ -171,6 +172,7 @@ class UCIEOwnerWheelAcquisitionV01Tests(unittest.TestCase):
     def test_offline_tamper_after_receipt_cannot_pass(self):
         stage, official = self._wheels()
         receipt = owner.validate_candidate(stage, official)
+        (self.root / owner.WHEELHOUSE).parent.mkdir(parents=True, exist_ok=True)
         stage.rename(self.root / owner.WHEELHOUSE)
         (self.root / owner.RECEIPT).write_text(
             json.dumps(receipt), encoding="ascii")
