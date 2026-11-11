@@ -26,10 +26,12 @@ class PortablePreviewError(ValueError):
 
 
 def _root(root: Path) -> Path:
+    git_marker = root / ".git"
     if (not isinstance(root, Path) or root.name.casefold() != "ucie"
-            or root.is_symlink() or not root.is_dir() or
-            (root / ".git").exists() or (root / ".git").is_symlink()):
-        raise PortablePreviewError("exact disposable UCIE-only root required")
+            or root.is_symlink() or not root.is_dir()
+            or git_marker.is_symlink() or not git_marker.is_dir()
+            or any(git_marker.iterdir())):
+        raise PortablePreviewError("exact empty synthetic UCIE staging git marker required")
     marker = root / MARKER_NAME
     source = root / "src" / "ucie_miner" / "local_v1_app_v01.py"
     if (marker.is_symlink() or not marker.is_file()
