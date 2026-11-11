@@ -147,6 +147,28 @@ class UCIEBrowserTests(unittest.TestCase):
             self.assertEqual(exc.exception.code, 403)
             self.assertEqual(calls, [])
 
+    def test_bounded_denied_post_finishes_405_without_tcp_abort(self):
+        # A Windows Python 3.15 regression: closing HTTP/1.0 while bytes
+        # from a rejected POST remain unread can produce WinError 10053.
+        # The request is still denied; its payload never reaches search.
+        seen = []
+
+        def searcher(root, **filters):
+            seen.append(1)
+            return SAMPLE
+
+        with local_only(searcher) as url:
+            for payload in (b"no writes allowed", b"X" * 8193):
+                with self.subTest(size=len(payload)):
+                    request = Request(url + "/", data=payload, method="POST")
+                    with self.assertRaises(HTTPError) as denied:
+                        urlopen(request, timeout=5)
+                    self.assertEqual(denied.exception.code, 405)
+                    self.assertEqual(denied.exception.read(),
+                                     b"READ_ONLY_GET_ONLY")
+                    denied.exception.close()
+        self.assertEqual(seen, [])
+
     def test_new_browser_tab_renders_form_without_reading_any_ledger(self):
         filters = parse_request_filters("")
         self.assertEqual(filters["query"], "")

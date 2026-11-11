@@ -161,12 +161,14 @@ def run_cycle(
             "production_approved": False,
             "consecutive_failures": 0,
         }
+        failure_phase = "BASE_COLLECTION"
         try:
             collect_clock_ns = perf_counter_ns()
             try:
                 result = collect(repo_root)
             finally:
                 receipt["collection_elapsed_ms"] = _bounded_elapsed_ms(collect_clock_ns)
+            failure_phase = "COLLECTOR_RESULT_VALIDATION"
             if (not isinstance(result, dict) or result.get("status") not in
                     ("COLLECTED_UNVERIFIED", "COLLECTED_UNVERIFIED_PARTIAL_NO_GO")):
                 raise ValueError("invalid collector completion status")
@@ -344,6 +346,7 @@ def run_cycle(
                         if type(phase) is not str or phase not in STAGE10_FAILURE_PHASES:
                             raise ValueError("invalid optional public stage failure phase")
                         receipt["stage10_error_phase"] = phase
+            failure_phase = "REPORT_WRITER"
             report_clock_ns = perf_counter_ns()
             try:
                 path = write_report(repo_root)
@@ -360,9 +363,26 @@ def run_cycle(
                 report_path=report_path.relative_to(repo_root.resolve()).as_posix(),
             )
         except Exception as exc:
-            # Exceptions can contain externally controlled text: store type ONLY.
+            # Only fixed UCIE-owned codes, never exception messages, URLs,
+            # headers, response bodies, or unsupported public identities.
             receipt["status"] = "COLLECTION_FAILED"
             receipt["error_type"] = type(exc).__name__
+            receipt["error_phase"] = failure_phase
+            from .core import PUBLIC_SOURCES
+            public_source = getattr(exc, "ucie_public_source", None)
+            public_operation = getattr(exc, "ucie_public_operation", None)
+            if type(public_source) is str and public_source in PUBLIC_SOURCES:
+                receipt["error_public_source"] = public_source
+            if type(public_operation) is str and public_operation in (
+                    "FETCH_PR_LIST", "VALIDATE_PR_LIST", "VALIDATE_PR_ROW",
+                    "FETCH_PR_FILES", "VALIDATE_PR_FILES", "RECORD_PR",
+                    "RECORD_RUN"):
+                receipt["error_public_operation"] = public_operation
+            from urllib.error import HTTPError
+            cause = exc.__cause__
+            if isinstance(cause, HTTPError) and type(cause.code) is int:
+                if cause.code in (403, 404, 429, 500, 502, 503, 504):
+                    receipt["error_http_status"] = cause.code
             if enforce_schedule:
                 receipt["consecutive_failures"] = min(6, failures + 1)
         finally:
