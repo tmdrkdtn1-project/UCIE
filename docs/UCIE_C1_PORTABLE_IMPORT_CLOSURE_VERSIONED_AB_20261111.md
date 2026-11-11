@@ -40,7 +40,9 @@ but are NOT conflated with the computed runtime import closure.
 
 `customer_portable_preview_v01` is NEW and separate from the existing
 owner-bound Local V1 `main()`. It requires a new **UCIE-named disposable
-folder**, an exact `.ucie_c1_staging_only` marker and absence of `.git`.
+folder**, an exact `.ucie_c1_staging_only` marker and a strictly empty synthetic `.git` directory (no owner Git
+history). Existing V04 handlers require this checkout-shaped marker.
+A populated `.git` is rejected by the portable entrypoint.
 It therefore will not launch on the operational owner `D:\\UCIE`.
 
 - The module locates its own UCIE root from `__file__`, not a hardcoded
