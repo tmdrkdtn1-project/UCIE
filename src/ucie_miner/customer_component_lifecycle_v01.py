@@ -157,6 +157,16 @@ def _manifest(payload: dict[str, bytes]) -> dict:
         "source_fingerprint_is_git_commit": False,
         "groups": {group: list(paths) for group, paths in GROUPS.items()},
         "four_pillars_present_in_census": list(PILLARS),
+        "pillar_gap_matrix": {
+            name: {
+                "first_party_source_present_in_census": True,
+                "independent_behavior_qa_attested_by_census": False,
+                "approved_non_draft_output_attested_by_census": False,
+                "rights_and_security_cleared": False,
+                "clean_recipient_acceptance_attested": False,
+                "customer_accepted": False,
+            } for name in PILLARS
+        },
         "entries": entries,
         "includes_local_ui_sources": True,
         "includes_owner_windows_scripts_for_inventory_only": True,
