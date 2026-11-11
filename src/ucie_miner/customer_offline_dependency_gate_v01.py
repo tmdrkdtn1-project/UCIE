@@ -254,7 +254,7 @@ def dynamic_import_risks(root: Path, closure: dict | None = None) -> dict:
 
 def _cryptography_constraint_satisfied(version: str) -> bool:
     """Only the reviewed pyproject >=50.0.2,<51 numeric-stable range."""
-    if type(version) is not str or re.fullmatch(r"\\d+\\.\\d+\\.\\d+", version) is None:
+    if type(version) is not str or re.fullmatch("[0-9]+[.][0-9]+[.][0-9]+", version) is None:
         return False
     major, minor, patch = (int(x) for x in version.split("."))
     return major == 50 and (minor, patch) >= (0, 2)
