@@ -216,7 +216,44 @@ def run_clean_windows_ci(root: Path, env: dict[str, str]) -> dict:
                 raise CleanRecipientError("install/update/rollback version not observed")
             # Reuse existing real installed-product smoke assertions, not a
             # fabricated four-pillar or browser receipt.
-            smoke = ab._smoke(label, child, slot["source"], scratch, clean)
+            try:
+                smoke = ab._smoke(label, child, slot["source"], scratch, clean)
+            except full.OfflineFullProductError as exc:
+                if str(exc) != "A/B installed localhost UI failed closed":
+                    raise
+                # Capture only a fixed, bounded UCIE first-party route reason.
+                # Never expose installed wheel contents or stderr paths.
+                wrapper = (
+                    "import json,sys\n"
+                    "from pathlib import Path\n"
+                    "from ucie_miner.customer_portable_preview_v01 "
+                    "import probe_preview_root,PortablePreviewError\n"
+                    "try:\n"
+                    " print(json.dumps(probe_preview_root(Path(sys.argv[1]))))\n"
+                    "except Exception as err:\n"
+                    " reason=str(err)[:160] if isinstance(err,PortablePreviewError) "
+                    "else type(err).__name__\n"
+                    " print(json.dumps({'status':'C4_UI_FAIL_CLOSED',"
+                    "'failure_class':type(err).__name__,'reason':reason}))\n"
+                )
+                output = full._run(
+                    [str(child), "-I", "-B", "-c", wrapper, str(slot["source"])],
+                    scratch, clean, "C4 UCIE-only bounded UI diagnostic")
+                try:
+                    diag = json.loads(output)
+                except ValueError as error:
+                    raise CleanRecipientError("C4_UI_DIAGNOSTIC_NOT_JSON") from error
+                if diag.get("status") != "C4_UI_FAIL_CLOSED":
+                    raise CleanRecipientError("C4_UI_RETRY_INCONSISTENT")
+                reason = str(diag.get("reason", "UNKNOWN"))
+                allowed_prefix = ("disposable UCIE", "exact ", "unauthorized",
+                                  "invalid", "unmarked", "incomplete",
+                                  "HTTP", "ModuleNotFoundError",
+                                  "KeyError", "FileNotFoundError",
+                                  "PermissionError", "RecursionError")
+                if not reason.startswith(allowed_prefix):
+                    reason = str(diag.get("failure_class", "UNKNOWN"))
+                raise CleanRecipientError("C4_UI_PROBE: " + reason[:120]) from None
             observations[phase] = {
                 "installed_version": state["installed_version"],
                 "four_pillars_exercised": (
@@ -282,7 +319,7 @@ def main() -> int:
             "status": "UCIE_C4_CLEAN_WINDOWS_FIRST_PARTY_INPLACE_FAIL_CLOSED",
             "failure_class": type(exc).__name__[:70],
             "safe_failure_stage": (str(exc)[:140]
-                if isinstance(exc, full.OfflineFullProductError)
+                if isinstance(exc, (full.OfflineFullProductError, CleanRecipientError))
                 else type(exc).__name__[:70]),
             "complete_c4_customer_product_accepted": False,
             "customer_distribution_authorized": False,
