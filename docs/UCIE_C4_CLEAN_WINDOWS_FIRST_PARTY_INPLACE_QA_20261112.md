@@ -6,7 +6,7 @@
 
 - PR #248은 **소유자 PC의 별도 가상환경 두 개**에 A/B를 설치한 후 선택기만 전환했다. 이는 하나의 고객 설치를 실제 업데이트/롤백한 것은 아니다.
 - PR #249는 A/B **공개 Git 고정 소스**를 Windows/Ubuntu에서 바이트 일치하는 QA wheel/ZIP으로 재현했으나 설치/업그레이드는 없었다.
-- 이번 신규 워크플로는 **깨끗한 Windows GitHub Actions VM 한 대의 단일 가상환경**에서 Git 고정 A→B→A wheel을 실제 pip로 설치·업데이트·롤백·제거한다. 처음 A로 돌아왔을 때 4축과 V04 임시 localhost 결과가 동일한지 비교한다.
+- 이번 신규 워크플로는 **깨끗한 Windows GitHub Actions VM 한 대의 단일 가상환경**에서 Git 고정 A→B→A wheel을 실제 pip로 설치·업데이트·롤백·제거한다. 처음 A로 돌아왔을 때 4축 자체 합성 실행 결과가 동일한지 비교한다. 웹 UI는 미검증이다.
 
 ## 직접 실행하는 프로그램과 증거
 
@@ -16,8 +16,8 @@
 
 1. UCIE 공개 Git A 커밋 171d56d8af155c70d3dd32a62afda87398330e99 / B 커밋 4242ebe7ae112076d9b3560e85b0babb22bbb713 원본 객체를 기존 source manifest의 Git blob SHA-1 / 크기 / C0 23경로와 대조한다. 로컬 소유자 변경파일과 고객 코드를 전혀 읽지 않는다.
 2. A 182개/B 184개 공개 UCIE Python 모듈에서 2개 실제 first-party wheel을 빌드하여 C1 고정 wheel SHA256과 PEP427 RECORD/원본 바이트 동일성을 검사한다. 외부 wheel을 가져오지 않는다.
-3. CI VM 임시 폴더에 정확히 1개 venv를 만들고 pip --isolated install --no-index --no-deps로 A 실제 설치 → 4축 합성 기능 및 임시 Local V04 localhost HTTP GET/POST 거부 검증.
-4. 변조 B 복사본 해시를 pip 실행 전에 차단하고 정상 B wheel만 같은 venv에 실제 in-place 설치. B 전용 real installed four-pillar self-check와 CLI/UI를 실행한다.
+3. CI VM 임시 폴더에 정확히 1개 venv를 만들고 pip --isolated install --no-index --no-deps로 A 실제 설치 → 4축 합성 기능을 실제 실행한다. 처음 CI 시도에서 **외부 wheel을 설치하지 않아 Local V04 실행이 ModuleNotFoundError로 거부**된 사실을 확인했다. 웹 UI 테스트는 이번 소스 전용 CI의 성공 기준에서 제외하고 별도 NO_GO로 기록한다.
+4. 변조 B 복사본 해시를 pip 실행 전에 차단하고 정상 B wheel만 같은 venv에 실제 in-place 설치. B 전용 실제 설치형 4축 self-check 및 CLI를 실행한다. 웹 UI 전체 인수는 하지 않는다.
 5. 같은 환경에 A wheel 실제 pip 롤백 → B만의 모듈 소멸 검사 및 최초 A 사용결과와 비교.
 6. pip uninstall 실제 수행 및 모듈/메타데이터 제거 확인. 모든 임시 venv/소스/wheel 삭제. CI artifact/release 업로드, 패키지 외부 배포, 키/계약 생성 없음.
 
@@ -32,3 +32,7 @@
 - D:\UCIE 소유자 PC에는 CI-only 본 실행을 하지 않는다. 소유자 Windows에서는 안전 계약 단일 테스트만 수행한다. 기존 운영 DB, 스케줄러, C40, Local V1, Cloudflare 및 09:00 보고 HOLD 무변경.
 
 결과가 실제 CI에서 성공한 후에만 FIRST_PARTY_INPLACE_QA_PASS라는 기술 게이트로 표시. 전체 **UCIE_FULL_PRODUCT_DESIGNATED_CUSTOMER_NO_GO** 유지. 다음 C2 실제 라이선스/NOTICE 원문 권리 검토 및 보안, C3 서명, 독립 소유자 관리 C4 고객용 전체 번들 인수는 별도 승인 필요.
+
+## 실측 실패 후 범위 확정
+
+첫 CI의 안전 계약 10/10은 성공했으나 오프라인 first-party A 실행에서 Local V04 화면 진입 시 ModuleNotFoundError가 발생했다. 별도 승인 없는 외부 패키지 다운로드/설치로 이 오류를 우회하지 않으며, 이 PR의 성공 범위는 실제 **one-venv A→B→A 4축 합성 CLI 및 제거**로 제한한다. Local V04 실행, 외부 native ABI, 완전한 고객용 패키지는 **미검증 NO_GO**로 명시한다.
