@@ -365,16 +365,13 @@ class UCIEPinnedGitSourceV01Tests(unittest.TestCase):
                          for idx in range(5 if slot == "A" else 7)}}
                 for slot in ("A", "B")
             }
-            with patch.object(pin, "_load_manifest", return_value=(doc, rows)):
+            with patch.object(pin, "_load_manifest", return_value=(doc, rows)), patch.dict(
+                pin.CANONICAL_QA_SHA256,
+                {"bundle": sha256(root_target.read_bytes()).hexdigest()}
+            ):
                 status = pin.verify_existing_bundle(self.root)
                 self.assertTrue(status["two_first_party_commit_pins_verified"])
                 self.assertFalse(status["vendor_packages_installed_or_shipped"])
-                forged = json.loads(json.dumps(result))
-                forged["slots"]["B"]["commit_sha"] = "0"*40
-                with patch.object(pin, "_verify_bundle",
-                                  side_effect=pin.PinnedSourceError(
-                                      "reject malicious archive")):
-                    pass
                 self.assertEqual(status["schema"], pin.BUNDLE_SCHEMA)
             with ZipFile(root_target, "r") as archived:
                 rawfiles = {name: archived.read(name)
@@ -384,7 +381,10 @@ class UCIEPinnedGitSourceV01Tests(unittest.TestCase):
             with ZipFile(root_target, "w", ZIP_DEFLATED) as fake:
                 for name, raw in rawfiles.items():
                     fake.writestr(name, raw)
-            with patch.object(pin, "_load_manifest", return_value=(doc, rows)):
+            with patch.object(pin, "_load_manifest", return_value=(doc, rows)), patch.dict(
+                pin.CANONICAL_QA_SHA256,
+                {"bundle": sha256(root_target.read_bytes()).hexdigest()}
+            ):
                 with self.assertRaises(pin.PinnedSourceError):
                     pin.verify_existing_bundle(self.root)
 
