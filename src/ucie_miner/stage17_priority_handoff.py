@@ -12,7 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from .automated_candidate_qa import _checked_handoff
+from .verification_handoff import _checked_handoff
 from .public_candidate_learning import _rows_from_stage10, _rows_from_stage15
 from .public_review_triage import (
     triage_unverified_review_rows, REVIEW_WEIGHTS, EVIDENCE_LEVELS,
