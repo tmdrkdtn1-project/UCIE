@@ -1,4 +1,4 @@
-name: UCIE C4 Clean Windows One-Venv In-Place First-Party QA ONLY
+name: UCIE C4 Clean Windows One-Venv First-Party CLI In-Place QA ONLY
 
 on:
   pull_request:
@@ -38,7 +38,7 @@ jobs:
         env:
           PYTHONPATH: src
           PYTHONDONTWRITEBYTECODE: '1'
-      - name: Actual one-venv A to B in-place update, A rollback and uninstall with four UCIE pillars and V04 loopback
+      - name: Actual one-venv A to B update, A rollback and uninstall with four first-party synthetic pillars - no vendor or V04 UI claim
         run: python -B tests/runtime_ucie_c4_clean_windows_first_party_lifecycle_v01.py
         env:
           PYTHONPATH: src
