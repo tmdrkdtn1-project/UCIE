@@ -2,7 +2,7 @@
 
 The pinned sources come only from two immutable UCIE Git commits and every
 source byte is verified. Two actual offline wheels install into ONE disposable
-Windows venv, run all four existing first-party workflows and Local V04 loopback,
+Windows venv, run all four existing first-party synthetic workflows (UI not attested),
 upgrade in-place, roll back in-place and uninstall. No vendor wheels are
 downloaded, installed, executed, bundled or approved.
 
@@ -216,44 +216,42 @@ def run_clean_windows_ci(root: Path, env: dict[str, str]) -> dict:
                 raise CleanRecipientError("install/update/rollback version not observed")
             # Reuse existing real installed-product smoke assertions, not a
             # fabricated four-pillar or browser receipt.
-            try:
-                smoke = ab._smoke(label, child, slot["source"], scratch, clean)
-            except full.OfflineFullProductError as exc:
-                if str(exc) != "A/B installed localhost UI failed closed":
-                    raise
-                # Capture only a fixed, bounded UCIE first-party route reason.
-                # Never expose installed wheel contents or stderr paths.
-                wrapper = (
-                    "import json,sys\n"
-                    "from pathlib import Path\n"
-                    "from ucie_miner.customer_portable_preview_v01 "
-                    "import probe_preview_root,PortablePreviewError\n"
-                    "try:\n"
-                    " print(json.dumps(probe_preview_root(Path(sys.argv[1]))))\n"
-                    "except Exception as err:\n"
-                    " reason=str(err)[:160] if isinstance(err,PortablePreviewError) "
-                    "else type(err).__name__\n"
-                    " print(json.dumps({'status':'C4_UI_FAIL_CLOSED',"
-                    "'failure_class':type(err).__name__,'reason':reason}))\n"
-                )
-                output = full._run(
-                    [str(child), "-I", "-B", "-c", wrapper, str(slot["source"])],
-                    scratch, clean, "C4 UCIE-only bounded UI diagnostic")
+            four = full._check_four_pillars(full._run(
+                [str(child), "-I", "-B", "-m",
+                 "ucie_miner.customer_staging_v01", "--pillar", "all"],
+                scratch, clean, phase + " installed UCIE four-pillar CLI"))
+            feature_sha = None
+            if label == "B":
+                b_output = full._run(
+                    [str(child), "-I", "-B", "-m",
+                     "ucie_miner.customer_installed_health_v01",
+                     "--self-check"],
+                    scratch, clean, "CI B-only real installed four-pillar health")
                 try:
-                    diag = json.loads(output)
+                    b_result = json.loads(b_output)
                 except ValueError as error:
-                    raise CleanRecipientError("C4_UI_DIAGNOSTIC_NOT_JSON") from error
-                if diag.get("status") != "C4_UI_FAIL_CLOSED":
-                    raise CleanRecipientError("C4_UI_RETRY_INCONSISTENT")
-                reason = str(diag.get("reason", "UNKNOWN"))
-                allowed_prefix = ("disposable UCIE", "exact ", "unauthorized",
-                                  "invalid", "unmarked", "incomplete",
-                                  "HTTP", "ModuleNotFoundError",
-                                  "KeyError", "FileNotFoundError",
-                                  "PermissionError", "RecursionError")
-                if not reason.startswith(allowed_prefix):
-                    reason = str(diag.get("failure_class", "UNKNOWN"))
-                raise CleanRecipientError("C4_UI_PROBE: " + reason[:120]) from None
+                    raise CleanRecipientError("B health output malformed") from error
+                feature_sha = b_result.get("four_pillar_synthetic_workflow_sha256")
+                if (b_result.get("schema")
+                        != "UCIE_C1_INSTALLED_FOUR_PILLAR_SELF_CHECK_V01"
+                        or b_result.get("installed_version") != "0.1.1"
+                        or b_result.get("installed_four_pillar_workflows_checked") is not True
+                        or b_result.get("customer_distribution_authorized") is not False
+                        or b_result.get("auto_promoted") is not False
+                        or type(feature_sha) is not str
+                        or SHA256.fullmatch(feature_sha) is None):
+                    raise CleanRecipientError("B-only installed feature failed closed")
+            # The first-party only mode EXPLICITLY skips Local V04 network
+            # routes: real first-run CI saw ModuleNotFoundError when external
+            # vendor packages were absent. Never silently mark UI as tested.
+            smoke = {
+                "four_pillars": four,
+                "local_V04": {
+                    "installed_local_ui_loopback_routes_verified": 0,
+                    "third_party_dependent_ui_acceptance": False,
+                },
+                "B_only_workflow_sha256": feature_sha,
+            }
             observations[phase] = {
                 "installed_version": state["installed_version"],
                 "four_pillars_exercised": (
@@ -295,6 +293,8 @@ def run_clean_windows_ci(root: Path, env: dict[str, str]) -> dict:
         "vendor_dependency_wheels_included_or_executed": False,
         "no_index_no_deps_first_party_only": True,
         "four_pillars_using_ucie_synthetic_input_only": True,
+        "local_v04_ui_routes_attested": False,
+        "actual_vendor_abi_and_full_dependency_install_tested": False,
         "private_customer_data_used": False,
         "signed_windows_installer_created": False,
         "independent_second_owner_controlled_recipient_accepted": False,
