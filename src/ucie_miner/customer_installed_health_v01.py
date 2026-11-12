@@ -41,7 +41,8 @@ def run_installed_self_check() -> dict:
             or observed.get("customer_data_scanned") is not False
             or observed.get("operating_ucie_database_written") is not False
             or observed.get("complete_customer_functional_acceptance") is not False
-            or set(observed.get("workflows", {})) != set(PILLARS)):
+            or type(observed.get("workflows")) is not dict
+            or set(observed["workflows"]) != set(PILLARS)):
         raise InstalledHealthError("one or more installed UCIE pillars failed closed")
     digest = sha256(json.dumps(
         observed, sort_keys=True, ensure_ascii=True,
