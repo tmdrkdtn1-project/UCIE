@@ -307,6 +307,39 @@ class UCIEFunctionalABLifecycleV01Tests(unittest.TestCase):
         self.assertEqual(payload["mode"], "OFFLINE_READONLY_PREVIEW")
         self.assertFalse(payload["customer_distribution_authorized"])
 
+    def test_real_complete_ucie_source_inventory_yields_distinct_a_b_wheels(self):
+        """Actually package BOTH bounded complete UCIE first-party snapshots.
+
+        Pure standard-library work; no pip, vendor imports, network or owner
+        operating data. This proves more than changing the metadata label.
+        """
+        real = Path(__file__).resolve().parents[1]
+        if real.name.casefold() != "ucie" or not (real / ".git").is_dir():
+            self.skipTest("exact UCIE checkout required")
+        graph = runtime.inspect_static_runtime_closure(real)
+        inventory = runtime._copy_payload(real, graph)
+        a, b = ab._two_sources(inventory)
+        with TemporaryDirectory(prefix="UCIE_REAL_SOURCE_AB_WHEELS_") as tmp:
+            root = Path(tmp)
+            first, second = root / "A", root / "B"
+            first.mkdir()
+            second.mkdir()
+            aw = full._build_first_party_wheel(first, a, version=ab.A_VERSION)
+            bw = full._build_first_party_wheel(second, b, version=ab.B_VERSION)
+            x = full._inspect_first_party_wheel(aw, a, version=ab.A_VERSION)
+            y = full._inspect_first_party_wheel(bw, b, version=ab.B_VERSION)
+            self.assertNotEqual(x["sha256"], y["sha256"])
+            self.assertEqual(y["file_count"], x["file_count"] + 1)
+            self.assertGreaterEqual(x["file_count"], 190)
+            self.assertEqual(y["file_count"],
+                             graph["all_python_modules_indexed"])
+            print("UCIE_C1_REAL_FULL_SOURCE_AB_MODULES=" +
+                  str(x["file_count"]) + "/" + str(y["file_count"]))
+            self.assertTrue(x["wheel_record_verified"])
+            self.assertTrue(y["wheel_record_verified"])
+            self.assertTrue(x["source_code_bytes_match"])
+            self.assertTrue(y["source_code_bytes_match"])
+
     def test_real_ucie_owner_is_preview_only(self):
         root = Path(__file__).resolve().parents[1]
         if root.name.casefold() != "ucie" or not (root / ".git").is_dir():
