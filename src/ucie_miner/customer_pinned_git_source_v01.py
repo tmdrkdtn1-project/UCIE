@@ -23,7 +23,7 @@ import sys
 import sysconfig
 import tarfile
 from tempfile import TemporaryDirectory
-from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
+from zipfile import ZipFile, ZipInfo, ZIP_STORED
 
 from . import customer_full_product_offline_rehearsal_v01 as product
 from . import customer_runtime_closure_v01 as runtime
@@ -447,9 +447,54 @@ def _owner_apply(root: Path) -> None:
         raise PinnedSourceError("local Git-ignored output must be new/isolated")
 
 
+def _canonical_first_party_wheel(path: Path) -> Path:
+    """Normalize QA wheel container bytes identically across Windows/Linux.
+
+    The existing stdlib first-party builder can produce different DEFLATE
+    streams across zlib versions, even for identical committed sources.
+    Re-encode only the disposable QA wheel as fixed-order ZIP_STORED with
+    deterministic timestamps, POSIX regular-file modes and exact bytes.
+    The wheel's PEP427 RECORD hashes FILE CONTENTS, so it stays valid.
+    Never edit an original signed/owner wheel or previous C1 receipt.
+    """
+    if (path.is_symlink() or not path.is_file()
+            or not 100 < path.stat().st_size <= MAX_BUNDLE):
+        raise PinnedSourceError("canonical QA wheel input missing/unsafe")
+    target = path.parent / (path.name + ".ucie-c1-repack")
+    if target.exists() or target.is_symlink():
+        raise PinnedSourceError("canonical QA scratch path already exists")
+    try:
+        with ZipFile(path) as original:
+            names = original.namelist()
+            if len(names) != len(set(names)) or len(names) > 250:
+                raise PinnedSourceError("unexpected QA wheel entries")
+            with ZipFile(target, "x", compression=ZIP_STORED) as output:
+                for name in sorted(names):
+                    if (not name.isascii() or name.startswith("/")
+                            or chr(92) in name
+                            or any(x in ("", ".", "..") for x in name.split("/"))):
+                        raise PinnedSourceError("noncanonical QA wheel member")
+                    item = original.getinfo(name)
+                    if item.file_size > runtime.MAX_FILE_BYTES:
+                        raise PinnedSourceError("oversize QA wheel member")
+                    with original.open(name) as stream:
+                        raw = stream.read(runtime.MAX_FILE_BYTES + 1)
+                    if len(raw) != item.file_size:
+                        raise PinnedSourceError("QA wheel member size changed")
+                    header = ZipInfo(name, (2020, 1, 1, 0, 0, 0))
+                    header.compress_type = ZIP_STORED
+                    header.create_system = 3
+                    header.external_attr = 0o100644 << 16
+                    output.writestr(header, raw)
+    except (BadZipFile, OSError) as exc:
+        raise PinnedSourceError("QA wheel reproducible ZIP normalization failed") from exc
+    os.replace(target, path)
+    return path
+
+
 def _member(name: str, raw: bytes, archive: ZipFile) -> None:
     item = ZipInfo(name, (2020, 1, 1, 0, 0, 0))
-    item.compress_type = ZIP_DEFLATED
+    item.compress_type = ZIP_STORED
     item.create_system = 3
     item.external_attr = 0o100644 << 16
     archive.writestr(item, raw)
@@ -488,7 +533,7 @@ def _bundle(src: Path, doc: dict, wheels: dict) -> dict:
         "customer_distribution_authorized": False,
         "slots": versions,
     }
-    with ZipFile(src, "x", compression=ZIP_DEFLATED) as zipfile:
+    with ZipFile(src, "x", compression=ZIP_STORED) as zipfile:
         _member("README.txt", README.encode("ascii"), zipfile)
         _member("reviewed-git-tree-manifest.json", json.dumps(
             doc, sort_keys=True, separators=(",", ":"), ensure_ascii=True
@@ -560,6 +605,7 @@ def export_once(root: Path, typed: str) -> dict:
             out.mkdir()
             wheel = product._build_first_party_wheel(
                 out, src, version=VERSION[slot])
+            _canonical_first_party_wheel(wheel)
             proof = product._inspect_first_party_wheel(
                 wheel, src, version=VERSION[slot])
             if proof["file_count"] != len(rows[slot]["python"]):
