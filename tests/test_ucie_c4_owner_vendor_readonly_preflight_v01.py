@@ -29,6 +29,12 @@ class C4OwnerExistingVendorBytePreflightTests(unittest.TestCase):
         destination = root / RECEIPT
         before_exists = destination.exists() or destination.is_symlink()
         result = inspect_readonly(root)
+        from ucie_miner import customer_pinned_git_source_v01 as pin
+        try:
+            bundle = pin.verify_existing_bundle(root)
+            qa_zip_verified = bundle.get("two_first_party_commit_pins_verified") is True
+        except (pin.PinnedSourceError, OSError, ValueError):
+            qa_zip_verified = False
         self.assertEqual(result["schema"], SCHEMA)
         self.assertEqual(sha256(capture.read_bytes()).hexdigest(), original)
         self.assertEqual(destination.exists() or destination.is_symlink(), before_exists)
@@ -42,6 +48,7 @@ class C4OwnerExistingVendorBytePreflightTests(unittest.TestCase):
             "schema": SCHEMA,
             "readiness": result["readiness"],
             "gates": result["gates"],
+            "existing_verified_pinned_qa_zip": qa_zip_verified,
             "source_commit_A": result["pinned_source_commits"]["A"],
             "source_commit_B": result["pinned_source_commits"]["B"],
             "actual_vendor_install_executed": False,
