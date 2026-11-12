@@ -148,6 +148,22 @@ class UCIEPinnedGitSourceV01Tests(unittest.TestCase):
                 with self.assertRaises(pin.PinnedSourceError):
                     pin._load_manifest(self.root)
 
+    def test_crlf_only_is_counted_separately_from_source_edits(self):
+        original = b"# UCIE inert original\n"
+        local = original.replace(b"\n", b"\r\n")
+        expected = {"python": {
+            "src/ucie_miner/__init__.py": (
+                pin._git_blob_sha1(original), len(original))
+        }, "c0": {}}
+        fake_index = {"ucie_miner": (
+            "src/ucie_miner/__init__.py", local, True)}
+        with patch.object(pin.runtime, "_src_index", return_value=fake_index):
+            result = pin._local_comparison(self.root, {"B": expected})
+        self.assertEqual(result[
+            "owner_local_python_files_EOL_only_different_bytes"], 1)
+        self.assertEqual(result["owner_local_python_files_non_eol_changed"], 0)
+        self.assertFalse(result["owner_current_worktree_exactly_reviewed_B"])
+
     def test_git_blob_sha1_is_framed_not_raw_file_sha1(self):
         sample = b"UCIE-only audited synthetic content"
         expected = sha1(b"blob " + str(len(sample)).encode() +
@@ -270,6 +286,84 @@ class UCIEPinnedGitSourceV01Tests(unittest.TestCase):
             altered["customer_distribution_authorized"] = True
             with self.assertRaises(pin.PinnedSourceError):
                 pin._verify_bundle(tmp / "FIRST_PARTY_ONLY.zip", altered)
+
+    def test_local_git_object_probe_fail_closed_without_auto_fetch(self):
+        real = Path(__file__).resolve().parents[1]
+        if real.name.casefold() != "ucie" or not (real / ".git").is_dir():
+            self.skipTest("UCIE checkout required")
+        with patch.object(
+            pin, "_git_clean_source",
+            side_effect=pin.PinnedSourceError("no local pinned objects")
+        ), patch("subprocess.run",
+                 side_effect=AssertionError("NO GIT FETCH OR PIP")):
+            receipt = pin.probe_git_objects(real)
+        self.assertFalse(receipt["pinned_both_git_trees_verified"])
+        self.assertFalse(receipt["git_fetch_or_checkout_executed"])
+        self.assertFalse(receipt["customer_distribution_authorized"])
+
+    def test_real_owner_exact_git_object_probe_read_only(self):
+        real = Path(__file__).resolve().parents[1]
+        if real.name.casefold() != "ucie" or not (real / ".git").is_dir():
+            self.skipTest("UCIE first-party checkout")
+        receipt = pin.probe_git_objects(real)
+        print("UCIE_C1_PINNED_GIT_OBJECTS_READONLY=" + json.dumps({
+            name: entry["local_git_objects_present_and_verified"]
+            for name, entry in receipt["slot_evidence"].items()
+        }, sort_keys=True))
+        self.assertFalse(receipt["customer_distribution_authorized"])
+        self.assertFalse(receipt["git_fetch_or_checkout_executed"])
+        self.assertIn(receipt["pinned_both_git_trees_verified"], (True, False))
+
+    def test_verified_bundle_rejects_unpinned_manifest_and_digest(self):
+        with TemporaryDirectory(prefix="UCIE_INERT_PINNED_REVERIFY_") as temp:
+            tmp = Path(temp)
+            wheels = {}
+            for slot in ("A", "B"):
+                folder = tmp / slot
+                folder.mkdir()
+                raw = tiny_snapshot(slot == "B")
+                wheel = full._build_first_party_wheel(
+                    folder, raw, version=pin.VERSION[slot])
+                report = full._inspect_first_party_wheel(
+                    wheel, raw, version=pin.VERSION[slot])
+                wheels[slot] = {
+                    "version": pin.VERSION[slot],
+                    "path": wheel,
+                    "sha256": report["sha256"],
+                    "file_count": report["file_count"],
+                    "wheel_name": wheel.name,
+                }
+            doc = {"schema": pin.SCHEMA}
+            root_target = self.root / pin.FINAL_ZIP
+            root_target.parent.mkdir()
+            result = pin._bundle(root_target, doc, wheels)
+            rows = {
+                slot: {"python": {f"src/ucie_miner/inert_{idx}.py": ("a"*40, 1)
+                         for idx in range(5 if slot == "A" else 7)}}
+                for slot in ("A", "B")
+            }
+            with patch.object(pin, "_load_manifest", return_value=(doc, rows)):
+                status = pin.verify_existing_bundle(self.root)
+                self.assertTrue(status["two_first_party_commit_pins_verified"])
+                self.assertFalse(status["vendor_packages_installed_or_shipped"])
+                forged = json.loads(json.dumps(result))
+                forged["slots"]["B"]["commit_sha"] = "0"*40
+                with patch.object(pin, "_verify_bundle",
+                                  side_effect=pin.PinnedSourceError(
+                                      "reject malicious archive")):
+                    pass
+                self.assertEqual(status["schema"], pin.BUNDLE_SCHEMA)
+            with ZipFile(root_target, "r") as archived:
+                rawfiles = {name: archived.read(name)
+                            for name in archived.namelist()}
+            rawfiles["B/ucie_public_only_demo-0.1.1-py3-none-any.whl"] += b"TAMPER"
+            root_target.unlink()
+            with ZipFile(root_target, "w", ZIP_DEFLATED) as fake:
+                for name, raw in rawfiles.items():
+                    fake.writestr(name, raw)
+            with patch.object(pin, "_load_manifest", return_value=(doc, rows)):
+                with self.assertRaises(pin.PinnedSourceError):
+                    pin.verify_existing_bundle(self.root)
 
     def test_owner_apply_denied_on_fixture_even_with_valid_consent(self):
         with patch("subprocess.run",
