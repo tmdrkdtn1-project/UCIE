@@ -17,7 +17,7 @@ import io
 import json
 import os
 from pathlib import Path
-import shutil
+from zipfile import BadZipFile
 import subprocess
 import sys
 import sysconfig
@@ -81,8 +81,7 @@ def _rows(raw: object, *, package: bool) -> dict[str, tuple[str, int]]:
             raise PinnedSourceError("malformed Git source row")
         path, git_hash, size = entry
         bits = path.split("/")
-        if (not path.startswith("src/ucie_miner/")
-                and not path.startswith("src/ucie_public/")) if package else False:
+        if package and not path.startswith(("src/ucie_miner/", "src/ucie_public/")):
             raise PinnedSourceError("non-UCIE package in source manifest")
         if (not path.isascii() or not path or chr(92) in path
                 or path.startswith("/") or any(x in ("", ".", "..") for x in bits)
@@ -406,7 +405,11 @@ def _verify_bundle(path: Path, evidence: dict) -> dict:
         "A/" + product.FIRST_PARTY_WHEEL,
         "B/ucie_public_only_demo-0.1.1-py3-none-any.whl",
     }
-    with ZipFile(path) as zipped:
+    try:
+        zipped = ZipFile(path)
+    except (BadZipFile, OSError) as exc:
+        raise PinnedSourceError("QA bundle ZIP malformed") from exc
+    with zipped:
         names = zipped.namelist()
         if len(names) != len(expected) or set(names) != expected:
             raise PinnedSourceError("QA bundle missing/extra members")
@@ -447,6 +450,8 @@ def export_once(root: Path, typed: str) -> dict:
                 out, src, version=VERSION[slot])
             proof = product._inspect_first_party_wheel(
                 wheel, src, version=VERSION[slot])
+            if proof["file_count"] != len(rows[slot]["python"]):
+                raise PinnedSourceError("Git archived wheel module count differs from exact manifest")
             wheels[slot] = {
                 "version": VERSION[slot],
                 "path": wheel, "sha256": proof["sha256"],
@@ -461,9 +466,12 @@ def export_once(root: Path, typed: str) -> dict:
         target = root / FINAL_ZIP
         if target.exists() or target.is_symlink():
             raise PinnedSourceError("QA source bundle output already exists")
-        # Exclusive create, not os.replace into a possible existing user path.
-        with target.open("xb") as out, staged.open("rb") as inp:
-            shutil.copyfileobj(inp, out)
+        # Same-volume hard link is atomic and refuses overwrites. Scratch
+        # cleanup drops only its own link; final UCIE-local QA bytes remain.
+        try:
+            os.link(staged, target)
+        except OSError as exc:
+            raise PinnedSourceError("atomic UCIE-local QA bundle promotion unavailable") from exc
         _verify_bundle(target, meta)
     receipt = {
         "schema": BUNDLE_SCHEMA,
