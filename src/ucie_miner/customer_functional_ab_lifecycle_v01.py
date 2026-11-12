@@ -255,7 +255,8 @@ def _smoke(slot: str, child: Path, root: Path, folder: Path,
                 folder, env, "B-only installed four-pillar self-check"))
         except (ValueError, TypeError) as exc:
             raise ABRehearsalError("B-only self-check not JSON") from exc
-        feature_sha = data.get("four_pillar_synthetic_workflow_sha256")
+        feature_sha = (data.get("four_pillar_synthetic_workflow_sha256")
+                       if type(data) is dict else None)
         if (type(data) is not dict
                 or data.get("schema") != "UCIE_C1_INSTALLED_FOUR_PILLAR_SELF_CHECK_V01"
                 or data.get("installed_version") != B_VERSION
@@ -265,7 +266,9 @@ def _smoke(slot: str, child: Path, root: Path, folder: Path,
                 or data.get("auto_promoted") is not False
                 or data.get("customer_code_read") is not False
                 or type(feature_sha) is not str or SHA.fullmatch(feature_sha) is None
-                or set(data.get("four_pillars", [])) != set(PILLARS)):
+                or type(data.get("four_pillars")) is not list
+                or len(data["four_pillars"]) != len(PILLARS)
+                or set(data["four_pillars"]) != set(PILLARS)):
             raise ABRehearsalError("B-only functional capability failed")
     return {"slot": slot, "four_pillars": pillars,
             "local_V04": ui, "B_only_workflow_sha256": feature_sha,
