@@ -47,7 +47,7 @@ class CleanRecipientError(ValueError):
 def validate_ci_scope(root: Path, env: dict[str, str], *,
                       platform: str, python: tuple[int, int]) -> Path:
     """Prevent an accidental owner/local/foreign/PR-source mutation."""
-    if (type(root) is not Path or root.name.casefold() != "ucie"
+    if (not isinstance(root, Path) or root.name.casefold() != "ucie"
             or root.is_symlink() or not root.is_dir()
             or (root / ".git").is_symlink()
             or not (root / ".git").is_dir()
@@ -108,8 +108,8 @@ def _installed_probe(child: Path, recipient: Path, cwd: Path, env: dict) -> dict
 
 
 def _offline_install_command(child: Path, wheel: Path, scratch: Path) -> list[str]:
-    if (type(child) is not Path or type(wheel) is not Path
-            or type(scratch) is not Path or scratch.is_symlink()
+    if (not isinstance(child, Path) or not isinstance(wheel, Path)
+            or not isinstance(scratch, Path) or scratch.is_symlink()
             or wheel.is_symlink() or not wheel.is_file()
             or not wheel.resolve().is_relative_to(scratch.resolve())
             or wheel.name not in (
