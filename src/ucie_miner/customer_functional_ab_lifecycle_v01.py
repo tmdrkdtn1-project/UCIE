@@ -41,10 +41,11 @@ print(json.dumps({
  'isolated':sys.prefix!=sys.base_prefix,
  'bits':64 if sys.maxsize>2**32 else 32},sort_keys=True))
 """
-ABSENCE_PROBE = """import json,importlib.metadata
+ABSENCE_PROBE = """import json,importlib.metadata,importlib.util
 try: importlib.metadata.version('ucie-public-only-demo'); installed=True
 except importlib.metadata.PackageNotFoundError: installed=False
-print(json.dumps({'installed':installed}))
+package_present=importlib.util.find_spec('ucie_miner') is not None
+print(json.dumps({'installed':installed,'ucie_module_still_present':package_present}))
 """
 
 
@@ -285,8 +286,10 @@ def _uninstall(child: Path, folder: Path, env: dict) -> None:
             folder, env, "confirm UCIE distribution absent"))
     except (ValueError, TypeError) as exc:
         raise ABRehearsalError("post-uninstall state invalid") from exc
-    if type(state) is not dict or state.get("installed") is not False:
-        raise ABRehearsalError("UCIE product uninstall not verified")
+    if (type(state) is not dict
+            or state.get("installed") is not False
+            or state.get("ucie_module_still_present") is not False):
+        raise ABRehearsalError("UCIE product uninstall or module cleanup not verified")
 
 
 def run_once(root: Path, typed_consent: str) -> dict:
