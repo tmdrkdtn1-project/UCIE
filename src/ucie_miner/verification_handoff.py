@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import sqlite3
 
+from ucie_public.policy import PolicyError
 from .patterns import PatternError, group_patterns
 from .public_candidate_learning import (
     COLUMNS, REVIEW_STATUS, _check_review_schema, _review_path,
@@ -187,3 +188,79 @@ def prepare_verification_handoff(root: Path) -> dict:
         "persistent_writes": 0, "production_approved": False,
         "deploy_allowed": False,
     }
+
+
+# Pure read-only candidate ledger gate, independent of optional vendor signing.
+HEX64 = re.compile(r"[a-f0-9]{64}\Z")
+
+def _checked_handoff(handoff: object) -> tuple[bool, list[dict]]:
+    """Reject forged candidate approvals; no signed verifier is needed to READ."""
+    from .static_rule_bridge import SOURCE_BINDINGS
+    if (type(handoff) is not dict
+            or handoff.get("schema") !=
+               "UCIE_PUBLIC_CANDIDATE_VERIFICATION_HANDOFF_V1"
+            or handoff.get("status") not in {
+                "LINKED_UNVERIFIED_NO_GO",
+                "SOURCE_REVISIONS_PENDING_NO_GO",
+                "REVIEW_LEDGER_ABSENT_NO_GO",
+            }
+            or handoff.get("auto_promoted") is not False
+            or handoff.get("production_approved") is not False
+            or handoff.get("deploy_allowed") is not False
+            or type(handoff.get("tasks")) is not list
+            or len(handoff["tasks"]) > MAX_ROWS):
+        raise PolicyError("invalid public candidate review ledger")
+    complete = handoff["status"] == "LINKED_UNVERIFIED_NO_GO"
+    if complete:
+        if (type(handoff.get("source_revisions")) is not int
+                or type(handoff.get("linked_revisions")) is not int
+                or handoff["source_revisions"] != handoff["linked_revisions"]
+                or handoff.get("pending_source_revisions") != 0):
+            raise PolicyError("inconsistent public review ledger counts")
+    elif handoff.get("status") == "REVIEW_LEDGER_ABSENT_NO_GO":
+        if handoff["tasks"]:
+            raise PolicyError("missing ledger cannot contain trusted tasks")
+    seen = set()
+    for row in handoff["tasks"]:
+        if (type(row) is not dict
+                or row.get("status") != "UNVERIFIED_CANDIDATE_ONLY"
+                or row.get("approval") is not False
+                or type(row.get("blocking_reasons")) is not list
+                or "VERIFICATION_NOT_PERFORMED"
+                   not in row["blocking_reasons"]
+                or type(row.get("candidate_id_sha256")) is not str
+                or HEX64.fullmatch(row["candidate_id_sha256"]) is None
+                or type(row.get("evidence_sha256")) is not str
+                or HEX64.fullmatch(row["evidence_sha256"]) is None
+                or row["candidate_id_sha256"] in seen):
+            raise PolicyError("forged or repeated public review evidence")
+        seen.add(row["candidate_id_sha256"])
+        candidate = row.get("stage6_candidate")
+        if candidate is None:
+            continue
+        if (type(candidate) is not dict
+                or candidate.get("status") != "UNVERIFIED_CANDIDATE_ONLY"
+                or candidate.get("executable_command") is not None
+                or type(candidate.get("required_gates")) is not dict
+                or not candidate["required_gates"]
+                or any(flag != "NOT_VERIFIED"
+                       for flag in candidate["required_gates"].values())):
+            raise PolicyError("stage 6 candidate attempted privilege escalation")
+        code = candidate.get("rule_code")
+        if code not in SOURCE_BINDINGS:
+            raise PolicyError("unrecognized candidate used an executable recipe ID")
+        source, number = SOURCE_BINDINGS[code]
+        reference = row.get("reference")
+        found = ((PR_REF.fullmatch(reference) or FIX_PR_REF.fullmatch(reference))
+                 if type(reference) is str else None)
+        pinned_shas = [sha for (s, n, sha), pinned_code in PINNED_RULES.items()
+                       if pinned_code == code and s == source and n == number]
+        if (found is None or int(found.group(1)) != number
+                or len(pinned_shas) != 1
+                or found.group(2) != pinned_shas[0]
+                or row.get("source") != source
+                or candidate.get("source") != source
+                or candidate.get("canonical_pr_number") != number
+                or PINNED_RULES.get((source, number, found.group(2))) != code):
+            raise PolicyError("public candidate not bound to exact known source")
+    return complete, handoff["tasks"]
