@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .automated_candidate_qa import _checked_handoff
+from .verification_handoff import _checked_handoff
 from .public_candidate_staging import MAX_ROWS
 from .library_entry import build_library_entry, TOKEN
 from .library_search import ALLOWED_DOMAINS, ALLOWED_KINDS
