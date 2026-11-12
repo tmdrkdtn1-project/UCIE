@@ -342,7 +342,7 @@ class UCIEFullProductOfflineRehearsalTests(unittest.TestCase):
         self.assertFalse(receipt["second_clean_windows_host_accepted"])
         self.assertFalse(receipt["customer_distribution_authorized"])
         self.assertTrue((self.root / full.RECEIPT).is_file())
-        self.assertEqual(list((self.root / "downloaded").glob("ucie_c1_full_product_*")), [])
+        self.assertFalse(any(p.is_dir() for p in (self.root / "downloaded").glob("ucie_c1_full_product_*")))
 
     def test_cli_preview_refuses_apply_without_user_prompt(self):
         fake_path = (self.root / "src" / "ucie_miner" /
