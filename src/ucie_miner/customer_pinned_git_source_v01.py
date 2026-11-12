@@ -333,6 +333,94 @@ def _git_clean_source(root: Path, rows: dict, label: str) -> dict[str, bytes]:
     return _validate_archived_source(output, rows[label])
 
 
+def probe_git_objects(root: Path) -> dict:
+    """Read ONLY two local pinned Git object histories; never fetch/checkout.
+
+    This validates the source bytes needed by future QA export without
+    building wheels, installing code, writing source or requiring online Git.
+    """
+    doc, rows = _load_manifest(root)
+    availability = {}
+    for slot in ("A", "B"):
+        try:
+            src = _git_clean_source(root, rows, slot)
+            source_python = rows[slot]["python"]
+            correct = (set(source_python).issubset(src)
+                       and len(src) == len(
+                           set(source_python) | set(rows[slot]["c0"])))
+            if not correct:
+                raise PinnedSourceError("Git object byte inventory not exact")
+            availability[slot] = {
+                "local_git_objects_present_and_verified": True,
+                "reviewed_python_modules": len(source_python),
+                "reviewed_selected_c0_components": len(rows[slot]["c0"]),
+                "git_commit_sha": PINNED[slot][0],
+                "tree_sha": PINNED[slot][1],
+            }
+        except PinnedSourceError:
+            availability[slot] = {
+                "local_git_objects_present_and_verified": False,
+                "reviewed_python_modules": len(rows[slot]["python"]),
+                "git_fetch_executed": False,
+                "source_export_authorized": False,
+            }
+    ready = all(x["local_git_objects_present_and_verified"]
+                for x in availability.values())
+    return {
+        "schema": SCHEMA,
+        "status": ("C1_BOTH_REVIEWED_LOCAL_GIT_TREES_AVAILABLE_QA_ONLY"
+                   if ready else "C1_REVIEWED_GIT_OBJECTS_MISSING_NO_AUTO_FETCH"),
+        "mode": "OFFLINE_GIT_OBJECT_READ_ONLY_NO_FETCH",
+        "pinned_both_git_trees_verified": ready,
+        "slot_evidence": availability,
+        "owner_worktree_read_or_modified": False,
+        "external_network_requests": 0,
+        "git_fetch_or_checkout_executed": False,
+        "customer_distribution_authorized": False,
+    }
+
+
+def verify_existing_bundle(root: Path) -> dict:
+    """Offline fixed-path QA bundle audit; no pip, tar extraction or vendor."""
+    doc, rows = _load_manifest(root)
+    path = root / FINAL_ZIP
+    if path.is_symlink() or not path.is_file():
+        raise PinnedSourceError("first-party pinned QA ZIP absent")
+    try:
+        with ZipFile(path) as zipfile:
+            meta = json.loads(zipfile.read("git-source-pins.json"))
+    except (BadZipFile, KeyError, ValueError, OSError, UnicodeError) as exc:
+        raise PinnedSourceError("QA ZIP provenance unreadable") from exc
+    digest = sha256(json.dumps(
+        doc, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("ascii")).hexdigest()
+    if (type(meta) is not dict or meta.get("schema") != BUNDLE_SCHEMA
+            or meta.get("pinned_manifest_sha256") != digest
+            or meta.get("vendor_wheels_included") is not False
+            or meta.get("complete_windows_installer") is not False
+            or meta.get("customer_distribution_authorized") is not False
+            or type(meta.get("slots")) is not dict
+            or set(meta["slots"]) != {"A", "B"}):
+        raise PinnedSourceError("QA ZIP not pinned to reviewed source manifest")
+    for slot in ("A", "B"):
+        entry = meta["slots"][slot]
+        if (type(entry) is not dict
+                or entry.get("commit_sha") != PINNED[slot][0]
+                or entry.get("version") != VERSION[slot]
+                or entry.get("first_party_python_files") != len(
+                    rows[slot]["python"])):
+            raise PinnedSourceError("QA ZIP source/commit/count drift")
+    _verify_bundle(path, meta)
+    return {
+        "schema": BUNDLE_SCHEMA,
+        "status": "PINNED_SOURCE_QA_BUNDLE_BYTES_VERIFIED_CUSTOMER_NO_GO",
+        "two_first_party_commit_pins_verified": True,
+        "qa_only_archive_sha256": sha256(path.read_bytes()).hexdigest(),
+        "vendor_packages_installed_or_shipped": False,
+        "customer_distribution_authorized": False,
+    }
+
+
 def _owner_apply(root: Path) -> None:
     root = _root(root)
     try:
@@ -513,7 +601,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="UCIE two reviewed Git commits: read-only source audit or consented source-only QA export"
     )
-    parser.add_argument("--apply", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--apply", action="store_true")
+    mode.add_argument("--probe-git-objects", action="store_true")
+    mode.add_argument("--verify-bundle", action="store_true")
     args = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[2]
     try:
@@ -521,6 +612,10 @@ def main(argv: list[str] | None = None) -> int:
             _owner_apply(root)
             typed = input("Type " + CONSENT + " to export first-party QA wheels ONLY: ")
             result = export_once(root, typed)
+        elif args.probe_git_objects:
+            result = probe_git_objects(root)
+        elif args.verify_bundle:
+            result = verify_existing_bundle(root)
         else:
             result = preview(root)
     except (PinnedSourceError, OSError, ValueError, RuntimeError, EOFError):
