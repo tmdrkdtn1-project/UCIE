@@ -170,15 +170,23 @@ def _local_comparison(root: Path, rows: dict) -> dict:
     source = runtime._src_index(root)
     actual = {path: value for path, value, _ in source.values()}
     expected = rows["B"]["python"]
-    changed = missing = 0
+    changed = missing = eol_only = 0
     for path, (git_hash, size) in expected.items():
         raw = actual.get(path)
         if raw is None:
             missing += 1
         elif len(raw) != size or _git_blob_sha1(raw) != git_hash:
-            changed += 1
+            # Classify Windows LF-vs-CRLF conversion; a line-ending
+            # difference is NOT identical release bytes, but neither
+            # is it a semantic/code-edit divergence.
+            normalized = raw.replace(b"\r\n", b"\n")
+            if (normalized != raw and len(normalized) == size
+                    and _git_blob_sha1(normalized) == git_hash):
+                eol_only += 1
+            else:
+                changed += 1
     extra = len(set(actual) - set(expected))
-    changed_c0 = missing_c0 = 0
+    changed_c0 = missing_c0 = c0_eol_only = 0
     for path, (git_hash, size) in rows["B"]["c0"].items():
         if path in expected:
             continue
@@ -186,18 +194,26 @@ def _local_comparison(root: Path, rows: dict) -> dict:
         if raw is None:
             missing_c0 += 1
         elif len(raw) != size or _git_blob_sha1(raw) != git_hash:
-            changed_c0 += 1
+            normalized = raw.replace(b"\r\n", b"\n")
+            if (normalized != raw and len(normalized) == size
+                    and _git_blob_sha1(normalized) == git_hash):
+                c0_eol_only += 1
+            else:
+                changed_c0 += 1
     return {
         "current_local_python_module_count": len(actual),
         "pinned_reviewed_b_python_module_count": len(expected),
-        "owner_local_python_files_changed": changed,
+        "owner_local_python_files_non_eol_changed": changed,
+        "owner_local_python_files_EOL_only_different_bytes": eol_only,
         "owner_local_python_files_missing": missing,
         "owner_local_extra_python_files_NOT_approved_for_export": extra,
-        "owner_selected_c0_components_changed": changed_c0,
+        "owner_selected_c0_components_non_eol_changed": changed_c0,
+        "owner_selected_c0_components_EOL_only_different_bytes": c0_eol_only,
         "owner_selected_c0_components_missing": missing_c0,
         "owner_current_worktree_exactly_reviewed_B": all(
             n == 0 for n in (
-                changed, missing, extra, changed_c0, missing_c0
+                changed, missing, extra, eol_only,
+                changed_c0, missing_c0, c0_eol_only
             )
         ),
     }
