@@ -12,7 +12,7 @@ from collections import Counter
 import json
 from pathlib import Path
 
-from .automated_candidate_qa import _checked_handoff
+from .verification_handoff import _checked_handoff
 from .library_entry import build_library_entry
 from .verification_handoff import prepare_verification_handoff
 
