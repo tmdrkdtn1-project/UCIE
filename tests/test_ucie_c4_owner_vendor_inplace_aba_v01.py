@@ -221,7 +221,7 @@ class UCIEC4OwnerVendorInplaceABATests(unittest.TestCase):
         self.assertTrue((self.root / c4.RECEIPT).is_file())
         self.assertFalse(any(p.exists() for p in slot_paths))
         self.assertFalse(any(
-            p.name.startswith("ucie_c4_owner_vendor_inplace_aba_")
+            p.is_dir() and p.name.startswith("ucie_c4_owner_vendor_inplace_aba_")
             for p in (self.root / "downloaded").iterdir()
         ))
         # The test never executed the actual process, binary or vendor.
