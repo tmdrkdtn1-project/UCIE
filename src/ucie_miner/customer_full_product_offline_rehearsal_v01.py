@@ -209,13 +209,17 @@ def _build_first_party_wheel(out: Path, snapshot: dict[str, bytes]) -> Path:
     total = 0
     for path, raw in snapshot.items():
         if (type(path) is not str or type(raw) is not bytes
-                or not path.startswith(("src/ucie_miner/", "src/ucie_public/"))
-                or not path.endswith(".py") or chr(92) in path or chr(0) in path
+                or chr(92) in path or chr(0) in path
                 or any(piece in ("", ".", "..") for piece in path.split("/"))
                 or not 0 < len(raw) <= runtime.MAX_FILE_BYTES):
-            if path.endswith(".py") and path.startswith("src/"):
-                raise OfflineFullProductError("bad first-party source member")
-            continue  # fixed C0 non-package scripts/docs are NOT wheel contents
+            raise OfflineFullProductError("invalid first-party source snapshot")
+        package_source = path.startswith(("src/ucie_miner/", "src/ucie_public/"))
+        if not package_source:
+            if path not in runtime.CENSUS_FILES:
+                raise OfflineFullProductError("unknown source outside UCIE C0 census")
+            continue  # C0 docs and owner scripts are staged, not in Python wheel.
+        if not path.endswith(".py"):
+            raise OfflineFullProductError("unexpected non-Python package member")
         name = path[4:]
         if name in entries:
             raise OfflineFullProductError("duplicate first-party wheel member")
@@ -313,6 +317,8 @@ def _inspect_first_party_wheel(wheel: Path, source: dict[str, bytes]) -> dict:
         for name, raw in expected.items():
             if archive.read(name) != raw:
                 raise OfflineFullProductError("installed wheel did not preserve exact UCIE source")
+        if WHEEL_META + "entry_points.txt" not in members:
+            raise OfflineFullProductError("first-party product console entrypoint missing")
         entry = archive.read(WHEEL_META + "entry_points.txt").decode("utf-8")
         if "ucie-product-preview" not in entry or "customer_staging_v01:main" not in entry:
             raise OfflineFullProductError("four-pillar installed entrypoint unavailable")
@@ -367,8 +373,11 @@ def _check_four_pillars(output: str) -> dict:
             or obj.get("operating_ucie_database_written") is not False
             or obj.get("customer_data_scanned") is not False
             or obj.get("automatic_rule_promotion") is not False
-            or set(obj.get("pillars_exercised", [])) != set(PILLARS)
-            or set(obj.get("workflows", {})) != set(PILLARS)):
+            or type(obj.get("pillars_exercised")) is not list
+            or type(obj.get("workflows")) is not dict
+            or set(obj["pillars_exercised"]) != set(PILLARS)
+            or len(obj["pillars_exercised"]) != len(PILLARS)
+            or set(obj["workflows"]) != set(PILLARS)):
         raise OfflineFullProductError("installed four-pillar workflow/guardrail drift")
     return {"first_party_four_pillars_synthetic_worked": True,
             "pillars_exercised": list(PILLARS),
