@@ -457,6 +457,7 @@ def _member(name: str, raw: bytes, archive: ZipFile) -> None:
 
 def _bundle(src: Path, doc: dict, wheels: dict) -> dict:
     expected_names = {"README.txt", "git-source-pins.json",
+                      "reviewed-git-tree-manifest.json",
                       "A/" + product.FIRST_PARTY_WHEEL,
                       "B/ucie_public_only_demo-0.1.1-py3-none-any.whl"}
     versions = {}
@@ -489,6 +490,9 @@ def _bundle(src: Path, doc: dict, wheels: dict) -> dict:
     }
     with ZipFile(src, "x", compression=ZIP_DEFLATED) as zipfile:
         _member("README.txt", README.encode("ascii"), zipfile)
+        _member("reviewed-git-tree-manifest.json", json.dumps(
+            doc, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        ).encode("ascii"), zipfile)
         _member("git-source-pins.json", json.dumps(
             result, sort_keys=True, separators=(",", ":")
         ).encode("ascii"), zipfile)
@@ -506,6 +510,7 @@ def _verify_bundle(path: Path, evidence: dict) -> dict:
         raise PinnedSourceError("QA bundle missing/oversize")
     expected = {
         "README.txt", "git-source-pins.json",
+        "reviewed-git-tree-manifest.json",
         "A/" + product.FIRST_PARTY_WHEEL,
         "B/ucie_public_only_demo-0.1.1-py3-none-any.whl",
     }
@@ -527,6 +532,9 @@ def _verify_bundle(path: Path, evidence: dict) -> dict:
             raise PinnedSourceError("QA bundle provenance invalid") from exc
         if metadata != evidence or metadata.get("customer_distribution_authorized") is not False:
             raise PinnedSourceError("QA bundle source metadata mismatch")
+        if sha256(zipped.read("reviewed-git-tree-manifest.json")).hexdigest() != evidence.get(
+                "pinned_manifest_sha256"):
+            raise PinnedSourceError("QA bundle reviewed Git manifest bytes drift")
         for slot in ("A", "B"):
             name = "A/" + product.FIRST_PARTY_WHEEL if slot == "A" else (
                 "B/ucie_public_only_demo-0.1.1-py3-none-any.whl")
