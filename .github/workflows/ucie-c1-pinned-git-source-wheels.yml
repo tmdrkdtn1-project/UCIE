@@ -1,0 +1,51 @@
+name: UCIE C1 Two Pinned Git Source Wheels - No Customer Release
+
+on:
+  pull_request:
+    paths:
+      - 'docs/UCIE_C1_TWO_PINNED_GIT_TREES_20261112.json'
+      - 'src/ucie_miner/customer_pinned_git_source_v01.py'
+      - 'tests/test_ucie_c1_pinned_git_source_v01.py'
+      - 'tests/runtime_ucie_c1_pinned_git_source_ci.py'
+      - '.github/workflows/ucie-c1-pinned-git-source-wheels.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/UCIE_C1_TWO_PINNED_GIT_TREES_20261112.json'
+      - 'src/ucie_miner/customer_pinned_git_source_v01.py'
+      - 'tests/test_ucie_c1_pinned_git_source_v01.py'
+      - 'tests/runtime_ucie_c1_pinned_git_source_ci.py'
+      - '.github/workflows/ucie-c1-pinned-git-source-wheels.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  reviewed-git-source:
+    name: Pinned A/B immutable Git objects only / ${{ matrix.os }} / Python 3.15
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Read complete first-party UCIE commit history only (no local owner repo)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python standard library only
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.15'
+      - name: Validate pinned A/B Git blobs and create/verify disposable source-only wheels
+        run: python -B tests/runtime_ucie_c1_pinned_git_source_ci.py
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
+      - name: Verify Git-source gate fail-closed unit regressions
+        run: python -B -m unittest discover -s tests -p test_ucie_c1_pinned_git_source_v01.py -v
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
