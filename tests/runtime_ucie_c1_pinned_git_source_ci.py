@@ -42,6 +42,7 @@ def main() -> int:
             destination.mkdir()
             file = full._build_first_party_wheel(
                 destination, source, version=pin.VERSION[label])
+            pin._canonical_first_party_wheel(file)
             checks = full._inspect_first_party_wheel(
                 file, source, version=pin.VERSION[label])
             if (checks["file_count"] != len(manifests[label]["python"])
@@ -82,6 +83,9 @@ def main() -> int:
         ).encode("ascii")).hexdigest(),
         "Git_exact_first_party_reproduced": True,
         "standalone_stdlib_QA_source_verifier_passed": True,
+        "cross_OS_deterministic_source_only_bundle_sha256":
+            independent["outer_QA_bundle_sha256"],
+        "zip_compression": "ZIP_STORED_FIXED_TIMESTAMP_AND_MODE",
         "no_customer_artifacts_uploaded": True,
         "external_vendor_packages_executed": False,
         "vendor_wheels_uploaded": False,
