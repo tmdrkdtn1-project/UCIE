@@ -206,6 +206,67 @@ class UCIEFunctionalABLifecycleV01Tests(unittest.TestCase):
                             "0.1.0", "a"*64, HASHES, {})
         # Unit of installed identity is observed via the mocked complete path.
 
+    def test_owner_apply_child_probes_compile_without_vendor_execution(self):
+        for name, source in (
+            ("version", ab.VERSION_PROBE),
+            ("uninstall", ab.ABSENCE_PROBE),
+            ("ui", full.UI_PROBE),
+        ):
+            with self.subTest(name=name):
+                self.assertIsNotNone(compile(source, "<UCIE_C1_INERT>", "exec"))
+
+    def test_post_uninstall_requires_metadata_and_module_both_absent(self):
+        child = self.root / "UCIE_FAKE_VENV" / "Scripts" / "python.exe"
+        cwd = self.root
+        for status in (
+            {"installed": True, "ucie_module_still_present": False},
+            {"installed": False, "ucie_module_still_present": True},
+            ["MALFORMED"],
+        ):
+            with self.subTest(status=status), patch.object(
+                full, "_run", side_effect=[
+                    "synthetic pip uninstall", json.dumps(status)
+                ]
+            ):
+                with self.assertRaises(ab.ABRehearsalError):
+                    ab._uninstall(child, cwd, {})
+        with patch.object(full, "_run", side_effect=[
+            "synthetic pip uninstall",
+            json.dumps({"installed": False, "ucie_module_still_present": False}),
+        ]) as run:
+            ab._uninstall(child, cwd, {})
+        self.assertEqual(run.call_count, 2)
+
+    def test_b_only_malformed_receipt_rejected_without_runtime_exception(self):
+        child = self.root / "UCIE_FAKE_VENV" / "Scripts" / "python.exe"
+        for bad in (["UCIE"], {"schema": health.SCHEMA}):
+            with self.subTest(bad=bad), patch.object(
+                full, "_run", side_effect=[
+                    json.dumps({
+                        "schema": "UCIE_FOUR_PILLAR_INSTALLED_STAGING_V01",
+                        "four_pillars_exercised": True,
+                        "product_capabilities_worked_in_staging": True,
+                        "customer_distribution_authorized": False,
+                        "operating_ucie_database_written": False,
+                        "customer_data_scanned": False,
+                        "automatic_rule_promotion": False,
+                        "pillars_exercised": list(PILLARS),
+                        "workflows": {p: {"status": "synthetic"} for p in PILLARS},
+                    }),
+                    json.dumps({
+                        "schema": "UCIE_C1_PORTABLE_LOCALHOST_PREVIEW_V01",
+                        "loopback_http_routes_checked": 5,
+                        "negative_post_checked": True,
+                        "bound_host": "127.0.0.1",
+                        "task_scheduler_modified": False,
+                        "customer_distribution_authorized": False,
+                    }),
+                    json.dumps(bad),
+                ]
+            ):
+                with self.assertRaises(ab.ABRehearsalError):
+                    ab._smoke("B", child, self.root, self.root, {})
+
     def test_bad_owner_gate_or_wrong_consent_never_starts_pip(self):
         with patch("subprocess.run", side_effect=AssertionError("NO PIP")), patch(
             "urllib.request.urlopen", side_effect=AssertionError("NO NETWORK")
