@@ -152,6 +152,85 @@ class UCIEC4OwnerVendorInplaceABATests(unittest.TestCase):
             self.assertIn(requirement, pip_command)
         self.assertEqual(len(called), 4)
 
+    def test_full_owner_A_B_A_orchestration_is_one_venv_inert_only(self):
+        """Positive orchestration with only UCIE-authored inert bytes and mocks."""
+        hashes = {"cffi": "a"*64, "cryptography": "b"*64,
+                  "pycparser": "c"*64}
+        slot_paths = []
+        phases = []
+        def fake_build(root, scratch):
+            slots = {}
+            for label, version in (("A", "0.1.0"), ("B", "0.1.1")):
+                folder = scratch / ("slot_" + label)
+                folder.mkdir()
+                stage = folder / "source" / "UCIE"
+                stage.mkdir(parents=True)
+                wheel_dir = folder / "wheels"
+                wheel_dir.mkdir()
+                wheel = wheel_dir / (
+                    "ucie_public_only_demo-" + version + "-py3-none-any.whl")
+                wheel.write_bytes(("UCIE INERT " + label).encode())
+                slot_paths.append(wheel)
+                slots[label] = {
+                    "wheel": wheel, "source": stage, "version": version,
+                    "digest": sha256(wheel.read_bytes()).hexdigest(),
+                    "modules": 182 if label == "A" else 184,
+                }
+            return slots
+
+        def fake_run(args, cwd, env, what):
+            self.assertEqual(what, "owner C4 new one-shot isolated recipient")
+            recipient = self.base / "not_used"
+            target = Path(args[-1])
+            target.joinpath("Scripts").mkdir(parents=True)
+            (target / "Scripts" / "python.exe").write_bytes(
+                b"UCIE synthetic no process executed")
+            return ""
+
+        def fake_phase(label, child, venv, slot, root, scratch,
+                       vendor_hashes, env):
+            phases.append((label, str(venv), str(child), dict(vendor_hashes)))
+            return {
+                "installed_version": slot["version"],
+                "B_only_feature_present": label == "B",
+                "four_pillar_synthetic": "d"*64,
+                "local_V04_real_GET_routes": 5,
+                "local_V04_POST_denied": True,
+                "B_only_workflow_sha256": "f"*64 if label == "B" else None,
+                "customer_distribution_authorized": False,
+            }
+        with patch.object(c4, "_owner_gate", return_value=self.base / "owner.exe"), \
+             patch.object(c4, "inspect_readonly", return_value={
+                 "readiness": "READY_FOR_EXPLICIT_OWNER_CONSENT_LOCAL_TEST_ONLY"}), \
+             patch.object(c4, "_verified_capture", return_value=hashes), \
+             patch.object(c4, "_build_two_pinned", side_effect=fake_build), \
+             patch.object(c4, "_phase", side_effect=fake_phase), \
+             patch.object(full, "_run", side_effect=fake_run), \
+             patch.object(c4.ab, "_uninstall") as removed, \
+             patch.object(c4.dep, "_environment", return_value={
+                 "PIP_NO_INDEX": "1"}):
+            evidence = c4.run_owner_once(self.root, typed_consent=c4.CONSENT)
+        self.assertEqual([row[0] for row in phases], ["A", "B", "A"])
+        self.assertEqual(len({row[1] for row in phases}), 1)
+        self.assertEqual(len({row[2] for row in phases}), 1)
+        self.assertEqual(evidence["observations"]["A_initial"],
+                         evidence["observations"]["A_inplace_rollback"])
+        self.assertTrue(evidence["same_real_windows_venv_A_B_A_and_actual_uninstall"])
+        self.assertFalse(evidence["customer_distribution_authorized"])
+        self.assertTrue(removed.called)
+        self.assertTrue((self.root / c4.RECEIPT).is_file())
+        self.assertFalse(any(p.exists() for p in slot_paths))
+        self.assertFalse(any(
+            p.name.startswith("ucie_c4_owner_vendor_inplace_aba_")
+            for p in (self.root / "downloaded").iterdir()
+        ))
+        # The test never executed the actual process, binary or vendor.
+        with patch.object(c4, "_owner_gate",
+                          side_effect=AssertionError("must not replay")):
+            with self.assertRaises(c4.C4OwnerTrialError):
+                c4.run_owner_once(self.root, typed_consent="not consent")
+
+
     def test_first_party_current_worktree_cannot_be_used_in_gated_build(self):
         from ucie_miner.customer_pinned_git_source_v01 import PINNED
         self.assertEqual(set(PINNED), {"A", "B"})
