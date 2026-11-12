@@ -91,6 +91,8 @@ class UCIEFullProductOfflineRehearsalTests(unittest.TestCase):
         self.source = {
             "src/ucie_miner/__init__.py": b"# UCIE synthetic\n",
             "src/ucie_miner/customer_staging_v01.py": b"# UCIE synthetic staging\n",
+            "src/ucie_miner/local_v1_app_v01.py": b"# UCIE synthetic V04\n",
+            "src/ucie_miner/customer_portable_preview_v01.py": b"# UCIE preview\n",
             "src/ucie_public/__init__.py": b"# UCIE synthetic\n",
         }
 
@@ -147,7 +149,7 @@ class UCIEFullProductOfflineRehearsalTests(unittest.TestCase):
         with TemporaryDirectory(prefix="UCIE_INERT_ZIP_") as folder:
             file = inert_product_wheel(Path(folder), self.source)
             report = full._inspect_first_party_wheel(file, self.source)
-        self.assertEqual(report["file_count"], 3)
+        self.assertEqual(report["file_count"], 5)
         self.assertTrue(report["wheel_record_verified"])
         self.assertTrue(report["source_code_bytes_match"])
         self.assertFalse(report["customer_distribution_authorized"])
@@ -187,15 +189,14 @@ class UCIEFullProductOfflineRehearsalTests(unittest.TestCase):
         with self.assertRaises(full.OfflineFullProductError):
             full._requirements(HASHES, "NOT_SHA256")
 
-    def test_build_and_install_commands_have_no_online_index(self):
-        build = full._build_cmd(
-            Path("C:/UCIE_SYNTHETIC/owner/python.exe"),
-            self.root / "disposable_source", self.root / "disposable_wheels")
-        self.assertIn("wheel", build)
-        self.assertIn("--no-index", build)
-        self.assertIn("--no-build-isolation", build)
-        self.assertIn("--no-deps", build)
-        self.assertNotIn("--index-url", build)
+    def test_stdlib_built_wheel_record_and_install_no_online_index(self):
+        with TemporaryDirectory(prefix="UCIE_STDLIB_WHEEL_") as temp:
+            wheel = full._build_first_party_wheel(Path(temp), self.source)
+            self.assertEqual(wheel.name, full.FIRST_PARTY_WHEEL)
+            report = full._inspect_first_party_wheel(wheel, self.source)
+            self.assertTrue(report["source_code_bytes_match"])
+            with self.assertRaises(full.OfflineFullProductError):
+                full._build_first_party_wheel(Path(temp), self.source)
         install = full._install_cmd(
             Path("C:/UCIE_SYNTHETIC/recipient/python.exe"),
             self.root / "vendor", self.root / "product", self.root / "requirements")
@@ -279,12 +280,11 @@ class UCIEFullProductOfflineRehearsalTests(unittest.TestCase):
         }
         files["src/ucie_miner/customer_portable_preview_v01.py"] = (
             b'REVISION = "UCIE_C1_DISPOSABLE_GENERATION_A"\n')
+        files["src/ucie_miner/__init__.py"] = b"# UCIE synthetic init\n"
+        files["src/ucie_public/__init__.py"] = b"# UCIE synthetic public\n"
         events = []
         def simulate(args, cwd, env, what):
             events.append(what)
-            if what == "first-party UCIE wheel build":
-                out = Path(args[args.index("--wheel-dir") + 1])
-                (out / full.FIRST_PARTY_WHEEL).write_bytes(b"UCIE DUMMY WHEEL")
             if what == "disposable full-product venv creation":
                 child = Path(args[-1]) / "Scripts" / "python.exe"
                 child.parent.mkdir(parents=True)
@@ -329,14 +329,11 @@ class UCIEFullProductOfflineRehearsalTests(unittest.TestCase):
         ), patch.object(runtime, "inspect_static_runtime_closure",
                        return_value=graph), patch.object(
             runtime, "_copy_payload", return_value=files
-        ), patch.object(full, "_inspect_first_party_wheel", return_value={
-            "sha256": "d"*64, "file_count": 23, "wheel_record_verified": True,
-            "source_code_bytes_match": True,
-        }), patch.object(full, "_run", side_effect=simulate), patch(
+        ), patch.object(full, "_run", side_effect=simulate), patch(
             "subprocess.run", side_effect=AssertionError("NO REAL PROCESS")
         ), patch("urllib.request.urlopen", side_effect=AssertionError("NO NETWORK")):
             receipt = full.run_owner_full_product(self.root, full.CONSENT)
-        self.assertEqual(len(events), 7)
+        self.assertEqual(len(events), 6)
         self.assertTrue(receipt["temporary_first_party_wheel_and_venv_removed"])
         self.assertTrue(receipt["offline_install_requires_four_sha256_hashes"])
         self.assertFalse(receipt["second_clean_windows_host_accepted"])
