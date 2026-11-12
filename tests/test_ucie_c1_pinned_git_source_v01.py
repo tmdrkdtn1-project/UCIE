@@ -111,10 +111,12 @@ class UCIEPinnedGitSourceV01Tests(unittest.TestCase):
             {k: report[k] for k in (
                 "current_local_python_module_count",
                 "pinned_reviewed_b_python_module_count",
-                "owner_local_python_files_changed",
+                "owner_local_python_files_non_eol_changed",
+                "owner_local_python_files_EOL_only_different_bytes",
                 "owner_local_python_files_missing",
                 "owner_local_extra_python_files_NOT_approved_for_export",
-                "owner_selected_c0_components_changed",
+                "owner_selected_c0_components_non_eol_changed",
+                "owner_selected_c0_components_EOL_only_different_bytes",
                 "owner_selected_c0_components_missing",
                 "owner_current_worktree_exactly_reviewed_B",
             )}, sort_keys=True))
