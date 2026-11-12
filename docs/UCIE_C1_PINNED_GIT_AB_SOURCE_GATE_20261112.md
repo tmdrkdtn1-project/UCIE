@@ -94,6 +94,38 @@ B 커밋의 부모에는 A가 있습니다. 이 호출은 Git 객체 데이터�
 
 **금지:** 사용자 운영 DB·현재 .venv·상주 Local V1 서비스·C40·PublicMiner·TaskScheduler·Cloudflare·기존 성공 영수증·09:00 HOLD·타 프로젝트에 변경을 가하지 않습니다. 고객용 실제 설치·권리 검토 없이 ZIP을 외부에 전달하지 않습니다.
 
+## 깨끗한 Windows에서의 **독립 바이트 검증기** (설치·실행 아님)
+
+`scripts/ucie_c1_verify_pinned_ab_qa_bundle_v01.py`는 UCIE 제품, Git,
+외부 라이브러리가 **전혀 설치되지 않은 별도의 Windows 실험 환경**에서도
+Python 표준 라이브러리만으로 소스 전용 ZIP을 검사할 수 있도록 작성했습니다.
+
+검증기는 **GitHub에서 신뢰 경로로 별도로 취득·검토한 원본 스크립트**
+여야 합니다. ZIP에 동봉된 코드나 임의 출처의 스크립트로 자신을 검증하지
+않습니다. 스크립트 내부에는 승인된 공개 Git 소스 매니페스트의
+SHA256 `f23c50ca7bf6d781b41bd76d109955b8ce91c3179aede594a66d083e617b11e8`
+이 고정되어 있습니다.
+
+검증 내용: 정확한 A/B 전체 커밋/트리, A 182개/B 184개 Python 소스,
+23개 C0 목록, B 전용 새 기능, 각각의 Git blob 해시, 내부 PEP427
+wheel의 모든 RECORD SHA256·파일 크기, 두 wheel 전체 SHA256,
+서명·고객 배포 미승인 상태와 외부 vendor 파일 **미포함 여부**입니다.
+ZIP을 해제·설치·실행하지 않고 네트워크 접속도 하지 않습니다.
+
+소유자 통제하에 격리된 Windows 시험 PC로 **소스만** 이동한 경우의
+확인 명령(실행은 별도 인수 단계에서만):
+
+```powershell
+py -3.15 -B .\ucie_c1_verify_pinned_ab_qa_bundle_v01.py --bundle .\ucie_c1_pinned_git_ab_first_party_qa_only.zip
+```
+
+여기서 PASS가 나와도 **독립 고객용 전체 제품 설치/네 기능 실제 실행,
+고객 PC의 업데이트·롤백·제거, 외부 wheel 재배포 권리 및 서명**은
+검증하지 않았으므로 C4/C5 NO-GO를 유지합니다. 새 GitHub CI는
+동일한 독립 검증기를 Windows·Ubuntu에서 실제 원본 두 wheel에
+적용하지만, 이 사실만으로 **사용자가 관리하는 두 번째 수신 PC에
+접속하거나 검사했다는 뜻은 아닙니다**.
+
 ## 다음 진짜 출시 게이트
 
 **C1/C4:** 완전한 자체 구성품과 승인된 외부 wheel을 구분·공급한 뒤, 별도 **깨끗한 Windows 수신 PC/VM**에서 온라인 접속 없이 검증·설치·실제 업그레이드·롤백·제거할 것. 여기의 소스 전용 QA ZIP 검증은 C4 PASS가 아닙니다.
