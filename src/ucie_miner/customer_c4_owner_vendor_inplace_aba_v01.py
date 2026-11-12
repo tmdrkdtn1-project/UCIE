@@ -258,9 +258,8 @@ def run_owner_once(root: Path, *, typed_consent: str) -> dict:
         with candidate.open("ab") as stream:
             stream.write(b"UCIE_FORGED_B_NEVER_INSTALL\n")
         try:
-            ab._verified_wheel(candidate, pin._git_clean_source(
-                root, pin._load_manifest(root)[1], "B"),
-                pin.VERSION["B"], pin.CANONICAL_QA_SHA256["B"])
+            ab._verified_wheel(candidate, {}, pin.VERSION["B"],
+                               pin.CANONICAL_QA_SHA256["B"])
         except ab.ABRehearsalError:
             rejected = True
         else:
