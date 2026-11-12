@@ -75,7 +75,8 @@ def _previous_full_receipt(root: Path) -> str:
             or doc.get("owner_existing_venv_modified") is not False
             or doc.get("customer_distribution_authorized") is not False
             or doc.get("second_clean_windows_host_accepted") is not False
-            or doc.get("first_party_source_member_count", 0) < 190
+            or type(doc.get("first_party_source_member_count")) is not int
+            or doc["first_party_source_member_count"] < 190
             or type(doc.get("native_probe")) is not dict
             or doc["native_probe"].get("cryptography_aesgcm_roundtrip") is not True
             or type(doc.get("four_pillar_installed_workflow")) is not dict
