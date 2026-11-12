@@ -157,7 +157,8 @@ class UCIEC4OwnerVendorInplaceABATests(unittest.TestCase):
         self.assertEqual(set(PINNED), {"A", "B"})
         self.assertEqual(set(c4.STAGES),
                          {"A_initial", "B_inplace_update", "A_inplace_rollback"})
-        self.assertFalse(c4.inspect_readonly if False else False)
+        self.assertNotEqual(c4.STATUS, "CUSTOMER_GO")
+        self.assertEqual(set(c4.pin.CANONICAL_QA_SHA256), {"A", "B", "bundle"})
 
 
 if __name__ == "__main__":
