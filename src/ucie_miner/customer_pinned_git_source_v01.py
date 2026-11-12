@@ -46,6 +46,14 @@ MAX_MANIFEST = 120_000
 MAX_ARCHIVE = 20_000_000
 MAX_BUNDLE = 20_000_000
 VERSION = {"A": "0.1.0", "B": "0.1.1"}
+# Exact bytes independently reproduced on Windows+Ubuntu Python 3.15,
+# using only reviewed public Git commits and deterministic ZIP_STORED.
+# These are QA artifact hashes, never vendor trust or customer signatures.
+CANONICAL_QA_SHA256 = {
+    "A": "b4e7c08786c40433497b79bd8b327a719e962eb9611c6c97ffb1efb432d12c40",
+    "B": "07c93afe211d22904ab4fc40c8b28ab4fb264e8ee2481760717d153eaf77d2b6",
+    "bundle": "d0b501bc725a79adb22de0c129faca21b5083926ab89f3a6867fb5e453dc4532",
+}
 PINNED = {"A": (A_SHA, TREE_A, 182), "B": (B_SHA, TREE_B, 184)}
 README = (
     "UCIE-only FIRST-PARTY reviewed-Git-commit A/B QA artifacts.\n"
@@ -411,6 +419,8 @@ def verify_existing_bundle(root: Path) -> dict:
                     rows[slot]["python"])):
             raise PinnedSourceError("QA ZIP source/commit/count drift")
     _verify_bundle(path, meta)
+    if sha256(path.read_bytes()).hexdigest() != CANONICAL_QA_SHA256["bundle"]:
+        raise PinnedSourceError("QA bundle differs from cross-OS reviewed canonical bytes")
     return {
         "schema": BUNDLE_SCHEMA,
         "status": "PINNED_SOURCE_QA_BUNDLE_BYTES_VERIFIED_CUSTOMER_NO_GO",
@@ -610,6 +620,8 @@ def export_once(root: Path, typed: str) -> dict:
                 wheel, src, version=VERSION[slot])
             if proof["file_count"] != len(rows[slot]["python"]):
                 raise PinnedSourceError("Git archived wheel module count differs from exact manifest")
+            if proof["sha256"] != CANONICAL_QA_SHA256[slot]:
+                raise PinnedSourceError("QA wheel differs from cross-OS canonical reviewed bytes")
             wheels[slot] = {
                 "version": VERSION[slot],
                 "path": wheel, "sha256": proof["sha256"],
@@ -621,6 +633,8 @@ def export_once(root: Path, typed: str) -> dict:
             raise PinnedSourceError("pinned A/B full source difference missing")
         staged = scratch / "two-commit-first-party-qa.zip"
         meta = _bundle(staged, doc, wheels)
+        if sha256(staged.read_bytes()).hexdigest() != CANONICAL_QA_SHA256["bundle"]:
+            raise PinnedSourceError("source-only QA ZIP is not cross-OS byte reproducible")
         target = root / FINAL_ZIP
         if target.exists() or target.is_symlink():
             raise PinnedSourceError("QA source bundle output already exists")
