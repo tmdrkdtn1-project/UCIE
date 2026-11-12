@@ -269,7 +269,9 @@ class UCIEFunctionalABLifecycleV01Tests(unittest.TestCase):
                     "four_pillar_synthetic_workflow_sha256": "9"*64,
                 })
             if why == "confirm UCIE distribution absent":
-                return json.dumps({"installed": False})
+                return json.dumps({
+                    "installed": False, "ucie_module_still_present": False
+                })
             return ""
         with patch.object(ab, "_owner_gate", return_value=Path(sys.executable)), patch.object(
             ab, "_previous_full_receipt", return_value="e"*64
