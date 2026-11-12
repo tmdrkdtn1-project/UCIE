@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'docs/UCIE_C1_TWO_PINNED_GIT_TREES_20261112.json'
+      - 'docs/UCIE_C1_PINNED_GIT_AB_SOURCE_GATE_20261112.md'
       - 'src/ucie_miner/customer_pinned_git_source_v01.py'
       - 'tests/test_ucie_c1_pinned_git_source_v01.py'
       - 'tests/runtime_ucie_c1_pinned_git_source_ci.py'
@@ -14,6 +15,7 @@ on:
     branches: [main]
     paths:
       - 'docs/UCIE_C1_TWO_PINNED_GIT_TREES_20261112.json'
+      - 'docs/UCIE_C1_PINNED_GIT_AB_SOURCE_GATE_20261112.md'
       - 'src/ucie_miner/customer_pinned_git_source_v01.py'
       - 'tests/test_ucie_c1_pinned_git_source_v01.py'
       - 'tests/runtime_ucie_c1_pinned_git_source_ci.py'
