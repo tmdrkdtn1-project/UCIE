@@ -25,6 +25,13 @@ B = "4242ebe7ae112076d9b3560e85b0babb22bbb713"
 TREE_A = "35e7e796deb83435f58c39b83daa984eb22eb30b"
 TREE_B = "7f96f430fb5b2f582dbcda8861968e7363055eb4"
 TRUSTED_MANIFEST_SHA256 = "f23c50ca7bf6d781b41bd76d109955b8ce91c3179aede594a66d083e617b11e8"
+# Audited source-only SHA256 values: exact match across Linux/Windows CI.
+# Not a signed release; only a pinned QA byte identity.
+EXPECTED_BUNDLE_SHA256 = "d0b501bc725a79adb22de0c129faca21b5083926ab89f3a6867fb5e453dc4532"
+EXPECTED_WHEELS_SHA256 = {
+    "A": "b4e7c08786c40433497b79bd8b327a719e962eb9611c6c97ffb1efb432d12c40",
+    "B": "07c93afe211d22904ab4fc40c8b28ab4fb264e8ee2481760717d153eaf77d2b6",
+}
 EXPECTED_B_NEW = {
     "src/ucie_miner/customer_installed_health_v01.py",
     "src/ucie_miner/customer_functional_ab_lifecycle_v01.py",
@@ -220,6 +227,8 @@ def verify(path: Path) -> dict:
             or path.is_symlink() or not path.is_file()
             or not 0 < path.stat().st_size <= MAX_ZIP_BYTES):
         raise VerifyError("not the approved first-party-only QA ZIP path")
+    if sha256(path.read_bytes()).hexdigest() != EXPECTED_BUNDLE_SHA256:
+        raise VerifyError("QA bundle differs from cross-OS canonical reviewed bytes")
     try:
         with ZipFile(path) as archive:
             _safe_entries(archive, OUTER, MAX_ZIP_BYTES)
@@ -256,8 +265,9 @@ def verify(path: Path) -> dict:
                     raise VerifyError("QA wheel slot not associated to exact reviewed Git commit")
                 name = slot + "/" + wanted["wheel"]
                 raw_wheel = _read(archive, name, MAX_ZIP_BYTES)
-                if sha256(raw_wheel).hexdigest() != entry.get("wheel_sha256"):
-                    raise VerifyError("QA wheel outer SHA256 does not match provenance")
+                if (sha256(raw_wheel).hexdigest() != entry.get("wheel_sha256")
+                        or sha256(raw_wheel).hexdigest() != EXPECTED_WHEELS_SHA256[slot]):
+                    raise VerifyError("QA wheel cross-OS canonical SHA256 changed")
                 checked[slot] = _wheel(raw_wheel, rows[slot], slot)
     except (BadZipFile, OSError) as exc:
         raise VerifyError("first-party QA outer ZIP malformed") from exc
