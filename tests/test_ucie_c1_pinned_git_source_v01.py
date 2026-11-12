@@ -14,7 +14,7 @@ import tarfile
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
-from zipfile import ZipFile, ZIP_DEFLATED
+from zipfile import ZipFile, ZIP_DEFLATED, ZIP_STORED
 
 from ucie_miner import customer_pinned_git_source_v01 as pin
 from ucie_miner import customer_full_product_offline_rehearsal_v01 as full
@@ -250,6 +250,27 @@ class UCIEPinnedGitSourceV01Tests(unittest.TestCase):
         with patch("subprocess.run", return_value=Fake(b"WRONG_TREE\n")):
             with self.assertRaises(pin.PinnedSourceError):
                 pin._git_object_roots(self.root, "B")
+
+    def test_reproducible_stored_qa_wheel_is_content_identical_and_record_valid(self):
+        first_party = tiny_snapshot(False)
+        with TemporaryDirectory(prefix="UCIE_CANONICAL_STORED_WHEEL_") as temp:
+            root = Path(temp)
+            outputs = []
+            for i in range(2):
+                folder = root / str(i)
+                folder.mkdir()
+                file = full._build_first_party_wheel(folder, first_party)
+                pin._canonical_first_party_wheel(file)
+                inspected = full._inspect_first_party_wheel(file, first_party)
+                self.assertTrue(inspected["wheel_record_verified"])
+                self.assertTrue(inspected["source_code_bytes_match"])
+                with ZipFile(file) as archive:
+                    self.assertTrue(all(x.compress_type == ZIP_STORED
+                                        for x in archive.infolist()))
+                outputs.append(file.read_bytes())
+            self.assertEqual(outputs[0], outputs[1])
+            self.assertEqual(sha256(outputs[0]).hexdigest(),
+                             sha256(outputs[1]).hexdigest())
 
     def test_qa_bundle_two_actual_inert_first_party_wheels_and_source_hashes(self):
         with TemporaryDirectory(prefix="UCIE_INERT_PINNED_BUNDLE_") as temp:
