@@ -1,0 +1,48 @@
+name: UCIE C4 Clean Windows One-Venv First-Party CLI In-Place QA ONLY
+
+on:
+  pull_request:
+    paths:
+      - 'tests/runtime_ucie_c4_clean_windows_first_party_lifecycle_v01.py'
+      - 'tests/test_ucie_c4_clean_windows_first_party_lifecycle_v01.py'
+      - 'docs/UCIE_C4_CLEAN_WINDOWS_FIRST_PARTY_INPLACE_QA_20261112.md'
+      - '.github/workflows/ucie-c4-clean-windows-first-party-lifecycle.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tests/runtime_ucie_c4_clean_windows_first_party_lifecycle_v01.py'
+      - 'tests/test_ucie_c4_clean_windows_first_party_lifecycle_v01.py'
+      - 'docs/UCIE_C4_CLEAN_WINDOWS_FIRST_PARTY_INPLACE_QA_20261112.md'
+      - '.github/workflows/ucie-c4-clean-windows-first-party-lifecycle.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  clean-windows-one-recipient-first-party:
+    name: Clean Windows Python3.15 A-install B-update A-rollback uninstall (NO VENDOR)
+    runs-on: windows-latest
+    timeout-minutes: 18
+    steps:
+      - name: Read UCIE own exact public Git history without owner worktree
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Configure disposable Windows Python 3.15
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.15'
+      - name: Unit regressions for CI-only scope and offline pip gates
+        run: python -B -m unittest discover -s tests -p test_ucie_c4_clean_windows_first_party_lifecycle_v01.py -v
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
+      - name: Actual one-venv A to B update, A rollback and uninstall with four first-party synthetic pillars - no vendor or V04 UI claim
+        run: python -B tests/runtime_ucie_c4_clean_windows_first_party_lifecycle_v01.py
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
+          UCIE_C4_FIRST_PARTY_CI_ONLY: '1'
+          PIP_NO_INDEX: '1'
+          PIP_DISABLE_PIP_VERSION_CHECK: '1'
