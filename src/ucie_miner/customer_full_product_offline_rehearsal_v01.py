@@ -11,9 +11,12 @@ This is NOT a clean second recipient, signed bundle or customer release.
 from __future__ import annotations
 
 import argparse
+import base64
+import csv
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
+import io
 import os
 from pathlib import Path
 import re
@@ -21,7 +24,7 @@ import subprocess
 import sys
 import sysconfig
 from tempfile import TemporaryDirectory
-from zipfile import ZipFile
+from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 
 from . import customer_offline_install_rehearsal_v01 as dependency
 from . import customer_owner_wheelhouse_acquire_v01 as acquire
@@ -193,13 +196,72 @@ def _run(args: list[str], cwd: Path, env: dict[str, str], what: str) -> str:
     return p.stdout.strip()
 
 
-def _build_cmd(python: Path, source: Path, out: Path) -> list[str]:
-    return [
-        str(python), "-I", "-B", "-m", "pip", "--isolated", "wheel",
-        "--no-index", "--no-deps", "--no-build-isolation",
-        "--disable-pip-version-check", "--no-cache-dir", "--no-input",
-        "--wheel-dir", str(out), str(source)
-    ]
+def _build_first_party_wheel(out: Path, snapshot: dict[str, bytes]) -> Path:
+    """Package only exact copied UCIE Python bytes with stdlib ZIP/WHEEL/RECORD.
+
+    This preview recipe performs NO build-hook, import, setuptools, subprocess,
+    vendor execution or network step. It is NOT a reviewed production wheel.
+    """
+    if (out.is_symlink() or not out.is_dir() or any(out.iterdir())
+            or type(snapshot) is not dict or not snapshot):
+        raise OfflineFullProductError("wheel output must be a fresh UCIE scratch dir")
+    entries = {}
+    total = 0
+    for path, raw in snapshot.items():
+        if (type(path) is not str or type(raw) is not bytes
+                or not path.startswith(("src/ucie_miner/", "src/ucie_public/"))
+                or not path.endswith(".py") or chr(92) in path or chr(0) in path
+                or any(piece in ("", ".", "..") for piece in path.split("/"))
+                or not 0 < len(raw) <= runtime.MAX_FILE_BYTES):
+            if path.endswith(".py") and path.startswith("src/"):
+                raise OfflineFullProductError("bad first-party source member")
+            continue  # fixed C0 non-package scripts/docs are NOT wheel contents
+        name = path[4:]
+        if name in entries:
+            raise OfflineFullProductError("duplicate first-party wheel member")
+        total += len(raw)
+        if total > runtime.MAX_SOURCE_BYTES:
+            raise OfflineFullProductError("wheel source budget exceeded")
+        entries[name] = raw
+    required = {"ucie_miner/__init__.py", "ucie_public/__init__.py",
+                "ucie_miner/customer_staging_v01.py",
+                "ucie_miner/local_v1_app_v01.py",
+                "ucie_miner/customer_portable_preview_v01.py"}
+    if not required.issubset(entries) or len(entries) > runtime.MAX_SOURCE_FILES:
+        raise OfflineFullProductError("core four-pillar/UI source missing in wheel")
+    entries[WHEEL_META + "METADATA"] = (
+        b"Metadata-Version: 2.3\nName: ucie-public-only-demo\n"
+        b"Version: 0.1.0\nRequires-Python: >=3.13\n"
+        b"Requires-Dist: cryptography>=50.0.2,<51\n"
+    )
+    entries[WHEEL_META + "WHEEL"] = (
+        b"Wheel-Version: 1.0\n"
+        b"Generator: UCIE C1 isolated first-party stdlib preview\n"
+        b"Root-Is-Purelib: true\nTag: py3-none-any\n"
+    )
+    entries[WHEEL_META + "entry_points.txt"] = (
+        b"[console_scripts]\n"
+        b"ucie-product-preview = ucie_miner.customer_staging_v01:main\n"
+    )
+    rows = []
+    for name in sorted(entries):
+        raw = entries[name]
+        digest = base64.urlsafe_b64encode(sha256(raw).digest()).rstrip(b"=")
+        rows.append((name, "sha256=" + digest.decode("ascii"), str(len(raw))))
+    rows.append((WHEEL_META + "RECORD", "", ""))
+    writer_stream = io.StringIO(newline="")
+    writer = csv.writer(writer_stream, lineterminator="\n")
+    writer.writerows(rows)
+    entries[WHEEL_META + "RECORD"] = writer_stream.getvalue().encode("utf-8")
+    wheel = out / FIRST_PARTY_WHEEL
+    with ZipFile(wheel, mode="x", compression=ZIP_DEFLATED) as archive:
+        for name in sorted(entries, key=lambda x: (x.startswith(WHEEL_META), x)):
+            item = ZipInfo(name, (2020, 1, 1, 0, 0, 0))
+            item.compress_type = ZIP_DEFLATED
+            item.create_system = 3
+            item.external_attr = 0o100644 << 16
+            archive.writestr(item, entries[name])
+    return wheel
 
 
 def _install_cmd(venv_python: Path, vendor: Path,
@@ -360,12 +422,8 @@ def run_owner_full_product(root: Path, consent: str) -> dict:
         runtime._verify(source, manifest)
         wheels = scratch / "first_party_wheel"
         wheels.mkdir()
-        _run(_build_cmd(python, source, wheels), scratch, environment,
-             "first-party UCIE wheel build")
-        built = list(wheels.iterdir())
-        if len(built) != 1:
-            raise OfflineFullProductError("exactly one UCIE wheel required")
-        wheel_info = _inspect_first_party_wheel(built[0], sources)
+        built = _build_first_party_wheel(wheels, sources)
+        wheel_info = _inspect_first_party_wheel(built, sources)
         requirements = scratch / "full-product-hash-locked.txt"
         require_text = _requirements(hashes, wheel_info["sha256"])
         requirements.write_text(require_text, encoding="ascii")
