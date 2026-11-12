@@ -279,7 +279,9 @@ class UCIEPinnedGitSourceV01Tests(unittest.TestCase):
                 tmp / "FIRST_PARTY_ONLY.zip", result
             )["qa_bundle_bytes_verified"])
             with ZipFile(tmp / "FIRST_PARTY_ONLY.zip") as zipped:
-                self.assertEqual(len(zipped.namelist()), 4)
+                self.assertEqual(len(zipped.namelist()), 5)
+                self.assertIn("reviewed-git-tree-manifest.json",
+                              zipped.namelist())
                 self.assertNotIn("cffi", " ".join(zipped.namelist()))
                 self.assertNotIn("cryptography", " ".join(zipped.namelist()))
             altered = dict(result)
