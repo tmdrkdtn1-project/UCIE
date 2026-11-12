@@ -106,6 +106,26 @@ A/B receipt.
 Successful user-only receipt path:
 `D:\UCIE\downloaded\ucie_c1_functional_ab_lifecycle_receipt_v01.json`
 
+## Source parity observation — important release blocker
+
+The owner UCIE source tree deliberately contains additional owner-local
+workroom files. With the exact source index and bounded build recipe used
+here, **owner Windows** constructed test wheels **A=197 / B=198** first-party
+Python modules; **clean GitHub Ubuntu CI** initially observed **A=183 /
+B=184** modules. These are not contradictory product functional results:
+the first-party source inventory is deliberately dynamic and the owner
+worktree includes additional modules. The original CI failure was an
+incorrect hardcoded module-count minimum; the repaired test requires
+**A count + 1 = B count = current environment's exact bounded source index**
+and independently checks the full wheel member hash/RECORD manifest.
+No local UCIE files were reset or deleted to make these numbers match.
+
+**Do not use the extra owner-local modules to represent a clean, reviewed
+customer version.** C1 technical rehearsal is not a substitute for two
+pinned Git commit trees, source rights/lineage reconciliation and clean
+recipient acceptance. Any 17 tracked owner modifications remain intact
+and are not silently assigned production provenance.
+
 ## Verification levels / remaining blockers
 
 Tests use **real UCIE first-party source** and build BOTH complete
