@@ -281,6 +281,9 @@ def main() -> int:
             "schema": SCHEMA,
             "status": "UCIE_C4_CLEAN_WINDOWS_FIRST_PARTY_INPLACE_FAIL_CLOSED",
             "failure_class": type(exc).__name__[:70],
+            "safe_failure_stage": (str(exc)[:140]
+                if isinstance(exc, full.OfflineFullProductError)
+                else type(exc).__name__[:70]),
             "complete_c4_customer_product_accepted": False,
             "customer_distribution_authorized": False,
         }, sort_keys=True))
