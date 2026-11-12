@@ -15,7 +15,7 @@ import re
 import sqlite3
 import sys
 
-from .automated_candidate_qa import _checked_handoff
+from .verification_handoff import _checked_handoff
 from .public_candidate_learning import _review_path
 from .public_discovery import DiscoveryError
 from .public_external_history import (

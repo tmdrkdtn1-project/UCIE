@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from .automated_candidate_qa import _checked_handoff
+from .verification_handoff import _checked_handoff
 from .library_explore import _candidate_rows, describe_purpose
 from .public_discovery import SOURCE_SKILL
 from .skill_profiles import PROFILE

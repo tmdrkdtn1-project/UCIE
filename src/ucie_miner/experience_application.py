@@ -18,7 +18,7 @@ from pathlib import Path
 from statistics import median
 from time import perf_counter_ns
 
-from .automated_candidate_qa import _checked_handoff
+from .verification_handoff import _checked_handoff
 from .experience_evolution import (
     _load_events, _workload_id, WORKLOADS, GENESIS,
     OWNER_OBSERVED_REFERENCE, EvolutionError,

@@ -16,8 +16,7 @@ from typing import Any
 from .library_entry import build_library_entry
 from .skill_profiles import PROFILE
 from .public_discovery import DiscoveryError
-from .verification_handoff import prepare_verification_handoff
-from .automated_candidate_qa import _checked_handoff
+from .verification_handoff import prepare_verification_handoff, _checked_handoff
 
 SCHEMA = "UCIE_W04_READ_ONLY_LIBRARY_CANDIDATE_SEARCH_V1"
 MAX_QUERY = 80

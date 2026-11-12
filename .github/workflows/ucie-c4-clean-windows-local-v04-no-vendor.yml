@@ -1,0 +1,41 @@
+name: UCIE C4 Clean Windows Installed Local V04 No-Vendor Regression
+
+on:
+  pull_request:
+    paths:
+      - 'tests/runtime_ucie_c4_clean_windows_current_installed_v04_v01.py'
+      - '.github/workflows/ucie-c4-clean-windows-local-v04-no-vendor.yml'
+      - 'src/ucie_miner/local_v1_app_v01.py'
+      - 'src/ucie_miner/skillbook_catalog_union_v01.py'
+      - 'docs/UCIE_C4_REAL_INSTALLED_LOCAL_V04_20261112.md'
+  push:
+    branches: [main]
+    paths:
+      - 'tests/runtime_ucie_c4_clean_windows_current_installed_v04_v01.py'
+      - '.github/workflows/ucie-c4-clean-windows-local-v04-no-vendor.yml'
+      - 'src/ucie_miner/local_v1_app_v01.py'
+      - 'src/ucie_miner/skillbook_catalog_union_v01.py'
+      - 'docs/UCIE_C4_REAL_INSTALLED_LOCAL_V04_20261112.md'
+
+permissions:
+  contents: read
+
+jobs:
+  installed-clean-v04:
+    name: Win315 current exact HEAD first-party installed V04 GET/POST + four pillars
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.15'
+      - name: Isolated no-index first-party wheel install and live loopback V04 test
+        run: python -B tests/runtime_ucie_c4_clean_windows_current_installed_v04_v01.py
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
+          PIP_NO_INDEX: '1'
+          UCIE_C4_CLEAN_V04_ONLY: '1'
