@@ -196,15 +196,18 @@ def _run(args: list[str], cwd: Path, env: dict[str, str], what: str) -> str:
     return p.stdout.strip()
 
 
-def _build_first_party_wheel(out: Path, snapshot: dict[str, bytes]) -> Path:
+def _build_first_party_wheel(out: Path, snapshot: dict[str, bytes],
+                             *, version: str = FIRST_PARTY_VERSION) -> Path:
     """Package only exact copied UCIE Python bytes with stdlib ZIP/WHEEL/RECORD.
 
     This preview recipe performs NO build-hook, import, setuptools, subprocess,
     vendor execution or network step. It is NOT a reviewed production wheel.
     """
-    if (out.is_symlink() or not out.is_dir() or any(out.iterdir())
+    if (version not in (FIRST_PARTY_VERSION, "0.1.1")
+            or type(version) is not str
+            or out.is_symlink() or not out.is_dir() or any(out.iterdir())
             or type(snapshot) is not dict or not snapshot):
-        raise OfflineFullProductError("wheel output must be a fresh UCIE scratch dir")
+        raise OfflineFullProductError("wheel output/version must be a fresh UCIE scratch dir")
     entries = {}
     total = 0
     for path, raw in snapshot.items():
@@ -233,17 +236,19 @@ def _build_first_party_wheel(out: Path, snapshot: dict[str, bytes]) -> Path:
                 "ucie_miner/customer_portable_preview_v01.py"}
     if not required.issubset(entries) or len(entries) > runtime.MAX_SOURCE_FILES:
         raise OfflineFullProductError("core four-pillar/UI source missing in wheel")
-    entries[WHEEL_META + "METADATA"] = (
+    meta_dir = "ucie_public_only_demo-" + version + ".dist-info/"
+    entries[meta_dir + "METADATA"] = (
         b"Metadata-Version: 2.3\nName: ucie-public-only-demo\n"
-        b"Version: 0.1.0\nRequires-Python: >=3.13\n"
-        b"Requires-Dist: cryptography>=50.0.2,<51\n"
+        + ("Version: " + version + "\n").encode("ascii")
+        + b"Requires-Python: >=3.13\n"
+        + b"Requires-Dist: cryptography>=50.0.2,<51\n"
     )
-    entries[WHEEL_META + "WHEEL"] = (
+    entries[meta_dir + "WHEEL"] = (
         b"Wheel-Version: 1.0\n"
         b"Generator: UCIE C1 isolated first-party stdlib preview\n"
         b"Root-Is-Purelib: true\nTag: py3-none-any\n"
     )
-    entries[WHEEL_META + "entry_points.txt"] = (
+    entries[meta_dir + "entry_points.txt"] = (
         b"[console_scripts]\n"
         b"ucie-product-preview = ucie_miner.customer_staging_v01:main\n"
     )
@@ -252,14 +257,14 @@ def _build_first_party_wheel(out: Path, snapshot: dict[str, bytes]) -> Path:
         raw = entries[name]
         digest = base64.urlsafe_b64encode(sha256(raw).digest()).rstrip(b"=")
         rows.append((name, "sha256=" + digest.decode("ascii"), str(len(raw))))
-    rows.append((WHEEL_META + "RECORD", "", ""))
+    rows.append((meta_dir + "RECORD", "", ""))
     writer_stream = io.StringIO(newline="")
     writer = csv.writer(writer_stream, lineterminator="\n")
     writer.writerows(rows)
-    entries[WHEEL_META + "RECORD"] = writer_stream.getvalue().encode("utf-8")
-    wheel = out / FIRST_PARTY_WHEEL
+    entries[meta_dir + "RECORD"] = writer_stream.getvalue().encode("utf-8")
+    wheel = out / ("ucie_public_only_demo-" + version + "-py3-none-any.whl")
     with ZipFile(wheel, mode="x", compression=ZIP_DEFLATED) as archive:
-        for name in sorted(entries, key=lambda x: (x.startswith(WHEEL_META), x)):
+        for name in sorted(entries, key=lambda x: (x.startswith(meta_dir), x)):
             item = ZipInfo(name, (2020, 1, 1, 0, 0, 0))
             item.compress_type = ZIP_DEFLATED
             item.create_system = 3
@@ -280,10 +285,15 @@ def _install_cmd(venv_python: Path, vendor: Path,
     ]
 
 
-def _inspect_first_party_wheel(wheel: Path, source: dict[str, bytes]) -> dict:
+def _inspect_first_party_wheel(wheel: Path, source: dict[str, bytes],
+                               *, version: str = FIRST_PARTY_VERSION) -> dict:
     """Check actual wheel RECORD and exact UCIE source bytes, no code execution."""
-    if (wheel.is_symlink() or not wheel.is_file()
-            or wheel.name != FIRST_PARTY_WHEEL
+    expected_wheel_name = "ucie_public_only_demo-" + str(version) + "-py3-none-any.whl"
+    meta_dir = "ucie_public_only_demo-" + str(version) + ".dist-info/"
+    if (type(version) is not str
+            or version not in (FIRST_PARTY_VERSION, "0.1.1")
+            or wheel.is_symlink() or not wheel.is_file()
+            or wheel.name != expected_wheel_name
             or not 100 < wheel.stat().st_size <= gate.MAX_WHEEL_BYTES):
         raise OfflineFullProductError("unexpected first-party wheel filename or size")
     try:
@@ -291,7 +301,7 @@ def _inspect_first_party_wheel(wheel: Path, source: dict[str, bytes]) -> dict:
     except (gate.OfflineDependencyError, OSError, ValueError) as exc:
         raise OfflineFullProductError("first-party wheel RECORD not validated") from exc
     if (info["name"] != FIRST_PARTY_NAME
-            or info["version"] != FIRST_PARTY_VERSION
+            or info["version"] != version
             or not info["metadata_record_sha256_verified"]
             or not any("cryptography" in req.lower() and "50.0.2" in req
                        for req in info["requires_dist"])):
@@ -312,18 +322,19 @@ def _inspect_first_party_wheel(wheel: Path, source: dict[str, bytes]) -> dict:
                     and name.endswith(".py")):
                 if name not in expected:
                     raise OfflineFullProductError("unexpected first-party Python module")
-            elif not name.startswith(WHEEL_META):
+            elif not name.startswith(meta_dir):
                 raise OfflineFullProductError("wheel bundled unreviewed non-UCIE payload")
         for name, raw in expected.items():
             if archive.read(name) != raw:
                 raise OfflineFullProductError("installed wheel did not preserve exact UCIE source")
-        if WHEEL_META + "entry_points.txt" not in members:
+        if meta_dir + "entry_points.txt" not in members:
             raise OfflineFullProductError("first-party product console entrypoint missing")
-        entry = archive.read(WHEEL_META + "entry_points.txt").decode("utf-8")
+        entry = archive.read(meta_dir + "entry_points.txt").decode("utf-8")
         if "ucie-product-preview" not in entry or "customer_staging_v01:main" not in entry:
             raise OfflineFullProductError("four-pillar installed entrypoint unavailable")
     return {
         "sha256": info["wheel_sha256"],
+        "version": version,
         "file_count": len(expected),
         "wheel_record_verified": True,
         "source_code_bytes_match": True,
@@ -331,12 +342,15 @@ def _inspect_first_party_wheel(wheel: Path, source: dict[str, bytes]) -> dict:
     }
 
 
-def _requirements(vendor_hashes: dict[str, str], product_sha: str) -> str:
-    if (type(product_sha) is not str or
-            re.fullmatch("[0-9a-f]{64}", product_sha) is None):
+def _requirements(vendor_hashes: dict[str, str], product_sha: str,
+                  *, version: str = FIRST_PARTY_VERSION) -> str:
+    if (type(version) is not str
+            or version not in (FIRST_PARTY_VERSION, "0.1.1")
+            or type(product_sha) is not str
+            or re.fullmatch("[0-9a-f]{64}", product_sha) is None):
         raise OfflineFullProductError("first-party product wheel digest not attested")
     return (dependency._requirements_lines(vendor_hashes) +
-            FIRST_PARTY_NAME + "==" + FIRST_PARTY_VERSION +
+            FIRST_PARTY_NAME + "==" + version +
             " --hash=sha256:" + product_sha + "\n")
 
 
