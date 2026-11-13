@@ -155,7 +155,8 @@ class PublicOnlyCapsuleUnitTests(unittest.TestCase):
         self.assertFalse(first["independent_upstream_source_attested"])
         self.assertFalse(first["snapshot_signed"])
         self.assertEqual(cap.search_capsule(
-            result, query="Python", limit=10)["total_matches"], 1)
+            result, query="Python", limit=10)["total_matches"], 2)
+        # W04 substring search matches Python itself and MCP python-sdk.
         self.assertEqual(cap.search_capsule(
             result, query="Git", limit=10,
             source_id="repo:git/git")["total_matches"], 1)
@@ -194,9 +195,9 @@ class PublicOnlyCapsuleUnitTests(unittest.TestCase):
             (root / cap.FILE).write_bytes(self.data)
             with self.assertRaises(ValueError):
                 cap.read_optional_capsule(root)
-            (root / cap.PIN).write_text(self.digest + "\n", encoding="ascii")
+            (root / cap.PIN).write_bytes((self.digest + "\n").encode("ascii"))
             self.assertEqual(cap.read_optional_capsule(root)["selected_count"], 5)
-            (root / cap.PIN).write_text("a"*64+"\n", encoding="ascii")
+            (root / cap.PIN).write_bytes(("a"*64+"\n").encode("ascii"))
             with self.assertRaises(ValueError):
                 cap.read_optional_capsule(root)
 
@@ -209,8 +210,8 @@ class PublicOnlyCapsuleRealHTTPTests(unittest.TestCase):
         (self.root / ".git").mkdir(parents=True)
         data = cap.build_capsule(synthetic_handoff())
         (self.root / cap.FILE).write_bytes(data)
-        (self.root / cap.PIN).write_text(sha256(data).hexdigest()+"\n",
-                                         encoding="ascii")
+        (self.root / cap.PIN).write_bytes(
+            (sha256(data).hexdigest() + "\n").encode("ascii"))
         self.server = HTTPServer(("127.0.0.1", 0), local.make_handler(self.root))
         thread = Thread(target=self.server.serve_forever, daemon=True)
         thread.start()
@@ -267,7 +268,7 @@ class PublicOnlyCapsuleRealHTTPTests(unittest.TestCase):
             with self.subTest(route=route):
                 observed, _, _ = self.request(route, method=method, host=host)
                 self.assertEqual(observed, code)
-        (self.root / cap.PIN).write_text("f"*64+"\n", encoding="ascii")
+        (self.root / cap.PIN).write_bytes(("f"*64+"\n").encode("ascii"))
         observed, body, _ = self.request("/local/library?q=Python")
         self.assertEqual(observed, 400)
         self.assertIn("FAIL_CLOSED", body)
