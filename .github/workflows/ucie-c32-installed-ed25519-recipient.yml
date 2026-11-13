@@ -1,0 +1,43 @@
+name: UCIE C3.2 Installed Native Ed25519 Windows Recipient
+
+on:
+  pull_request:
+    paths:
+      - 'src/ucie_miner/local_public_pr_recipient_import_v01.py'
+      - 'src/ucie_miner/local_public_pr_trusted_recipient_v01.py'
+      - 'src/ucie_miner/local_public_pr_owner_auth_v01.py'
+      - 'src/ucie_miner/local_public_pr_capsule_v01.py'
+      - 'tests/test_ucie_local_public_pr_recipient_import_v01.py'
+      - 'tests/runtime_ucie_c32_installed_crypto_recipient_v01.py'
+      - '.github/workflows/ucie-c32-installed-ed25519-recipient.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/ucie_miner/local_public_pr_recipient_import_v01.py'
+      - 'tests/runtime_ucie_c32_installed_crypto_recipient_v01.py'
+      - '.github/workflows/ucie-c32-installed-ed25519-recipient.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  installed-c32-native:
+    name: Win315 installed first-party wheel + real existing CI native Ed25519 + signed HTTP200/400
+    runs-on: windows-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.15'
+      - name: Install already-declared CI Ed25519 dependency and existing test backend
+        run: python -m pip install -r requirements.txt "setuptools>=68"
+      - name: Installed isolated first-party wheel with existing CI crypto provider
+        run: python -B tests/runtime_ucie_c32_installed_crypto_recipient_v01.py
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
+          PIP_NO_INDEX: '1'
+          UCIE_C32_INSTALLED_NATIVE_TEST_ONLY: '1'
