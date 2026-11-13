@@ -9,6 +9,11 @@ on:
       - 'tests/test_ucie_c2_bundled_openssl_advisory_v01.py'
       - 'docs/UCIE_C2_C3_OWNER_OPENSSL_RISK_AND_EXISTING_KEY_REAL_SIGNING_20261113.md'
       - 'src/ucie_miner/customer_private_entitlement_v01.py'
+      - 'src/ucie_miner/customer_c2_existing_owner_license_integrity_v01.py'
+      - 'src/ucie_miner/customer_c4_physical_windows_recipient_readonly_v01.py'
+      - 'tests/test_ucie_c2_existing_owner_license_integrity_v01.py'
+      - 'tests/test_ucie_c4_physical_windows_recipient_readonly_v01.py'
+      - 'docs/UCIE_C2_C4_OWNER_REAL_RECEIPT_AND_PHYSICAL_ACCEPTANCE_20261113.md'
       - 'src/ucie_miner/customer_private_offline_lifecycle_v01.py'
       - 'src/ucie_miner/customer_private_offline_bootstrap_v01.py'
       - 'tests/test_ucie_customer_private_entitlement_v01.py'
@@ -22,6 +27,11 @@ on:
     branches: [main]
     paths:
       - 'src/ucie_miner/customer_private_entitlement_v01.py'
+      - 'src/ucie_miner/customer_c2_existing_owner_license_integrity_v01.py'
+      - 'src/ucie_miner/customer_c4_physical_windows_recipient_readonly_v01.py'
+      - 'tests/test_ucie_c2_existing_owner_license_integrity_v01.py'
+      - 'tests/test_ucie_c4_physical_windows_recipient_readonly_v01.py'
+      - 'docs/UCIE_C2_C4_OWNER_REAL_RECEIPT_AND_PHYSICAL_ACCEPTANCE_20261113.md'
       - 'src/ucie_miner/customer_private_offline_lifecycle_v01.py'
       - 'src/ucie_miner/customer_private_offline_bootstrap_v01.py'
       - 'tests/runtime_ucie_b3_b4_clean_full_vendor_release_v01.py'
