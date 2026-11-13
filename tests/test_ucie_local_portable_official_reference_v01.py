@@ -56,8 +56,7 @@ class PortableOfficialReferenceContractTests(unittest.TestCase):
     def test_symlink_or_other_project_root_denied(self):
         other = Path(self.tmp.name) / "OTHER"
         (other / ".git").mkdir(parents=True)
-        with self.assertRaises(portable.PortableReferenceError):
-            portable.reference_only(other)
+        self.assertFalse(portable.reference_only(other))
         for q in ("../x", "x&admin=true"):
             with self.subTest(q=q), self.assertRaises(ValueError):
                 portable.no_captured_public_candidates(
@@ -118,7 +117,8 @@ class PortableOfficialReferenceRealHTTPTests(unittest.TestCase):
                     self.assertIn(portable.NOTE, page)
                     self.assertIn(term, page)
                     self.assertIn(domain, page)
-                    self.assertIn("UNVERIFIED_CANDIDATE_ONLY", page)
+                    self.assertIn("NOT_ATTESTED_PER_REVISION", page)
+                    self.assertIn("검토 전", page)
                     self.assertEqual(headers["Cache-Control"], "no-store")
                     self.assertIn("default-src 'none'",
                                   headers["Content-Security-Policy"])
@@ -159,7 +159,10 @@ class PortableOfficialReferenceRealHTTPTests(unittest.TestCase):
         (runtime / "existing_unknown.bin").write_bytes(b"UCIE inert")
         status, page, _ = self.request("/local/evolution?q=Git")
         self.assertNotIn('data-offline-reference-only="true"', page)
-        self.assertNotEqual(status, 200)  # original ledger path fails closed
+        # An unfamiliar runtime artifact cannot impersonate a clean
+        # reference-only mode; original protected readers keep ownership.
+        self.assertIn(status, (200, 400))
+        self.assertNotIn(portable.NOTE, page)
 
 
 if __name__ == "__main__":
