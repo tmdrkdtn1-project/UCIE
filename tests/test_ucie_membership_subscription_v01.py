@@ -51,6 +51,7 @@ class MembershipSignedAccessTests(unittest.TestCase):
             "period_start_utc":owner._stamp(self.start),
             "period_end_utc":owner._stamp(self.end),
             "grace_until_utc":owner._stamp(self.end),
+            "access_lease_expires_utc":owner._stamp(self.end),
         }
         data.update(updates)
         return data
@@ -118,6 +119,7 @@ class MembershipSignedAccessTests(unittest.TestCase):
             period_start_utc=owner._stamp(start),
             period_end_utc=owner._stamp(start.replace(year=2027)),
             grace_until_utc=owner._stamp(start.replace(year=2027)),
+            access_lease_expires_utc=owner._stamp(start+timedelta(days=35)),
             issued_utc=owner._stamp(start))
         self.assertEqual(
             self.verify(record_bytes=body,signature_bytes=sig,now=start+timedelta(days=210))["billing_interval"],
@@ -140,7 +142,8 @@ class MembershipSignedAccessTests(unittest.TestCase):
 
     def test_08_past_due_grace_library_only_then_expired(self):
         b,s=self.signed(billing_status="PAST_DUE",
-            grace_until_utc=owner._stamp(self.end+timedelta(days=3)))
+            grace_until_utc=owner._stamp(self.end+timedelta(days=3)),
+            access_lease_expires_utc=owner._stamp(self.end+timedelta(days=3)))
         r=self.verify(record_bytes=b,signature_bytes=s,now=self.end+timedelta(days=2))
         self.assertEqual(r["membership_phase"],"GRACE_READ_ONLY")
         self.assertTrue(member.route_access("/local/library",r))
@@ -233,7 +236,9 @@ class MembershipSignedAccessTests(unittest.TestCase):
             {"payment_receipt_sha256":"0"*64},
             {"billing_status":"CANCELED_BUT_STILL_ACTIVE"},
             {"renewal_sequence":True},
-            {"product_entitlement_min_serial":0}):
+            {"product_entitlement_min_serial":0},
+            {"access_lease_expires_utc":owner._stamp(self.end+timedelta(days=1))},
+            {"access_lease_expires_utc":owner._stamp(self.start)}):
             with self.subTest(change=change),self.assertRaises(ValueError):
                 member._record_checks(self.record(**change))
 
@@ -266,6 +271,38 @@ class MembershipSignedAccessTests(unittest.TestCase):
         self.assertFalse(report["customer_distribution_authorized"])
         self.assertFalse(report["automatic_customer_code_collection"])
         self.assertEqual(report["operating_database_writes"],0)
+
+
+    def test_24_annual_subscription_lease_ends_before_annual_payment(self):
+        start=datetime(2026,2,10,tzinfo=timezone.utc)
+        end=start.replace(year=2027)
+        lease=start+timedelta(days=35)
+        b,s=self.signed(billing_interval="annual",
+            period_start_utc=owner._stamp(start),
+            period_end_utc=owner._stamp(end),
+            grace_until_utc=owner._stamp(end),
+            issued_utc=owner._stamp(start),
+            access_lease_expires_utc=owner._stamp(lease))
+        r=self.verify(record_bytes=b,signature_bytes=s,now=lease)
+        self.assertEqual(r["membership_phase"],"LEASE_REFRESH_REQUIRED")
+        self.assertEqual(r["billing_interval"],"annual")
+        self.assertFalse(member.route_access("/local/library",r))
+        # A second owner review may issue a short lease in the SAME paid year
+        # without pretending the customer was charged again.
+        renewed=self.record(billing_interval="annual",
+            period_start_utc=owner._stamp(start),
+            period_end_utc=owner._stamp(end),
+            grace_until_utc=owner._stamp(end),
+            issued_utc=owner._stamp(start+timedelta(days=32)),
+            access_lease_expires_utc=owner._stamp(start+timedelta(days=67)),
+            renewal_sequence=2)
+        raw=product.canonical(renewed)
+        sig=member._sig(raw,self.private,
+            consent="OWNER_SIGN_UCIE_MEMBERSHIP_EXISTING_KEY_ONCE")
+        active=self.verify(record_bytes=raw,signature_bytes=sig,
+            min_renewal_sequence=2,now=start+timedelta(days=36))
+        self.assertEqual(active["membership_phase"],"ACTIVE")
+        self.assertTrue(active["offline_lease_must_be_refreshed_without_rebilling"])
 
 
 if __name__=="__main__":
