@@ -213,8 +213,18 @@ for label,product,version,serial in (
 root=scratch/"separate_disposable_customer"/life.RECIPIENT_NAME
 root.parent.mkdir()
 print("UCIE_STAGE_INSTALL_A_START",flush=True)
-a=life.install_or_update(root,bundles[0],python=Path(sys.executable),
- consent=life.CONSENT,**owner_args)
+try:
+ a=life.install_or_update(root,bundles[0],python=Path(sys.executable),
+  consent=life.CONSENT,**owner_args)
+except Exception as e:
+ # Only static first-party failure strings converted to stage labels.
+ tag=type(e).__name__.upper()
+ reason=(
+  str(e).upper().replace(" ","_")[:60]
+  if type(e).__name__ in ("OfflineFullProductError",
+                           "OfflineProductLifecycleError") else "NO_DETAIL")
+ print("UCIE_STAGE_INSTALL_A_FAILURE_"+tag+"_"+reason,flush=True)
+ raise
 assert a["previous_slot"] is None and a["real_offline_pip_installed"]
 assert root.joinpath(life.LAUNCHER_NAME).read_bytes()==life.LAUNCHER.encode("utf-8")
 print("UCIE_STAGE_INSTALL_A_PASS",flush=True)
@@ -267,8 +277,16 @@ finally:
  if p.poll() is None:
   p.kill();p.wait(timeout=5)
 print("UCIE_STAGE_INSTALL_B_START",flush=True)
-b=life.install_or_update(root,bundles[1],python=Path(sys.executable),
- consent=life.CONSENT,**owner_args)
+try:
+ b=life.install_or_update(root,bundles[1],python=Path(sys.executable),
+  consent=life.CONSENT,**owner_args)
+except Exception as e:
+ tag=type(e).__name__.upper()
+ reason=(str(e).upper().replace(" ","_")[:60]
+         if type(e).__name__ in ("OfflineFullProductError",
+                                  "OfflineProductLifecycleError") else "NO_DETAIL")
+ print("UCIE_STAGE_INSTALL_B_FAILURE_"+tag+"_"+reason,flush=True)
+ raise
 assert b["active_slot"]!=a["active_slot"]
 assert b["previous_slot"]==a["active_slot"]
 assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
@@ -545,7 +563,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
             errors="replace",timeout=300,check=False)
         if run.returncode!=0:
             stages=[line.strip() for line in run.stdout.splitlines()
-                    if re.fullmatch("UCIE_STAGE_[A-Z0-9_]{1,60}",line.strip())]
+                    if re.fullmatch("UCIE_STAGE_[A-Z0-9_]{1,150}",line.strip())]
             last_stage=stages[-1] if stages else "UCIE_STAGE_IMPORT_NOT_COMPLETED"
             error_types=re.findall(r"\b([A-Za-z][A-Za-z0-9_]{0,60}(?:Error|Exception))(?=:|$)",
                                    run.stderr)
