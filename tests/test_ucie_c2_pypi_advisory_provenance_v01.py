@@ -211,6 +211,11 @@ class C2OfficialPinnedParserTests(unittest.TestCase):
         self.assertFalse(report["actual_owner_wheel_captured_and_crosschecked"])
         self.assertEqual(report["pypi_published_attestation_objects_observed"], 1)
         self.assertEqual(report["pypi_versioned_advisories_observed"], 0)
+        native=report["bundled_native_openssl_security_review"]
+        self.assertEqual(native["known_embedded_openssl_advisory_count"],5)
+        self.assertEqual(native["embedded_openssl_version_declared_by_upstream"],"4.0.3")
+        self.assertFalse(native["security_clearance_for_customer_distribution"])
+        self.assertFalse(native["customer_distribution_authorized"])
         self.assertFalse(report["signatures_cryptographically_independently_verified"])
         self.assertFalse(report["customer_distribution_authorized"])
         self.assertEqual({x["distribution"] for x in report["packages"]},
