@@ -65,7 +65,70 @@ else:
    finally:
     server.shutdown();thread.join(timeout=5)
     if thread.is_alive():raise ValueError("offline docs server remained running")
+  # Genuine installed wheel code consumes one newly generated PUBLIC-ONLY
+  # synthetic metadata capsule. No owner ledger, external code or vendor.
+  from ucie_miner.local_public_pr_capsule_v01 import (
+   FILE as CAP_FILE,PIN as CAP_PIN,build_capsule,inspect_capsule,RECEIVER_STATUS
+  )
+  from hashlib import sha256
+  from ucie_miner.public_discovery import SOURCE_SKILL
+  synthetic={
+   "schema":"UCIE_PUBLIC_CANDIDATE_VERIFICATION_HANDOFF_V1",
+   "status":"LINKED_UNVERIFIED_NO_GO",
+   "source_revisions":1,"linked_revisions":1,"pending_source_revisions":0,
+   "auto_promoted":False,"production_approved":False,"deploy_allowed":False,
+   "tasks":[{
+    "source":"git/git","reference":"pr:45984:"+("c"*40),
+    "pattern_code":"GIT_PORCELAIN_SAFE",
+    "skill_id":SOURCE_SKILL["git/git"],"evidence_sha256":"c"*64,
+    "candidate_id_sha256":"d"*64,"stage6_candidate":None,
+    "status":"UNVERIFIED_CANDIDATE_ONLY","approval":False,
+    "blocking_reasons":["VERIFICATION_NOT_PERFORMED"]
+   }]
+  }
+  payload=build_capsule(synthetic)
+  digest=sha256(payload).hexdigest()
+  check=inspect_capsule(payload,digest)
+  if check["selected_count"]!=1 or check["signature_verified"] is not False:
+   raise ValueError("synthetic capsule did not remain unapproved")
+  (root/CAP_FILE).write_bytes(payload)
+  (root/CAP_PIN).write_bytes((digest+"\\n").encode("ascii"))
+  imported_routes=(
+   "/local/library?q=Git","/local/evolution?q=Git","/local/error?q=Git")
+  with LOCAL_SERVER_CLASS(("127.0.0.1",0),make_handler(root)) as server:
+   thread=Thread(target=server.serve_forever,daemon=True);thread.start()
+   try:
+    for route in imported_routes:
+     with closing(HTTPConnection("127.0.0.1",server.server_port,timeout=6)) as c:
+      c.request("GET",route,headers={"Host":"127.0.0.1:"+str(server.server_port)})
+      response=c.getresponse();page=response.read(400001).decode("utf-8","replace")
+      if (response.status!=200 or "github.com/git/git/pull/45984" not in page
+          or 'data-public-snapshot-unsigned="true"' not in page
+          or "독립 출처 확인 전 검토 보류" not in page
+          or "개선 방향 살펴보기<span" in page):
+       raise ValueError("installed unsigned public PR metadata page rejected")
+    from urllib.parse import quote
+    first=check["items"][0]["library_item_id"]
+    with closing(HTTPConnection("127.0.0.1",server.server_port,timeout=6)) as c:
+     c.request("GET","/local/review?q=Git&id="+quote(first,safe=""),
+               headers={"Host":"127.0.0.1:"+str(server.server_port)})
+     response=c.getresponse();response.read(4096)
+     if response.status!=400:
+      raise ValueError("unsigned imported PR accepted as verified owner review")
+    (root/CAP_PIN).write_bytes(("f"*64+"\\n").encode("ascii"))
+    with closing(HTTPConnection("127.0.0.1",server.server_port,timeout=6)) as c:
+     c.request("GET","/local/library?q=Git",
+               headers={"Host":"127.0.0.1:"+str(server.server_port)})
+     response=c.getresponse();response.read(4096)
+     if response.status!=400:
+      raise ValueError("tampered unsigned PR metadata accepted")
+   finally:
+    server.shutdown();thread.join(timeout=5)
+    if thread.is_alive():raise ValueError("public capsule server did not shut down")
   print(json.dumps({"status":"V04_LOCALHOST_HTTP_PASS","ui":result,
+                    "installed_synthetic_public_PR_capsule_routes":len(imported_routes),
+                    "installed_unsigned_PR_review_denied":True,
+                    "installed_corrupt_public_capsule_denied":True,
                     "installed_offline_reference_routes_verified":len(routes),
                     "offline_reference_status":REF_STATUS,
                     "installed_no_public_pr_database":True,
@@ -157,7 +220,10 @@ def run(root: Path, env: dict) -> dict:
             raise InstalledUIError("UI_BLOCKER_" + str(ui_result.get("status"))[:40]
                                    + "_MISSING_" + missing)
         ui = full._check_ui(json.dumps(ui_result["ui"], sort_keys=True))
-        if (ui_result.get("installed_offline_reference_routes_verified") != 8
+        if (ui_result.get("installed_synthetic_public_PR_capsule_routes") != 3
+                or ui_result.get("installed_unsigned_PR_review_denied") is not True
+                or ui_result.get("installed_corrupt_public_capsule_denied") is not True
+                or ui_result.get("installed_offline_reference_routes_verified") != 8
                 or ui_result.get("offline_reference_status")
                     != "OFFICIAL_DOCUMENT_REFERENCES_ONLY_NO_CAPTURED_PR_LEDGER_NO_GO"
                 or ui_result.get("installed_no_public_pr_database") is not True
@@ -175,6 +241,9 @@ def run(root: Path, env: dict) -> dict:
             "installed_four_pillar_uci_synthetic": True,
             "installed_V04_real_127_0_0_1_GET_routes": 5,
             "installed_offline_official_reference_HTTP_GET_routes": 8,
+            "installed_synthetic_public_PR_capsule_GET_routes": 3,
+            "installed_unsigned_public_PR_review_denied": True,
+            "installed_tampered_public_PR_capsule_denied": True,
             "installed_public_PR_captured_database_present": False,
             "installed_offline_PR_page2_denied": True,
             "installed_V04_real_POST_denied": True,

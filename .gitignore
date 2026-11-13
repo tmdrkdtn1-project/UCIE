@@ -38,3 +38,6 @@ backups/
 secrets/
 credentials/
 *.token
+# Owner-local public metadata transfer receipts (never accidentally commit)
+.ucie_b2_public_pr_metadata_v01.json
+.ucie_b2_public_pr_metadata_v01.sha256

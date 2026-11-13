@@ -99,8 +99,15 @@ def _search(root: Path, query: str, *, limit: int = PAGE_SIZE,
         reference_only, no_captured_public_candidates,
     )
     if reference_only(root):
-        # Empty clean install: existing first-party official refs may appear,
-        # but no captured public PR revision can be claimed or auto-approved.
+        # Owner-selected PUBLIC-ONLY candidate metadata, NOT operating DB.
+        from .local_public_pr_capsule_v01 import (
+            read_optional_capsule, search_capsule,
+        )
+        portable = read_optional_capsule(root)
+        if portable is not None:
+            return search_capsule(
+                portable, query=query, limit=limit, offset=offset,
+                source_id=source_id)
         return no_captured_public_candidates(
             query=query, limit=limit, offset=offset, source_id=source_id)
     kwargs = {"query": query, "limit": limit,
@@ -209,7 +216,8 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
     """Display a clear customer summary; preserve inspectable evidence."""
     from .rule_candidates import GUIDANCE
 
-    if report.get("portable_reference_mode") is not None:
+    if (report.get("portable_reference_mode") is not None
+            and report.get("portable_snapshot_status") is None):
         from .local_portable_official_reference_v01 import STATUS as OFFLINE_STATUS
         if (report.get("portable_reference_mode") != OFFLINE_STATUS
                 or report.get("status") != "SOURCE_LINKAGE_INCOMPLETE_NO_GO"
@@ -236,6 +244,13 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
             '<p>다른 기술명이나 오류 키워드로 다시 검색해 보세요.</p>'
             '</section>'
         )
+    imported_unsigned = report.get("portable_snapshot_status") is not None
+    if imported_unsigned:
+        from .local_public_pr_capsule_v01 import RECEIVER_STATUS
+        if (report.get("portable_snapshot_status") != RECEIVER_STATUS
+                or report.get("snapshot_signed") is not False
+                or report.get("independent_upstream_source_attested") is not False):
+            raise LocalProductError("unsigned portable public PR cannot be approved")
     output = []
     for row in rows:
         url = row["public_url"]
@@ -262,8 +277,10 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
             '<p class="customer-note">공개된 기술 변경을 바탕으로 정리한 참고 사례입니다.</p>'
             '</div><span class="record-stamp">검토 전</span></header>'
             '<div class="evidence-actions">'
-            '<a href="' + target + '">개선 방향 살펴보기'
-            '<span aria-hidden="true"> →</span></a>'
+            + ('<span>이식된 공개 후보 · 독립 출처 확인 전 검토 보류</span>'
+               if imported_unsigned else
+               '<a href="' + target + '">개선 방향 살펴보기'
+               '<span aria-hidden="true"> →</span></a>') +
             '<a href="' + _e(url) + '" target="_blank"'
             ' rel="noopener noreferrer">원문 보기 ↗</a>'
             '</div>'
@@ -380,7 +397,22 @@ def _paged_evidence(root: Path, query: str, *, page: int,
     navigation = (
         '<section class="pager-box"><nav class="pagination" aria-label="공개 근거 검색 페이지">'
         + ' · '.join(links) + '</nav></section>' if links else '')
-    return (recipe_html + summary + _evidence_rows(
+    imported_notice = ""
+    if report.get("portable_snapshot_status") is not None:
+        from .local_public_pr_capsule_v01 import RECEIVER_STATUS
+        if (report.get("portable_snapshot_status") != RECEIVER_STATUS
+                or report.get("snapshot_signed") is not False
+                or report.get("independent_upstream_source_attested") is not False):
+            raise LocalProductError("portable public snapshot not independently trusted")
+        imported_notice = (
+            '<section class="workbench-note" data-public-snapshot-unsigned="true">'
+            '<h2>별도로 이식된 공개 후보 · 서명·독립 출처 확인 전</h2>'
+            '<p>기존 운영 원장은 여기에 복사되지 않았습니다. '
+            '공개 PR 주소와 검토 전 분류를 조회할 수 있지만, '
+            '파일 해시 일치는 소유자 서명이나 원본 변경 검증이 아닙니다. '
+            '자동 규칙 반영·고객 배포·독립 수정 승인 없음.</p></section>'
+        )
+    return (recipe_html + imported_notice + summary + _evidence_rows(
         report, guidance=guidance, query=query, page=page, route=route,
         source_filter=source_filter)
         + navigation)
@@ -571,8 +603,9 @@ def _review(root: Path, raw: str) -> str:
     if source_filter:
         kwargs["source_id"] = "repo:" + source_filter
     search = _search(root, term, **kwargs)
-    if search["status"] != "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO":
-        raise LocalProductError("source provenance unavailable for review")
+    if (search["status"] != "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO"
+            or search.get("portable_snapshot_status") is not None):
+        raise LocalProductError("portable candidate cannot enter owner verified review")
     matches = [
         row for row in search["items"]
         if row.get("library_item_id") == candidate_id
