@@ -190,7 +190,7 @@ def verify_staged_originals(folder: Path, expected: dict) -> dict:
     if expected != required:
         raise OriginalLicenseCopyError("bundle cannot claim legal clearance")
     return {"schema": SCHEMA, "status": STATUS, "original_license_files_verified": 5,
-            "source_hash_bound_to_existing_owner_receipt": True,
+            "source_review_sha_recorded_not_independently_authenticated": True,
             "openssl_embedded_notice_complete": False,
             "human_license_notice_approved": False,
             "customer_distribution_authorized": False}
