@@ -365,11 +365,14 @@ def _paged_evidence(root: Path, query: str, *, page: int,
 
 def _error(root: Path, raw: str) -> str:
     require_local_work("ERROR_PREVENTION")
-    args = _params(raw, ("q", "page"))
+    args = _params(raw, ("q", "page", "case"))
     term = args.get("q", "")
+    selected_case = args.get("case", "")
     if QUERY.fullmatch(term) is None:
         raise LocalProductError("invalid error search keyword")
     page = _page_number(args)
+    if selected_case and page != 1:
+        raise LocalProductError("triage selection requires first page")
     if not term and page != 1:
         raise LocalProductError("query required for non-initial error page")
     body = (
@@ -382,6 +385,86 @@ def _error(root: Path, raw: str) -> str:
         '<small>자료별 출처와 검토 상태를 확인하실 수 있습니다.</small>'
         '</section>'
     )
+    # A real user journey: symptom -> bounded non-executed checks ->
+    # official reference -> linked library. Never accept pasted user logs.
+    from .local_error_actionable_workflow_v01 import (
+        get_case as _triage_case, CASE_IDS as _triage_ids,
+        SCHEMA as _triage_schema, STATUS as _triage_status,
+    )
+    cards = tuple((key, _triage_case(key)) for key in _triage_ids)
+    body += (
+        '<section class="search-panel" aria-label="오류 유형별 안전 점검">'
+        '<h2>오류 유형 선택 · 안전한 확인 단계</h2>'
+        '<p>아래 유형 중 하나만 선택하세요. 코드·경로·토큰·실제 오류 로그를 '
+        '이 화면에 입력할 필요가 없습니다.</p>'
+        '<form action="/local/error" method="get">'
+        '<label>오류 유형 <select name="case">'
+        '<option value="">점검할 오류를 선택</option>'
+    )
+    for code, record in cards:
+        body += (
+            '<option value="' + _e(code) + '"'
+            + (' selected' if selected_case == code else '')
+            + '>' + _e(record["label"]) + '</option>'
+        )
+    body += (
+        '</select></label><button type="submit">확인 단계 보기</button></form>'
+        '<p>기술 안내일 뿐 자동 수정·외부 실행·독립 오류 검증이 아닙니다.</p>'
+        '</section>'
+    )
+    if selected_case:
+        try:
+            triage = _triage_case(selected_case)
+        except ValueError as exc:
+            raise LocalProductError("unknown safe error triage case") from exc
+        if (triage.get("schema") != _triage_schema
+                or triage.get("status") != _triage_status
+                or triage.get("case_id") != selected_case
+                or any(triage.get(flag) is not False for flag in (
+                    "commands_executed", "user_logs_or_files_read",
+                    "independent_fix_validated", "automatic_rule_promotion",
+                    "customer_distribution_authorized"))
+                or triage.get("network_requests") != 0
+                or triage.get("operating_database_writes") != 0
+                or len(triage["checks"]) != 2):
+            raise LocalProductError("unsafe unverified triage state")
+        body += (
+            '<section class="shelf-entry" data-safe-triage="true">'
+            '<span class="eyebrow">UCIE · 사람 검토용 점검</span>'
+            '<h2>' + _e(triage["label"]) + '</h2>'
+            '<p><strong>관측 가능한 증상:</strong> '
+            + _e(triage["symptom"]) + '</p>'
+            '<p><strong>가능한 원인:</strong> '
+            + _e(triage["cause"]) + '</p>'
+            '<h3>직접 확인할 안전한 명령 · 자동 실행 안 함</h3>'
+        )
+        for title, command, expected in triage["checks"]:
+            body += (
+                '<div class="shelf-entry"><h3>' + _e(title) + '</h3>'
+                '<pre><code>' + _e(command) + '</code></pre>'
+                '<p>확인 기준: ' + _e(expected) + '</p></div>'
+            )
+        body += (
+            '<p><strong>다음 작업:</strong> ' + _e(triage["safe_next"]) + '</p>'
+            '<p>공식 출처: <a target="_blank" rel="noopener noreferrer" href="'
+            + _e(triage["official_url"]) + '">'
+            + _e(triage["official_title"]) + '</a></p>'
+            '<p>근거 범위: ' + _e(triage["doc_scope"]) + '</p>'
+            '<p><a href="/local/library?q='
+            + quote(triage["library_query"], safe="") + '">'
+            'UCIE 도서관에서 같은 기술 검색 →</a></p>'
+        )
+        if selected_case == "mcp-prompts":
+            body += (
+                '<p><a href="/local/guide/mcp-prompts">'
+                'MCP 공식 소스 연결 검토 가이드 →</a>'
+                ' · <a href="/local/engine?purpose=MCP_PROMPTS_CONTRACT">'
+                'UCIE 자체 입력오류 계약 예제 →</a></p>'
+            )
+        body += (
+            '<p>원인·수정 효과는 개별 환경에서 확인해야 하며, '
+            '고객 출시·자동 승인 상태는 그대로 NO_GO입니다.</p></section>'
+        )
     # Guided bridge from a concrete public MCP error to its UCIE-authored
     # source-pinned review-only SkillBook. This is NOT an automatic fix,
     # generic MCP certification, rule promotion or a change to V04 styling.
