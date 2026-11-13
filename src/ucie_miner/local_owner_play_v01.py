@@ -140,7 +140,7 @@ def render_owner_play() -> str:
         )
     return (
         '<section class="section-heading" aria-labelledby="owner-play-title">'
-        '<span class="eyebrow">OWNER LOCAL · FOUR PILLARS</span>'
+        '<span class="eyebrow">FOUR PILLARS · EXPERIENCE</span>'
         '<h2 id="owner-play-title">내 PC에서 바로 사용해보기</h2>'
         '<p>네 가지 실제 UCIE 화면을 연결해 살펴보세요. '
         '결제·고객 설치·로그 업로드 없이 작동합니다.</p></section>'
