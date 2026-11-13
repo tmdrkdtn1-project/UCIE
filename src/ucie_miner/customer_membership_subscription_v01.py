@@ -26,6 +26,7 @@ DOMAIN = b"UCIE_MEMBERSHIP_SUBSCRIPTION_ACCESS_V01\x00"
 MAX_RECORD = 2700
 MAX_SIGNATURE = 1300
 MAX_GRACE_DAYS = 7
+MAX_OFFLINE_LEASE_DAYS = 35
 MAX_SEQUENCE = 2**31-1
 TIERS = {
     "standard": ("error_prevention","virtual_library_and_skillbooks"),
@@ -39,6 +40,7 @@ FIELDS = frozenset((
     "plan","billing_interval","billing_status","payment_receipt_sha256",
     "renewal_sequence","product_entitlement_min_serial",
     "issued_utc","period_start_utc","period_end_utc","grace_until_utc",
+    "access_lease_expires_utc",
 ))
 SIG_FIELDS = frozenset((
     "schema","scope","owner_key_id","algorithm","payload_sha256","signature_base64",
@@ -79,7 +81,7 @@ def _period_end(start:datetime, interval:str) -> datetime:
     return start.replace(year=year,month=month,day=day)
 
 
-def _record_checks(record:dict) -> tuple[datetime,datetime,datetime,datetime]:
+def _record_checks(record:dict) -> tuple[datetime,datetime,datetime,datetime,datetime]:
     if type(record) is not dict or set(record)!=FIELDS:
         raise MembershipError("unknown membership fields")
     if (record.get("schema")!=SCHEMA or record.get("scope")!=SCOPE
@@ -103,16 +105,20 @@ def _record_checks(record:dict) -> tuple[datetime,datetime,datetime,datetime]:
         end=owner._parse_stamp(record["period_end_utc"])
         grace=owner._parse_stamp(record["grace_until_utc"])
         issued=owner._parse_stamp(record["issued_utc"])
+        lease=owner._parse_stamp(record["access_lease_expires_utc"])
     except (owner.OwnerMetadataAuthError,ValueError,TypeError) as exc:
         raise MembershipError("invalid canonical membership UTC timestamps") from exc
     if (_period_end(start,record["billing_interval"])!=end
-            or issued>end+timedelta(days=1)
+            or issued>grace+timedelta(days=1)
             or issued>start+timedelta(days=40)
             or grace<end
             or grace>end+timedelta(days=MAX_GRACE_DAYS)
-            or record["billing_status"]!="PAST_DUE" and grace!=end):
-        raise MembershipError("membership period, grace or invoice dates contradictory")
-    return issued,start,end,grace
+            or record["billing_status"]!="PAST_DUE" and grace!=end
+            or lease<=issued
+            or lease>issued+timedelta(days=MAX_OFFLINE_LEASE_DAYS)
+            or lease>grace):
+        raise MembershipError("membership period, grace or short offline access lease invalid")
+    return issued,start,end,grace,lease
 
 
 def _sig(record_bytes:bytes, private:object, *, consent:str) -> bytes:
@@ -167,7 +173,7 @@ def verify_membership(
     try:
         raw=product._decode(record_bytes,maximum=MAX_RECORD)
         sig=product._decode(signature_bytes,maximum=MAX_SIGNATURE)
-        issued,start,end,grace=_record_checks(raw)
+        issued,start,end,grace,lease=_record_checks(raw)
         current=owner._utc(now)
         if (set(sig)!=SIG_FIELDS or sig["schema"]!=SIG_SCHEMA
                 or sig["scope"]!=SCOPE or sig["algorithm"]!="Ed25519"
@@ -214,9 +220,16 @@ def verify_membership(
     elif current<end:
         phase="ENDING" if state=="CANCEL_AT_PERIOD_END" else "ACTIVE"
         allowed=TIERS[raw["plan"]]
-    elif state=="PAST_DUE" and current<grace:
-        phase="GRACE_READ_ONLY"
-        allowed=("virtual_library_and_skillbooks",)
+    elif current>=end:
+        if state=="PAST_DUE" and current<grace and current<lease:
+            phase="GRACE_READ_ONLY"
+            allowed=("virtual_library_and_skillbooks",)
+        else:
+            phase="EXPIRED"
+            allowed=()
+    elif current>=lease:
+        phase="LEASE_REFRESH_REQUIRED"
+        allowed=()
     else:
         phase="EXPIRED"
         allowed=()
@@ -232,6 +245,8 @@ def verify_membership(
         "renewal_sequence":raw["renewal_sequence"],
         "paid_period_ends_utc":raw["period_end_utc"],
         "grace_until_utc":raw["grace_until_utc"],
+        "offline_access_lease_expires_utc":raw["access_lease_expires_utc"],
+        "offline_lease_must_be_refreshed_without_rebilling":True,
         "cancel_at_period_end":state=="CANCEL_AT_PERIOD_END",
         "allowed_pillars":list(allowed),
         "seat_or_recipient_bound_to_signed_product":True,
