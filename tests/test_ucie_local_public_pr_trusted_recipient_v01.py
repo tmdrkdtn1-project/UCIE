@@ -144,6 +144,12 @@ class C31EphemeralEd25519Tests(unittest.TestCase):
         self.assertFalse(receipt["human_approved"])
 
     def test_local_readonly_browser_and_existing_unsigned_gate(self):
+        # Pure rendering acceptance first: preserve exact exception diagnostic
+        # for synthetic fixtures, rather than hiding it behind HTTP400.
+        html_direct = receiver.render_signed_public_review(
+            self.root, expected_owner_key_id=self.keyid, min_serial=7,
+            raw_query="q=Git")
+        self.assertIn('data-c31-owner-signature="verified"', html_direct)
         code, html = self.request("/local/trusted-public?q=Git")
         self.assertEqual(code, 200)
         self.assertIn('data-c31-owner-signature="verified"', html)
