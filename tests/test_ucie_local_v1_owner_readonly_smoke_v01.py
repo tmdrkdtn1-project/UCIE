@@ -43,7 +43,8 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
         self.assertIn("/skillbooks/", books)
         self.assertIn("미승인", books)
         error = app._error(root, "q=python")
-        self.assertIn("오류 예방", error)
+        # V04 visual label is intentionally "문제 예방"; the function name is internal.
+        self.assertIn("문제 예방", error)
         self.assertTrue("UNVERIFIED_CANDIDATE_ONLY" in error or
                         "출처 연결이 불완전" in error or
                         "기존 공개 근거가 없습니다" in error)
