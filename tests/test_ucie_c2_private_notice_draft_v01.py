@@ -109,7 +109,7 @@ class PrivateNoticeDraftTests(unittest.TestCase):
             from contextlib import redirect_stdout
             from io import StringIO
             output = StringIO()
-            with patch.object(draft.sys.stdin, "isatty", return_value=False), redirect_stdout(output):
+            with patch.object(draft.sys, "stdin", StringIO("")), redirect_stdout(output):
                 code = draft.main(["--owner-stage-private-review-only",
                                    "--expected-review-entries-sha256", pin])
             self.assertEqual(code, 2)
