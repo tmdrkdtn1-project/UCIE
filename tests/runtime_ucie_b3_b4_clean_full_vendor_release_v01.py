@@ -312,6 +312,53 @@ assert removed["removed_registered_slots"]==2
 assert root.is_dir() and list(root.iterdir())==[]
 assert not (root/"runtime").exists()
 assert not (root/".git").exists()
+# Standalone end-user bootstrap acceptance: only Python3.15 + the exact
+# four local wheels + independently pinned hashes and owner PUBLIC trust.
+# No prior UCIE first-party installation or PYTHONPATH inside verifier.
+print("UCIE_STAGE_BOOTSTRAP_STANDALONE_START",flush=True)
+fresh=scratch/"third_independent_clean_windows_receiver"/life.RECIPIENT_NAME
+fresh.parent.mkdir()
+script=bundles[0]/life.BOOTSTRAP_NAME
+base=[
+ str(Path(sys.executable)),"-I","-B",str(script),
+ "--bundle",str(bundles[0]),"--recipient-root",str(fresh),
+ "--product-version","0.1.0",
+ "--expected-product-sha256",sha256(product_A.read_bytes()).hexdigest(),
+ "--expected-cryptography-sha256",vendor_hashes["cryptography"],
+ "--expected-cffi-sha256",vendor_hashes["cffi"],
+ "--expected-pycparser-sha256",vendor_hashes["pycparser"],
+ "--public-trust-pem",str(trust),
+ "--expected-owner-key-id",keyid,
+ "--recipient-token-sha256",recipient,
+ "--rights-packet-sha256",rights,
+ "--min-serial","60","--consent",life.CONSENT
+]
+bad=list(base)
+at=bad.index("--expected-cffi-sha256")+1
+bad[at]="f"*64
+denied=subprocess.run(bad,capture_output=True,text=True,timeout=60,
+                      env=dict(os.environ,PYTHONDONTWRITEBYTECODE="1"))
+if denied.returncode==0 or fresh.exists():
+ raise AssertionError("untrusted vendor SHA reached recipient install")
+bootstrap=subprocess.run(base,capture_output=True,text=True,timeout=300,
+                         env=dict(os.environ,PYTHONDONTWRITEBYTECODE="1"))
+if bootstrap.returncode!=0:
+ print("UCIE_STAGE_BOOTSTRAP_FAILURE_RETURN_"+str(bootstrap.returncode),flush=True)
+ raise AssertionError("standalone authenticated offline bootstrap failed")
+boot_result=json.loads(bootstrap.stdout.strip().splitlines()[-1])
+if (boot_result.get("status")!=
+    "UCIE_PRIVATE_BOOTSTRAP_TECHNICAL_INSTALL_ONLY_CUSTOMER_NO_GO"
+    or boot_result.get("customer_distribution_authorized") is not False
+    or boot_result.get("installed_disposable_bootstrap_native_provider_removed") is not True):
+ raise AssertionError("standalone bootstrap false success")
+if life.verify_selected(fresh,**owner_args)["product_version"]!="0.1.0":
+ raise AssertionError("standalone bootstrap installed wrong version")
+if not (fresh/life.LAUNCHER_NAME).is_file():
+ raise AssertionError("real customer PowerShell launcher absent")
+life.remove_technical_install(fresh,consent=life.REMOVE_CONSENT)
+if list(fresh.iterdir()):
+ raise AssertionError("standalone customer uninstall left installed data")
+print("UCIE_STAGE_BOOTSTRAP_STANDALONE_PASS",flush=True)
 print(json.dumps({
  "status":"B3_B4_REAL_SIGNED_A_TO_B_TO_A_TO_B_WINDOWS_PRIVATE_SLOT_PASS",
  "product_versions":["0.1.0","0.1.1"],
@@ -325,6 +372,8 @@ print(json.dumps({
  "signed_serial_floor_blocks_stale_rollback":True,
  "real_backward_and_forward_pointer_switching":True,
  "real_private_product_slots_uninstalled":2,
+ "standalone_hash_pinned_python315_bootstrap_to_clean_recipient":True,
+ "pre_import_bad_vendor_sha_denied":True,
  "launcher_generated_with_zero_embedded_customer_ids_or_private_keys":True,
  "ephemeral_in_memory_ed25519_only":True,
  "real_owner_private_key_used":False,
@@ -578,6 +627,8 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
                 or slots.get("per_get_signed_recipient_http200_and_after_tamper_http403") is not True
                 or slots.get("signed_serial_floor_blocks_stale_rollback") is not True
                 or slots.get("real_private_product_slots_uninstalled") != 2
+                or slots.get("standalone_hash_pinned_python315_bootstrap_to_clean_recipient") is not True
+                or slots.get("pre_import_bad_vendor_sha_denied") is not True
                 or slots.get("customer_distribution_authorized") is not False):
             raise FullRecipientQAFailure("real independently signed private slot QA failed")
         ab._uninstall(child,scratch,safe_install)
