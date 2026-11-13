@@ -207,6 +207,7 @@ for label,product,version,serial in (
  assert not proof["customer_distribution_authorized"]
  bundles.append(release)
 root=scratch/"separate_disposable_customer"/life.RECIPIENT_NAME
+root.parent.mkdir()
 a=life.install_or_update(root,bundles[0],python=Path(sys.executable),
  consent=life.CONSENT,**owner_args)
 assert a["previous_slot"] is None and a["real_offline_pip_installed"]
