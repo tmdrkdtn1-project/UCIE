@@ -728,12 +728,15 @@ def serve_selected(
     class PrivateVerifiedHandler(parent):
         def do_GET(self):
             try:
-                verify_selected(
+                current=verify_selected(
                     recipient,public_pem=public_pem,
                     expected_owner_key_id=expected_owner_key_id,
                     expected_recipient_token_sha256=expected_recipient_token_sha256,
                     expected_rights_packet_sha256=expected_rights_packet_sha256,
                     min_serial=min_serial,now=datetime.now(timezone.utc))
+                if current["active_slot"]!=slot:
+                    raise OfflineProductLifecycleError(
+                        "stale served slot after signed update or rollback")
             except (OSError,TypeError,ValueError):
                 return self.reply(403,"UCIE_PRIVATE_ENTITLEMENT_REVOKED_NO_GO",
                                   "text/plain; charset=utf-8")
