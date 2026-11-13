@@ -74,6 +74,12 @@ def _decision_bytes(payload: bytes, *, independently_approved_sha256: str) -> di
             or data["customer_distribution_authorized"] is not False
             or any(data.get(k) is not True for k in REQUIRED_DECISION_TRUE)):
         raise ExistingOwnerSigningError("human approvals absent or security risk unresolved")
+    # The exact reviewed C1 pin cryptography==50.0.2 bundles OpenSSL 4.0.3.
+    # No new patched vendor version/ABI/SHA was independently pinned.
+    # A human checkbox must not falsely declare THIS wheel patched.
+    if data["security_disposition"]=="OFFICIAL_PATCHED_WHEEL_VERIFIED":
+        raise ExistingOwnerSigningError(
+            "existing fixed cryptography 50.0.2 wheel is not verified patched")
     return data
 
 
