@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 from tempfile import TemporaryDirectory
 
@@ -166,6 +167,7 @@ tests=unittest.defaultTestLoader.discover(
 executed=unittest.TextTestRunner(stream=io.StringIO()).run(tests)
 if executed.testsRun!=16 or executed.skipped or not executed.wasSuccessful():
  raise AssertionError("16 signed customer lifecycle tests skipped or failed")
+print("UCIE_STAGE_NATIVE_UNIT_PASS",flush=True)
 scratch=Path(sys.argv[1])
 product_A=Path(sys.argv[2])
 product_B=Path(sys.argv[3])
@@ -183,6 +185,7 @@ owner_args={
  "expected_recipient_token_sha256":recipient,
  "expected_rights_packet_sha256":rights,"min_serial":60}
 bundles=[]
+print("UCIE_STAGE_BUNDLE_START",flush=True)
 for label,product,version,serial in (
  ("A",product_A,"0.1.0",60),("B",product_B,"0.1.1",61)
 ):
@@ -206,12 +209,15 @@ for label,product,version,serial in (
  assert proof["real_ed25519_verified"] and proof["product_version"]==version
  assert not proof["customer_distribution_authorized"]
  bundles.append(release)
+ print("UCIE_STAGE_BUNDLE_"+label+"_PASS",flush=True)
 root=scratch/"separate_disposable_customer"/life.RECIPIENT_NAME
 root.parent.mkdir()
+print("UCIE_STAGE_INSTALL_A_START",flush=True)
 a=life.install_or_update(root,bundles[0],python=Path(sys.executable),
  consent=life.CONSENT,**owner_args)
 assert a["previous_slot"] is None and a["real_offline_pip_installed"]
 assert root.joinpath(life.LAUNCHER_NAME).read_bytes()==life.LAUNCHER.encode("utf-8")
+print("UCIE_STAGE_INSTALL_A_PASS",flush=True)
 check=life.verify_selected(root,**owner_args)
 assert check["product_version"]=="0.1.0"
 # Real version-0.1.0 active installed Python: no reuse of owner D:/UCIE.
@@ -225,6 +231,7 @@ cmd=[str(exe),"-I","-B","-m",
      "--public-trust-pem",str(trust),
      "--expected-owner-key-id",keyid,"--recipient-token-sha256",recipient,
      "--rights-packet-sha256",rights,"--min-serial","60","--port","0"]
+print("UCIE_STAGE_SERVE_A_START",flush=True)
 p=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                    text=True,encoding="utf-8",env=dict(os.environ,
                    PYTHONDONTWRITEBYTECODE="1"))
@@ -253,16 +260,19 @@ try:
  finally:
   sigfile.write_bytes(original)
  assert get("/local")[0]==200
+ print("UCIE_STAGE_SIGNED_HTTP_PASS",flush=True)
 finally:
  p.terminate()
  p.wait(timeout=10)
  if p.poll() is None:
   p.kill();p.wait(timeout=5)
+print("UCIE_STAGE_INSTALL_B_START",flush=True)
 b=life.install_or_update(root,bundles[1],python=Path(sys.executable),
  consent=life.CONSENT,**owner_args)
 assert b["active_slot"]!=a["active_slot"]
 assert b["previous_slot"]==a["active_slot"]
 assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
+print("UCIE_STAGE_INSTALL_B_PASS",flush=True)
 # Replay floor independent of signed payload blocks legacy rollback.
 try:
  life.rollback(root,consent=life.ROLLBACK_CONSENT,
@@ -271,12 +281,14 @@ try:
 except ValueError:
  pass
 assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
+print("UCIE_STAGE_ROLLBACK_START",flush=True)
 rollback=life.rollback(root,consent=life.ROLLBACK_CONSENT,**owner_args)
 assert rollback["active_slot"]==a["active_slot"]
 assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.0"
 # Switching back to signed B remains allowed with the same independent pin.
 life.rollback(root,consent=life.ROLLBACK_CONSENT,**owner_args)
 assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
+print("UCIE_STAGE_REMOVE_START",flush=True)
 removed=life.remove_technical_install(root,consent=life.REMOVE_CONSENT)
 assert removed["removed_registered_slots"]==2
 assert root.is_dir() and list(root.iterdir())==[]
@@ -521,12 +533,25 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         if (sha256(product_A.read_bytes()).hexdigest()
                 ==sha256(product_B.read_bytes()).hexdigest()):
             raise FullRecipientQAFailure("A and B product sources not distinct")
-        slots=json.loads(full._run([
+        # Bounded CI-only execution with private-key-safe stage-class diagnostics.
+        # full._run normally hides failing child stdout/stderr, so a genuine
+        # regression could not be fixed without observing this fixed marker.
+        run=subprocess.run([
             str(child),"-I","-B","-c",PRIVATE_SLOTS_CHILD,
             str(scratch),str(product_A),str(product_B),str(vendor_dir),
             json.dumps(hashes,sort_keys=True),str(root/"tests")],
-            scratch,safe_install,
-            "real signed A0.1.0/B0.1.1 offline private recipient slots"))
+            cwd=scratch,env=safe_install,stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,text=True,encoding="utf-8",
+            errors="replace",timeout=300,check=False)
+        if run.returncode!=0:
+            stages=[line.strip() for line in run.stdout.splitlines()
+                    if re.fullmatch("UCIE_STAGE_[A-Z0-9_]{1,60}",line.strip())]
+            last_stage=stages[-1] if stages else "UCIE_STAGE_IMPORT_NOT_COMPLETED"
+            error_types=re.findall(r"\\b([A-Za-z][A-Za-z0-9_]{0,60}(?:Error|Exception))(?=:|$)",
+                                   run.stderr)
+            last_error=error_types[-1] if error_types else "UnhandledChild"
+            raise FullRecipientQAFailure("technical signed slots "+last_stage+" "+last_error)
+        slots=json.loads(run.stdout.strip().splitlines()[-1])
         if (slots.get("status") !=
                 "B3_B4_REAL_SIGNED_A_TO_B_TO_A_TO_B_WINDOWS_PRIVATE_SLOT_PASS"
                 or slots.get("installed_lifecycle_unit_cases_executed")!=16
