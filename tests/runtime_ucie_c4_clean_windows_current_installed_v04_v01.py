@@ -136,11 +136,29 @@ else:
    finally:
     server.shutdown();thread.join(timeout=5)
     if thread.is_alive():raise ValueError("public capsule server did not shut down")
+  # C3.1 new installed module MUST be importable without cryptography.
+  # Absent independent trusted PEM must fail closed on its explicit local route.
+  from ucie_miner.local_public_pr_trusted_recipient_v01 import make_trusted_handler
+  with LOCAL_SERVER_CLASS(("127.0.0.1",0),make_trusted_handler(
+       root,expected_owner_key_id="a"*32,min_serial=1)) as verified_server:
+   verified_thread=Thread(target=verified_server.serve_forever,daemon=True)
+   verified_thread.start()
+   try:
+    with closing(HTTPConnection("127.0.0.1",verified_server.server_port,timeout=6)) as c:
+     c.request("GET","/local/trusted-public?q=Git",
+               headers={"Host":"127.0.0.1:"+str(verified_server.server_port)})
+     response=c.getresponse();text=response.read(4096).decode("utf-8","replace")
+     if response.status!=400 or "UCIE_C31_TRUST_FAIL_CLOSED_NO_GO" not in text:
+      raise ValueError("unprovisioned C3.1 installed route did not fail closed")
+   finally:
+    verified_server.shutdown();verified_thread.join(timeout=5)
+    if verified_thread.is_alive():raise ValueError("C3.1 installed HTTP server leaked")
   print(json.dumps({"status":"V04_LOCALHOST_HTTP_PASS","ui":result,
                     "installed_synthetic_public_PR_capsule_routes":len(imported_routes),
                     "installed_unsigned_PR_review_denied":True,
                     "installed_corrupt_public_capsule_denied":True,
                     "installed_untrusted_signed_sidecar_denied":True,
+                    "installed_c31_unprovisioned_readonly_HTTP400":True,
                     "installed_offline_reference_routes_verified":len(routes),
                     "offline_reference_status":REF_STATUS,
                     "installed_no_public_pr_database":True,
