@@ -30,6 +30,7 @@ from threading import Thread
 from . import customer_full_product_offline_rehearsal_v01 as full
 from . import customer_offline_dependency_gate_v01 as wheel_gate
 from . import customer_private_entitlement_v01 as entitlement
+from . import customer_c2_license_copy_bundle_v01 as c2_license_copy
 from . import customer_owner_wheelhouse_acquire_v01 as vendor
 from .customer_staging_v01 import PILLARS
 
@@ -243,7 +244,9 @@ def _sbom(entries: list[dict], product_hash: str) -> dict:
 
 
 def build_private_qa_bundle(root: Path, product: Path, vendors: Path,
-                            record_bytes: bytes, signature_bytes: bytes) -> dict:
+                            record_bytes: bytes, signature_bytes: bytes,
+                            *, existing_owner_license_packet: Path | None = None,
+                            expected_owner_review_sha256: str | None = None) -> dict:
     """Exclusive-create FOUR local wheels + SPDX + manifest, no network, NO_GO.
 
     This outputs technical QA bytes ONLY. Real vendor redistribution is not
@@ -271,6 +274,14 @@ def build_private_qa_bundle(root: Path, product: Path, vendors: Path,
             or signature.get("scope") != entitlement.SCOPE
             or record.get("four_pillars") != list(PILLARS)):
         raise OfflineProductLifecycleError("unbound candidate unsigned/invalid content")
+    if (existing_owner_license_packet is None) != (expected_owner_review_sha256 is None):
+        raise OfflineProductLifecycleError("existing owner LICENSE packet and independent SHA both required")
+    original_license_copies = None
+    if existing_owner_license_packet is not None:
+        # Read only existing, independently SHA-verified five originals.
+        # No new wheel extraction, internet, signing, or license approval.
+        original_license_copies = c2_license_copy.prepare_originals(
+            existing_owner_license_packet, independent_sha256=expected_owner_review_sha256)
     root.mkdir()
     wheel_out = root/"wheels"
     wheel_out.mkdir()
@@ -291,6 +302,10 @@ def build_private_qa_bundle(root: Path, product: Path, vendors: Path,
     (root/BOOTSTRAP_NAME).write_bytes(bootstrap)
     (root/"entitlement.json").write_bytes(record_bytes)
     (root/"entitlement.sig.json").write_bytes(signature_bytes)
+    original_license_appendix = None
+    if original_license_copies is not None:
+        original_license_appendix = c2_license_copy.stage_originals_into_technical_bundle(
+            root, original_license_copies, expected_owner_review_sha256)
     manifest = {
         "schema": BUNDLE_SCHEMA,
         "status": "TECHNICAL_CANDIDATE_NOT_APPROVED_FOR_CUSTOMER_DISTRIBUTION",
@@ -304,6 +319,8 @@ def build_private_qa_bundle(root: Path, product: Path, vendors: Path,
         "customer_distribution_authorized": False,
         "four_pillars": list(PILLARS),
     }
+    if original_license_appendix is not None:
+        manifest["original_license_qa_review"] = original_license_appendix
     (root/"manifest.json").write_bytes(_canon(manifest))
     return {
         "schema": SCHEMA,
@@ -323,13 +340,19 @@ def verify_private_qa_bundle(
 ) -> dict:
     """Verify every wheel, license binding and fixed SBOM before installation/launch."""
     _bundle_root(root)
-    if {f.name for f in root.iterdir()} != {
+    manifest = _parse(_read(root/"manifest.json", MAX_MANIFEST), MAX_MANIFEST)
+    allowed_root = {
         "wheels", "sbom.spdx.json", "NOTICE_REVIEW_REQUIRED.txt",
         BOOTSTRAP_NAME,
         "entitlement.json", "entitlement.sig.json", "manifest.json"
-    }:
+    }
+    if "original_license_qa_review" in manifest:
+        allowed_root.add(c2_license_copy.DIR)
+    if {f.name for f in root.iterdir()} != allowed_root:
         raise OfflineProductLifecycleError("unexpected package root file")
-    manifest = _parse(_read(root/"manifest.json", MAX_MANIFEST), MAX_MANIFEST)
+    if "original_license_qa_review" in manifest:
+        c2_license_copy.verify_staged_originals(
+            root/c2_license_copy.DIR, manifest["original_license_qa_review"])
     entries, product, vendor_hashes = _inventory(root/"wheels")
     if (manifest.get("schema") != BUNDLE_SCHEMA
             or manifest.get("status") !=
