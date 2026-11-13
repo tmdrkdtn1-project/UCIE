@@ -265,6 +265,10 @@ def route_access(route:str,report:dict) -> bool:
     if report.get("owner_membership_signature_verified") is not True:
         return False
     phase=report.get("membership_phase")
+    # Signed member may view status/renewal guidance even AFTER expiry
+    # or owner revocation; no paid pillar is unlocked by this endpoint.
+    if route=="/local/membership":
+        return True
     if phase=="GRACE_READ_ONLY":
         # No SkillBook run, source review, code execution or evolution during
         # payment grace. The existing library listing remains accessible.
