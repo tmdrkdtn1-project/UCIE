@@ -218,18 +218,15 @@ def verify_membership(
         phase="NOT_STARTED"
         allowed=()
     elif current<end:
-        phase="ENDING" if state=="CANCEL_AT_PERIOD_END" else "ACTIVE"
-        allowed=TIERS[raw["plan"]]
-    elif current>=end:
-        if state=="PAST_DUE" and current<grace and current<lease:
-            phase="GRACE_READ_ONLY"
-            allowed=("virtual_library_and_skillbooks",)
-        else:
-            phase="EXPIRED"
+        if current>=lease:
+            phase="LEASE_REFRESH_REQUIRED"
             allowed=()
-    elif current>=lease:
-        phase="LEASE_REFRESH_REQUIRED"
-        allowed=()
+        else:
+            phase="ENDING" if state=="CANCEL_AT_PERIOD_END" else "ACTIVE"
+            allowed=TIERS[raw["plan"]]
+    elif state=="PAST_DUE" and current<grace and current<lease:
+        phase="GRACE_READ_ONLY"
+        allowed=("virtual_library_and_skillbooks",)
     else:
         phase="EXPIRED"
         allowed=()
