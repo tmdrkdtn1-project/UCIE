@@ -41,3 +41,5 @@ credentials/
 # Owner-local public metadata transfer receipts (never accidentally commit)
 .ucie_b2_public_pr_metadata_v01.json
 .ucie_b2_public_pr_metadata_v01.sha256
+# Owner C3 detached attestation is never a tracked credential or release
+.ucie_c3_public_pr_owner_attestation_v01.json
