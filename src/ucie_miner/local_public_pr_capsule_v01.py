@@ -260,7 +260,7 @@ def inspect_capsule(data: bytes, expected_sha256: str) -> dict:
 
 
 def _root(root: Path) -> Path:
-    if (type(root) is not Path or root.name.casefold() != "ucie"
+    if (not isinstance(root, Path) or root.name.casefold() != "ucie"
             or root.is_symlink() or not root.is_dir()
             or (root / ".git").is_symlink() or not (root / ".git").is_dir()):
         raise PublicCapsuleError("dedicated UCIE checkout root required")
