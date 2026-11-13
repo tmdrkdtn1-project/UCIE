@@ -232,6 +232,20 @@ class PublicOnlyCapsuleRealHTTPTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_direct_backend_search_preserves_snapshot_marker(self):
+        report = local._search(self.root, "Python", limit=10)
+        self.assertEqual(report["portable_snapshot_status"], cap.RECEIVER_STATUS)
+        self.assertEqual(report["status"],
+                         "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO")
+        self.assertEqual(report["network_requests"], 0)
+        self.assertEqual(report["operating_database_writes"], 0)
+        # Call the same page rendering functions directly for useful failure
+        # diagnostics without logging any user or private data.
+        for renderer in (local._library, local._evolution, local._error):
+            with self.subTest(renderer=renderer.__name__):
+                page = renderer(self.root, "q=Python")
+                self.assertIn('data-public-snapshot-unsigned="true"', page)
+
     def test_real_library_and_evolution_show_unverified_public_pr_and_docs(self):
         for endpoint in ("/local/library", "/local/evolution", "/local/error"):
             for word in ("Python", "Git", "MCP"):
