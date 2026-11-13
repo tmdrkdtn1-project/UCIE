@@ -137,7 +137,7 @@ owner_suite=unittest.defaultTestLoader.discover(
  pattern="test_ucie_customer_c3_owner_existing_key_product_sign_v01.py",
  top_level_dir=str(Path(sys.argv[1])))
 owner_result=unittest.TextTestRunner(stream=io.StringIO(),verbosity=1).run(owner_suite)
-if (owner_result.testsRun!=13 or len(owner_result.skipped)!=0
+if (owner_result.testsRun!=14 or len(owner_result.skipped)!=0
     or not owner_result.wasSuccessful()):
  raise AssertionError("existing-owner-key real C3 crypto verification suite was skipped or failed")
 print(json.dumps({"status":"C3_REAL_NATIVE_INSTALLED_ENTITLEMENT_TESTS_PASS",
@@ -546,7 +546,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
             scratch,safe_install,"all 18 real installed Ed25519 entitlement tests"))
         if (unit.get("status")!="C3_REAL_NATIVE_INSTALLED_ENTITLEMENT_TESTS_PASS"
                 or unit.get("executed")!=18 or unit.get("skipped")!=0
-                or unit.get("existing_owner_signer_tests_executed")!=13
+                or unit.get("existing_owner_signer_tests_executed")!=14
                 or unit.get("existing_owner_signer_tests_skipped")!=0
                 or unit.get("existing_owner_private_key_accessed") is not False
                 or unit.get("tests_from_installed_ucie_wheel") is not True):
@@ -682,7 +682,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         "real_signed_source_distinct_A_B_customer_slot_lifecycle_verified":True,
         "signed_anonymous_test_recipient_entitlement_verified_before_cli":True,
         "installed_genuine_crypto_customer_entitlement_unit_tests_18_executed_zero_skips":True,
-        "existing_owner_real_signer_unit_tests_13_executed_zero_skips":True,
+        "existing_owner_real_signer_unit_tests_14_executed_zero_skips":True,
         "owner_real_private_key_accessed":False,
         "actual_owner_c1_captured_wheels_used":False,
         "actual_physical_owner_controlled_second_windows_recipient_accepted":False,
