@@ -81,6 +81,11 @@ class ExistingOwnerPrivateCustomerSigningTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             signer._decision_bytes(raw,independently_approved_sha256=pin)
 
+    def test_04b_claimed_patched_vendor_denied_under_actual_50_0_2_pin(self):
+        raw,pin=self.decision(security_disposition="OFFICIAL_PATCHED_WHEEL_VERIFIED")
+        with self.assertRaises(ValueError):
+            signer._decision_bytes(raw,independently_approved_sha256=pin)
+
     def test_05_duplicate_untrusted_decision_fields_denied(self):
         raw=b'{"schema":"a","schema":"b"}\n'
         with self.assertRaises(ValueError):
