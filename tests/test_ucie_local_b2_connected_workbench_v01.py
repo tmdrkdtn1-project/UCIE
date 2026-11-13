@@ -196,10 +196,16 @@ class B2RealLocalLoopbackTests(unittest.TestCase):
                             self.assertNotIn(
                                 "customer_distribution_authorized=True", page)
                         else:
-                            self.assertEqual(status, 400,
-                                             "no local public catalog: " + route)
-                            self.assertEqual(
-                                page, "UCIE_LOCAL_V1_FAIL_CLOSED_NO_RELEASE")
+                            # Clean install has official UCIE-authored document
+                            # pointers, but NO captured public PR ledger.
+                            from ucie_miner.local_portable_official_reference_v01 import NOTE
+                            self.assertEqual(status, 200,
+                                             "official-reference route: " + route)
+                            self.assertIn('data-offline-reference-only="true"', page)
+                            self.assertIn(NOTE, page)
+                            self.assertIn("NOT_ATTESTED_PER_REVISION", page)
+                            self.assertNotIn(
+                                "customer_distribution_authorized=True", page)
                         self.assertEqual(headers["Cache-Control"], "no-store")
         finally:
             live.shutdown()
