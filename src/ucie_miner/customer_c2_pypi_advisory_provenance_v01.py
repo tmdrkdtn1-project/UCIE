@@ -211,7 +211,7 @@ def assess_pinned_release(name: str, version: str, filename: str,
                           digest: str, release: dict,
                           provenance: dict | None) -> dict:
     """Strict identity/SHA/advisory/provenance separation. Always customer NO_GO."""
-    if (name, version) not in PINNED or not _filename(name, version, filename)
+    if ((name, version) not in PINNED or not _filename(name, version, filename)
             or type(digest) is not str or SHA.fullmatch(digest) is None):
         raise C2PublicReviewError("untrusted wheel release identity or digest")
     info = release.get("info")
