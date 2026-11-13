@@ -254,6 +254,7 @@ def run(root: Path, env: dict) -> dict:
                 or ui_result.get("installed_unsigned_PR_review_denied") is not True
                 or ui_result.get("installed_corrupt_public_capsule_denied") is not True
                 or ui_result.get("installed_untrusted_signed_sidecar_denied") is not True
+                or ui_result.get("installed_c31_unprovisioned_readonly_HTTP400") is not True
                 or ui_result.get("installed_offline_reference_routes_verified") != 8
                 or ui_result.get("offline_reference_status")
                     != "OFFICIAL_DOCUMENT_REFERENCES_ONLY_NO_CAPTURED_PR_LEDGER_NO_GO"
@@ -276,6 +277,7 @@ def run(root: Path, env: dict) -> dict:
             "installed_unsigned_public_PR_review_denied": True,
             "installed_tampered_public_PR_capsule_denied": True,
             "installed_untrusted_C3_signed_sidecar_denied": True,
+            "installed_C31_unprovisioned_trust_HTTP400": True,
             "installed_public_PR_captured_database_present": False,
             "installed_offline_PR_page2_denied": True,
             "installed_V04_real_POST_denied": True,
