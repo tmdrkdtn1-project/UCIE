@@ -74,6 +74,15 @@ class B3B4CleanVendorRecipientPolicyTests(unittest.TestCase):
         self.assertNotIn("D:/UCIE/.build_keys", src)
         self.assertNotIn("D:\\UCIE\\.build_keys", src)
 
+    def test_embedded_native_windows_child_scripts_compile_before_vendor_download(self):
+        # Prevent an embedded multiline CI-script indentation regression from
+        # wasting a full native Windows wheel installation job.
+        for name in ("ENTITLEMENT_UNIT_CHILD","PRIVATE_SLOTS_CHILD","EXTRA_UI_CHILD"):
+            with self.subTest(child=name):
+                payload=getattr(full_ci,name)
+                self.assertIsInstance(payload,str)
+                compile(payload,name+".py","exec")
+
     def test_real_native_and_four_pillar_checks_reused_not_fabricated_flags(self):
         import inspect
         source = inspect.getsource(full_ci.run_clean_vendor_recipient)
