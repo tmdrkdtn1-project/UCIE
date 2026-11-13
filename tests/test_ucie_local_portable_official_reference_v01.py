@@ -113,12 +113,18 @@ class PortableOfficialReferenceRealHTTPTests(unittest.TestCase):
                 with self.subTest(route=route, word=word):
                     status, page, headers = self.request(route + "?q=" + word)
                     self.assertEqual(status, 200, page[:200])
-                    self.assertIn('data-offline-reference-only="true"', page)
-                    self.assertIn(portable.NOTE, page)
-                    self.assertIn(term, page)
-                    self.assertIn(domain, page)
-                    self.assertIn("NOT_ATTESTED_PER_REVISION", page)
-                    self.assertIn("검토 전", page)
+                    self.assertTrue('data-offline-reference-only="true"' in page,
+                                    route + ":" + word + ": portable badge missing")
+                    self.assertTrue(portable.NOTE in page,
+                                    route + ":" + word + ": limited evidence note missing")
+                    self.assertTrue(term in page,
+                                    route + ":" + word + ": " + term + " missing")
+                    self.assertTrue(domain in page,
+                                    route + ":" + word + ": " + domain + " missing")
+                    self.assertTrue("NOT_ATTESTED_PER_REVISION" in page,
+                                    route + ":" + word + ": unreviewed license not shown")
+                    self.assertTrue("검토 전" in page,
+                                    route + ":" + word + ": review state missing")
                     self.assertEqual(headers["Cache-Control"], "no-store")
                     self.assertIn("default-src 'none'",
                                   headers["Content-Security-Policy"])
@@ -137,7 +143,7 @@ class PortableOfficialReferenceRealHTTPTests(unittest.TestCase):
                 self.assertEqual(status, 200, path + ": " + body[:100])
         status, page, _ = self.request("/local/library?q=Git")
         self.assertEqual(status, 200)
-        self.assertIn("가이드", page)
+        self.assertTrue("가이드" in page, "existing SkillBook guide unavailable")
 
     def test_no_new_pages_post_or_forged_origin_and_invalid_source(self):
         for path, method, host, expected in (
