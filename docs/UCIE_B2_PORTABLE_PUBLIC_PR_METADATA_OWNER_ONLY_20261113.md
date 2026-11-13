@@ -18,12 +18,12 @@ PR #258 구현 기능은 UCIE 자체 공개 근거 Stage10/15 → Stage12의 완
 - 기존 prepare_verification_handoff와 _checked_handoff가 출처 연결, 중복, 위조 상태를 검증합니다. 불완전하면 캡슐 생성이 차단됩니다.
 - 기존 운영 SQLite·Stage10/12/15·공개 마이너·예약 작업·상주 Local V1을 변경하지 않습니다.
 
-소유자가 **별도로 승인**하는 로컬 1회 파일 생성만 허용됩니다. 같은 모듈에 --export-once 옵션을 주고 정확한 문구 UCIE_OWNER_PUBLIC_METADATA_LOCAL_EXPORT_ONCE를 직접 입력해야 합니다. 프로그램은 다음 두 파일만 D:\UCIE 내부에 O_EXCL로 덮어쓰기 없이 생성합니다.
+소유자가 **별도로 승인**하는 로컬 1회 파일 생성만 허용됩니다. 같은 모듈에 --export-once 옵션을 주고 정확한 문구 UCIE_OWNER_PUBLIC_METADATA_LOCAL_EXPORT_ONCE를 직접 입력해야 합니다. 프로그램은 소유자 기존 Git-무시 디렉터리 D:\UCIE\downloaded 내부에만 O_EXCL로 덮어쓰기 없이 생성합니다. 소유자 저장소 루트나 운영 SQLite 디렉터리에는 쓰지 않습니다.
 
-- .ucie_b2_public_pr_metadata_v01.json
-- .ucie_b2_public_pr_metadata_v01.sha256
+- downloaded/.ucie_b2_public_pr_metadata_v01.json
+- downloaded/.ucie_b2_public_pr_metadata_v01.sha256
 
-두 파일은 실수로 Git에 포함되지 않도록 .gitignore에 추가했습니다. 파일 생성은 고객 배포나 외부 전달 승인이 아닙니다. 이 파일을 다른 PC로 전달할지는 별도 소유자 검토 사항입니다.
+소유자 원본 저장소의 기존 .gitignore는 downloaded/ 전체를 무시합니다. 별도 수신 저장소의 루트에 수동 배치하는 정확한 두 파일 이름도 새 .gitignore에 추가했지만, 수신 경로 반입은 별도 소유자 검토·권한이 필요합니다. 파일 생성은 고객 배포나 외부 전달 승인이 아닙니다.
 
 ## 별도 검토된 깨끗한 UCIE 환경에서 사용
 
