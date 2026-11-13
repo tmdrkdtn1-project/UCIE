@@ -154,6 +154,7 @@ def _page(name: str, main: str) -> str:
 
 def _home() -> str:
     require_local_work("LOCAL_APP")
+    from .local_owner_play_v01 import render_owner_play
     names = (
         ("문제 예방", "공개 기술 사례를 살펴보고 해결 방향을 확인하세요."),
         ("개발 도구", "유용한 개발 도구와 실행 예제를 만나보세요."),
@@ -198,7 +199,8 @@ def _home() -> str:
         '<h2>주요 기능</h2>'
         '<p>원하는 작업을 선택하세요.</p></section>'
         '<section class="pillar-grid" aria-label="UCIE 주요 기능">' +
-        ''.join(entries) + '</section>'
+        ''.join(entries) + '</section>' +
+        render_owner_play() +
         '<section class="workbench-note">'
         '<h2>자료를 살펴보실 때</h2>'
         '<p>공개 기술 자료의 출처와 검토 상태는 상세 화면에서 확인하실 수 있습니다.'
