@@ -292,6 +292,21 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         if (removed.get("installed") is not False
                 or removed.get("ucie_module_still_present") is not False):
             raise FullRecipientQAFailure("first-party uninstall or cleanup missing")
+        # Reinstall the CURRENT whole UCIE product from the very same
+        # pinned local wheelhouse; no network or different source accepted.
+        full._run(full._install_cmd(child,vendor_dir,product_dir,required),
+                  scratch,safe_install,"verified first-party reinstall in same clean venv")
+        full._run([str(child),"-I","-B","-m","pip","--isolated","check",
+                   "--disable-pip-version-check"],
+                  scratch,safe_install,"reinstalled full dependency consistency")
+        four_reinstalled=full._check_four_pillars(full._run(
+            [str(child),"-I","-B","-m","ucie_miner.customer_staging_v01",
+             "--pillar","all"],scratch,safe_install,
+            "reinstalled synthetic full UCIE four pillars"))
+        if (four_reinstalled["workflow_receipt_sha256"]
+                != four["workflow_receipt_sha256"]):
+            raise FullRecipientQAFailure("full-product reinstall changed four-pillar behavior")
+        ab._uninstall(child,scratch,safe_install)
         observed={
             "official_pypi_sha256_vendor_wheels":hashes,
             "product_wheel_sha256":checked["sha256"],
@@ -306,6 +321,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
             "installed_local_v04":ui,
             "installed_extra_official_route_gets":8,
             "real_pip_uninstall_first_party":True,
+            "current_product_real_reinstall_then_second_uninstall":True,
         }
     if scratch_path is None or scratch_path.exists():
         raise FullRecipientQAFailure("ephemeral Windows recipient not destroyed")
@@ -316,6 +332,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         "current_first_party_and_all_three_vendor_wheels_installed":True,
         "native_vendor_code_ran_in_isolated_recipient":True,
         "synthetic_four_pillars_real_installed":True,
+        "same_hash_current_product_reinstall_workflow_unchanged":True,
         "signed_anonymous_test_recipient_entitlement_verified_before_cli":True,
         "owner_real_private_key_accessed":False,
         "actual_owner_c1_captured_wheels_used":False,
