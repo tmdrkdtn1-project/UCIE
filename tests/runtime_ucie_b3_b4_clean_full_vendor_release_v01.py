@@ -190,7 +190,7 @@ print(json.dumps({"status":"C3_REAL_NATIVE_INSTALLED_ENTITLEMENT_TESTS_PASS",
 
 
 PRIVATE_SLOTS_CHILD = r"""
-import json,sys,os,subprocess
+import json,sys,os,subprocess,shutil
 from datetime import datetime,timedelta,timezone
 from hashlib import sha256
 from pathlib import Path
@@ -201,6 +201,8 @@ from cryptography.hazmat.primitives import serialization
 from ucie_public.rulepack import key_id
 from ucie_miner import customer_private_entitlement_v01 as c3
 from ucie_miner import customer_private_offline_lifecycle_v01 as life
+from ucie_miner import customer_membership_subscription_v01 as membership
+from ucie_miner import customer_membership_recipient_v01 as membership_recipient
 from ucie_miner import local_public_pr_owner_auth_v01 as auth
 from ucie_miner.customer_staging_v01 import PILLARS
 from importlib.metadata import version
@@ -279,6 +281,45 @@ assert root.joinpath(life.LAUNCHER_NAME).read_bytes()==life.LAUNCHER.encode("utf
 print("UCIE_STAGE_INSTALL_A_PASS",flush=True)
 check=life.verify_selected(root,**owner_args)
 assert check["product_version"]=="0.1.0"
+# The same ephemeral Ed25519 OWNER TEST KEY signs a distinct-purpose
+# SYNTHETIC member lease: not a payment, account or production issue.
+member_id=sha256(b"UCIE_CI_SYNTHETIC_MEMBERSHIP_NOT_PAID").hexdigest()
+member_end=membership._period_end(now,"monthly")
+lease=min(member_end,now+timedelta(days=7))
+member_record={
+ "schema":membership.SCHEMA,"scope":membership.SCOPE,"service":"UCIE",
+ "subscription_id_sha256":member_id,
+ "recipient_token_sha256":recipient,
+ "rights_packet_sha256":rights,
+ "owner_key_id":keyid,
+ "plan":"complete","billing_interval":"monthly","billing_status":"ACTIVE",
+ "payment_receipt_sha256":sha256(b"CI_NO_REAL_PAYMENT").hexdigest(),
+ "renewal_sequence":1,"product_entitlement_min_serial":60,
+ "issued_utc":auth._stamp(now),
+ "period_start_utc":auth._stamp(now),
+ "period_end_utc":auth._stamp(member_end),
+ "grace_until_utc":auth._stamp(member_end),
+ "access_lease_expires_utc":auth._stamp(lease),
+}
+member_bytes=c3.canonical(member_record)
+member_sig=membership._sig(
+ member_bytes,private,consent="OWNER_SIGN_UCIE_MEMBERSHIP_EXISTING_KEY_ONCE")
+membership_receipt=membership_recipient.import_owner_signed_membership(
+ root,member_bytes,member_sig,public_pem=pub,
+ expected_owner_key_id=keyid,expected_recipient_token_sha256=recipient,
+ expected_rights_packet_sha256=rights,expected_subscription_id_sha256=member_id,
+ min_product_serial=60,min_renewal_sequence=1,
+ consent=membership_recipient.CONSENT,now=now)
+assert membership_receipt["membership_phase"]=="ACTIVE"
+assert membership_receipt["payment_provider_event_independently_verified"] is False
+assert membership_recipient.verify_installed_membership(
+ root,public_pem=pub,expected_owner_key_id=keyid,
+ expected_recipient_token_sha256=recipient,
+ expected_rights_packet_sha256=rights,
+ expected_subscription_id_sha256=member_id,
+ min_product_serial=60,min_renewal_sequence=1,now=now)[
+ "owner_membership_signature_verified"] is True
+print("UCIE_STAGE_SIGNED_SYNTHETIC_MEMBERSHIP_PASS",flush=True)
 # Real version-0.1.0 active installed Python: no reuse of owner D:/UCIE.
 trust=scratch/"synthetic_approved_public_only.pem"
 trust.write_bytes(pub)
@@ -289,7 +330,9 @@ cmd=[str(exe),"-I","-B","-m",
      "--action","serve","--recipient-root",str(root),
      "--public-trust-pem",str(trust),
      "--expected-owner-key-id",keyid,"--recipient-token-sha256",recipient,
-     "--rights-packet-sha256",rights,"--min-serial","60","--port","0"]
+     "--rights-packet-sha256",rights,"--min-serial","60",
+     "--expected-subscription-id-sha256",member_id,
+     "--min-membership-sequence","1","--port","0"]
 print("UCIE_STAGE_SERVE_A_START",flush=True)
 p=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                    text=True,encoding="utf-8",env=dict(os.environ,
@@ -297,7 +340,8 @@ p=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
 try:
  line=p.stdout.readline()
  status=json.loads(line)
- assert status["status"]=="SIGNED_CUSTOMER_LOCAL_TECHNICAL_PREVIEW_NO_GO"
+ assert status["status"]=="SIGNED_MEMBERSHIP_LOCAL_TECHNICAL_PREVIEW_NO_GO"
+  assert status["signed_membership_required_for_every_GET"] is True
  assert status["customer_distribution_authorized"] is False
  port=int(status["url"].split(":")[-1].split("/")[0])
  def get(url):
@@ -307,6 +351,7 @@ try:
    return r.status,r.read(400001).decode("utf-8","replace")
  code,health=get("/local/health")
  assert code==200 and json.loads(health)["private_entitlement_reverified_per_request"]
+  assert json.loads(health)["membership_signature_reverified_per_request"] is True
  assert get("/local")[0]==200
  assert get("/local/library?q=Git")[0]==200
  # Actual post-install signature change must DENY the existing UI per request.
@@ -315,7 +360,7 @@ try:
  sigfile.write_bytes(b"forged signed customer entitlement")
  try:
   code,message=get("/local")
-  assert code==403 and "ENTITLEMENT_REVOKED" in message
+  assert code==403 and "MEMBERSHIP_ACCESS_DENIED" in message
  finally:
   sigfile.write_bytes(original)
  assert get("/local")[0]==200
@@ -335,7 +380,7 @@ try:
  assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
  print("UCIE_STAGE_INSTALL_B_PASS",flush=True)
  code,body=get("/local")
- assert code==403 and "ENTITLEMENT_REVOKED" in body
+ assert code==403 and "MEMBERSHIP_ACCESS_DENIED" in body
  print("UCIE_STAGE_STALE_A_SESSION_HTTP403_PASS",flush=True)
  print("UCIE_STAGE_SIGNED_HTTP_PASS",flush=True)
 finally:
@@ -361,7 +406,13 @@ assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
 print("UCIE_STAGE_REMOVE_START",flush=True)
 removed=life.remove_technical_install(root,consent=life.REMOVE_CONSENT)
 assert removed["removed_registered_slots"]==2
-assert root.is_dir() and list(root.iterdir())==[]
+assert root.is_dir()
+# Uninstall preserves recipient-signed subscription records and customer
+# owned data. Purge ONLY this explicit disposable CI synthetic snapshot.
+assert (root/"membership"/"current.json").is_file()
+assert not (root/"slots").exists()
+shutil.rmtree(root/"membership")
+assert list(root.iterdir())==[]
 assert not (root/"runtime").exists()
 assert not (root/".git").exists()
 # Standalone end-user bootstrap acceptance: only Python3.15 + the exact
@@ -421,6 +472,9 @@ print(json.dumps({
  "product_source_versions_distinct":True,
  "offline_two_installed_native_vendor_slots":True,
  "per_get_signed_recipient_http200_and_after_tamper_http403":True,
+  "real_native_signed_synthetic_membership_http200_and_tamper_http403":True,
+  "signed_member_snapshot_survives_product_uninstall_before_CI_cleanup":True,
+  "actual_payment_provider_or_customer_subscription_activated":False,
  "stale_A_signed_client_denied_after_B_update_http403":True,
  "signed_serial_floor_blocks_stale_rollback":True,
  "real_backward_and_forward_pointer_switching":True,
