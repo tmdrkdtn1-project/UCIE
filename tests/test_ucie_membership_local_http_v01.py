@@ -157,8 +157,11 @@ class SignedMembershipRealLoopbackHTTPTests(unittest.TestCase):
                 ("GET","/local"),("GET","/local/health"),
                 ("GET","/local/library?q=Python"),
                 ("GET","/local/evolution?q=Python"),
+                ("GET","/local/membership"),
                 ("POST","/local")])
-            self.assertEqual([a for a,b in results],[200,200,200,200,405])
+            self.assertEqual([a for a,b in results],[200,200,200,200,200,405])
+            self.assertIn(b"UCIE",results[4][1])
+            self.assertNotIn(self.subid.encode("ascii"),results[4][1])
             h=json.loads(results[1][1])
             self.assertTrue(h["membership_signature_reverified_per_request"])
             self.assertEqual(h["membership_plan"],"complete")
@@ -177,8 +180,11 @@ class SignedMembershipRealLoopbackHTTPTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             root,child=self.receiver(Path(tmp))
             self.import_snapshot(root,status="REVOKED")
-            results=self.perform_http(root,child,[("GET","/local"),("GET","/local/library")])
-            self.assertEqual([x[0] for x in results],[403,403])
+            results=self.perform_http(root,child,[
+                ("GET","/local"),("GET","/local/library"),
+                ("GET","/local/membership")])
+            self.assertEqual([x[0] for x in results],[403,403,200])
+            self.assertIn(b"REVOKED",results[2][1])
 
     def test_04_cancel_at_period_end_still_allows_paid_period(self):
         with TemporaryDirectory() as tmp:
