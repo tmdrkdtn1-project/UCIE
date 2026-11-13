@@ -253,9 +253,15 @@ def route_access(route:str,report:dict) -> bool:
         return False
     if report.get("owner_membership_signature_verified") is not True:
         return False
+    phase=report.get("membership_phase")
+    if phase=="GRACE_READ_ONLY":
+        # No SkillBook run, source review, code execution or evolution during
+        # payment grace. The existing library listing remains accessible.
+        return route in ("/", "/local","/local/","/local/health",
+                         "/local/policy","/local/library","/local/books")
     pillar=ROUTE_TO_PILLAR.get(route)
     if pillar is not None:
-        return pillar in report.get("allowed_pillars",[])
+        return phase in ("ACTIVE","ENDING") and pillar in report.get("allowed_pillars",[])
     if route in NON_FEATURE_ROUTES:
-        return report.get("membership_phase") in ("ACTIVE","ENDING","GRACE_READ_ONLY")
+        return phase in ("ACTIVE","ENDING")
     return False
