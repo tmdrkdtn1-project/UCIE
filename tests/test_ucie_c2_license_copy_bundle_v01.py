@@ -48,7 +48,7 @@ class C2PrivateBundleLicenseCopiesTests(unittest.TestCase):
             packet, pin, bundle, receipt = self.build_review(Path(tmp))
             result = copy.verify_staged_originals(bundle/copy.DIR, receipt)
             self.assertEqual(result["original_license_files_verified"], 5)
-            self.assertTrue(result["source_hash_bound_to_existing_owner_receipt"])
+            self.assertTrue(result["source_review_sha_recorded_not_independently_authenticated"])
             self.assertFalse(result["human_license_notice_approved"])
 
     def test_03_exact_open_ssl_legal_notice_cannot_be_faked(self):
