@@ -492,6 +492,37 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         if (four_reinstalled["workflow_receipt_sha256"]
                 != four["workflow_receipt_sha256"]):
             raise FullRecipientQAFailure("full-product reinstall changed four-pillar behavior")
+        # THIS is the new release-critical integration: two genuinely distinct
+        # customer product wheels, individually signed and PINNED, each fully
+        # installed offline in a NEW independent slot. Observe actual HTTP.
+        source_A,source_B=ab._two_sources(sources)
+        wheel_A_dir=scratch/"private_release_A_wheel"
+        wheel_B_dir=scratch/"private_release_B_wheel"
+        wheel_A_dir.mkdir()
+        wheel_B_dir.mkdir()
+        product_A=full._build_first_party_wheel(
+            wheel_A_dir,source_A,version="0.1.0")
+        product_B=full._build_first_party_wheel(
+            wheel_B_dir,source_B,version="0.1.1")
+        full._inspect_first_party_wheel(product_A,source_A,version="0.1.0")
+        full._inspect_first_party_wheel(product_B,source_B,version="0.1.1")
+        if (sha256(product_A.read_bytes()).hexdigest()
+                ==sha256(product_B.read_bytes()).hexdigest()):
+            raise FullRecipientQAFailure("A and B product sources not distinct")
+        slots=json.loads(full._run([
+            str(child),"-I","-B","-c",PRIVATE_SLOTS_CHILD,
+            str(scratch),str(product_A),str(product_B),str(vendor_dir),
+            json.dumps(hashes,sort_keys=True)],
+            scratch,safe_install,
+            "real signed A0.1.0/B0.1.1 offline private recipient slots"))
+        if (slots.get("status") !=
+                "B3_B4_REAL_SIGNED_A_TO_B_TO_A_TO_B_WINDOWS_PRIVATE_SLOT_PASS"
+                or slots.get("product_source_versions_distinct") is not True
+                or slots.get("per_get_signed_recipient_http200_and_after_tamper_http403") is not True
+                or slots.get("signed_serial_floor_blocks_stale_rollback") is not True
+                or slots.get("real_private_product_slots_uninstalled") != 2
+                or slots.get("customer_distribution_authorized") is not False):
+            raise FullRecipientQAFailure("real independently signed private slot QA failed")
         ab._uninstall(child,scratch,safe_install)
         observed={
             "official_pypi_sha256_vendor_wheels":hashes,
@@ -507,6 +538,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
             "four_pillar_installed_cli":four,
             "installed_local_v04":ui,
             "installed_extra_official_route_gets":8,
+            "full_signed_product_A_to_B_rollback_uninstall":slots,
             "real_pip_uninstall_first_party":True,
             "current_product_real_reinstall_then_second_uninstall":True,
         }
@@ -520,6 +552,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         "native_vendor_code_ran_in_isolated_recipient":True,
         "synthetic_four_pillars_real_installed":True,
         "same_hash_current_product_reinstall_workflow_unchanged":True,
+        "real_signed_source_distinct_A_B_customer_slot_lifecycle_verified":True,
         "signed_anonymous_test_recipient_entitlement_verified_before_cli":True,
         "installed_genuine_crypto_customer_entitlement_unit_tests_18_executed_zero_skips":True,
         "owner_real_private_key_accessed":False,
