@@ -462,6 +462,9 @@ def _error(root: Path, raw: str) -> str:
                 'UCIE 자체 입력오류 계약 예제 →</a></p>'
             )
         body += (
+            '<p><a href="/local/engine?purpose=B2_CONNECTED_TRIAGE&amp;case='
+            + _e(selected_case) + '">'
+            '선택한 오류의 UCIE 합성 검증 → 4축 연결 워크벤치</a></p>'
             '<p>원인·수정 효과는 개별 환경에서 확인해야 하며, '
             '고객 출시·자동 승인 상태는 그대로 NO_GO입니다.</p></section>'
         )
@@ -646,14 +649,20 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
     require_local_work("DEV_ENGINE_SKILL")
     from .capability_trials import RECIPES, evaluate_ucie_owned_recipe
 
-    args = _params(raw, ("purpose", "case"))
+    args = _params(raw, ("purpose", "case", "scenario"))
     purpose = args.get("purpose", "")
     selected_case = args.get("case", "")
-    if selected_case and purpose != "PYTHON_SCANDIR_SAFE":
-        raise LocalProductError("Python-only selectable use case")
+    scenario = args.get("scenario", "")
+    if purpose == "B2_CONNECTED_TRIAGE":
+        from .local_error_actionable_workflow_v01 import CASE_IDS
+        from .local_b2_connected_workbench_v01 import SCENARIOS
+        if selected_case not in CASE_IDS or scenario not in ("", *SCENARIOS):
+            raise LocalProductError("unregistered B2 selected error/scenario")
+    elif scenario or (selected_case and purpose != "PYTHON_SCANDIR_SAFE"):
+        raise LocalProductError("scenario only available for a selected B2 case")
     if purpose and purpose not in (*RECIPES, "REAL_PUBLIC_CATALOG",
                                    "MCP_PROMPTS_CONTRACT",
-                                   "PYTHON_SCANDIR_SAFE"):
+                                   "PYTHON_SCANDIR_SAFE", "B2_CONNECTED_TRIAGE"):
         raise LocalProductError("unregistered development engine")
     friendly = {
         "ENGINE_INCREMENTAL_BUILD": ("증분 빌드 실험", "변경된 부분만 다시 계산하는 방법"),
@@ -667,6 +676,10 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
         ' · 예제 체험</span></a></li>'
         for name in sorted(RECIPES))
     choices += (
+        '<li><a href="/local/engine?purpose=B2_CONNECTED_TRIAGE&amp;case=mcp-prompts">'
+        '<span>4축 연결 워크벤치</span>'
+        '<span class="recipe-copy">오류 사례 선택 → UCIE 합성 판정 → '
+        '도서관 공식 근거 → 개선 근거 검토</span></a></li>'
         '<li><a href="/local/engine?purpose=MCP_PROMPTS_CONTRACT">'
         '<span>MCP 입력 오류 계약 체험</span>'
         '<span class="recipe-copy">UCIE 자체 생성 JSON-RPC 사례로 '
@@ -686,7 +699,70 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
         '<ul class="recipe-list">' + choices + '</ul>'
         '<p class="customer-note">예제의 결과는 실제 작업 환경에서'
         ' 동일한 성능을 보장하지 않습니다.</p></section>')
-    if purpose == "REAL_PUBLIC_CATALOG":
+    if purpose == "B2_CONNECTED_TRIAGE":
+        from .local_b2_connected_workbench_v01 import (
+            evaluate_case, SCHEMA as B2_SCHEMA, STATUS as B2_STATUS,
+            PURPOSE as B2_PURPOSE, SCENARIOS as B2_SCENARIOS,
+        )
+        if purpose != B2_PURPOSE:
+            raise LocalProductError("unexpected B2 engine purpose")
+        try:
+            outcome = evaluate_case(selected_case, scenario or "issue")
+        except ValueError as exc:
+            raise LocalProductError("unreviewed B2 scenario") from exc
+        if (outcome.get("schema") != B2_SCHEMA
+                or outcome.get("status") != B2_STATUS
+                or outcome.get("case_id") != selected_case
+                or outcome.get("scenario") not in B2_SCENARIOS
+                or outcome.get("fixture_origin") != "UCIE_AUTHORED_FIXED_SYNTHETIC"
+                or outcome.get("fixture_evaluated") is not True
+                or any(outcome.get(flag) is not False for flag in (
+                    "actual_user_environment_inspected",
+                    "third_party_code_executed",
+                    "arbitrary_command_or_path_accepted",
+                    "independent_fix_validated", "human_review_approved",
+                    "rule_or_skillbook_promoted", "customer_distribution_authorized"))
+                or outcome.get("network_requests") != 0
+                or outcome.get("operating_database_writes") != 0):
+            raise LocalProductError("unsafe B2 result cannot be displayed")
+        domain = outcome["case_id"]
+        query = quote(outcome["public_library_query"], safe="")
+        evolution = quote(outcome["evolution_query"], safe="")
+        body += (
+            '<section class="shelf-entry" data-b2-connected="true">'
+            '<span class="eyebrow">B2 · UCIE READ-ONLY FOUR-PILLAR JOB</span>'
+            '<h2>' + _e(outcome["label"]) + ' · 연결형 검토</h2>'
+            '<p>같은 오류를 네 기능에서 순서대로 확인합니다. '
+            '이 화면의 검증은 실제 사용자 PC 진단이 아닌 UCIE 작성 합성 사례입니다.</p>'
+            '<ol>'
+            '<li><a href="/local/error?case=' + _e(domain) + '">'
+            '문제 예방 · 점검 지침</a></li>'
+            '<li>개발 엔진 · 아래 UCIE 합성 검증 실행 결과</li>'
+            '<li><a href="/local/library?q=' + query + '">'
+            '가상도서관 · 출처와 SkillBook 검토</a></li>'
+            '<li><a href="/local/evolution?q=' + evolution + '">'
+            '개선 제안 · 공개 근거와 미검증 상태</a></li>'
+            '</ol>'
+            '<p><strong>합성 시험 선택:</strong> '
+            '<a href="/local/engine?purpose=B2_CONNECTED_TRIAGE&amp;case='
+            + _e(domain) + '&amp;scenario=issue">오류 상황</a> · '
+            '<a href="/local/engine?purpose=B2_CONNECTED_TRIAGE&amp;case='
+            + _e(domain) + '&amp;scenario=control">대조 상황</a></p>'
+            '<dl class="inventory-grid">'
+            '<div><dt>합성 시험</dt><dd>' + _e(outcome["scenario"]) + '</dd></div>'
+            '<div><dt>UCIE 자체 판정</dt><dd><code>'
+            + _e(outcome["result_code"]) + '</code></dd></div></dl>'
+            '<p><strong>관찰:</strong> ' +
+            _e(outcome["observed_synthetic_result"]) + '</p>'
+            '<p><strong>검증 한계:</strong> ' + _e(outcome["limitation"]) + '</p>'
+            '<p>공식 문서: <a target="_blank" rel="noopener noreferrer" href="'
+            + _e(outcome["official_source_url"]) + '">'
+            + _e(outcome["official_source_label"]) + '</a></p>'
+            '<p>판정은 실제 버전·사용자 코드·공급자 변경의 독립 검증이 아니며 '
+            '승인된 수정·규칙·SkillBook이나 고객용 배포가 아닙니다.</p>'
+            '</section>'
+        )
+    elif purpose == "REAL_PUBLIC_CATALOG":
         from .experience_application import (
             SCHEMA as PUBLIC_ENGINE_SCHEMA,
             benchmark_existing_ucie_public_catalog,
