@@ -150,11 +150,10 @@ def verify_private_entitlement(
         artifact_duration=expiry-issued
         if (artifact_duration not in (
                 timedelta(days=MAX_DAYS),
-                timedelta(days=SUBSCRIPTION_PRODUCT_ARTIFACT_DAYS))
-                or issued > current + timedelta(minutes=5) or current > expiry):
+                timedelta(days=SUBSCRIPTION_PRODUCT_ARTIFACT_DAYS))):
             # Never allow an arbitrary never-expiring product token.
             raise PrivateEntitlementError("unapproved product artifact validity")
-        if current > expiry:
+        if issued > current + timedelta(minutes=5) or current > expiry:
             raise PrivateEntitlementError("entitlement issued in future or expired")
         encoded = signature["signature_base64"]
         if (type(encoded) is not str or owner_auth.B64.fullmatch(encoded) is None):
