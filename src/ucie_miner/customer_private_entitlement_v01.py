@@ -35,6 +35,7 @@ MAX_SERIAL = 2**31 - 1
 SHA = re.compile(r"[a-f0-9]{64}\Z")
 KEYID = re.compile(r"[a-f0-9]{32}\Z")
 VERSION = "0.1.0"
+SUPPORTED_VERSIONS = ("0.1.0", "0.1.1")  # approved technical QA candidate slots only
 DIST = "ucie-public-only-demo"
 FIELDS = frozenset({
     "schema", "scope", "product", "product_version", "product_wheel_sha256",
@@ -95,6 +96,7 @@ def verify_private_entitlement(
     expected_vendor_wheels_sha256: dict[str, str],
     expected_rights_packet_sha256: str,
     now: datetime,
+    expected_product_version: str = VERSION,
 ) -> dict:
     """Verify true Ed25519 and expected artifact hashes; NEVER authorize shipping.
 
@@ -102,7 +104,9 @@ def verify_private_entitlement(
     checked actual artifacts, not self-asserted package claims. This function
     NEVER installs, signs, issues or accesses a private key.
     """
-    if (not isinstance(now, datetime) or now.tzinfo is None
+    if (type(expected_product_version) is not str
+            or expected_product_version not in SUPPORTED_VERSIONS
+            or not isinstance(now, datetime) or now.tzinfo is None
             or type(expected_owner_key_id) is not str
             or KEYID.fullmatch(expected_owner_key_id) is None
             or type(min_serial) is not int or not 1 <= min_serial <= MAX_SERIAL
@@ -122,7 +126,7 @@ def verify_private_entitlement(
         if set(record) != FIELDS or set(signature) != SIG_FIELDS:
             raise PrivateEntitlementError("unexpected private release entitlement fields")
         if (record["schema"] != SCHEMA or record["scope"] != SCOPE
-                or record["product"] != DIST or record["product_version"] != VERSION
+                or record["product"] != DIST or record["product_version"] != expected_product_version
                 or record["product_wheel_sha256"] != expected_product_wheel_sha256
                 or record["recipient_token_sha256"] != expected_recipient_token_sha256
                 or record["rights_packet_sha256"] != expected_rights_packet_sha256
@@ -172,7 +176,7 @@ def verify_private_entitlement(
         "schema": SCHEMA,
         "status": "CUSTOMER_ENTITLEMENT_CRYPTO_BOUND_TECHNICAL_ONLY_NO_GO",
         "release_serial": record["serial"],
-        "product_version": VERSION,
+        "product_version": expected_product_version,
         "product_wheel_sha256": expected_product_wheel_sha256,
         "vendor_wheel_count": len(PINNED),
         "four_pillars_bound": list(PILLARS),
