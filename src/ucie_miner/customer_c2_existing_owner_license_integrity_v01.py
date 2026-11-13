@@ -153,6 +153,15 @@ def verify_existing_owner_license_texts(
         })
     if len(seen)!=5 or total!=manifest["license_total_bytes"]:
         raise ExistingLicenseReviewError("owner five original license texts not complete")
+    expected_files=seen | {"review_manifest.json","README_KO.md"}
+    # Also reject unfamiliar/dropped files or links within the owner-only
+    # exported packet: no backup, binary, private data or script may ride along.
+    all_members=list(folder.rglob("*"))
+    if (len(all_members)>64
+            or any(p.is_symlink() for p in all_members)
+            or {p.relative_to(folder).as_posix() for p in all_members
+                if p.is_file()}!=expected_files):
+        raise ExistingLicenseReviewError("unexpected file in original license review folder")
     return {
         "schema":SCHEMA,"status":STATUS,
         "source_packet_review_entries_sha256":expected_review_entries_sha256,
