@@ -165,6 +165,10 @@ class B2RealLocalLoopbackTests(unittest.TestCase):
         # an empty synthetic .git root is correctly fail-closed. Exercise a
         # second disposable localhost server against this UCIE repo ONLY.
         root = Path(__file__).resolve().parents[1]
+        # runtime/ is intentionally gitignored. Fresh GitHub checkouts have
+        # no UCIE evidence DB; their existing source-backed pages MUST deny
+        # rendering instead of claiming an approved/empty evidence source.
+        actual_captured_catalog = (root / "runtime" / "public_miner.sqlite3").is_file()
         live = HTTPServer(("127.0.0.1", 0), app.make_handler(root))
         worker = Thread(target=live.serve_forever, daemon=True)
         worker.start()
@@ -185,12 +189,18 @@ class B2RealLocalLoopbackTests(unittest.TestCase):
                             headers = dict(response.getheaders())
                         finally:
                             client.close()
-                        self.assertEqual(status, 200,
-                                         route + " " + page[:160])
-                        self.assertIn("<!doctype html>", page.lower())
+                        if actual_captured_catalog:
+                            self.assertEqual(status, 200,
+                                             route + " " + page[:160])
+                            self.assertIn("<!doctype html>", page.lower())
+                            self.assertNotIn(
+                                "customer_distribution_authorized=True", page)
+                        else:
+                            self.assertEqual(status, 400,
+                                             "no local public catalog: " + route)
+                            self.assertEqual(
+                                page, "UCIE_LOCAL_V1_FAIL_CLOSED_NO_RELEASE")
                         self.assertEqual(headers["Cache-Control"], "no-store")
-                        self.assertNotIn(
-                            "customer_distribution_authorized=True", page)
         finally:
             live.shutdown()
             live.server_close()
