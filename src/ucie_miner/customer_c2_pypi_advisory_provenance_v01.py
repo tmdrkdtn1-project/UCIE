@@ -270,6 +270,9 @@ def assess_pinned_release(name: str, version: str, filename: str,
     }
 
 
+from .customer_c2_bundled_openssl_advisory_v01 import assess_current_embedded_openssl
+
+
 def _public_release_filenames() -> dict[str, str]:
     if set(PUBLIC_TEST_ONLY) != {n for n, _ in PINNED}:
         raise C2PublicReviewError("unexpected public PyPI pin plan")
@@ -319,6 +322,10 @@ def review_once(*, owner_capture: dict[str, dict] | None = None) -> dict:
             x["pypi_versioned_advisory_count"] for x in result),
         "pypi_published_attestation_objects_observed": sum(
             x["pypi_integrity_endpoint_has_attestation"] for x in result),
+        "bundled_native_openssl_security_review": assess_current_embedded_openssl(
+            cryptography_version="50.0.2",
+            pypi_versioned_advisories_observed=sum(
+                x["pypi_versioned_advisory_count"] for x in result)),
         "signatures_cryptographically_independently_verified": False,
         "separate_security_and_legal_review_completed": False,
         "private_customer_rights_verified": False,
