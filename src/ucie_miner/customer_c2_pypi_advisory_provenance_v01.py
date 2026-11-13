@@ -308,8 +308,10 @@ def review_once(*, owner_capture: dict[str, dict] | None = None) -> dict:
     }
 
 
-def _owner_capture() -> dict[str, dict]:
-    """Only an explicitly invoked owner Windows review reads existing C1 receipt."""
+def _owner_capture(*, consent: str) -> dict[str, dict]:
+    """Require exact owner consent BEFORE reading any C1 wheel or receipt."""
+    if consent != CONSENT:
+        raise C2PublicReviewError("owner C2 public review consent missing")
     root = HOST_ROOT
     expected_python = root / ".venv" / "Scripts" / "python.exe"
     if (os.name != "nt" or sys.version_info[:2] != (3, 15)
@@ -361,10 +363,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     try:
         if args.owner_existing_c1_once:
-            capture = _owner_capture()
             typed = input("UCIE C2 exact public metadata-only consent: ").strip()
-            if typed != CONSENT:
-                raise C2PublicReviewError("separate metadata review consent required")
+            capture = _owner_capture(consent=typed)
             result = review_once(owner_capture=capture)
         else:
             result = review_once()
