@@ -240,10 +240,17 @@ class C2OfficialPinnedParserTests(unittest.TestCase):
                 self.assertEqual(result["network_requests"], 0)
                 self.assertFalse(result["customer_distribution_authorized"])
 
-    def test_owner_mode_requires_real_windows_tty_not_workaround(self):
+    def test_owner_mode_requires_consent_before_any_wheel_file_read(self):
         with patch.object(c2, "verify_local", side_effect=AssertionError("owner wheel scanned")):
-            with self.assertRaises(ValueError):
-                c2._owner_capture()
+            for denied in ("", "yes", c2.CONSENT + "!"):
+                with self.subTest(denied=denied), self.assertRaises(ValueError):
+                    c2._owner_capture(consent=denied)
+            with patch("builtins.input", return_value="not-approved"):
+                output = StringIO()
+                with redirect_stdout(output):
+                    code = c2.main(["--owner-existing-c1-once"])
+                self.assertEqual(code, 2)
+                self.assertEqual(json.loads(output.getvalue())["status"], c2.FAIL_STATUS)
 
 
 if __name__ == "__main__":
