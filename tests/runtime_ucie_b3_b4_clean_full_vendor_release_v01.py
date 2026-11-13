@@ -139,6 +139,159 @@ print(json.dumps({"status":"C3_REAL_NATIVE_INSTALLED_ENTITLEMENT_TESTS_PASS",
 """
 
 
+PRIVATE_SLOTS_CHILD = r"""
+import json,sys,os,subprocess
+from datetime import datetime,timedelta,timezone
+from hashlib import sha256
+from pathlib import Path
+from http.client import HTTPConnection
+from contextlib import closing
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization
+from ucie_public.rulepack import key_id
+from ucie_miner import customer_private_entitlement_v01 as c3
+from ucie_miner import customer_private_offline_lifecycle_v01 as life
+from ucie_miner import local_public_pr_owner_auth_v01 as auth
+from ucie_miner.customer_staging_v01 import PILLARS
+from importlib.metadata import version
+assert version("cryptography")=="50.0.2"
+assert version("cffi")=="2.1.1"
+assert version("pycparser")=="3.12"
+scratch=Path(sys.argv[1])
+product_A=Path(sys.argv[2])
+product_B=Path(sys.argv[3])
+vendors=Path(sys.argv[4])
+vendor_hashes=json.loads(sys.argv[5])
+private=Ed25519PrivateKey.generate()  # disposable MEMORY only, never persisted
+pub=private.public_key().public_bytes(
+ serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)
+keyid=key_id(private.public_key())
+recipient=sha256(b"UCIE-EPHEMERAL-NOT-A-REAL-CUSTOMER").hexdigest()
+rights=sha256(b"UCIE-SYNTHETIC-C2-LEGAL-NOT-APPROVED").hexdigest()
+now=datetime.now(timezone.utc).replace(microsecond=0)
+owner_args={
+ "public_pem":pub,"expected_owner_key_id":keyid,
+ "expected_recipient_token_sha256":recipient,
+ "expected_rights_packet_sha256":rights,"min_serial":60}
+bundles=[]
+for label,product,version,serial in (
+ ("A",product_A,"0.1.0",60),("B",product_B,"0.1.1",61)
+):
+ rec={
+  "schema":c3.SCHEMA,"scope":c3.SCOPE,"product":c3.DIST,
+  "product_version":version,
+  "product_wheel_sha256":sha256(product.read_bytes()).hexdigest(),
+  "vendor_wheels_sha256":vendor_hashes,
+  "recipient_token_sha256":recipient,
+  "rights_packet_sha256":rights,
+  "four_pillars":list(PILLARS),"serial":serial,"owner_key_id":keyid,
+  "issued_utc":auth._stamp(now),
+  "expires_utc":auth._stamp(now+timedelta(days=30))
+ }
+ body,sig=c3.synthetic_fixture_signing_bytes(rec,private)
+ release=scratch/("private_version_"+label)/life.RELEASE_NAME
+ release.parent.mkdir()
+ built=life.build_private_qa_bundle(release,product,vendors,body,sig)
+ assert built["exact_wheel_count"]==4
+ proof=life.verify_private_qa_bundle(release,**owner_args)
+ assert proof["real_ed25519_verified"] and proof["product_version"]==version
+ assert not proof["customer_distribution_authorized"]
+ bundles.append(release)
+root=scratch/"separate_disposable_customer"/life.RECIPIENT_NAME
+a=life.install_or_update(root,bundles[0],python=Path(sys.executable),
+ consent=life.CONSENT,**owner_args)
+assert a["previous_slot"] is None and a["real_offline_pip_installed"]
+assert root.joinpath(life.LAUNCHER_NAME).read_bytes()==life.LAUNCHER.encode("utf-8")
+check=life.verify_selected(root,**owner_args)
+assert check["product_version"]=="0.1.0"
+# Real version-0.1.0 active installed Python: no reuse of owner D:/UCIE.
+trust=scratch/"synthetic_approved_public_only.pem"
+trust.write_bytes(pub)
+active=root/"slots"/a["active_slot"]
+exe=active/"venv"/"Scripts"/"python.exe"
+cmd=[str(exe),"-I","-B","-m",
+     "ucie_miner.customer_private_offline_lifecycle_v01",
+     "--action","serve","--recipient-root",str(root),
+     "--public-trust-pem",str(trust),
+     "--expected-owner-key-id",keyid,"--recipient-token-sha256",recipient,
+     "--rights-packet-sha256",rights,"--min-serial","60","--port","0"]
+p=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                   text=True,encoding="utf-8",env=dict(os.environ,
+                   PYTHONDONTWRITEBYTECODE="1"))
+try:
+ line=p.stdout.readline()
+ status=json.loads(line)
+ assert status["status"]=="SIGNED_CUSTOMER_LOCAL_TECHNICAL_PREVIEW_NO_GO"
+ assert status["customer_distribution_authorized"] is False
+ port=int(status["url"].split(":")[-1].split("/")[0])
+ def get(url):
+  with closing(HTTPConnection("127.0.0.1",port,timeout=8)) as c:
+   c.request("GET",url,headers={"Host":"127.0.0.1:"+str(port)})
+   r=c.getresponse()
+   return r.status,r.read(400001).decode("utf-8","replace")
+ code,health=get("/local/health")
+ assert code==200 and json.loads(health)["private_entitlement_reverified_per_request"]
+ assert get("/local")[0]==200
+ assert get("/local/library?q=Git")[0]==200
+ # Actual post-install signature change must DENY the existing UI per request.
+ sigfile=active/life.RELEASE_NAME/"entitlement.sig.json"
+ original=sigfile.read_bytes()
+ sigfile.write_bytes(b"forged signed customer entitlement")
+ try:
+  code,message=get("/local")
+  assert code==403 and "ENTITLEMENT_REVOKED" in message
+ finally:
+  sigfile.write_bytes(original)
+ assert get("/local")[0]==200
+finally:
+ p.terminate()
+ p.wait(timeout=10)
+ if p.poll() is None:
+  p.kill();p.wait(timeout=5)
+b=life.install_or_update(root,bundles[1],python=Path(sys.executable),
+ consent=life.CONSENT,**owner_args)
+assert b["active_slot"]!=a["active_slot"]
+assert b["previous_slot"]==a["active_slot"]
+assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
+# Replay floor independent of signed payload blocks legacy rollback.
+try:
+ life.rollback(root,consent=life.ROLLBACK_CONSENT,
+               **dict(owner_args,min_serial=61))
+ raise AssertionError("stale A entitlement erroneously rolled back")
+except ValueError:
+ pass
+assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
+rollback=life.rollback(root,consent=life.ROLLBACK_CONSENT,**owner_args)
+assert rollback["active_slot"]==a["active_slot"]
+assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.0"
+# Switching back to signed B remains allowed with the same independent pin.
+life.rollback(root,consent=life.ROLLBACK_CONSENT,**owner_args)
+assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
+removed=life.remove_technical_install(root,consent=life.REMOVE_CONSENT)
+assert removed["removed_registered_slots"]==2
+assert root.is_dir() and list(root.iterdir())==[]
+assert not (root/"runtime").exists()
+assert not (root/".git").exists()
+print(json.dumps({
+ "status":"B3_B4_REAL_SIGNED_A_TO_B_TO_A_TO_B_WINDOWS_PRIVATE_SLOT_PASS",
+ "product_versions":["0.1.0","0.1.1"],
+ "release_candidate_wheels_per_version":4,
+ "local_spdx_noassertion_packages":4,
+ "product_source_versions_distinct":True,
+ "offline_two_installed_native_vendor_slots":True,
+ "per_get_signed_recipient_http200_and_after_tamper_http403":True,
+ "signed_serial_floor_blocks_stale_rollback":True,
+ "real_backward_and_forward_pointer_switching":True,
+ "real_private_product_slots_uninstalled":2,
+ "launcher_generated_with_zero_embedded_customer_ids_or_private_keys":True,
+ "ephemeral_in_memory_ed25519_only":True,
+ "real_owner_private_key_used":False,
+ "real_owner_license_issued":False,
+ "customer_distribution_authorized":False,
+},sort_keys=True))
+"""
+
+
 EXTRA_UI_CHILD = r"""
 import json
 from pathlib import Path
