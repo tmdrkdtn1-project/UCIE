@@ -547,7 +547,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
             stages=[line.strip() for line in run.stdout.splitlines()
                     if re.fullmatch("UCIE_STAGE_[A-Z0-9_]{1,60}",line.strip())]
             last_stage=stages[-1] if stages else "UCIE_STAGE_IMPORT_NOT_COMPLETED"
-            error_types=re.findall(r"\\b([A-Za-z][A-Za-z0-9_]{0,60}(?:Error|Exception))(?=:|$)",
+            error_types=re.findall(r"\b([A-Za-z][A-Za-z0-9_]{0,60}(?:Error|Exception))(?=:|$)",
                                    run.stderr)
             last_error=error_types[-1] if error_types else "UnhandledChild"
             raise FullRecipientQAFailure("technical signed slots "+last_stage+" "+last_error)
