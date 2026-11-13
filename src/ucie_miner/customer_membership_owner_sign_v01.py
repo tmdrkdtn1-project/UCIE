@@ -33,7 +33,7 @@ OUT_PREFIX="ucie_membership_owner_signed_sequence_"
 REVIEW_FIELDS=frozenset((
     "schema","subscription_id_sha256","recipient_token_sha256",
     "payment_receipt_sha256","billing_interval","billing_status","plan",
-    "period_start_utc","customer_contract_signed_confirmed",
+    "period_start_utc","lease_issued_utc","customer_contract_signed_confirmed",
     "recurring_billing_disclosure_and_customer_consent_confirmed",
     "owner_verified_actual_provider_event",
     "customer_cancellation_intent_confirmed",
@@ -56,6 +56,7 @@ def _payment_review(raw:bytes,*,expected_sha256:str,record:dict) -> dict:
             or data["billing_status"]!=record["billing_status"]
             or data["plan"]!=record["plan"]
             or data["period_start_utc"]!=record["period_start_utc"]
+            or data["lease_issued_utc"]!=record["issued_utc"]
             or data["customer_contract_signed_confirmed"] is not True
             or data["recurring_billing_disclosure_and_customer_consent_confirmed"] is not True
             or data["owner_verified_actual_provider_event"] is not True
