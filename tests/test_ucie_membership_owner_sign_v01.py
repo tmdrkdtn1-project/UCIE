@@ -36,6 +36,7 @@ class OwnerSubscriptionRightsAndPaymentGates(unittest.TestCase):
             "issued_utc":owner._stamp(start),"period_start_utc":owner._stamp(start),
             "period_end_utc":owner._stamp(end),
             "grace_until_utc":owner._stamp(end),
+            "access_lease_expires_utc":owner._stamp(end),
         }
         r.update(updates)
         return r
@@ -51,6 +52,7 @@ class OwnerSubscriptionRightsAndPaymentGates(unittest.TestCase):
             "billing_status":r["billing_status"],
             "plan":r["plan"],
             "period_start_utc":r["period_start_utc"],
+            "lease_issued_utc":r["issued_utc"],
             "customer_contract_signed_confirmed":True,
             "recurring_billing_disclosure_and_customer_consent_confirmed":True,
             "owner_verified_actual_provider_event":True,
