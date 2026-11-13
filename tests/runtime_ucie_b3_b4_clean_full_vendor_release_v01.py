@@ -160,7 +160,7 @@ if (physical_result.testsRun!=12 or physical_result.skipped
 # route tests must execute with the INSTALLED actual native crypto wheel.
 membership_counts={}
 for pattern, expected, label in (
-    ("test_ucie_membership_subscription_v01.py",24,"membership_subscription"),
+    ("test_ucie_membership_subscription_v01.py",25,"membership_subscription"),
     ("test_ucie_membership_recipient_v01.py",16,"membership_recipient"),
     ("test_ucie_membership_owner_sign_v01.py",11,"membership_owner_sign"),
     ("test_ucie_membership_local_http_v01.py",7,"membership_local_http")):
@@ -592,7 +592,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
                 or unit.get("physical_recipient_readonly_tests_executed")!=12
                 or unit.get("physical_recipient_readonly_tests_skipped")!=0
                 or unit.get("signed_membership_real_native_test_counts")!={
-                    "membership_subscription":24,
+                    "membership_subscription":25,
                     "membership_recipient":16,
                     "membership_owner_sign":11,
                     "membership_local_http":7}
@@ -733,7 +733,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         "existing_owner_real_signer_unit_tests_14_executed_zero_skips":True,
         "existing_owner_five_license_integrity_tests_10_executed_zero_skips":True,
         "owner_physical_recipient_readonly_policy_tests_12_executed_zero_skips":True,
-        "real_native_membership_policy_owner_sign_recipient_http_58_executed_zero_skips":True,
+        "real_native_membership_policy_owner_sign_recipient_http_59_executed_zero_skips":True,
         "actual_payment_provider_account_connected_or_billed":False,
         "actual_subscription_customer_activated":False,
         "actual_owner_private_license_text_files_read_by_ci":False,
