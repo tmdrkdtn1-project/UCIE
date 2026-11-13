@@ -66,6 +66,10 @@ def no_captured_public_candidates(*, query: str, limit: int,
     )
     if kind is not None or domain is not None or grouped:
         raise PortableReferenceError("unexpected portable shelf query options")
+    if src is not None:
+        from .product_plan import APPROVED_REPOSITORIES
+        if src.removeprefix("repo:") not in APPROVED_REPOSITORIES:
+            raise PortableReferenceError("portable reference query outside approved sources")
     return {
         "schema": W04_SCHEMA,
         "status": "SOURCE_LINKAGE_INCOMPLETE_NO_GO",
