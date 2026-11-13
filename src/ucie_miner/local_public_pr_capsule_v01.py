@@ -385,7 +385,13 @@ def export_once(root: Path, *, consent: str) -> dict:
     if consent != CONSENT:
         raise PublicCapsuleError("specific explicit owner-local export consent required")
     root = _root(root)
-    src, pin = root / FILE, root / PIN
+    # OWNER export is confined to the pre-existing Git-ignored downloaded/
+    # directory. The separate recipient must explicitly place a reviewed copy
+    # at its own root. No implicit repo upload, install or transfer occurs.
+    out = root / "downloaded"
+    if out.is_symlink() or not out.is_dir():
+        raise PublicCapsuleError("existing ignored UCIE downloaded directory required")
+    src, pin = out / FILE, out / PIN
     if src.exists() or pin.exists() or src.is_symlink() or pin.is_symlink():
         raise PublicCapsuleError("immutable one-time capsule already present")
     payload = build_capsule(prepare_verification_handoff(root))
@@ -403,7 +409,7 @@ def export_once(root: Path, *, consent: str) -> dict:
         "schema": SCHEMA,
         "status": "OWNER_LOCAL_ONLY_UNSIGNED_METADATA_FILES_CREATED_NO_GO",
         "capsule_sha256": digest,
-        "file_names": [FILE, PIN],
+        "file_names": ["downloaded/" + FILE, "downloaded/" + PIN],
         "operating_database_writes": 0,
         "customer_distribution_authorized": False,
         "files_distributed_or_uploaded": False,
