@@ -98,7 +98,7 @@ def _read(file: Path, maximum: int) -> bytes:
 
 
 def _parent_safe(path: Path) -> None:
-    if type(path) is not Path or not path.is_absolute():
+    if not isinstance(path, Path) or not path.is_absolute():
         raise OfflineProductLifecycleError("absolute Windows recipient path required")
     if path.is_symlink() or path.parent.is_symlink():
         raise OfflineProductLifecycleError("symlinked recipient or parent forbidden")
