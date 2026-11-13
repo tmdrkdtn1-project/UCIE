@@ -8,6 +8,8 @@ verified installed cryptography wheel, zero skips required.
 from __future__ import annotations
 
 from datetime import datetime,timezone
+from contextlib import redirect_stdout
+from io import StringIO
 from hashlib import sha256
 from http.client import HTTPConnection
 from http.server import HTTPServer
@@ -108,8 +110,13 @@ class SignedMembershipRealLoopbackHTTPTests(unittest.TestCase):
             return server
         def process():
             try:
-                with patch.object(sys,"executable",str(child)):
-                    life.serve_selected(root,public_pem=self.public,
+                # The REAL server emits a startup JSON line to stdout.
+                # Capture it inside this test only; otherwise the parent
+                # native CI runner receives multiple JSON documents and
+                # fails to parse its SINGLE machine-readable QA receipt.
+                with redirect_stdout(StringIO()):
+                    with patch.object(sys,"executable",str(child)):
+                        life.serve_selected(root,public_pem=self.public,
                         expected_owner_key_id=self.owner_id,
                         expected_recipient_token_sha256=self.account,
                         expected_rights_packet_sha256=self.rights,
