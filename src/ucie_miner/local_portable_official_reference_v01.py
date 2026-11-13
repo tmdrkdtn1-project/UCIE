@@ -64,6 +64,8 @@ def no_captured_public_candidates(*, query: str, limit: int,
     """A W04 INCOMPLETE response, never fabricated accepted candidates."""
     if type(offset) is not int or offset != 0 or offset > MAX_PAGE_OFFSET:
         raise PortableReferenceError("no candidate pages in reference-only mode")
+    if ".." in query or query.startswith("/"):
+        raise PortableReferenceError("portable reference query cannot be a path")
     q, kind, domain, src, bounded_limit, grouped = _filters(
         query=query, kind=None, domain=None, source_id=source_id,
         limit=limit, group_revisions=False,
