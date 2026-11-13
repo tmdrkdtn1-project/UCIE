@@ -93,6 +93,35 @@ class PublicOnlyCapsuleUnitTests(unittest.TestCase):
             with self.subTest(limit=limit), self.assertRaises(ValueError):
                 cap.build_capsule(synthetic_handoff(), limit=limit)
 
+    def test_large_source_window_selects_approved_domains_fairly(self):
+        handoff = synthetic_handoff(0)
+        handoff["tasks"] = []
+        for i in range(65):
+            source, _ref, purpose, _token = FIXTURES[i % len(FIXTURES)]
+            handoff["tasks"].append({
+                "source": source,
+                "reference": "pr:" + str(50000+i) + ":" + f"{i+1:040x}",
+                "pattern_code": purpose,
+                "skill_id": SOURCE_SKILL[source],
+                "evidence_sha256": f"{i+700:064x}",
+                "candidate_id_sha256": f"{i+600:064x}",
+                "stage6_candidate": None,
+                "status": "UNVERIFIED_CANDIDATE_ONLY", "approval": False,
+                "blocking_reasons": ["VERIFICATION_NOT_PERFORMED"],
+            })
+        handoff["source_revisions"] = 65
+        handoff["linked_revisions"] = 65
+        blob = cap.build_capsule(handoff)
+        report = cap.inspect_capsule(blob, sha256(blob).hexdigest())
+        self.assertEqual(report["selected_count"], cap.MAX_ITEMS)
+        self.assertEqual(report["omitted_count"], 17)
+        counts = {key: sum(
+            r["source_id"] == "repo:" + key for r in report["items"])
+            for key in SOURCE_SKILL}
+        self.assertEqual(sum(counts.values()), cap.MAX_ITEMS)
+        self.assertTrue(all(8 <= n <= 11 for n in counts.values()))
+        self.assertFalse(report["signature_verified"])
+
     def test_reject_incomplete_or_forged_source_handoff(self):
         for mutate in (
             lambda x: x.update(status="SOURCE_REVISIONS_PENDING_NO_GO"),
