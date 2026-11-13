@@ -74,22 +74,22 @@ class OwnerC3StdlibOnlyContractTests(unittest.TestCase):
             import http.client
             from http.server import HTTPServer
             from threading import Thread
-            with HTTPServer(("127.0.0.1", 0), make_handler(root)) as http:
-                thread = Thread(target=http.serve_forever, daemon=True)
+            with HTTPServer(("127.0.0.1", 0), make_handler(root)) as server:
+                thread = Thread(target=server.serve_forever, daemon=True)
                 thread.start()
                 try:
                     conn = http.client.HTTPConnection(
-                        "127.0.0.1", http.server_port, timeout=5)
+                        "127.0.0.1", server.server_port, timeout=5)
                     try:
                         conn.request("GET", "/local/library?q=Git", headers={
-                            "Host": "127.0.0.1:" + str(http.server_port)})
+                            "Host": "127.0.0.1:" + str(server.server_port)})
                         result = conn.getresponse()
                         self.assertEqual(result.status, 400)
                         self.assertIn("FAIL_CLOSED", result.read().decode("ascii"))
                     finally:
                         conn.close()
                 finally:
-                    http.shutdown()
+                    server.shutdown()
                     thread.join(timeout=5)
 
     def test_invalid_unprovisioned_trust_or_metadata_rejected_first(self):
