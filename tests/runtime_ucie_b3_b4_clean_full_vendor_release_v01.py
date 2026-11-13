@@ -114,6 +114,31 @@ print(json.dumps({
  "customer_distribution_authorized":False},sort_keys=True))
 """
 
+# Run the entire 18-case real Ed25519 suite INSIDE the newly installed
+# SHA/RECORD-verified first-party + native-vendor recipient. Any skip is FAIL.
+# Never count an all-skipped unittest suite as an acceptable CI success.
+ENTITLEMENT_UNIT_CHILD = r"""
+import io,json,sys,unittest
+from pathlib import Path
+import ucie_miner,cryptography
+venv=Path(sys.argv[2]).resolve()
+assert Path(ucie_miner.__file__).resolve().is_relative_to(venv)
+assert Path(cryptography.__file__).resolve().is_relative_to(venv)
+suite=unittest.defaultTestLoader.discover(
+ start_dir=str(Path(sys.argv[1])),pattern="test_ucie_customer_private_entitlement_v01.py",
+ top_level_dir=str(Path(sys.argv[1])))
+output=io.StringIO()
+result=unittest.TextTestRunner(stream=output,verbosity=1).run(suite)
+if result.testsRun!=18 or len(result.skipped)!=0 or not result.wasSuccessful():
+ raise AssertionError("native customer entitlement unit tests did not all run and pass")
+print(json.dumps({"status":"C3_REAL_NATIVE_INSTALLED_ENTITLEMENT_TESTS_PASS",
+  "executed":result.testsRun,"skipped":len(result.skipped),
+  "tests_from_installed_ucie_wheel":True,
+  "owner_private_key_used":False,
+  "customer_distribution_authorized":False},sort_keys=True))
+"""
+
+
 EXTRA_UI_CHILD = r"""
 import json
 from pathlib import Path
@@ -256,6 +281,14 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         full._run([str(child),"-I","-B","-m","pip","--isolated","check",
                    "--disable-pip-version-check"],
                   scratch,safe_install,"full dependency check")
+        unit=json.loads(full._run([
+            str(child),"-I","-B","-c",ENTITLEMENT_UNIT_CHILD,
+            str(root/"tests"),str(venv)],
+            scratch,safe_install,"all 18 real installed Ed25519 entitlement tests"))
+        if (unit.get("status")!="C3_REAL_NATIVE_INSTALLED_ENTITLEMENT_TESTS_PASS"
+                or unit.get("executed")!=18 or unit.get("skipped")!=0
+                or unit.get("tests_from_installed_ucie_wheel") is not True):
+            raise FullRecipientQAFailure("native installed entitlement tests missing/skipped")
         # Actual installed cryptography and all 3 native vendor package checks.
         native=full._check_native(full._run(
             [str(child),"-I","-B","-c",full.NATIVE_PROBE],
@@ -316,6 +349,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
             "hash_locked_four_wheel_offline_install":True,
             "pip_dependency_check":True,
             "actual_three_vendor_native_probes":native,
+            "real_18_customer_entitlement_unit_tests":unit,
             "signed_four_pillar_entitlement_synthetic":license_probe,
             "four_pillar_installed_cli":four,
             "installed_local_v04":ui,
@@ -334,6 +368,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         "synthetic_four_pillars_real_installed":True,
         "same_hash_current_product_reinstall_workflow_unchanged":True,
         "signed_anonymous_test_recipient_entitlement_verified_before_cli":True,
+        "installed_genuine_crypto_customer_entitlement_unit_tests_18_executed_zero_skips":True,
         "owner_real_private_key_accessed":False,
         "actual_owner_c1_captured_wheels_used":False,
         "actual_physical_owner_controlled_second_windows_recipient_accepted":False,
