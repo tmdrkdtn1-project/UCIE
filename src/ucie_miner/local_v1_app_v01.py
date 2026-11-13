@@ -216,7 +216,8 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
     """Display a clear customer summary; preserve inspectable evidence."""
     from .rule_candidates import GUIDANCE
 
-    if report.get("portable_reference_mode") is not None:
+    if (report.get("portable_reference_mode") is not None
+            and report.get("portable_snapshot_status") is None):
         from .local_portable_official_reference_v01 import STATUS as OFFLINE_STATUS
         if (report.get("portable_reference_mode") != OFFLINE_STATUS
                 or report.get("status") != "SOURCE_LINKAGE_INCOMPLETE_NO_GO"
