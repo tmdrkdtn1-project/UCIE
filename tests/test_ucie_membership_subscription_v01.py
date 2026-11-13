@@ -305,5 +305,43 @@ class MembershipSignedAccessTests(unittest.TestCase):
         self.assertTrue(active["offline_lease_must_be_refreshed_without_rebilling"])
 
 
+    def test_25_long_lived_product_integrity_is_not_paid_membership(self):
+        from ucie_miner.customer_owner_wheelhouse_acquire_v01 import PINNED
+        vendors={name:sha256(name.encode()).hexdigest() for name,_ in PINNED}
+        artifact={
+            "schema":product.SCHEMA,"scope":product.SCOPE,
+            "product":product.DIST,"product_version":product.VERSION,
+            "product_wheel_sha256":"a"*64,
+            "vendor_wheels_sha256":vendors,
+            "recipient_token_sha256":self.recipient,
+            "rights_packet_sha256":self.rights,
+            "four_pillars":list(PILLARS),
+            "serial":8,"owner_key_id":self.keyid,
+            "issued_utc":owner._stamp(self.now),
+            "expires_utc":owner._stamp(
+                self.now+timedelta(days=product.SUBSCRIPTION_PRODUCT_ARTIFACT_DAYS)),
+        }
+        body,signature=product.synthetic_fixture_signing_bytes(artifact,self.private)
+        verified=product.verify_private_entitlement(
+            body,signature,self.pub,expected_owner_key_id=self.keyid,
+            min_serial=8,expected_recipient_token_sha256=self.recipient,
+            expected_product_wheel_sha256="a"*64,
+            expected_vendor_wheels_sha256=vendors,
+            expected_rights_packet_sha256=self.rights,
+            now=self.now+timedelta(days=700))
+        self.assertEqual(verified["artifact_entitlement_validity_days"],1095)
+        self.assertTrue(verified["commercial_access_still_requires_separate_signed_membership"])
+        # An arbitrary never-ending artifact is never signed-in as paid membership.
+        artifact["expires_utc"]=owner._stamp(self.now+timedelta(days=1096))
+        newer,detached=product.synthetic_fixture_signing_bytes(artifact,self.private)
+        with self.assertRaises(ValueError):
+            product.verify_private_entitlement(
+                newer,detached,self.pub,expected_owner_key_id=self.keyid,
+                min_serial=8,expected_recipient_token_sha256=self.recipient,
+                expected_product_wheel_sha256="a"*64,
+                expected_vendor_wheels_sha256=vendors,
+                expected_rights_packet_sha256=self.rights,now=self.now)
+
+
 if __name__=="__main__":
     unittest.main()
