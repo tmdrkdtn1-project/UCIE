@@ -682,3 +682,120 @@ def remove_technical_install(recipient:Path,*,consent:str) -> dict:
         "recipient_directory_preserved":True,
         "customer_distribution_authorized":False,
     }
+
+
+
+def serve_selected(
+    recipient: Path, *, public_pem: bytes, expected_owner_key_id: str,
+    expected_recipient_token_sha256: str, expected_rights_packet_sha256: str,
+    min_serial: int, port: int = 0,
+) -> int:
+    """Private localhost surface: genuine selected signature checked EVERY GET."""
+    from . import local_v1_app_v01 as app
+    if type(port) is not int or (port!=0 and not 1024<=port<=65535):
+        raise OfflineProductLifecycleError("unapproved loopback port")
+    receipt=verify_selected(
+        recipient,public_pem=public_pem,expected_owner_key_id=expected_owner_key_id,
+        expected_recipient_token_sha256=expected_recipient_token_sha256,
+        expected_rights_packet_sha256=expected_rights_packet_sha256,min_serial=min_serial)
+    slot=receipt["active_slot"]
+    child=recipient/"slots"/slot/"venv"/"Scripts"/"python.exe"
+    if Path(sys.executable).resolve()!=child.resolve():
+        raise OfflineProductLifecycleError("run ONLY authenticated active installed Python")
+    ui=recipient/"slots"/slot/"ui"/"UCIE"
+    if (not (ui/".git").is_dir() or ui.is_symlink()
+            or (ui/"runtime").exists()):
+        raise OfflineProductLifecycleError("unsafe recipient local UI root")
+    parent=app.make_handler(ui)
+
+    class PrivateVerifiedHandler(parent):
+        def do_GET(self):
+            try:
+                verify_selected(
+                    recipient,public_pem=public_pem,
+                    expected_owner_key_id=expected_owner_key_id,
+                    expected_recipient_token_sha256=expected_recipient_token_sha256,
+                    expected_rights_packet_sha256=expected_rights_packet_sha256,
+                    min_serial=min_serial,now=datetime.now(timezone.utc))
+            except (OSError,TypeError,ValueError):
+                return self.reply(403,"UCIE_PRIVATE_ENTITLEMENT_REVOKED_NO_GO",
+                                  "text/plain; charset=utf-8")
+            from urllib.parse import urlsplit
+            if urlsplit(self.path).path=="/local/health":
+                return self.reply(200,json.dumps({
+                    "schema":SCHEMA,
+                    "status":"SIGNED_TECHNICAL_OFFLINE_LOCAL_PREVIEW_NO_GO",
+                    "private_entitlement_reverified_per_request":True,
+                    "operating_database_writes":0,
+                    "owner_real_customer_approval_proven":False,
+                    "customer_distribution_authorized":False,
+                },sort_keys=True),"application/json; charset=utf-8")
+            return super().do_GET()
+
+    with app.LOCAL_SERVER_CLASS(("127.0.0.1",port),PrivateVerifiedHandler) as server:
+        print(json.dumps({
+            "schema":SCHEMA,
+            "status":"SIGNED_CUSTOMER_LOCAL_TECHNICAL_PREVIEW_NO_GO",
+            "url":"http://127.0.0.1:"+str(server.server_port)+"/local",
+            "signed_active_slot_verified":True,
+            "customer_distribution_authorized":False,
+            "owner_private_key_accessed":False,
+            "host_service_registered":False,
+        },sort_keys=True),flush=True)
+        server.serve_forever(poll_interval=0.5)
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    parser=argparse.ArgumentParser(
+        description="UCIE signed private offline technical recipient, not commercial release")
+    parser.add_argument("--action",choices=("verify","stage","rollback","remove","serve"),required=True)
+    parser.add_argument("--recipient-root",type=Path,required=True)
+    parser.add_argument("--bundle",type=Path)
+    parser.add_argument("--public-trust-pem",type=Path)
+    parser.add_argument("--expected-owner-key-id")
+    parser.add_argument("--recipient-token-sha256")
+    parser.add_argument("--rights-packet-sha256")
+    parser.add_argument("--min-serial",type=int,default=0)
+    parser.add_argument("--python",type=Path)
+    parser.add_argument("--consent",default="")
+    parser.add_argument("--port",type=int,default=0)
+    args=parser.parse_args(argv)
+    try:
+        root=args.recipient_root
+        if args.action=="remove":
+            result=remove_technical_install(root,consent=args.consent)
+        else:
+            if args.public_trust_pem is None:
+                raise OfflineProductLifecycleError("separate approved PUBLIC trust key required")
+            key=_read(args.public_trust_pem,2000)
+            kwargs=dict(
+                public_pem=key,expected_owner_key_id=args.expected_owner_key_id,
+                expected_recipient_token_sha256=args.recipient_token_sha256,
+                expected_rights_packet_sha256=args.rights_packet_sha256,
+                min_serial=args.min_serial)
+            if args.action=="verify":
+                result=verify_selected(root,**kwargs)
+            elif args.action=="rollback":
+                result=rollback(root,consent=args.consent,**kwargs)
+            elif args.action=="stage":
+                if args.bundle is None or args.python is None:
+                    raise OfflineProductLifecycleError("signed bundle and exact Python required")
+                result=install_or_update(
+                    root,args.bundle,python=args.python,consent=args.consent,**kwargs)
+            else:
+                return serve_selected(root,port=args.port,**kwargs)
+        print(json.dumps(result,sort_keys=True),flush=True)
+        return 0
+    except (OSError,TypeError,KeyError,ValueError) as exc:
+        print(json.dumps({
+            "schema":SCHEMA,"status":"PRIVATE_OFFLINE_RECIPIENT_FAIL_CLOSED_NO_GO",
+            "reason_type":type(exc).__name__,
+            "customer_distribution_authorized":False,
+        },sort_keys=True))
+        return 2
+
+
+if __name__=="__main__":
+    raise SystemExit(main())
