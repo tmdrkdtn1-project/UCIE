@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'src/ucie_miner/customer_c2_pypi_advisory_provenance_v01.py'
+      - 'src/ucie_miner/customer_c2_bundled_openssl_advisory_v01.py'
+      - 'tests/test_ucie_c2_bundled_openssl_advisory_v01.py'
+      - 'docs/UCIE_C2_C3_OWNER_OPENSSL_RISK_AND_EXISTING_KEY_REAL_SIGNING_20261113.md'
       - 'tests/test_ucie_c2_pypi_advisory_provenance_v01.py'
       - 'docs/UCIE_C2_PINNED_PYPI_ADVISORY_PROVENANCE_REVIEW_20261113.md'
       - '.github/workflows/ucie-c2-pypi-advisory-one-shot.yml'
@@ -31,5 +34,6 @@ jobs:
           $report = & python -B -m ucie_miner.customer_c2_pypi_advisory_provenance_v01 --public-one-shot
           if ($LASTEXITCODE -ne 0) { throw "C2_PYPI_PUBLIC_EVIDENCE_FAIL_CLOSED" }
           $obj = $report | ConvertFrom-Json
+          if ($obj.bundled_native_openssl_security_review.known_embedded_openssl_advisory_count -ne 5 -or $obj.bundled_native_openssl_security_review.embedded_openssl_version_declared_by_upstream -ne "4.0.3" -or $obj.bundled_native_openssl_security_review.security_clearance_for_customer_distribution -ne $false) { throw "C2_EMBEDDED_OPENSSL_CVE_GATE_MISSING" }
           if ($obj.packages_checked -ne 3 -or $obj.actual_owner_wheel_captured_and_crosschecked -ne $false -or $obj.customer_distribution_authorized -ne $false -or $obj.signatures_cryptographically_independently_verified -ne $false -or $obj.external_python_code_downloaded_or_executed -ne $false -or $obj.operating_database_writes -ne 0) { throw "C2_PUBLIC_EVIDENCE_CLAIM_INVALID" }
           Write-Output $report
