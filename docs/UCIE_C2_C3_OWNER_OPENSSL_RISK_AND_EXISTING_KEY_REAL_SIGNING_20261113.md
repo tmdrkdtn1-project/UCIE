@@ -121,10 +121,16 @@ Exact required canonical fields:
 - four_pillar_product_scope_human_approved: false
 
 The owner/reviewer must actually substantiate all separate approvals.
-Only a reviewed fixed-wheel or explicit documented restricted 5-CVE
-risk-acceptance disposition is accepted:
-OFFICIAL_PATCHED_WHEEL_VERIFIED or
+Because THIS exact C1 pin cryptography 50.0.2 bundles OpenSSL 4.0.3,
+the owner signer now **explicitly rejects**
+OFFICIAL_PATCHED_WHEEL_VERIFIED. It is impossible to prove that fixed
+wheel patched by checking the checkbox. Re-pinning a future *officially
+fixed* wheel requires separate source, SHA, ABI, licenses and Windows
+re-acceptance, NOT automatic upgrade. The only currently modeled
+human disposition is:
 HUMAN_ACCEPTED_DOCUMENTED_RESTRICTED_5_LOW_CVE_RISK.
+This is a risk acceptance requiring actual independent legal/security
+judgment, no executable auto-determination.
 All seven approval booleans must be true to allow signing. The
 file SHA256 must ALSO match a separately provided expected SHA.
 These human assertions remain owner-controlled and are not
