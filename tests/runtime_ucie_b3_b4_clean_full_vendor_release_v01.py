@@ -341,7 +341,7 @@ try:
  line=p.stdout.readline()
  status=json.loads(line)
  assert status["status"]=="SIGNED_MEMBERSHIP_LOCAL_TECHNICAL_PREVIEW_NO_GO"
-  assert status["signed_membership_required_for_every_GET"] is True
+ assert status["signed_membership_required_for_every_GET"] is True
  assert status["customer_distribution_authorized"] is False
  port=int(status["url"].split(":")[-1].split("/")[0])
  def get(url):
@@ -351,7 +351,7 @@ try:
    return r.status,r.read(400001).decode("utf-8","replace")
  code,health=get("/local/health")
  assert code==200 and json.loads(health)["private_entitlement_reverified_per_request"]
-  assert json.loads(health)["membership_signature_reverified_per_request"] is True
+ assert json.loads(health)["membership_signature_reverified_per_request"] is True
  assert get("/local")[0]==200
  assert get("/local/library?q=Git")[0]==200
  # Actual post-install signature change must DENY the existing UI per request.
