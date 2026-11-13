@@ -156,7 +156,25 @@ physical_result=unittest.TextTestRunner(stream=io.StringIO()).run(physical_suite
 if (physical_result.testsRun!=12 or physical_result.skipped
     or not physical_result.wasSuccessful()):
  raise AssertionError("bounded physical recipient observer tests skipped/failed")
+# All membership policy, owner-sign, signed recipient and LIVE localhost
+# route tests must execute with the INSTALLED actual native crypto wheel.
+membership_counts={}
+for pattern, expected, label in (
+    ("test_ucie_membership_subscription_v01.py",23,"membership_subscription"),
+    ("test_ucie_membership_recipient_v01.py",16,"membership_recipient"),
+    ("test_ucie_membership_owner_sign_v01.py",11,"membership_owner_sign"),
+    ("test_ucie_membership_local_http_v01.py",7,"membership_local_http")):
+ suite=unittest.defaultTestLoader.discover(
+  start_dir=str(Path(sys.argv[1])),pattern=pattern,
+  top_level_dir=str(Path(sys.argv[1])))
+ result_member=unittest.TextTestRunner(stream=io.StringIO()).run(suite)
+ if (result_member.testsRun!=expected or result_member.skipped
+     or not result_member.wasSuccessful()):
+  raise AssertionError("native signed membership suite failed or skipped: "+label)
+ membership_counts[label]=result_member.testsRun
 print(json.dumps({"status":"C3_REAL_NATIVE_INSTALLED_ENTITLEMENT_TESTS_PASS",
+  "signed_membership_real_native_test_counts":membership_counts,
+  "signed_membership_real_native_test_skipped":0,
   "existing_owner_license_integrity_tests_executed":rights_result.testsRun,
   "existing_owner_license_integrity_tests_skipped":len(rights_result.skipped),
   "physical_recipient_readonly_tests_executed":physical_result.testsRun,
@@ -573,6 +591,12 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
                 or unit.get("existing_owner_license_integrity_tests_skipped")!=0
                 or unit.get("physical_recipient_readonly_tests_executed")!=12
                 or unit.get("physical_recipient_readonly_tests_skipped")!=0
+                or unit.get("signed_membership_real_native_test_counts")!={
+                    "membership_subscription":23,
+                    "membership_recipient":16,
+                    "membership_owner_sign":11,
+                    "membership_local_http":7}
+                or unit.get("signed_membership_real_native_test_skipped")!=0
                 or unit.get("tests_from_installed_ucie_wheel") is not True):
             raise FullRecipientQAFailure("native installed entitlement tests missing/skipped")
         # Actual installed cryptography and all 3 native vendor package checks.
@@ -709,6 +733,9 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         "existing_owner_real_signer_unit_tests_14_executed_zero_skips":True,
         "existing_owner_five_license_integrity_tests_10_executed_zero_skips":True,
         "owner_physical_recipient_readonly_policy_tests_12_executed_zero_skips":True,
+        "real_native_membership_policy_owner_sign_recipient_http_57_executed_zero_skips":True,
+        "actual_payment_provider_account_connected_or_billed":False,
+        "actual_subscription_customer_activated":False,
         "actual_owner_private_license_text_files_read_by_ci":False,
         "owner_real_private_key_accessed":False,
         "actual_owner_c1_captured_wheels_used":False,
