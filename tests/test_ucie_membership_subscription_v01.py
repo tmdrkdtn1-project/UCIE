@@ -130,6 +130,7 @@ class MembershipSignedAccessTests(unittest.TestCase):
             self.verify(now=self.end)["membership_phase"],"EXPIRED")
         self.assertFalse(member.route_access("/local/library",self.verify(now=self.end)))
         self.assertFalse(member.route_access("/local",self.verify(now=self.end)))
+        self.assertTrue(member.route_access("/local/membership",self.verify(now=self.end)))
 
     def test_07_cancel_at_period_end_does_not_terminate_paid_use_early(self):
         b,s=self.signed(billing_status="CANCEL_AT_PERIOD_END")
@@ -169,6 +170,7 @@ class MembershipSignedAccessTests(unittest.TestCase):
             self.assertEqual(r["membership_phase"],state)
             self.assertEqual(r["allowed_pillars"],[])
             self.assertFalse(member.route_access("/local",r))
+            self.assertTrue(member.route_access("/local/membership",r))
 
     def test_11_future_period_is_not_active(self):
         start=datetime(2026,12,1,tzinfo=timezone.utc)
