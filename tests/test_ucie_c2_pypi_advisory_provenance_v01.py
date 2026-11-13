@@ -180,6 +180,22 @@ class C2OfficialPinnedParserTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 c2._get_json(url)
 
+    def test_reject_unapproved_pypi_routes_and_disable_redirects(self):
+        from urllib.request import Request
+        for url, integrity in (
+            ("https://pypi.org/pypi/unapproved/1/json", False),
+            ("https://pypi.org/pypi/cryptography/50.0.1/json", False),
+            ("https://pypi.org/integrity/other/1/other-1.whl/provenance", True),
+            ("https://pypi.org/integrity/cryptography/50.0.2/../x/provenance", True),
+            ("https://pypi.org/pypi/cffi/2.1.1/json", True),
+        ):
+            with self.subTest(url=url, integrity=integrity):
+                with self.assertRaises(ValueError):
+                    c2._get_json(url, integrity=integrity)
+        req = Request("https://pypi.org/pypi/cffi/2.1.1/json")
+        self.assertIsNone(c2._NoRedirect().redirect_request(
+            req, None, 302, "Moved", {}, "https://offsite.example/payload"))
+
     def test_all_three_fixed_public_pins_true_identity_with_mocked_transport(self):
         def mocked(url, *, integrity=False):
             for name, version in c2.PINNED:
