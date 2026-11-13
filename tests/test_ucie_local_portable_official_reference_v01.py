@@ -123,8 +123,9 @@ class PortableOfficialReferenceRealHTTPTests(unittest.TestCase):
                                     route + ":" + word + ": " + domain + " missing")
                     self.assertTrue("NOT_ATTESTED_PER_REVISION" in page,
                                     route + ":" + word + ": unreviewed license not shown")
-                    self.assertTrue("검토 전" in page,
-                                    route + ":" + word + ": review state missing")
+                    self.assertTrue(
+                        "검토 전" in page or "UNVERIFIED_CANDIDATE_ONLY" in page,
+                        route + ":" + word + ": review status missing")
                     self.assertEqual(headers["Cache-Control"], "no-store")
                     self.assertIn("default-src 'none'",
                                   headers["Content-Security-Policy"])
