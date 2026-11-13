@@ -16,9 +16,12 @@ from ucie_miner.customer_staging_v01 import PILLARS
 class ExistingOwnerPrivateCustomerSigningTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-        from cryptography.hazmat.primitives import serialization
-        from ucie_public.rulepack import key_id
+        try:
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+            from cryptography.hazmat.primitives import serialization
+            from ucie_public.rulepack import key_id
+        except ImportError:
+            raise unittest.SkipTest("real Ed25519 vendor absent; no signer crypto PASS")
         cls.key=Ed25519PrivateKey.generate() # ONLY synthetic ephemeral memory
         cls.pub=cls.key.public_key().public_bytes(
             serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)
