@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 from tempfile import TemporaryDirectory
 
@@ -136,6 +137,253 @@ print(json.dumps({"status":"C3_REAL_NATIVE_INSTALLED_ENTITLEMENT_TESTS_PASS",
   "tests_from_installed_ucie_wheel":True,
   "owner_private_key_used":False,
   "customer_distribution_authorized":False},sort_keys=True))
+"""
+
+
+PRIVATE_SLOTS_CHILD = r"""
+import json,sys,os,subprocess
+from datetime import datetime,timedelta,timezone
+from hashlib import sha256
+from pathlib import Path
+from http.client import HTTPConnection
+from contextlib import closing
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization
+from ucie_public.rulepack import key_id
+from ucie_miner import customer_private_entitlement_v01 as c3
+from ucie_miner import customer_private_offline_lifecycle_v01 as life
+from ucie_miner import local_public_pr_owner_auth_v01 as auth
+from ucie_miner.customer_staging_v01 import PILLARS
+from importlib.metadata import version
+assert version("cryptography")=="50.0.2"
+assert version("cffi")=="2.1.1"
+assert version("pycparser")=="3.12"
+# All 16 lifecycle / genuine A0.1.0/B0.1.1 Ed25519 tests MUST execute
+# inside installed first-party + all pinned native vendor wheels.
+import unittest,io
+tests=unittest.defaultTestLoader.discover(
+ start_dir=str(Path(sys.argv[6])),pattern="test_ucie_customer_private_offline_lifecycle_v01.py",
+ top_level_dir=str(Path(sys.argv[6])))
+executed=unittest.TextTestRunner(stream=io.StringIO()).run(tests)
+if executed.testsRun!=16 or executed.skipped or not executed.wasSuccessful():
+ raise AssertionError("16 signed customer lifecycle tests skipped or failed")
+print("UCIE_STAGE_NATIVE_UNIT_PASS",flush=True)
+scratch=Path(sys.argv[1])
+product_A=Path(sys.argv[2])
+product_B=Path(sys.argv[3])
+vendors=Path(sys.argv[4])
+vendor_hashes=json.loads(sys.argv[5])
+private=Ed25519PrivateKey.generate()  # disposable MEMORY only, never persisted
+pub=private.public_key().public_bytes(
+ serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)
+keyid=key_id(private.public_key())
+recipient=sha256(b"UCIE-EPHEMERAL-NOT-A-REAL-CUSTOMER").hexdigest()
+rights=sha256(b"UCIE-SYNTHETIC-C2-LEGAL-NOT-APPROVED").hexdigest()
+now=datetime.now(timezone.utc).replace(microsecond=0)
+owner_args={
+ "public_pem":pub,"expected_owner_key_id":keyid,
+ "expected_recipient_token_sha256":recipient,
+ "expected_rights_packet_sha256":rights,"min_serial":60}
+bundles=[]
+print("UCIE_STAGE_BUNDLE_START",flush=True)
+for label,product,version,serial in (
+ ("A",product_A,"0.1.0",60),("B",product_B,"0.1.1",61)
+):
+ rec={
+  "schema":c3.SCHEMA,"scope":c3.SCOPE,"product":c3.DIST,
+  "product_version":version,
+  "product_wheel_sha256":sha256(product.read_bytes()).hexdigest(),
+  "vendor_wheels_sha256":vendor_hashes,
+  "recipient_token_sha256":recipient,
+  "rights_packet_sha256":rights,
+  "four_pillars":list(PILLARS),"serial":serial,"owner_key_id":keyid,
+  "issued_utc":auth._stamp(now),
+  "expires_utc":auth._stamp(now+timedelta(days=30))
+ }
+ body,sig=c3.synthetic_fixture_signing_bytes(rec,private)
+ release=scratch/("private_version_"+label)/life.RELEASE_NAME
+ release.parent.mkdir()
+ built=life.build_private_qa_bundle(release,product,vendors,body,sig)
+ assert built["exact_wheel_count"]==4
+ proof=life.verify_private_qa_bundle(release,**owner_args)
+ assert proof["real_ed25519_verified"] and proof["product_version"]==version
+ assert not proof["customer_distribution_authorized"]
+ bundles.append(release)
+ print("UCIE_STAGE_BUNDLE_"+label+"_PASS",flush=True)
+root=scratch/"separate_disposable_customer"/life.RECIPIENT_NAME
+root.parent.mkdir()
+print("UCIE_STAGE_INSTALL_A_START",flush=True)
+try:
+ a=life.install_or_update(root,bundles[0],python=Path(sys.executable),
+  consent=life.CONSENT,**owner_args)
+except Exception as e:
+ # Only static first-party failure strings converted to stage labels.
+ tag=type(e).__name__.upper()
+ reason=(
+  str(e).upper().replace(" ","_")[:60]
+  if type(e).__name__ in ("OfflineFullProductError",
+                           "OfflineProductLifecycleError") else "NO_DETAIL")
+ print("UCIE_STAGE_INSTALL_A_FAILURE_"+tag+"_"+reason,flush=True)
+ raise
+assert a["previous_slot"] is None and a["real_offline_pip_installed"]
+assert root.joinpath(life.LAUNCHER_NAME).read_bytes()==life.LAUNCHER.encode("utf-8")
+print("UCIE_STAGE_INSTALL_A_PASS",flush=True)
+check=life.verify_selected(root,**owner_args)
+assert check["product_version"]=="0.1.0"
+# Real version-0.1.0 active installed Python: no reuse of owner D:/UCIE.
+trust=scratch/"synthetic_approved_public_only.pem"
+trust.write_bytes(pub)
+active=root/"slots"/a["active_slot"]
+exe=active/"venv"/"Scripts"/"python.exe"
+cmd=[str(exe),"-I","-B","-m",
+     "ucie_miner.customer_private_offline_lifecycle_v01",
+     "--action","serve","--recipient-root",str(root),
+     "--public-trust-pem",str(trust),
+     "--expected-owner-key-id",keyid,"--recipient-token-sha256",recipient,
+     "--rights-packet-sha256",rights,"--min-serial","60","--port","0"]
+print("UCIE_STAGE_SERVE_A_START",flush=True)
+p=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                   text=True,encoding="utf-8",env=dict(os.environ,
+                   PYTHONDONTWRITEBYTECODE="1"))
+try:
+ line=p.stdout.readline()
+ status=json.loads(line)
+ assert status["status"]=="SIGNED_CUSTOMER_LOCAL_TECHNICAL_PREVIEW_NO_GO"
+ assert status["customer_distribution_authorized"] is False
+ port=int(status["url"].split(":")[-1].split("/")[0])
+ def get(url):
+  with closing(HTTPConnection("127.0.0.1",port,timeout=8)) as c:
+   c.request("GET",url,headers={"Host":"127.0.0.1:"+str(port)})
+   r=c.getresponse()
+   return r.status,r.read(400001).decode("utf-8","replace")
+ code,health=get("/local/health")
+ assert code==200 and json.loads(health)["private_entitlement_reverified_per_request"]
+ assert get("/local")[0]==200
+ assert get("/local/library?q=Git")[0]==200
+ # Actual post-install signature change must DENY the existing UI per request.
+ sigfile=active/life.RELEASE_NAME/"entitlement.sig.json"
+ original=sigfile.read_bytes()
+ sigfile.write_bytes(b"forged signed customer entitlement")
+ try:
+  code,message=get("/local")
+  assert code==403 and "ENTITLEMENT_REVOKED" in message
+ finally:
+  sigfile.write_bytes(original)
+ assert get("/local")[0]==200
+ print("UCIE_STAGE_INSTALL_B_START",flush=True)
+ try:
+  b=life.install_or_update(root,bundles[1],python=Path(sys.executable),
+   consent=life.CONSENT,**owner_args)
+ except Exception as e:
+  tag=type(e).__name__.upper()
+  reason=(str(e).upper().replace(" ","_")[:60]
+          if type(e).__name__ in ("OfflineFullProductError",
+                                   "OfflineProductLifecycleError") else "NO_DETAIL")
+  print("UCIE_STAGE_INSTALL_B_FAILURE_"+tag+"_"+reason,flush=True)
+  raise
+ assert b["active_slot"]!=a["active_slot"]
+ assert b["previous_slot"]==a["active_slot"]
+ assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
+ print("UCIE_STAGE_INSTALL_B_PASS",flush=True)
+ code,body=get("/local")
+ assert code==403 and "ENTITLEMENT_REVOKED" in body
+ print("UCIE_STAGE_STALE_A_SESSION_HTTP403_PASS",flush=True)
+ print("UCIE_STAGE_SIGNED_HTTP_PASS",flush=True)
+finally:
+ p.terminate()
+ p.wait(timeout=10)
+ if p.poll() is None:
+  p.kill();p.wait(timeout=5)
+# Replay floor independent of signed payload blocks legacy rollback.
+try:
+ life.rollback(root,consent=life.ROLLBACK_CONSENT,
+               **dict(owner_args,min_serial=61))
+ raise AssertionError("stale A entitlement erroneously rolled back")
+except ValueError:
+ pass
+assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
+print("UCIE_STAGE_ROLLBACK_START",flush=True)
+rollback=life.rollback(root,consent=life.ROLLBACK_CONSENT,**owner_args)
+assert rollback["active_slot"]==a["active_slot"]
+assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.0"
+# Switching back to signed B remains allowed with the same independent pin.
+life.rollback(root,consent=life.ROLLBACK_CONSENT,**owner_args)
+assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
+print("UCIE_STAGE_REMOVE_START",flush=True)
+removed=life.remove_technical_install(root,consent=life.REMOVE_CONSENT)
+assert removed["removed_registered_slots"]==2
+assert root.is_dir() and list(root.iterdir())==[]
+assert not (root/"runtime").exists()
+assert not (root/".git").exists()
+# Standalone end-user bootstrap acceptance: only Python3.15 + the exact
+# four local wheels + independently pinned hashes and owner PUBLIC trust.
+# No prior UCIE first-party installation or PYTHONPATH inside verifier.
+print("UCIE_STAGE_BOOTSTRAP_STANDALONE_START",flush=True)
+fresh=scratch/"third_independent_clean_windows_receiver"/life.RECIPIENT_NAME
+fresh.parent.mkdir()
+script=bundles[0]/life.BOOTSTRAP_NAME
+base=[
+ str(Path(sys.executable)),"-I","-B",str(script),
+ "--bundle",str(bundles[0]),"--recipient-root",str(fresh),
+ "--product-version","0.1.0",
+ "--expected-product-sha256",sha256(product_A.read_bytes()).hexdigest(),
+ "--expected-cryptography-sha256",vendor_hashes["cryptography"],
+ "--expected-cffi-sha256",vendor_hashes["cffi"],
+ "--expected-pycparser-sha256",vendor_hashes["pycparser"],
+ "--public-trust-pem",str(trust),
+ "--expected-owner-key-id",keyid,
+ "--recipient-token-sha256",recipient,
+ "--rights-packet-sha256",rights,
+ "--min-serial","60","--consent",life.CONSENT
+]
+bad=list(base)
+at=bad.index("--expected-cffi-sha256")+1
+bad[at]="f"*64
+denied=subprocess.run(bad,capture_output=True,text=True,timeout=60,
+                      env=dict(os.environ,PYTHONDONTWRITEBYTECODE="1"))
+if denied.returncode==0 or fresh.exists():
+ raise AssertionError("untrusted vendor SHA reached recipient install")
+bootstrap=subprocess.run(base,capture_output=True,text=True,timeout=300,
+                         env=dict(os.environ,PYTHONDONTWRITEBYTECODE="1"))
+if bootstrap.returncode!=0:
+ print("UCIE_STAGE_BOOTSTRAP_FAILURE_RETURN_"+str(bootstrap.returncode),flush=True)
+ raise AssertionError("standalone authenticated offline bootstrap failed")
+boot_result=json.loads(bootstrap.stdout.strip().splitlines()[-1])
+if (boot_result.get("status")!=
+    "UCIE_PRIVATE_BOOTSTRAP_TECHNICAL_INSTALL_ONLY_CUSTOMER_NO_GO"
+    or boot_result.get("customer_distribution_authorized") is not False
+    or boot_result.get("installed_disposable_bootstrap_native_provider_removed") is not True):
+ raise AssertionError("standalone bootstrap false success")
+if life.verify_selected(fresh,**owner_args)["product_version"]!="0.1.0":
+ raise AssertionError("standalone bootstrap installed wrong version")
+if not (fresh/life.LAUNCHER_NAME).is_file():
+ raise AssertionError("real customer PowerShell launcher absent")
+life.remove_technical_install(fresh,consent=life.REMOVE_CONSENT)
+if list(fresh.iterdir()):
+ raise AssertionError("standalone customer uninstall left installed data")
+print("UCIE_STAGE_BOOTSTRAP_STANDALONE_PASS",flush=True)
+print(json.dumps({
+ "status":"B3_B4_REAL_SIGNED_A_TO_B_TO_A_TO_B_WINDOWS_PRIVATE_SLOT_PASS",
+ "product_versions":["0.1.0","0.1.1"],
+ "installed_lifecycle_unit_cases_executed":executed.testsRun,
+ "installed_lifecycle_unit_cases_skipped":len(executed.skipped),
+ "release_candidate_wheels_per_version":4,
+ "local_spdx_noassertion_packages":4,
+ "product_source_versions_distinct":True,
+ "offline_two_installed_native_vendor_slots":True,
+ "per_get_signed_recipient_http200_and_after_tamper_http403":True,
+ "stale_A_signed_client_denied_after_B_update_http403":True,
+ "signed_serial_floor_blocks_stale_rollback":True,
+ "real_backward_and_forward_pointer_switching":True,
+ "real_private_product_slots_uninstalled":2,
+ "standalone_hash_pinned_python315_bootstrap_to_clean_recipient":True,
+ "pre_import_bad_vendor_sha_denied":True,
+ "launcher_generated_with_zero_embedded_customer_ids_or_private_keys":True,
+ "ephemeral_in_memory_ed25519_only":True,
+ "real_owner_private_key_used":False,
+ "real_owner_license_issued":False,
+ "customer_distribution_authorized":False,
+},sort_keys=True))
 """
 
 
@@ -339,6 +587,55 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         if (four_reinstalled["workflow_receipt_sha256"]
                 != four["workflow_receipt_sha256"]):
             raise FullRecipientQAFailure("full-product reinstall changed four-pillar behavior")
+        # THIS is the new release-critical integration: two genuinely distinct
+        # customer product wheels, individually signed and PINNED, each fully
+        # installed offline in a NEW independent slot. Observe actual HTTP.
+        source_A,source_B=ab._two_sources(sources)
+        wheel_A_dir=scratch/"private_release_A_wheel"
+        wheel_B_dir=scratch/"private_release_B_wheel"
+        wheel_A_dir.mkdir()
+        wheel_B_dir.mkdir()
+        product_A=full._build_first_party_wheel(
+            wheel_A_dir,source_A,version="0.1.0")
+        product_B=full._build_first_party_wheel(
+            wheel_B_dir,source_B,version="0.1.1")
+        full._inspect_first_party_wheel(product_A,source_A,version="0.1.0")
+        full._inspect_first_party_wheel(product_B,source_B,version="0.1.1")
+        if (sha256(product_A.read_bytes()).hexdigest()
+                ==sha256(product_B.read_bytes()).hexdigest()):
+            raise FullRecipientQAFailure("A and B product sources not distinct")
+        # Bounded CI-only execution with private-key-safe stage-class diagnostics.
+        # full._run normally hides failing child stdout/stderr, so a genuine
+        # regression could not be fixed without observing this fixed marker.
+        run=subprocess.run([
+            str(child),"-I","-B","-c",PRIVATE_SLOTS_CHILD,
+            str(scratch),str(product_A),str(product_B),str(vendor_dir),
+            json.dumps(hashes,sort_keys=True),str(root/"tests")],
+            cwd=scratch,env=safe_install,stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,text=True,encoding="utf-8",
+            errors="replace",timeout=300,check=False)
+        if run.returncode!=0:
+            stages=[line.strip() for line in run.stdout.splitlines()
+                    if re.fullmatch("UCIE_STAGE_[A-Z0-9_]{1,150}",line.strip())]
+            last_stage=stages[-1] if stages else "UCIE_STAGE_IMPORT_NOT_COMPLETED"
+            error_types=re.findall(r"\b([A-Za-z][A-Za-z0-9_]{0,60}(?:Error|Exception))(?=:|$)",
+                                   run.stderr)
+            last_error=error_types[-1] if error_types else "UnhandledChild"
+            raise FullRecipientQAFailure("technical signed slots "+last_stage+" "+last_error)
+        slots=json.loads(run.stdout.strip().splitlines()[-1])
+        if (slots.get("status") !=
+                "B3_B4_REAL_SIGNED_A_TO_B_TO_A_TO_B_WINDOWS_PRIVATE_SLOT_PASS"
+                or slots.get("installed_lifecycle_unit_cases_executed")!=16
+                or slots.get("installed_lifecycle_unit_cases_skipped")!=0
+                or slots.get("product_source_versions_distinct") is not True
+                or slots.get("per_get_signed_recipient_http200_and_after_tamper_http403") is not True
+                or slots.get("stale_A_signed_client_denied_after_B_update_http403") is not True
+                or slots.get("signed_serial_floor_blocks_stale_rollback") is not True
+                or slots.get("real_private_product_slots_uninstalled") != 2
+                or slots.get("standalone_hash_pinned_python315_bootstrap_to_clean_recipient") is not True
+                or slots.get("pre_import_bad_vendor_sha_denied") is not True
+                or slots.get("customer_distribution_authorized") is not False):
+            raise FullRecipientQAFailure("real independently signed private slot QA failed")
         ab._uninstall(child,scratch,safe_install)
         observed={
             "official_pypi_sha256_vendor_wheels":hashes,
@@ -354,6 +651,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
             "four_pillar_installed_cli":four,
             "installed_local_v04":ui,
             "installed_extra_official_route_gets":8,
+            "full_signed_product_A_to_B_rollback_uninstall":slots,
             "real_pip_uninstall_first_party":True,
             "current_product_real_reinstall_then_second_uninstall":True,
         }
@@ -367,6 +665,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         "native_vendor_code_ran_in_isolated_recipient":True,
         "synthetic_four_pillars_real_installed":True,
         "same_hash_current_product_reinstall_workflow_unchanged":True,
+        "real_signed_source_distinct_A_B_customer_slot_lifecycle_verified":True,
         "signed_anonymous_test_recipient_entitlement_verified_before_cli":True,
         "installed_genuine_crypto_customer_entitlement_unit_tests_18_executed_zero_skips":True,
         "owner_real_private_key_accessed":False,
@@ -387,9 +686,15 @@ def main() -> int:
         report=run_clean_vendor_recipient(REPO,dict(os.environ))
     except Exception as exc:
         label=type(exc).__name__[:64]
+        # No traceback, filesystem paths, key bytes, downloaded wheel or
+        # customer data. Only whitelisted first-party hardcoded step labels.
+        safe_reason=(str(exc)[:170] if isinstance(
+            exc,(FullRecipientQAFailure,full.OfflineFullProductError))
+            else "exception_type_only")
         print(json.dumps({
             "schema":SCHEMA,"status":FAIL,
             "failure_type":label,
+            "safe_first_party_stage":safe_reason,
             "customer_release_or_distribution_authorized":False,
         },sort_keys=True))
         return 2
