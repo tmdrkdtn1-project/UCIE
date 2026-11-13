@@ -122,3 +122,63 @@ https://github.com/tmdrkdtn1-project/UCIE/pull/263
 This implementation must be verified from its exact tested PR SHA
 and merged only after both full installed Windows and standard
 cross-platform CI pass.
+
+
+## Standalone Windows customer-side technical bootstrap (no prior UCIE)
+
+Every **technical** UCIE_PRIVATE_BUNDLE now contains
+Start-UCIE-Private-Install.py, copied byte-for-byte from the first-party
+wheel's reviewed Python source and checked again against its SHA-pinned
+resource, alongside exactly four real wheels, canonical manifest,
+SPDX inventory, rights-review HOLD notice and detached signed
+customer entitlement.
+
+An independently trusted Python 3.15 Windows interpreter can run
+this standalone standard-library script with:
+- --bundle <absolute UCIE_PRIVATE_BUNDLE>
+- --recipient-root <absolute UCIE_PRIVATE_RECIPIENT>
+- --product-version 0.1.0 (or separately authorized 0.1.1)
+- --expected-product-sha256 <owner independently confirmed wheel SHA256>
+- --expected-cryptography-sha256 <independently approved hash>
+- --expected-cffi-sha256 <independently approved hash>
+- --expected-pycparser-sha256 <independently approved hash>
+- --public-trust-pem <owner-approved PUBLIC key path>
+- --expected-owner-key-id <independently confirmed 32-character ID>
+- --recipient-token-sha256 <recipient-specific SHA256>
+- --rights-packet-sha256 <separately approved rights packet SHA256>
+- --min-serial <approved revocation floor>
+- --consent UCIE_PRIVATE_OFFLINE_TECHNICAL_RECIPIENT_INSTALL_ONCE
+
+Example syntax (technical QA only, NOT an instruction to ship):
+```powershell
+& '<existing-Windows-Python-3.15>' -I -B '<approved-bundle>\Start-UCIE-Private-Install.py' --bundle '<approved-bundle>' --recipient-root '<independent-recipient>\UCIE_PRIVATE_RECIPIENT' --product-version 0.1.0 --expected-product-sha256 '<approved-hash>' --expected-cryptography-sha256 '<approved-hash>' --expected-cffi-sha256 '<approved-hash>' --expected-pycparser-sha256 '<approved-hash>' --public-trust-pem '<approved-public-PEM-path>' --expected-owner-key-id '<approved-32hex>' --recipient-token-sha256 '<approved-64hex>' --rights-packet-sha256 '<approved-64hex>' --min-serial 1 --consent UCIE_PRIVATE_OFFLINE_TECHNICAL_RECIPIENT_INSTALL_ONCE
+```
+
+The entry script checks **all 4 independently supplied SHA256 pins
+BEFORE installing or importing ANY downloaded wheel**. It then creates
+a disposable hash-locked verifier venv and installs only the 3 approved
+vendor wheels without a network or sdists. From inside that ephemeral
+native-equipped verifier it ZIP-imports the independently pinned
+first-party wheel, requires a genuine C3 purpose-separated Ed25519
+customer signature, and calls the existing full offline 4-wheel slot
+installer. The disposable verifier is deleted. A failed consent,
+wrong hash, wrong owner PUBLIC key or invalid signed recipient must
+not create/activate a customer product.
+
+After a legitimate technical install, the recipient has
+Launch-UCIE-Private.ps1; its explicit public trust parameters
+are required every launch and the installed active slot rechecks
+the signed entitlement and all wheel hashes on EVERY GET. There is
+no automatic client launch or background service registration.
+
+**Installer distribution itself must be authenticated out of band**;
+these code checks cannot prove that an installer script was delivered
+by the owner rather than a substitute. Current test-only public GitHub
+source and SHA receipts do not grant redistribution rights for vendor
+binaries or permission to issue/sell customer entitlements.
+
+Acceptance also includes executing this exact standalone script in
+a newly created disposable Windows receiver with no UCIE package
+preinstalled, failing a wrong vendor SHA without creating the
+recipient, and actually installing/uninstalling the signed A product.
+This is NOT acceptance of a different physical owner-managed device.
