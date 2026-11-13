@@ -150,7 +150,8 @@ class OwnerC3EphemeralCryptoTests(unittest.TestCase):
     def test_real_ed25519_signature_and_independent_key_pinning_pass(self):
         result = self.verify()
         self.assertTrue(result["signature_cryptographically_verified"])
-        self.assertTrue(result["owner_key_preaccepted_out_of_band"])
+        self.assertTrue(result["owner_public_key_matches_supplied_trust_pin"])
+        self.assertFalse(result["out_of_band_owner_approval_independently_proven"])
         self.assertEqual(result["signed_serial"], 7)
         self.assertEqual(result["owner_key_id"], self.expected_key_id)
         self.assertEqual(result["status"], auth.VERIFY_STATUS)
