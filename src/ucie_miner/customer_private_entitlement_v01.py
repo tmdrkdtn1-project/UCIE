@@ -30,7 +30,8 @@ SCOPE = "UCIE_PRIVATE_DESIGNATED_CUSTOMER_COMPLETE_FOUR_PILLAR_PRODUCT"
 DOMAIN = b"UCIE_C3_PRIVATE_FOUR_PILLAR_CUSTOMER_ENTITLEMENT_V01\x00"
 MAX_RECORD = 3500
 MAX_ATTESTATION = 1300
-MAX_DAYS = 30
+MAX_DAYS = 30  # Existing technical A/B QA receipt remains valid.
+SUBSCRIPTION_PRODUCT_ARTIFACT_DAYS = 365 * 3  # Integrity lifecycle, NOT paid member access.
 MAX_SERIAL = 2**31 - 1
 SHA = re.compile(r"[a-f0-9]{64}\Z")
 KEYID = re.compile(r"[a-f0-9]{32}\Z")
@@ -146,8 +147,14 @@ def verify_private_entitlement(
             raise PrivateEntitlementError("mismatched or wrong-purpose attestation")
         issued = owner_auth._parse_stamp(record["issued_utc"])
         expiry = owner_auth._parse_stamp(record["expires_utc"])
-        if (expiry - issued != timedelta(days=MAX_DAYS)
+        artifact_duration=expiry-issued
+        if (artifact_duration not in (
+                timedelta(days=MAX_DAYS),
+                timedelta(days=SUBSCRIPTION_PRODUCT_ARTIFACT_DAYS))
                 or issued > current + timedelta(minutes=5) or current > expiry):
+            # Never allow an arbitrary never-expiring product token.
+            raise PrivateEntitlementError("unapproved product artifact validity")
+        if current > expiry:
             raise PrivateEntitlementError("entitlement issued in future or expired")
         encoded = signature["signature_base64"]
         if (type(encoded) is not str or owner_auth.B64.fullmatch(encoded) is None):
@@ -184,6 +191,9 @@ def verify_private_entitlement(
         "expected_recipient_binding_matches": True,
         "expected_product_and_pinned_vendor_digests_match": True,
         "expiry_utc": record["expires_utc"],
+        "artifact_entitlement_validity_days":artifact_duration.days,
+        "artifact_signature_not_a_paid_membership":True,
+        "commercial_access_still_requires_separate_signed_membership":True,
         "owner_key_matches_independent_expected_pin": True,
         "out_of_band_owner_approval_independently_proven": False,
         "rights_packet_sha256_bound_but_legal_approval_not_proven": True,
