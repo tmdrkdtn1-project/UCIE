@@ -27,8 +27,49 @@ if importlib.util.find_spec("cryptography") is not None:
 else:
  try:
   from ucie_miner.customer_portable_preview_v01 import probe_preview_root
-  result=probe_preview_root(Path(sys.argv[1]))
+  root=Path(sys.argv[1])
+  result=probe_preview_root(root)
+  from ucie_miner.local_v1_app_v01 import make_handler,LOCAL_SERVER_CLASS
+  from ucie_miner.local_portable_official_reference_v01 import NOTE
+  from http.client import HTTPConnection
+  from threading import Thread
+  from contextlib import closing
+  assert not (root/"runtime").exists(), "CI source must not contain owner DB"
+  routes=(
+    ("/local/library?q=Python","docs.python.org"),
+    ("/local/library?q=PowerShell","learn.microsoft.com"),
+    ("/local/library?q=Git","git-scm.com"),
+    ("/local/library?q=MCP","modelcontextprotocol.io"),
+    ("/local/evolution?q=Python","docs.python.org"),
+    ("/local/evolution?q=PowerShell","learn.microsoft.com"),
+    ("/local/evolution?q=Git","git-scm.com"),
+    ("/local/evolution?q=MCP","modelcontextprotocol.io"),
+  )
+  from ucie_miner.local_portable_official_reference_v01 import STATUS as REF_STATUS
+  with LOCAL_SERVER_CLASS(("127.0.0.1",0),make_handler(root)) as server:
+   thread=Thread(target=server.serve_forever,daemon=True);thread.start()
+   try:
+    for route,marker in routes:
+     with closing(HTTPConnection("127.0.0.1",server.server_port,timeout=6)) as c:
+      c.request("GET",route,headers={"Host":"127.0.0.1:"+str(server.server_port)})
+      response=c.getresponse();data=response.read(400001).decode("utf-8","replace")
+      if (response.status!=200 or marker not in data or NOTE not in data
+          or 'data-offline-reference-only="true"' not in data
+          or len(data)>400000):
+       raise ValueError("installed offline docs route fail closed")
+    with closing(HTTPConnection("127.0.0.1",server.server_port,timeout=6)) as c:
+     c.request("GET","/local/library?q=Git&page=2",
+               headers={"Host":"127.0.0.1:"+str(server.server_port)})
+     response=c.getresponse();response.read(1024)
+     if response.status!=400:raise ValueError("offline PR pagination admitted")
+   finally:
+    server.shutdown();thread.join(timeout=5)
+    if thread.is_alive():raise ValueError("offline docs server remained running")
   print(json.dumps({"status":"V04_LOCALHOST_HTTP_PASS","ui":result,
+                    "installed_offline_reference_routes_verified":len(routes),
+                    "offline_reference_status":REF_STATUS,
+                    "installed_no_public_pr_database":True,
+                    "offline_PR_page2_rejected":True,
                     "vendor_distribution_absent":True,
                     "customer_release_authorized":False},sort_keys=True))
  except ModuleNotFoundError as err:
@@ -116,7 +157,12 @@ def run(root: Path, env: dict) -> dict:
             raise InstalledUIError("UI_BLOCKER_" + str(ui_result.get("status"))[:40]
                                    + "_MISSING_" + missing)
         ui = full._check_ui(json.dumps(ui_result["ui"], sort_keys=True))
-        if (ui_result.get("vendor_distribution_absent") is not True
+        if (ui_result.get("installed_offline_reference_routes_verified") != 8
+                or ui_result.get("offline_reference_status")
+                    != "OFFICIAL_DOCUMENT_REFERENCES_ONLY_NO_CAPTURED_PR_LEDGER_NO_GO"
+                or ui_result.get("installed_no_public_pr_database") is not True
+                or ui_result.get("offline_PR_page2_rejected") is not True
+                or ui_result.get("vendor_distribution_absent") is not True
                 or ui_result.get("customer_release_authorized") is not False
                 or ui.get("installed_local_ui_loopback_routes_verified") != 5
                 or four.get("first_party_four_pillars_synthetic_worked") is not True):
@@ -128,6 +174,9 @@ def run(root: Path, env: dict) -> dict:
             "installed_python_module_count": info["file_count"],
             "installed_four_pillar_uci_synthetic": True,
             "installed_V04_real_127_0_0_1_GET_routes": 5,
+            "installed_offline_official_reference_HTTP_GET_routes": 8,
+            "installed_public_PR_captured_database_present": False,
+            "installed_offline_PR_page2_denied": True,
             "installed_V04_real_POST_denied": True,
             "vendor_packages_included_or_executed": False,
             "native_vendor_ABI_attested": False,
