@@ -39,7 +39,7 @@ VULN_ID = re.compile(r"[A-Za-z0-9_.-]{1,90}\Z")
 # Bounded CI public-only examples; no assumption that these are the actual
 # selected owner wheel filenames (owner mode uses verified C1 receipt instead).
 PUBLIC_TEST_ONLY = {
-    "cryptography": "cryptography-50.0.2-cp315-abi3t-win_amd64.whl",
+    "cryptography": "cryptography-50.0.2-cp315-abi3.abi3t-win_amd64.whl",
     "cffi": "cffi-2.1.1-cp315-cp315-win_amd64.whl",
     "pycparser": "pycparser-3.12-py3-none-any.whl",
 }
