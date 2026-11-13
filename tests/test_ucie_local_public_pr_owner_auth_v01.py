@@ -92,6 +92,24 @@ class OwnerC3StdlibOnlyContractTests(unittest.TestCase):
                     server.shutdown()
                     thread.join(timeout=5)
 
+    def test_trust_key_parent_symlink_refused_without_reading_any_file(self):
+        with TemporaryDirectory(prefix="UCIE_C3_NO_PATH_ESCAPE_") as parent:
+            trustdir = Path(parent) / ".build_keys"
+            trustdir.mkdir()
+            key = trustdir / auth.TRUST_NAME
+            key.write_bytes(b"not-a-real-owner-key")
+            original_read = Path.read_bytes
+            with patch.object(Path, "is_symlink",
+                              autospec=True,
+                              side_effect=lambda p: p == trustdir):
+                with patch.object(Path, "read_bytes",
+                                  autospec=True,
+                                  side_effect=AssertionError("untrusted file read")):
+                    with self.assertRaises(auth.OwnerMetadataAuthError):
+                        auth._safe_small(key, max_bytes=auth.MAX_PEM)
+            self.assertTrue(key.exists())
+            self.assertIsNotNone(original_read)
+
     def test_invalid_unprovisioned_trust_or_metadata_rejected_first(self):
         raw = in_memory_public_metadata()
         for pub, keyid, serial in (
