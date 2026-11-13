@@ -140,7 +140,27 @@ owner_result=unittest.TextTestRunner(stream=io.StringIO(),verbosity=1).run(owner
 if (owner_result.testsRun!=14 or len(owner_result.skipped)!=0
     or not owner_result.wasSuccessful()):
  raise AssertionError("existing-owner-key real C3 crypto verification suite was skipped or failed")
+rights_suite=unittest.defaultTestLoader.discover(
+ start_dir=str(Path(sys.argv[1])),
+ pattern="test_ucie_c2_existing_owner_license_integrity_v01.py",
+ top_level_dir=str(Path(sys.argv[1])))
+rights_result=unittest.TextTestRunner(stream=io.StringIO()).run(rights_suite)
+if (rights_result.testsRun!=10 or rights_result.skipped
+    or not rights_result.wasSuccessful()):
+ raise AssertionError("bounded existing owner license integrity tests skipped/failed")
+physical_suite=unittest.defaultTestLoader.discover(
+ start_dir=str(Path(sys.argv[1])),
+ pattern="test_ucie_c4_physical_windows_recipient_readonly_v01.py",
+ top_level_dir=str(Path(sys.argv[1])))
+physical_result=unittest.TextTestRunner(stream=io.StringIO()).run(physical_suite)
+if (physical_result.testsRun!=12 or physical_result.skipped
+    or not physical_result.wasSuccessful()):
+ raise AssertionError("bounded physical recipient observer tests skipped/failed")
 print(json.dumps({"status":"C3_REAL_NATIVE_INSTALLED_ENTITLEMENT_TESTS_PASS",
+  "existing_owner_license_integrity_tests_executed":rights_result.testsRun,
+  "existing_owner_license_integrity_tests_skipped":len(rights_result.skipped),
+  "physical_recipient_readonly_tests_executed":physical_result.testsRun,
+  "physical_recipient_readonly_tests_skipped":len(physical_result.skipped),
   "existing_owner_signer_tests_executed":owner_result.testsRun,
   "existing_owner_signer_tests_skipped":len(owner_result.skipped),
   "existing_owner_private_key_accessed":False,
@@ -549,6 +569,10 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
                 or unit.get("existing_owner_signer_tests_executed")!=14
                 or unit.get("existing_owner_signer_tests_skipped")!=0
                 or unit.get("existing_owner_private_key_accessed") is not False
+                or unit.get("existing_owner_license_integrity_tests_executed")!=10
+                or unit.get("existing_owner_license_integrity_tests_skipped")!=0
+                or unit.get("physical_recipient_readonly_tests_executed")!=12
+                or unit.get("physical_recipient_readonly_tests_skipped")!=0
                 or unit.get("tests_from_installed_ucie_wheel") is not True):
             raise FullRecipientQAFailure("native installed entitlement tests missing/skipped")
         # Actual installed cryptography and all 3 native vendor package checks.
@@ -683,6 +707,9 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         "signed_anonymous_test_recipient_entitlement_verified_before_cli":True,
         "installed_genuine_crypto_customer_entitlement_unit_tests_18_executed_zero_skips":True,
         "existing_owner_real_signer_unit_tests_14_executed_zero_skips":True,
+        "existing_owner_five_license_integrity_tests_10_executed_zero_skips":True,
+        "owner_physical_recipient_readonly_policy_tests_12_executed_zero_skips":True,
+        "actual_owner_private_license_text_files_read_by_ci":False,
         "owner_real_private_key_accessed":False,
         "actual_owner_c1_captured_wheels_used":False,
         "actual_physical_owner_controlled_second_windows_recipient_accepted":False,
