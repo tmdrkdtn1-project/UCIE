@@ -47,7 +47,7 @@ class C2EmbeddedNativeAdvisoryTests(unittest.TestCase):
                 c2.assess_current_embedded_openssl(
                     pypi_versioned_advisories_observed=x)
 
-    def test_05_offline CLI_returns_intentional_no_go_exit2(self):
+    def test_05_offline_CLI_returns_intentional_no_go_exit2(self):
         output=StringIO()
         with redirect_stdout(output):
             status=c2.main(["--offline-c2-review"])
