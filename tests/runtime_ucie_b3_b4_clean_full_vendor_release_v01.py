@@ -270,27 +270,30 @@ try:
  finally:
   sigfile.write_bytes(original)
  assert get("/local")[0]==200
+ print("UCIE_STAGE_INSTALL_B_START",flush=True)
+ try:
+  b=life.install_or_update(root,bundles[1],python=Path(sys.executable),
+   consent=life.CONSENT,**owner_args)
+ except Exception as e:
+  tag=type(e).__name__.upper()
+  reason=(str(e).upper().replace(" ","_")[:60]
+          if type(e).__name__ in ("OfflineFullProductError",
+                                   "OfflineProductLifecycleError") else "NO_DETAIL")
+  print("UCIE_STAGE_INSTALL_B_FAILURE_"+tag+"_"+reason,flush=True)
+  raise
+ assert b["active_slot"]!=a["active_slot"]
+ assert b["previous_slot"]==a["active_slot"]
+ assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
+ print("UCIE_STAGE_INSTALL_B_PASS",flush=True)
+ code,body=get("/local")
+ assert code==403 and "ENTITLEMENT_REVOKED" in body
+ print("UCIE_STAGE_STALE_A_SESSION_HTTP403_PASS",flush=True)
  print("UCIE_STAGE_SIGNED_HTTP_PASS",flush=True)
 finally:
  p.terminate()
  p.wait(timeout=10)
  if p.poll() is None:
   p.kill();p.wait(timeout=5)
-print("UCIE_STAGE_INSTALL_B_START",flush=True)
-try:
- b=life.install_or_update(root,bundles[1],python=Path(sys.executable),
-  consent=life.CONSENT,**owner_args)
-except Exception as e:
- tag=type(e).__name__.upper()
- reason=(str(e).upper().replace(" ","_")[:60]
-         if type(e).__name__ in ("OfflineFullProductError",
-                                  "OfflineProductLifecycleError") else "NO_DETAIL")
- print("UCIE_STAGE_INSTALL_B_FAILURE_"+tag+"_"+reason,flush=True)
- raise
-assert b["active_slot"]!=a["active_slot"]
-assert b["previous_slot"]==a["active_slot"]
-assert life.verify_selected(root,**owner_args)["product_version"]=="0.1.1"
-print("UCIE_STAGE_INSTALL_B_PASS",flush=True)
 # Replay floor independent of signed payload blocks legacy rollback.
 try:
  life.rollback(root,consent=life.ROLLBACK_CONSENT,
@@ -369,6 +372,7 @@ print(json.dumps({
  "product_source_versions_distinct":True,
  "offline_two_installed_native_vendor_slots":True,
  "per_get_signed_recipient_http200_and_after_tamper_http403":True,
+ "stale_A_signed_client_denied_after_B_update_http403":True,
  "signed_serial_floor_blocks_stale_rollback":True,
  "real_backward_and_forward_pointer_switching":True,
  "real_private_product_slots_uninstalled":2,
@@ -625,6 +629,7 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
                 or slots.get("installed_lifecycle_unit_cases_skipped")!=0
                 or slots.get("product_source_versions_distinct") is not True
                 or slots.get("per_get_signed_recipient_http200_and_after_tamper_http403") is not True
+                or slots.get("stale_A_signed_client_denied_after_B_update_http403") is not True
                 or slots.get("signed_serial_floor_blocks_stale_rollback") is not True
                 or slots.get("real_private_product_slots_uninstalled") != 2
                 or slots.get("standalone_hash_pinned_python315_bootstrap_to_clean_recipient") is not True
