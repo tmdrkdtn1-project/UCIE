@@ -745,6 +745,9 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
                 or slots.get("installed_lifecycle_unit_cases_skipped")!=0
                 or slots.get("product_source_versions_distinct") is not True
                 or slots.get("per_get_signed_recipient_http200_and_after_tamper_http403") is not True
+                or slots.get("real_native_signed_synthetic_membership_http200_and_tamper_http403") is not True
+                or slots.get("signed_member_snapshot_survives_product_uninstall_before_CI_cleanup") is not True
+                or slots.get("actual_payment_provider_or_customer_subscription_activated") is not False
                 or slots.get("stale_A_signed_client_denied_after_B_update_http403") is not True
                 or slots.get("signed_serial_floor_blocks_stale_rollback") is not True
                 or slots.get("real_private_product_slots_uninstalled") != 2
