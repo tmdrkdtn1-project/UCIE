@@ -160,6 +160,21 @@ class B2RealLocalLoopbackTests(unittest.TestCase):
                 self.assertEqual(status, 400)
                 self.assertIn("FAIL_CLOSED", page)
 
+    def test_real_navigation_arrives_at_library_and_evidence_views(self):
+        # Follow the generated links to the existing three/four pillar pages.
+        # A missing public catalog must show an honest empty/review state,
+        # never invent an approved source or return an arbitrary code path.
+        for case in b2.EXPECTED:
+            q = quote(b2.PUBLIC_QUERIES[case], safe="")
+            for route in ("/local/library?q=" + q,
+                          "/local/evolution?q=" + q):
+                with self.subTest(case=case, route=route):
+                    status, body, headers = self.get(route)
+                    self.assertEqual(status, 200, route + " " + body[:160])
+                    self.assertIn("<!doctype html>", body.lower())
+                    self.assertIn("no-store", headers["Cache-Control"])
+                    self.assertNotIn("customer_distribution_authorized=True", body)
+
     def test_no_mutation_post_forbidden_host_and_unrelated_engine_scenario(self):
         for path in (
             "/local/engine?purpose=B2_CONNECTED_TRIAGE&case=python-env",
