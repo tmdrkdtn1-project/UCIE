@@ -281,6 +281,8 @@ def sign_existing_owner_local_once(root: Path, *, serial: int,
         if (not isinstance(root, Path) or root.resolve(strict=True) !=
                 expected.resolve(strict=True)
                 or os.name != "nt"
+                or Path(sys.executable).resolve(strict=True) != (
+                    root / ".venv" / "Scripts" / "python.exe").resolve(strict=True)
                 or sys.implementation.name != "cpython"
                 or sys.version_info[:2] != (3, 15)
                 or not sys.stdin.isatty()
@@ -349,13 +351,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--expected-owner-key-id", required=True)
     ap.add_argument("--min-serial", type=int)
     ap.add_argument("--serial", type=int)
+    ap.add_argument("--recipient-ucie-root", type=Path)
     args = ap.parse_args(argv)
-    root = Path(__file__).resolve().parents[2]
+    # Installed-wheel verifier needs a separately designated recipient UCIE
+    # checkout. Owner signing never accepts a user-selected root.
+    root = (args.recipient_ucie_root if args.verify_recipient
+            else Path(__file__).resolve().parents[2])
     from .local_public_pr_capsule_v01 import _root as checked_root
     try:
         checked_root(root)
         if args.owner_sign_once:
-            if args.min_serial is not None or args.serial is None:
+            if (args.recipient_ucie_root is not None
+                    or args.min_serial is not None or args.serial is None):
                 raise OwnerMetadataAuthError("owner serial or mode invalid")
             consent = input("Separate UCIE C3 metadata signature consent: ").strip()
             result = sign_existing_owner_local_once(
@@ -363,8 +370,10 @@ def main(argv: list[str] | None = None) -> int:
                 expected_owner_key_id=args.expected_owner_key_id,
                 consent=consent)
         else:
-            if args.serial is not None or args.min_serial is None:
-                raise OwnerMetadataAuthError("recipient minimum serial required")
+            if (args.serial is not None or args.min_serial is None
+                    or args.recipient_ucie_root is None
+                    or not args.recipient_ucie_root.is_absolute()):
+                raise OwnerMetadataAuthError("absolute UCIE recipient root and minimum serial required")
             # Independent trust key provisioned through dedicated ignored area.
             # Key-ID and floor are passed by owner OUT OF BAND, never read
             # from the copied capsule or signature.
