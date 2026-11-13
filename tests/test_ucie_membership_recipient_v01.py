@@ -50,6 +50,7 @@ class SignedMembershipRecipientTests(unittest.TestCase):
             "period_start_utc":owner._stamp(start),
             "period_end_utc":owner._stamp(end),
             "grace_until_utc":owner._stamp(end),
+            "access_lease_expires_utc":owner._stamp(end),
         }
 
     def signed(self,seq=1,status="ACTIVE",plan="complete"):
