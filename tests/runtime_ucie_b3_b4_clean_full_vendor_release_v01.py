@@ -157,6 +157,15 @@ from importlib.metadata import version
 assert version("cryptography")=="50.0.2"
 assert version("cffi")=="2.1.1"
 assert version("pycparser")=="3.12"
+# All 16 lifecycle / genuine A0.1.0/B0.1.1 Ed25519 tests MUST execute
+# inside installed first-party + all pinned native vendor wheels.
+import unittest,io
+tests=unittest.defaultTestLoader.discover(
+ start_dir=str(Path(sys.argv[6])),pattern="test_ucie_customer_private_offline_lifecycle_v01.py",
+ top_level_dir=str(Path(sys.argv[6])))
+executed=unittest.TextTestRunner(stream=io.StringIO()).run(tests)
+if executed.testsRun!=16 or executed.skipped or not executed.wasSuccessful():
+ raise AssertionError("16 signed customer lifecycle tests skipped or failed")
 scratch=Path(sys.argv[1])
 product_A=Path(sys.argv[2])
 product_B=Path(sys.argv[3])
@@ -275,6 +284,8 @@ assert not (root/".git").exists()
 print(json.dumps({
  "status":"B3_B4_REAL_SIGNED_A_TO_B_TO_A_TO_B_WINDOWS_PRIVATE_SLOT_PASS",
  "product_versions":["0.1.0","0.1.1"],
+ "installed_lifecycle_unit_cases_executed":executed.testsRun,
+ "installed_lifecycle_unit_cases_skipped":len(executed.skipped),
  "release_candidate_wheels_per_version":4,
  "local_spdx_noassertion_packages":4,
  "product_source_versions_distinct":True,
@@ -512,11 +523,13 @@ def run_clean_vendor_recipient(root: Path, env: dict[str, str]) -> dict:
         slots=json.loads(full._run([
             str(child),"-I","-B","-c",PRIVATE_SLOTS_CHILD,
             str(scratch),str(product_A),str(product_B),str(vendor_dir),
-            json.dumps(hashes,sort_keys=True)],
+            json.dumps(hashes,sort_keys=True),str(root/"tests")],
             scratch,safe_install,
             "real signed A0.1.0/B0.1.1 offline private recipient slots"))
         if (slots.get("status") !=
                 "B3_B4_REAL_SIGNED_A_TO_B_TO_A_TO_B_WINDOWS_PRIVATE_SLOT_PASS"
+                or slots.get("installed_lifecycle_unit_cases_executed")!=16
+                or slots.get("installed_lifecycle_unit_cases_skipped")!=0
                 or slots.get("product_source_versions_distinct") is not True
                 or slots.get("per_get_signed_recipient_http200_and_after_tamper_http403") is not True
                 or slots.get("signed_serial_floor_blocks_stale_rollback") is not True
