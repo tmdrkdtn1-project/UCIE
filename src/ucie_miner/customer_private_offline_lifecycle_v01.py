@@ -52,7 +52,9 @@ param(
   [Parameter(Mandatory=$true)][string]$ExpectedOwnerKeyId,
   [Parameter(Mandatory=$true)][string]$RecipientTokenSha256,
   [Parameter(Mandatory=$true)][string]$RightsPacketSha256,
-  [Parameter(Mandatory=$true)][int]$MinSerial
+  [Parameter(Mandatory=$true)][int]$MinSerial,
+  [Parameter(Mandatory=$true)][string]$ExpectedSubscriptionIdSha256,
+  [Parameter(Mandatory=$true)][int]$MinMembershipSequence
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -61,7 +63,7 @@ $slot = [string]$ptr.active_slot
 if ($slot -cnotmatch '^[0-9a-f]{16}$') { throw 'UCIE_UNTRUSTED_SLOT_POINTER' }
 $exe = Join-Path $root ('slots\' + $slot + '\venv\Scripts\python.exe')
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'UCIE_INSTALLED_PYTHON_MISSING' }
-& $exe -I -B -m ucie_miner.customer_private_offline_lifecycle_v01 --action serve --recipient-root $root --public-trust-pem $PublicTrustPem --expected-owner-key-id $ExpectedOwnerKeyId --recipient-token-sha256 $RecipientTokenSha256 --rights-packet-sha256 $RightsPacketSha256 --min-serial $MinSerial --port 0
+& $exe -I -B -m ucie_miner.customer_private_offline_lifecycle_v01 --action serve --recipient-root $root --public-trust-pem $PublicTrustPem --expected-owner-key-id $ExpectedOwnerKeyId --recipient-token-sha256 $RecipientTokenSha256 --rights-packet-sha256 $RightsPacketSha256 --min-serial $MinSerial --expected-subscription-id-sha256 $ExpectedSubscriptionIdSha256 --min-membership-sequence $MinMembershipSequence --port 0
 exit $LASTEXITCODE
 """
 
@@ -394,7 +396,7 @@ def _recipient(root: Path) -> Path:
     if root.exists():
         if not root.is_dir() or (root/"slots").is_symlink():
             raise OfflineProductLifecycleError("unsafe recipient directory")
-        if set(p.name for p in root.iterdir()) - {"slots", "active.json", LAUNCHER_NAME}:
+        if set(p.name for p in root.iterdir()) - {"slots", "active.json", LAUNCHER_NAME, "membership"}:
             raise OfflineProductLifecycleError("recipient has unrecognized data")
         script=root/LAUNCHER_NAME
         if script.exists() or script.is_symlink():
@@ -705,16 +707,34 @@ def remove_technical_install(recipient:Path,*,consent:str) -> dict:
 def serve_selected(
     recipient: Path, *, public_pem: bytes, expected_owner_key_id: str,
     expected_recipient_token_sha256: str, expected_rights_packet_sha256: str,
-    min_serial: int, port: int = 0,
+    min_serial: int, expected_subscription_id_sha256: str,
+    min_membership_sequence: int, port: int = 0,
 ) -> int:
     """Private localhost surface: genuine selected signature checked EVERY GET."""
     from . import local_v1_app_v01 as app
-    if type(port) is not int or (port!=0 and not 1024<=port<=65535):
+    from . import customer_membership_subscription_v01 as sub
+    from . import customer_membership_recipient_v01 as member
+    if (type(expected_subscription_id_sha256) is not str
+            or sub.product.SHA.fullmatch(expected_subscription_id_sha256) is None
+            or type(min_membership_sequence) is not int
+            or not 1<=min_membership_sequence<=sub.MAX_SEQUENCE):
+        raise OfflineProductLifecycleError("paid membership account and owner renewal floor required")
+    if type(port) is not int or (port!=0 and not 1024<=65535):
         raise OfflineProductLifecycleError("unapproved loopback port")
     receipt=verify_selected(
         recipient,public_pem=public_pem,expected_owner_key_id=expected_owner_key_id,
         expected_recipient_token_sha256=expected_recipient_token_sha256,
         expected_rights_packet_sha256=expected_rights_packet_sha256,min_serial=min_serial)
+    # The real product C3 signature is NEVER payment/term authorization.
+    # Require a separate purpose-signed subscription before binding HTTP.
+    member.verify_installed_membership(
+        recipient,public_pem=public_pem,
+        expected_owner_key_id=expected_owner_key_id,
+        expected_recipient_token_sha256=expected_recipient_token_sha256,
+        expected_rights_packet_sha256=expected_rights_packet_sha256,
+        expected_subscription_id_sha256=expected_subscription_id_sha256,
+        min_product_serial=min_serial,
+        min_renewal_sequence=min_membership_sequence)
     slot=receipt["active_slot"]
     child=recipient/"slots"/slot/"venv"/"Scripts"/"python.exe"
     if Path(sys.executable).resolve()!=child.resolve():
@@ -737,17 +757,65 @@ def serve_selected(
                 if current["active_slot"]!=slot:
                     raise OfflineProductLifecycleError(
                         "stale served slot after signed update or rollback")
+                # Renew/cancel/revoke/expire is checked for EVERY request,
+                # including direct/deep links, not only the landing page.
+                membership=member.verify_installed_membership(
+                    recipient,public_pem=public_pem,
+                    expected_owner_key_id=expected_owner_key_id,
+                    expected_recipient_token_sha256=expected_recipient_token_sha256,
+                    expected_rights_packet_sha256=expected_rights_packet_sha256,
+                    expected_subscription_id_sha256=expected_subscription_id_sha256,
+                    min_product_serial=min_serial,
+                    min_renewal_sequence=min_membership_sequence,
+                    now=datetime.now(timezone.utc))
+                from urllib.parse import urlsplit
+                route=urlsplit(self.path).path
+                if not sub.route_access(route,membership):
+                    raise OfflineProductLifecycleError(
+                        "unsubscribed, expired, revoked or lower membership plan")
             except (OSError,TypeError,ValueError):
-                return self.reply(403,"UCIE_PRIVATE_ENTITLEMENT_REVOKED_NO_GO",
+                return self.reply(403,"UCIE_MEMBERSHIP_ACCESS_DENIED_NO_GO",
                                   "text/plain; charset=utf-8")
-            from urllib.parse import urlsplit
-            if urlsplit(self.path).path=="/local/health":
+            if route=="/local/membership":
+                # Show only already-verified, safe low-cardinality claims.
+                # Never expose account hashes, owner keys or payment evidence.
+                from html import escape
+                fields=(
+                    ("멤버십 등급",membership["plan"]),
+                    ("구독 상태",membership["membership_phase"]),
+                    ("청구 주기",membership["billing_interval"]),
+                    ("이용 기간 종료",membership["paid_period_ends_utc"]),
+                    ("오프라인 접근권 갱신 기한",
+                     membership["offline_access_lease_expires_utc"]),
+                )
+                rows="".join(
+                    "<dt>"+escape(label)+"</dt><dd>"+escape(str(value))+"</dd>"
+                    for label,value in fields)
+                page=(
+                    "<!doctype html><html lang='ko'><meta charset='utf-8'>"
+                    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                    "<title>UCIE 멤버십 상태</title>"
+                    "<style>body{background:#111827;color:#f3f4f6;font-family:"
+                    "system-ui,sans-serif;max-width:660px;margin:48px auto;padding:20px}"
+                    "dt{color:#a5b4fc;margin-top:18px}dd{margin:6px 0 0;font-weight:600}"
+                    "a{color:#93c5fd}</style>"
+                    "<h1>UCIE 멤버십</h1><p>구독형 서비스 이용권</p><dl>"+rows+"</dl>"
+                    "<p>멤버십 갱신은 승인된 결제 및 서명된 접근권을 통해 처리됩니다."
+                    " 재결제 없이 접근권 갱신이 필요한 경우 제공자에게 문의하세요.</p>"
+                    "<p>구독 만료는 고객이 작성한 코드와 업무 결과물을 삭제하지 않습니다.</p>"
+                    "<p><a href='/local'>UCIE 홈</a></p></html>"
+                )
+                return self.reply(200,page,"text/html; charset=utf-8")
+            if route=="/local/health":
                 return self.reply(200,json.dumps({
                     "schema":SCHEMA,
-                    "status":"SIGNED_TECHNICAL_OFFLINE_LOCAL_PREVIEW_NO_GO",
+                    "status":"SIGNED_MEMBERSHIP_LOCAL_TECHNICAL_PREVIEW_NO_GO",
                     "private_entitlement_reverified_per_request":True,
+                    "membership_signature_reverified_per_request":True,
+                    "membership_phase":membership["membership_phase"],
+                    "membership_plan":membership["plan"],
+                    "paid_membership_is_separate_from_product_install":True,
                     "operating_database_writes":0,
-                    "owner_real_customer_approval_proven":False,
                     "customer_distribution_authorized":False,
                 },sort_keys=True),"application/json; charset=utf-8")
             return super().do_GET()
@@ -755,9 +823,10 @@ def serve_selected(
     with app.LOCAL_SERVER_CLASS(("127.0.0.1",port),PrivateVerifiedHandler) as server:
         print(json.dumps({
             "schema":SCHEMA,
-            "status":"SIGNED_CUSTOMER_LOCAL_TECHNICAL_PREVIEW_NO_GO",
+            "status":"SIGNED_MEMBERSHIP_LOCAL_TECHNICAL_PREVIEW_NO_GO",
             "url":"http://127.0.0.1:"+str(server.server_port)+"/local",
             "signed_active_slot_verified":True,
+            "signed_membership_required_for_every_GET":True,
             "customer_distribution_authorized":False,
             "owner_private_key_accessed":False,
             "host_service_registered":False,
@@ -778,6 +847,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--recipient-token-sha256")
     parser.add_argument("--rights-packet-sha256")
     parser.add_argument("--min-serial",type=int,default=0)
+    parser.add_argument("--expected-subscription-id-sha256")
+    parser.add_argument("--min-membership-sequence",type=int,default=0)
     parser.add_argument("--python",type=Path)
     parser.add_argument("--consent",default="")
     parser.add_argument("--port",type=int,default=0)
@@ -805,7 +876,9 @@ def main(argv: list[str] | None = None) -> int:
                 result=install_or_update(
                     root,args.bundle,python=args.python,consent=args.consent,**kwargs)
             else:
-                return serve_selected(root,port=args.port,**kwargs)
+                return serve_selected(root,port=args.port,
+                    expected_subscription_id_sha256=args.expected_subscription_id_sha256,
+                    min_membership_sequence=args.min_membership_sequence,**kwargs)
         print(json.dumps(result,sort_keys=True),flush=True)
         return 0
     except (OSError,TypeError,KeyError,ValueError) as exc:
