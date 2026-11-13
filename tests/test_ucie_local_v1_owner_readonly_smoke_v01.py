@@ -50,7 +50,7 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
                         "기존 공개 근거가 없습니다" in error)
         evolution = app._evolution(root, "q=python")
         self.assertIn("기존 공개 PR 후보:", evolution)
-        self.assertIn("수동 검토", evolution)
+        self.assertIn("UNVERIFIED_CANDIDATE_ONLY", evolution)
         snapshot = policy.roadmap()
         self.assertTrue(snapshot["local_v1_accepted_by_owner"])
         self.assertFalse(snapshot["customer_distribution_authorized"])
