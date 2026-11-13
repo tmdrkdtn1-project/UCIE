@@ -258,7 +258,8 @@ def verify_owner_metadata_bytes(capsule_bytes: bytes, attestation: bytes,
 
 
 def _safe_small(path: Path, *, max_bytes: int) -> bytes:
-    if (not isinstance(path, Path) or path.is_symlink() or not path.is_file()
+    if (not isinstance(path, Path) or path.is_symlink()
+            or path.parent.is_symlink() or not path.is_file()
             or not 0 < path.stat().st_size <= max_bytes):
         raise OwnerMetadataAuthError("expected exact local owner file unavailable")
     raw = path.read_bytes()
@@ -300,7 +301,6 @@ def sign_existing_owner_local_once(root: Path, *, serial: int,
     if (out.is_symlink() or not out.is_dir()
             or private.parent.is_symlink() or not private.parent.is_dir()):
         raise OwnerMetadataAuthError("fixed private key or ignored output unavailable")
-    from .local_public_pr_capsule_v01 import read_optional_capsule
     # The real owner capsule lives under downloaded, while reader expects a
     # clean recipient root. Perform the exact same bytes/hash verification
     # directly instead of routing the owner's operating root to recipient.
