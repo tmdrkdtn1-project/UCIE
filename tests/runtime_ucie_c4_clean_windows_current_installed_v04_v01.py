@@ -122,6 +122,17 @@ else:
      response=c.getresponse();response.read(4096)
      if response.status!=400:
       raise ValueError("tampered unsigned PR metadata accepted")
+    # Restore the valid unsigned pin. A forged C3 signature sidecar
+    # must not be silently treated as already authenticated.
+    from ucie_miner.local_public_pr_owner_auth_v01 import SIGNATURE_FILE
+    (root/CAP_PIN).write_bytes((digest+"\\n").encode("ascii"))
+    (root/SIGNATURE_FILE).write_bytes(b"forged-owner-claim")
+    with closing(HTTPConnection("127.0.0.1",server.server_port,timeout=6)) as c:
+     c.request("GET","/local/library?q=Git",
+               headers={"Host":"127.0.0.1:"+str(server.server_port)})
+     response=c.getresponse();response.read(4096)
+     if response.status!=400:
+      raise ValueError("untrusted signature sidecar bypassed independent key pin")
    finally:
     server.shutdown();thread.join(timeout=5)
     if thread.is_alive():raise ValueError("public capsule server did not shut down")
@@ -129,6 +140,7 @@ else:
                     "installed_synthetic_public_PR_capsule_routes":len(imported_routes),
                     "installed_unsigned_PR_review_denied":True,
                     "installed_corrupt_public_capsule_denied":True,
+                    "installed_untrusted_signed_sidecar_denied":True,
                     "installed_offline_reference_routes_verified":len(routes),
                     "offline_reference_status":REF_STATUS,
                     "installed_no_public_pr_database":True,
@@ -223,6 +235,7 @@ def run(root: Path, env: dict) -> dict:
         if (ui_result.get("installed_synthetic_public_PR_capsule_routes") != 3
                 or ui_result.get("installed_unsigned_PR_review_denied") is not True
                 or ui_result.get("installed_corrupt_public_capsule_denied") is not True
+                or ui_result.get("installed_untrusted_signed_sidecar_denied") is not True
                 or ui_result.get("installed_offline_reference_routes_verified") != 8
                 or ui_result.get("offline_reference_status")
                     != "OFFICIAL_DOCUMENT_REFERENCES_ONLY_NO_CAPTURED_PR_LEDGER_NO_GO"
@@ -244,6 +257,7 @@ def run(root: Path, env: dict) -> dict:
             "installed_synthetic_public_PR_capsule_GET_routes": 3,
             "installed_unsigned_public_PR_review_denied": True,
             "installed_tampered_public_PR_capsule_denied": True,
+            "installed_untrusted_C3_signed_sidecar_denied": True,
             "installed_public_PR_captured_database_present": False,
             "installed_offline_PR_page2_denied": True,
             "installed_V04_real_POST_denied": True,

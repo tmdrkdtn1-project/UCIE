@@ -293,6 +293,14 @@ def read_optional_capsule(root: Path) -> dict | None:
     The caller must already have checked the root's empty-runtime policy.
     """
     root = _root(root)
+    # A copied claimed signature must NEVER silently downgrade into unsigned
+    # browser rendering. Only the separate out-of-band C3 trust verifier may
+    # consume a signed pair; the standard V04 preview has no trusted key pin.
+    from .local_public_pr_owner_auth_v01 import SIGNATURE_FILE
+    signature = root / SIGNATURE_FILE
+    if signature.exists() or signature.is_symlink():
+        raise PublicCapsuleError(
+            "signed metadata requires separately provisioned C3 owner trust")
     src, pin = root / FILE, root / PIN
     if not src.exists() and not pin.exists():
         return None
