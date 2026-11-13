@@ -16,6 +16,7 @@ from __future__ import annotations
 from contextlib import closing
 from datetime import datetime, timezone
 from hashlib import sha256
+from importlib.resources import files
 from http.client import HTTPConnection
 from http.server import HTTPServer
 import json
@@ -43,6 +44,7 @@ RELEASE_NAME = "UCIE_PRIVATE_BUNDLE"
 RECIPIENT_NAME = "UCIE_PRIVATE_RECIPIENT"
 PRODUCT_NAMES = {v: "ucie_public_only_demo-" + v + "-py3-none-any.whl"
                  for v in entitlement.SUPPORTED_VERSIONS}
+BOOTSTRAP_NAME = "Start-UCIE-Private-Install.py"
 LAUNCHER_NAME = "Launch-UCIE-Private.ps1"
 LAUNCHER = r"""# UCIE PRIVATE technical work surface; no release authorization.
 param(
@@ -278,6 +280,13 @@ def build_private_qa_bundle(root: Path, product: Path, vendors: Path,
     spdx = _canon(_sbom(rows, sha256(product_file.read_bytes()).hexdigest()))
     (root/"sbom.spdx.json").write_bytes(spdx)
     (root/"NOTICE_REVIEW_REQUIRED.txt").write_bytes(NOTICE.encode("ascii"))
+    # Include a standalone stdlib entrypoint as BYTES from the exact
+    # first-party signed wheel source, never an untrusted owner script.
+    bootstrap=files("ucie_miner").joinpath(
+        "customer_private_offline_bootstrap_v01.py").read_bytes()
+    if not 100<len(bootstrap)<80000:
+        raise OfflineProductLifecycleError("reviewed standalone installer absent")
+    (root/BOOTSTRAP_NAME).write_bytes(bootstrap)
     (root/"entitlement.json").write_bytes(record_bytes)
     (root/"entitlement.sig.json").write_bytes(signature_bytes)
     manifest = {
@@ -286,6 +295,7 @@ def build_private_qa_bundle(root: Path, product: Path, vendors: Path,
         "wheel_files": rows,
         "spdx_sha256": sha256(spdx).hexdigest(),
         "notice_sha256": sha256(NOTICE.encode("ascii")).hexdigest(),
+        "bootstrap_sha256": sha256(bootstrap).hexdigest(),
         "entitlement_sha256": sha256(record_bytes).hexdigest(),
         "signature_sha256": sha256(signature_bytes).hexdigest(),
         "vendor_license_legal_review_approved": False,
@@ -313,6 +323,7 @@ def verify_private_qa_bundle(
     _bundle_root(root)
     if {f.name for f in root.iterdir()} != {
         "wheels", "sbom.spdx.json", "NOTICE_REVIEW_REQUIRED.txt",
+        BOOTSTRAP_NAME,
         "entitlement.json", "entitlement.sig.json", "manifest.json"
     }:
         raise OfflineProductLifecycleError("unexpected package root file")
@@ -329,6 +340,12 @@ def verify_private_qa_bundle(
     notice = _read(root/"NOTICE_REVIEW_REQUIRED.txt", 3000)
     if notice != NOTICE.encode("ascii") or sha256(notice).hexdigest() != manifest.get("notice_sha256"):
         raise OfflineProductLifecycleError("legal rights hold or notice changed")
+    bootstrap_expected=files("ucie_miner").joinpath(
+        "customer_private_offline_bootstrap_v01.py").read_bytes()
+    bootstrap_actual=_read(root/BOOTSTRAP_NAME,80000)
+    if (bootstrap_actual!=bootstrap_expected or
+            sha256(bootstrap_actual).hexdigest()!=manifest.get("bootstrap_sha256")):
+        raise OfflineProductLifecycleError("standalone bootstrap differs from pinned wheel")
     sbom_bytes = _read(root/"sbom.spdx.json", MAX_SBOM)
     expected_sbom = _canon(_sbom(entries, entries[0]["sha256"]))
     if (sbom_bytes != expected_sbom
