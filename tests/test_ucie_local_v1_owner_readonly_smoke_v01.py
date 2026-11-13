@@ -43,13 +43,14 @@ class RealOwnerPublicOnlyLocalV1Workflow(unittest.TestCase):
         self.assertIn("/skillbooks/", books)
         self.assertIn("미승인", books)
         error = app._error(root, "q=python")
-        self.assertIn("오류 예방", error)
+        # V04 visual label is intentionally "문제 예방"; the function name is internal.
+        self.assertIn("문제 예방", error)
         self.assertTrue("UNVERIFIED_CANDIDATE_ONLY" in error or
                         "출처 연결이 불완전" in error or
                         "기존 공개 근거가 없습니다" in error)
         evolution = app._evolution(root, "q=python")
         self.assertIn("기존 공개 PR 후보:", evolution)
-        self.assertIn("수동 검토", evolution)
+        self.assertIn("UNVERIFIED_CANDIDATE_ONLY", evolution)
         snapshot = policy.roadmap()
         self.assertTrue(snapshot["local_v1_accepted_by_owner"])
         self.assertFalse(snapshot["customer_distribution_authorized"])
