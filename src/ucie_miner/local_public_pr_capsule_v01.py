@@ -128,7 +128,26 @@ def build_capsule(handoff: dict, *, limit: int = MAX_ITEMS) -> bytes:
                      r["evidence_sha256"], r["purpose_code"])
                     for r in all_rows}) != len(all_rows)):
         raise PublicCapsuleError("duplicate public revision metadata")
-    selected = all_rows[:limit]
+    # Balance a partial owner-preview across all existing approved sources.
+    # No source gets all 48 slots just because of ASCII sort order.
+    buckets = {source: [] for source in APPROVED_REPOSITORIES}
+    for row in all_rows:
+        buckets[row["source_id"].removeprefix("repo:")].append(row)
+    picked = []
+    for index in range(limit):
+        source = APPROVED_REPOSITORIES[index % len(APPROVED_REPOSITORIES)]
+        if buckets[source]:
+            picked.append(buckets[source].pop(0))
+        elif any(buckets.values()):
+            # If this source is exhausted, take from the first still-present.
+            next_source = next(k for k in APPROVED_REPOSITORIES if buckets[k])
+            picked.append(buckets[next_source].pop(0))
+        else:
+            break
+    selected = sorted(picked, key=lambda r: (
+        r["source_id"], r["evidence_reference"], r["evidence_sha256"],
+        r["library_item_id"], r["review_candidate_sha256"],
+    ))
     result = {
         "schema": SCHEMA,
         "status": STATUS,
