@@ -20,7 +20,7 @@ from pathlib import Path
 import re
 import sys
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .customer_owner_wheelhouse_acquire_v01 import PINNED, RECEIPT, HOST_ROOT, verify_local
 from .customer_offline_dependency_gate_v01 import WHEELHOUSE
@@ -89,19 +89,40 @@ def _filename(name: str, version: str, filename: str) -> bool:
             and ".." not in filename)
 
 
+class _NoRedirect(HTTPRedirectHandler):
+    """Fail before following redirects to any unapproved host or endpoint."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _allowed_endpoint(url: str, *, integrity: bool) -> bool:
+    if type(url) is not str:
+        return False
+    for name, version in PINNED:
+        if not integrity and url == _official_release_url(name, version):
+            return True
+        if integrity:
+            prefix = PYPI + "/integrity/" + name + "/" + version + "/"
+            suffix = "/provenance"
+            if url.startswith(prefix) and url.endswith(suffix):
+                filename = url[len(prefix):-len(suffix)]
+                if _filename(name, version, filename):
+                    return True
+    return False
+
+
 def _get_json(url: str, *, integrity: bool = False) -> dict | None:
-    """One bounded GET to a constructed URL; 404 means no file attestation."""
-    if (type(url) is not str or not url.startswith(PYPI + "/")
-            or not (url.startswith(PYPI + "/pypi/")
-                    or url.startswith(PYPI + "/integrity/"))):
-        raise C2PublicReviewError("non-official metadata endpoint denied")
+    """Only fixed release/approved wheel routes, never follow redirects."""
+    if not _allowed_endpoint(url, integrity=integrity):
+        raise C2PublicReviewError("unapproved official metadata endpoint denied")
     headers = {
         "Accept": "application/vnd.pypi.integrity.v1+json" if integrity
                   else "application/json",
         "User-Agent": "UCIE-C2-owner-pinned-metadata-review/1.0",
     }
     try:
-        with urlopen(Request(url, headers=headers), timeout=12) as reply:
+        with build_opener(_NoRedirect).open(Request(url, headers=headers), timeout=12) as reply:
             if reply.status != 200 or reply.geturl() != url:
                 raise C2PublicReviewError("unexpected PyPI redirect/status")
             payload = reply.read(
