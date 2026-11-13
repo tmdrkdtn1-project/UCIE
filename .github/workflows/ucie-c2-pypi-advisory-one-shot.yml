@@ -1,0 +1,35 @@
+name: UCIE C2 Pinned Official PyPI Advisory and Provenance One Shot
+
+on:
+  pull_request:
+    paths:
+      - 'src/ucie_miner/customer_c2_pypi_advisory_provenance_v01.py'
+      - 'tests/test_ucie_c2_pypi_advisory_provenance_v01.py'
+      - 'docs/UCIE_C2_PINNED_PYPI_ADVISORY_PROVENANCE_REVIEW_20261113.md'
+      - '.github/workflows/ucie-c2-pypi-advisory-one-shot.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  official-pypi-only:
+    name: Windows 3.15 official pinned PyPI metadata only (NOT rights/security GO)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.15'
+      - name: Parse official three-release JSON and exact per-file PEP 740 metadata only
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = 'src'
+          $env:PYTHONDONTWRITEBYTECODE = '1'
+          $report = & python -B -m ucie_miner.customer_c2_pypi_advisory_provenance_v01 --public-one-shot
+          if ($LASTEXITCODE -ne 0) { throw "C2_PYPI_PUBLIC_EVIDENCE_FAIL_CLOSED" }
+          $obj = $report | ConvertFrom-Json
+          if ($obj.packages_checked -ne 3 -or $obj.actual_owner_wheel_captured_and_crosschecked -ne $false -or $obj.customer_distribution_authorized -ne $false -or $obj.signatures_cryptographically_independently_verified -ne $false -or $obj.external_python_code_downloaded_or_executed -ne $false -or $obj.operating_database_writes -ne 0) { throw "C2_PUBLIC_EVIDENCE_CLAIM_INVALID" }
+          Write-Output $report
