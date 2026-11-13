@@ -776,6 +776,36 @@ def serve_selected(
             except (OSError,TypeError,ValueError):
                 return self.reply(403,"UCIE_MEMBERSHIP_ACCESS_DENIED_NO_GO",
                                   "text/plain; charset=utf-8")
+            if route=="/local/membership":
+                # Show only already-verified, safe low-cardinality claims.
+                # Never expose account hashes, owner keys or payment evidence.
+                from html import escape
+                fields=(
+                    ("멤버십 등급",membership["plan"]),
+                    ("구독 상태",membership["membership_phase"]),
+                    ("청구 주기",membership["billing_interval"]),
+                    ("이용 기간 종료",membership["paid_period_ends_utc"]),
+                    ("오프라인 접근권 갱신 기한",
+                     membership["offline_access_lease_expires_utc"]),
+                )
+                rows="".join(
+                    "<dt>"+escape(label)+"</dt><dd>"+escape(str(value))+"</dd>"
+                    for label,value in fields)
+                page=(
+                    "<!doctype html><html lang='ko'><meta charset='utf-8'>"
+                    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                    "<title>UCIE 멤버십 상태</title>"
+                    "<style>body{background:#111827;color:#f3f4f6;font-family:"
+                    "system-ui,sans-serif;max-width:660px;margin:48px auto;padding:20px}"
+                    "dt{color:#a5b4fc;margin-top:18px}dd{margin:6px 0 0;font-weight:600}"
+                    "a{color:#93c5fd}</style>"
+                    "<h1>UCIE 멤버십</h1><p>구독형 서비스 이용권</p><dl>"+rows+"</dl>"
+                    "<p>멤버십 갱신은 승인된 결제 및 서명된 접근권을 통해 처리됩니다."
+                    " 재결제 없이 접근권 갱신이 필요한 경우 제공자에게 문의하세요.</p>"
+                    "<p>구독 만료는 고객이 작성한 코드와 업무 결과물을 삭제하지 않습니다.</p>"
+                    "<p><a href='/local'>UCIE 홈</a></p></html>"
+                )
+                return self.reply(200,page,"text/html; charset=utf-8")
             if route=="/local/health":
                 return self.reply(200,json.dumps({
                     "schema":SCHEMA,
