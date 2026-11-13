@@ -498,7 +498,7 @@ def install_or_update(
         expected_recipient_token_sha256=expected_recipient_token_sha256,
         expected_rights_packet_sha256=expected_rights_packet_sha256,
         min_serial=min_serial,now=now)
-    if (type(python) is not Path or not python.is_absolute()
+    if (not isinstance(python, Path) or not python.is_absolute()
             or python.is_symlink() or not python.is_file()):
         raise OfflineProductLifecycleError("exact approved Python interpreter required")
     slot=_slot_id(bundle)
