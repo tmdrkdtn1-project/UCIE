@@ -92,7 +92,7 @@ else:
   if check["selected_count"]!=1 or check["signature_verified"] is not False:
    raise ValueError("synthetic capsule did not remain unapproved")
   (root/CAP_FILE).write_bytes(payload)
-  (root/CAP_PIN).write_bytes((digest+"\n").encode("ascii"))
+  (root/CAP_PIN).write_bytes((digest+"\\n").encode("ascii"))
   imported_routes=(
    "/local/library?q=Git","/local/evolution?q=Git","/local/error?q=Git")
   with LOCAL_SERVER_CLASS(("127.0.0.1",0),make_handler(root)) as server:
@@ -115,7 +115,7 @@ else:
      response=c.getresponse();response.read(4096)
      if response.status!=400:
       raise ValueError("unsigned imported PR accepted as verified owner review")
-    (root/CAP_PIN).write_bytes(("f"*64+"\n").encode("ascii"))
+    (root/CAP_PIN).write_bytes(("f"*64+"\\n").encode("ascii"))
     with closing(HTTPConnection("127.0.0.1",server.server_port,timeout=6)) as c:
      c.request("GET","/local/library?q=Git",
                headers={"Host":"127.0.0.1:"+str(server.server_port)})
