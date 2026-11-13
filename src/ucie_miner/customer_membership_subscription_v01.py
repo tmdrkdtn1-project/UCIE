@@ -110,7 +110,6 @@ def _record_checks(record:dict) -> tuple[datetime,datetime,datetime,datetime,dat
         raise MembershipError("invalid canonical membership UTC timestamps") from exc
     if (_period_end(start,record["billing_interval"])!=end
             or issued>grace+timedelta(days=1)
-            or issued>start+timedelta(days=40)
             or grace<end
             or grace>end+timedelta(days=MAX_GRACE_DAYS)
             or record["billing_status"]!="PAST_DUE" and grace!=end
