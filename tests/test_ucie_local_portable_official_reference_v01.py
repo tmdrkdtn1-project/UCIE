@@ -117,6 +117,9 @@ class PortableOfficialReferenceRealHTTPTests(unittest.TestCase):
                                     route + ":" + word + ": portable badge missing")
                     self.assertTrue(portable.NOTE in page,
                                     route + ":" + word + ": limited evidence note missing")
+                    self.assertTrue(
+                        'data-public-pr-ledger-absent="true"' in page,
+                        route + ":" + word + ": captured PR absence must be explicit")
                     self.assertTrue(term in page,
                                     route + ":" + word + ": " + term + " missing")
                     self.assertTrue(domain in page,
