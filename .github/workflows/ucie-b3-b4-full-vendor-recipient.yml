@@ -5,7 +5,9 @@ on:
     paths:
       - 'src/ucie_miner/customer_private_entitlement_v01.py'
       - 'src/ucie_miner/customer_private_offline_lifecycle_v01.py'
+      - 'src/ucie_miner/customer_private_offline_bootstrap_v01.py'
       - 'tests/test_ucie_customer_private_entitlement_v01.py'
+      - 'tests/test_ucie_customer_private_bootstrap_v01.py'
       - 'tests/test_ucie_customer_private_offline_lifecycle_v01.py'
       - 'tests/runtime_ucie_b3_b4_clean_full_vendor_release_v01.py'
       - 'tests/test_ucie_b3_b4_clean_full_vendor_release_v01.py'
@@ -16,6 +18,7 @@ on:
     paths:
       - 'src/ucie_miner/customer_private_entitlement_v01.py'
       - 'src/ucie_miner/customer_private_offline_lifecycle_v01.py'
+      - 'src/ucie_miner/customer_private_offline_bootstrap_v01.py'
       - 'tests/runtime_ucie_b3_b4_clean_full_vendor_release_v01.py'
       - '.github/workflows/ucie-b3-b4-full-vendor-recipient.yml'
 
@@ -36,6 +39,11 @@ jobs:
           python-version: '3.15'
       # The 18-case native Ed25519 suite is executed AFTER SHA+RECORD-verified
       # offline wheel install inside the isolated venv. Zero skips required.
+      - name: Run standalone offline Windows bootstrap security and consent unit tests
+        run: python -B -m unittest discover -s tests -p "test_ucie_customer_private_bootstrap_v01.py" -v
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
       - name: Test strict Windows recipient CI-only preflight and fixed PyPI policy
         run: python -B -m unittest discover -s tests -p "test_ucie_b3_b4_clean_full_vendor_release_v01.py" -v
         env:
