@@ -225,8 +225,13 @@ def verify_owner_metadata_bytes(capsule_bytes: bytes, attestation: bytes,
         public = serialization.load_pem_public_key(trusted_public_key_pem)
     except (ValueError, TypeError) as exc:
         raise OwnerMetadataAuthError("invalid independent owner trust key") from exc
-    if not isinstance(public, public_type) or key_id(public) != expected_owner_key_id:
-        raise OwnerMetadataAuthError("trusted public key not the pre-accepted owner key")
+    if (not isinstance(public, public_type)
+            or key_id(public) != expected_owner_key_id
+            or public.public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo)
+                != trusted_public_key_pem):
+        raise OwnerMetadataAuthError("trusted public key not the exact pinned owner key")
     try:
         public.verify(signature, DOMAIN + _canonical(core))
     except (bad_sig, ValueError) as exc:
