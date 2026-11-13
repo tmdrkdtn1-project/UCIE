@@ -41,7 +41,8 @@ REMOVE_CONSENT = "UCIE_PRIVATE_OFFLINE_TECHNICAL_REMOVE_ONCE"
 NO_GO = "UCIE_FULL_PRODUCT_CUSTOMER_RELEASE_NO_GO"
 RELEASE_NAME = "UCIE_PRIVATE_BUNDLE"
 RECIPIENT_NAME = "UCIE_PRIVATE_RECIPIENT"
-PRODUCT_NAME = full.FIRST_PARTY_WHEEL
+PRODUCT_NAMES = {v: "ucie_public_only_demo-" + v + "-py3-none-any.whl"
+                 for v in entitlement.SUPPORTED_VERSIONS}
 HEX64 = re.compile(r"[a-f0-9]{64}\Z")
 SLOT_NAME = re.compile(r"[a-f0-9]{16}\Z")
 MAX_MANIFEST = 12000
@@ -140,19 +141,24 @@ def _inventory(wheels: Path) -> tuple[list[dict], Path, dict[str, str]]:
     files = list(wheels.iterdir())
     if len(files) != 4:
         raise OfflineProductLifecycleError("wheelhouse must have exactly 4 wheels")
-    main = wheels/PRODUCT_NAME
-    if not main.is_file() or main.is_symlink():
+    product_files = [wheels/name for name in PRODUCT_NAMES.values()
+                     if (wheels/name).exists() or (wheels/name).is_symlink()]
+    if len(product_files) != 1:
+        raise OfflineProductLifecycleError("exactly one approved first-party product version required")
+    main = product_files[0]
+    if main.is_symlink() or not main.is_file():
         raise OfflineProductLifecycleError("pinned first-party product wheel absent")
     item = wheel_gate._inspect_wheel(main)
     if (item.get("name") != full.FIRST_PARTY_NAME or
-            item.get("version") != full.FIRST_PARTY_VERSION or
+            item.get("version") not in PRODUCT_NAMES or
+            main.name != PRODUCT_NAMES[item.get("version")] or
             item.get("metadata_record_sha256_verified") is not True):
         raise OfflineProductLifecycleError("first-party exact identity/RECORD invalid")
-    vend = _vendor_wheels_subset(wheels, PRODUCT_NAME)
+    vend = _vendor_wheels_subset(wheels, main.name)
     hashes = {name: sha256(path.read_bytes()).hexdigest()
               for name, path in vend.items()}
     rows = [{
-        "distribution": full.FIRST_PARTY_NAME, "version": full.FIRST_PARTY_VERSION,
+        "distribution": full.FIRST_PARTY_NAME, "version": item["version"],
         "filename": main.name, "bytes": main.stat().st_size,
         "sha256": sha256(main.read_bytes()).hexdigest(),
         "license_review_approved": False,
@@ -222,11 +228,13 @@ def build_private_qa_bundle(root: Path, product: Path, vendors: Path,
     _parent_safe(root)
     if root.name != RELEASE_NAME or root.exists() or root.is_symlink():
         raise OfflineProductLifecycleError("fresh bounded UCIE bundle required")
-    if product.is_symlink() or not product.is_file() or product.name != PRODUCT_NAME:
+    if (product.is_symlink() or not product.is_file()
+            or product.name not in PRODUCT_NAMES.values()):
         raise OfflineProductLifecycleError("exact previously validated UCIE wheel required")
     verified = wheel_gate._inspect_wheel(product)
     if (verified.get("name") != full.FIRST_PARTY_NAME
-            or verified.get("version") != full.FIRST_PARTY_VERSION
+            or verified.get("version") not in PRODUCT_NAMES
+            or product.name != PRODUCT_NAMES[verified.get("version")]
             or verified.get("metadata_record_sha256_verified") is not True):
         raise OfflineProductLifecycleError("first party wheel corrupt")
     sources = _vendor_wheels(vendors)
@@ -317,6 +325,7 @@ def verify_private_qa_bundle(
         min_serial=min_serial,
         expected_recipient_token_sha256=expected_recipient_token_sha256,
         expected_product_wheel_sha256=entries[0]["sha256"],
+        expected_product_version=entries[0]["version"],
         expected_vendor_wheels_sha256=vendor_hashes,
         expected_rights_packet_sha256=expected_rights_packet_sha256,
         now=datetime.now(timezone.utc) if now is None else now,
@@ -327,6 +336,7 @@ def verify_private_qa_bundle(
     return {
         "schema": SCHEMA, "status": NO_GO,
         "product_sha256": entries[0]["sha256"],
+        "product_version": entries[0]["version"],
         "pinned_vendor_sha256": vendor_hashes,
         "exact_wheel_count": 4,
         "real_ed25519_verified": True,
@@ -488,7 +498,7 @@ def install_or_update(
     requirements=slot_dir/"locked_requirements.txt"
     requirements.write_text(
         full._requirements(verified["pinned_vendor_sha256"],
-                           verified["product_sha256"]),encoding="ascii")
+                           verified["product_sha256"],version=verified["product_version"]),encoding="ascii")
     venv=slot_dir/"venv"
     full._run([str(python),"-I","-B","-m","venv",str(venv)],
               slot_dir,_env(),"new signed customer recipient venv")
