@@ -75,7 +75,9 @@ def _verified_installed_local_smoke(root:Path,*,public_pem:bytes,
             or result.get("customer_distribution_authorized") is not False
             or not all(x in result.get("four_pillars_bound",[]) for x in PILLARS)):
         raise PhysicalRecipientAcceptanceError("customer-bound installed signature not verified")
-    slot=result["active_slot"]
+    slot=result.get("active_slot")
+    if type(slot) is not str or life.SLOT_NAME.fullmatch(slot) is None:
+        raise PhysicalRecipientAcceptanceError("untrusted installed customer slot")
     child=root/"slots"/slot/"venv"/"Scripts"/"python.exe"
     ui=root/"slots"/slot/"ui"/"UCIE"
     # Actual tests MUST run from the selected installed slot, not a
@@ -89,7 +91,8 @@ def _verified_installed_local_smoke(root:Path,*,public_pem:bytes,
             or not (ui/".git").is_dir()):
         raise PhysicalRecipientAcceptanceError("untrusted physical recipient active interpreter or UI root")
     four,local=life._installed_smoke(child,ui,child.parent.parent.parent)
-    if (four.get("pillar_count")!=4
+    if (four.get("first_party_four_pillars_synthetic_worked") is not True
+            or set(four.get("pillars_exercised",[]))!=set(PILLARS)
             or local.get("verified_local_V04_GET_count")!=4
             or local.get("denied_POST") is not True):
         raise PhysicalRecipientAcceptanceError("actual physical device signed four pillars or V04 failed")
