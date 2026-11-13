@@ -88,7 +88,7 @@ class StandaloneOfflineBootstrapSafetyTests(unittest.TestCase):
         self.assertFalse(hasattr(boot,"issue_customer_license"))
         self.assertNotIn("https://",boot.VERIFY_AND_STAGE)
         self.assertIn("--action","stage "+boot.VERIFY_AND_STAGE)
-        self.assertIn("PIP_NO_INDEX",open(boot.__file__,encoding="utf-8").read())
+        self.assertIn("PIP_NO_INDEX",Path(boot.__file__).read_text(encoding="utf-8"))
 
     def test_07_unsigned_noncanonical_bundle_denied_before_verifier(self):
         with TemporaryDirectory(prefix="UCIE_BOOT_") as tmp:
