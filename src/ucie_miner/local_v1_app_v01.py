@@ -95,6 +95,14 @@ def _search(root: Path, query: str, *, limit: int = PAGE_SIZE,
 
     if type(query) is not str or QUERY.fullmatch(query) is None:
         raise LocalProductError("invalid public evidence search")
+    from .local_portable_official_reference_v01 import (
+        reference_only, no_captured_public_candidates,
+    )
+    if reference_only(root):
+        # Empty clean install: existing first-party official refs may appear,
+        # but no captured public PR revision can be claimed or auto-approved.
+        return no_captured_public_candidates(
+            query=query, limit=limit, offset=offset, source_id=source_id)
     kwargs = {"query": query, "limit": limit,
               "group_revisions": False, "offset": offset}
     if source_id is not None:
@@ -327,7 +335,8 @@ def _paged_evidence(root: Path, query: str, *, page: int,
     # Official documentation and W04 PR metadata remain different evidence
     # types. The SAME validated W04 page feeds display and bounded comparison.
     recipe_html = ""
-    if route == "/local/library":
+    portable = report.get("portable_reference_mode") is not None
+    if route == "/local/library" or (route == "/local/evolution" and portable):
         if not source_filter or source_filter == "python/cpython":
             recipe_html += _python_reference_recipe_shelf(query, report)
         recipe_html += _approved_document_references_html(
@@ -1667,6 +1676,15 @@ def _library(root: Path, raw: str) -> str:
             '</p><p>검토 중인 초안 · 외부 배포 가능한 완성본이 아닙니다.</p>'
             '</details></article>'
         )
+    from .local_portable_official_reference_v01 import (
+        reference_only, NOTE as OFFLINE_REFERENCE_NOTE,
+    )
+    if reference_only(root):
+        body += (
+            '<section class="workbench-note" data-offline-reference-only="true">'
+            '<h2>기본 공식 자료 · 로컬 공개 원장 미탑재</h2>'
+            '<p>' + _e(OFFLINE_REFERENCE_NOTE) + '</p></section>'
+        )
     if not books:
         body += (
             '<section class="workbench-note"><h2>일치하는 가이드가 없습니다</h2>'
@@ -1838,7 +1856,12 @@ def _evolution(root: Path, raw: str) -> str:
     if QUERY.fullmatch(term) is None:
         raise LocalProductError("invalid public change search")
     page = _page_number(args)
-    inventory = collection_inventory(root)
+    from .local_portable_official_reference_v01 import (
+        reference_only, no_captured_inventory, NOTE as OFFLINE_REFERENCE_NOTE,
+    )
+    portable_references = reference_only(root)
+    inventory = (no_captured_inventory() if portable_references
+                 else collection_inventory(root))
     if (inventory.get("schema") != INVENTORY_SCHEMA
             or inventory.get("operating_database_writes") != 0):
         raise LocalProductError("unexpected UCIE collection inventory")
@@ -1873,6 +1896,12 @@ def _evolution(root: Path, raw: str) -> str:
         ' 자동 승격은 수행하지 않습니다.</p></details>'
         '</section>'
     )
+    if portable_references:
+        body += (
+            '<section class="workbench-note" data-offline-reference-only="true">'
+            '<h2>기본 공식 자료 · 로컬 공개 원장 미탑재</h2>'
+            '<p>' + _e(OFFLINE_REFERENCE_NOTE) + '</p></section>'
+        )
     if page == 1 and term.casefold().strip() in (
             "mcp", "prompts/get", "prompt", "-32602"):
         body += _mcp_evolution_comparison()
