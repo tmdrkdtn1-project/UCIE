@@ -232,6 +232,14 @@ def main(argv:list[str]|None=None)->int:
         else:
             if a.member_record is None or a.member_signature is None:
                 raise MembershipRecipientError("two genuine signed member files required")
+            # Do not read an arbitrary path or a second project when importing.
+            inbox=a.recipient_root.parent/"UCIE_SIGNED_MEMBERSHIP_INBOX"
+            if (not a.recipient_root.is_absolute()
+                    or a.recipient_root.name!=life.RECIPIENT_NAME
+                    or inbox.is_symlink() or not inbox.is_dir()
+                    or a.member_record!=inbox/"member.json"
+                    or a.member_signature!=inbox/"member.sig.json"):
+                raise MembershipRecipientError("only UCIE bounded signed member inbox allowed")
             report=import_owner_signed_membership(
                 a.recipient_root,
                 life._read(a.member_record,sub.MAX_RECORD),
