@@ -131,7 +131,9 @@ def render_signed_public_review(root: Path, *, expected_owner_key_id: str,
         href = ROUTE + "?q=" + quote(q, safe="") + "&amp;page=" + str(page - 1)
         main += ('<p><a href="' + local._e(href) +
                  '">이전 공개 후보 보기</a></p>')
-    return local._page("서명 검증된 공개 메타데이터 · 검토 전", main)
+    # Existing V04 shell accepts only its registered page keys. Reuse the
+    # reviewed library envelope; our signed review heading stays in main.
+    return local._page("통합 가상도서관", main)
 
 
 def make_trusted_handler(root: Path, *, expected_owner_key_id: str,
