@@ -209,6 +209,20 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
     """Display a clear customer summary; preserve inspectable evidence."""
     from .rule_candidates import GUIDANCE
 
+    if report.get("portable_reference_mode") is not None:
+        from .local_portable_official_reference_v01 import STATUS as OFFLINE_STATUS
+        if (report.get("portable_reference_mode") != OFFLINE_STATUS
+                or report.get("status") != "SOURCE_LINKAGE_INCOMPLETE_NO_GO"
+                or report.get("total_matches") != 0
+                or report.get("items") != []):
+            raise LocalProductError("forged offline public source identity")
+        return (
+            '<section class="workbench-note" data-public-pr-ledger-absent="true">'
+            '<h2>공개 PR 후보 원장은 미탑재</h2>'
+            '<p>위 공식 문서·검토용 가이드는 사용할 수 있지만,'
+            ' 별도 수집 원장의 공개 PR 후보는 포함되어 있지 않습니다.'
+            ' 출처 검증·승인된 수정으로 오해하지 마세요.</p></section>'
+        )
     if report.get("status") == "SOURCE_LINKAGE_INCOMPLETE_NO_GO":
         return (
             '<section class="workbench-note"><h2>자료를 불러오지 못했습니다</h2>'
