@@ -462,6 +462,9 @@ def _error(root: Path, raw: str) -> str:
                 'UCIE 자체 입력오류 계약 예제 →</a></p>'
             )
         body += (
+            '<p><a href="/local/engine?purpose=B2_CONNECTED_TRIAGE&amp;case='
+            + _e(selected_case) + '">'
+            '선택한 오류의 UCIE 합성 검증 → 4축 연결 워크벤치</a></p>'
             '<p>원인·수정 효과는 개별 환경에서 확인해야 하며, '
             '고객 출시·자동 승인 상태는 그대로 NO_GO입니다.</p></section>'
         )
@@ -646,14 +649,20 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
     require_local_work("DEV_ENGINE_SKILL")
     from .capability_trials import RECIPES, evaluate_ucie_owned_recipe
 
-    args = _params(raw, ("purpose", "case"))
+    args = _params(raw, ("purpose", "case", "scenario"))
     purpose = args.get("purpose", "")
     selected_case = args.get("case", "")
-    if selected_case and purpose != "PYTHON_SCANDIR_SAFE":
-        raise LocalProductError("Python-only selectable use case")
+    scenario = args.get("scenario", "")
+    if purpose == "B2_CONNECTED_TRIAGE":
+        from .local_error_actionable_workflow_v01 import CASE_IDS
+        from .local_b2_connected_workbench_v01 import SCENARIOS
+        if selected_case not in CASE_IDS or scenario not in ("", *SCENARIOS):
+            raise LocalProductError("unregistered B2 selected error/scenario")
+    elif scenario or (selected_case and purpose != "PYTHON_SCANDIR_SAFE"):
+        raise LocalProductError("scenario only available for a selected B2 case")
     if purpose and purpose not in (*RECIPES, "REAL_PUBLIC_CATALOG",
                                    "MCP_PROMPTS_CONTRACT",
-                                   "PYTHON_SCANDIR_SAFE"):
+                                   "PYTHON_SCANDIR_SAFE", "B2_CONNECTED_TRIAGE"):
         raise LocalProductError("unregistered development engine")
     friendly = {
         "ENGINE_INCREMENTAL_BUILD": ("증분 빌드 실험", "변경된 부분만 다시 계산하는 방법"),
@@ -667,6 +676,10 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
         ' · 예제 체험</span></a></li>'
         for name in sorted(RECIPES))
     choices += (
+        '<li><a href="/local/engine?purpose=B2_CONNECTED_TRIAGE&amp;case=mcp-prompts">'
+        '<span>4축 연결 워크벤치</span>'
+        '<span class="recipe-copy">오류 사례 선택 → UCIE 합성 판정 → '
+        '도서관 공식 근거 → 개선 근거 검토</span></a></li>'
         '<li><a href="/local/engine?purpose=MCP_PROMPTS_CONTRACT">'
         '<span>MCP 입력 오류 계약 체험</span>'
         '<span class="recipe-copy">UCIE 자체 생성 JSON-RPC 사례로 '
