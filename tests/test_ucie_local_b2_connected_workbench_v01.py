@@ -161,19 +161,40 @@ class B2RealLocalLoopbackTests(unittest.TestCase):
                 self.assertIn("FAIL_CLOSED", page)
 
     def test_real_navigation_arrives_at_library_and_evidence_views(self):
-        # Follow the generated links to the existing three/four pillar pages.
-        # A missing public catalog must show an honest empty/review state,
-        # never invent an approved source or return an arbitrary code path.
-        for case in b2.EXPECTED:
-            q = quote(b2.PUBLIC_QUERIES[case], safe="")
-            for route in ("/local/library?q=" + q,
-                          "/local/evolution?q=" + q):
-                with self.subTest(case=case, route=route):
-                    status, body, headers = self.get(route)
-                    self.assertEqual(status, 200, route + " " + body[:160])
-                    self.assertIn("<!doctype html>", body.lower())
-                    self.assertIn("no-store", headers["Cache-Control"])
-                    self.assertNotIn("customer_distribution_authorized=True", body)
+        # These existing federated views require actual UCIE public metadata;
+        # an empty synthetic .git root is correctly fail-closed. Exercise a
+        # second disposable localhost server against this UCIE repo ONLY.
+        root = Path(__file__).resolve().parents[1]
+        live = HTTPServer(("127.0.0.1", 0), app.make_handler(root))
+        worker = Thread(target=live.serve_forever, daemon=True)
+        worker.start()
+        try:
+            for case in b2.EXPECTED:
+                q = quote(b2.PUBLIC_QUERIES[case], safe="")
+                for route in ("/local/library?q=" + q,
+                              "/local/evolution?q=" + q):
+                    with self.subTest(case=case, route=route):
+                        client = http.client.HTTPConnection(
+                            "127.0.0.1", live.server_port, timeout=6)
+                        try:
+                            client.request("GET", route, headers={
+                                "Host": "127.0.0.1:" + str(live.server_port)})
+                            response = client.getresponse()
+                            status = response.status
+                            page = response.read().decode("utf-8", "replace")
+                            headers = dict(response.getheaders())
+                        finally:
+                            client.close()
+                        self.assertEqual(status, 200,
+                                         route + " " + page[:160])
+                        self.assertIn("<!doctype html>", page.lower())
+                        self.assertEqual(headers["Cache-Control"], "no-store")
+                        self.assertNotIn(
+                            "customer_distribution_authorized=True", page)
+        finally:
+            live.shutdown()
+            live.server_close()
+            worker.join(timeout=3)
 
     def test_no_mutation_post_forbidden_host_and_unrelated_engine_scenario(self):
         for path in (
