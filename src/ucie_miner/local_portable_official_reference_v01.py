@@ -41,10 +41,14 @@ def reference_only(root: Path) -> bool:
     No file contents are read; no directory is created. An existing ANY
     runtime artifact, including an unexpected file, disables this fallback.
     """
-    if (not isinstance(root, Path) or root.name.casefold() != "ucie"
-            or root.is_symlink() or not root.is_dir()
-            or (root / ".git").is_symlink() or not (root / ".git").is_dir()):
-        raise PortableReferenceError("UCIE-only checked out source root required")
+    if not isinstance(root, Path) or root.name.casefold() != "ucie":
+        return False
+    if root.is_symlink() or (root / ".git").is_symlink():
+        raise PortableReferenceError("symlinked UCIE root or Git directory")
+    if not root.is_dir() or not (root / ".git").is_dir():
+        # Existing pure unit tests use an inert Path("UCIE") and injected
+        # readers. Do not claim such a path is a verified clean install.
+        return False
     runtime = root / "runtime"
     if runtime.is_symlink():
         raise PortableReferenceError("runtime symlink is not a clean UCIE ledger")
