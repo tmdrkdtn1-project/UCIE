@@ -145,6 +145,8 @@ class MembershipSignedAccessTests(unittest.TestCase):
         self.assertEqual(r["membership_phase"],"GRACE_READ_ONLY")
         self.assertTrue(member.route_access("/local/library",r))
         self.assertFalse(member.route_access("/local/engine",r))
+        self.assertFalse(member.route_access("/local/skillbook-run",r))
+        self.assertFalse(member.route_access("/local/review",r))
         self.assertEqual(
             self.verify(record_bytes=b,signature_bytes=s,
                 now=self.end+timedelta(days=3))["membership_phase"],"EXPIRED")
