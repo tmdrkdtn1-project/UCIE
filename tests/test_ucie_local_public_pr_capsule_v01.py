@@ -200,6 +200,7 @@ class PublicOnlyCapsuleUnitTests(unittest.TestCase):
         with TemporaryDirectory(prefix="UCIE_PUBLIC_CAPSULE_TEST_") as folder:
             root = Path(folder) / "UCIE"
             (root / ".git").mkdir(parents=True)
+            (root / "downloaded").mkdir()
             with patch.object(cap, "prepare_verification_handoff",
                               return_value=synthetic_handoff()):
                 preview = cap.capture_preview(root)
@@ -211,6 +212,16 @@ class PublicOnlyCapsuleUnitTests(unittest.TestCase):
                 receipt = cap.export_once(root, consent=cap.CONSENT)
                 self.assertEqual(receipt["status"],
                                  "OWNER_LOCAL_ONLY_UNSIGNED_METADATA_FILES_CREATED_NO_GO")
+                self.assertFalse((root / cap.FILE).exists())
+                self.assertTrue((root / "downloaded" / cap.FILE).exists())
+                self.assertTrue((root / "downloaded" / cap.PIN).exists())
+                self.assertEqual(receipt["file_names"], [
+                    "downloaded/" + cap.FILE, "downloaded/" + cap.PIN])
+                # Only an explicit test copy represents recipient acceptance.
+                (root / cap.FILE).write_bytes(
+                    (root / "downloaded" / cap.FILE).read_bytes())
+                (root / cap.PIN).write_bytes(
+                    (root / "downloaded" / cap.PIN).read_bytes())
                 reread = cap.read_optional_capsule(root)
                 self.assertEqual(reread["selected_count"], 5)
                 with self.assertRaises(cap.PublicCapsuleError):
