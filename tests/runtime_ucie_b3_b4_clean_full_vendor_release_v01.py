@@ -587,9 +587,15 @@ def main() -> int:
         report=run_clean_vendor_recipient(REPO,dict(os.environ))
     except Exception as exc:
         label=type(exc).__name__[:64]
+        # No traceback, filesystem paths, key bytes, downloaded wheel or
+        # customer data. Only whitelisted first-party hardcoded step labels.
+        safe_reason=(str(exc)[:170] if isinstance(
+            exc,(FullRecipientQAFailure,full.OfflineFullProductError))
+            else "exception_type_only")
         print(json.dumps({
             "schema":SCHEMA,"status":FAIL,
             "failure_type":label,
+            "safe_first_party_stage":safe_reason,
             "customer_release_or_distribution_authorized":False,
         },sort_keys=True))
         return 2
