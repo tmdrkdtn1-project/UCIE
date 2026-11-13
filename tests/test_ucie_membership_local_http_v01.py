@@ -66,6 +66,7 @@ class SignedMembershipRealLoopbackHTTPTests(unittest.TestCase):
             "period_start_utc":auth._stamp(self.start),
             "period_end_utc":auth._stamp(self.end),
             "grace_until_utc":auth._stamp(self.end),
+            "access_lease_expires_utc":auth._stamp(self.end),
         }
         raw=product.canonical(row)
         return raw,mem._sig(raw,self.private,
