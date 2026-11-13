@@ -1,0 +1,50 @@
+name: UCIE B3 B4 Full Current Product Vendor Inclusive Clean Windows Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'src/ucie_miner/customer_private_entitlement_v01.py'
+      - 'tests/test_ucie_customer_private_entitlement_v01.py'
+      - 'tests/runtime_ucie_b3_b4_clean_full_vendor_release_v01.py'
+      - 'tests/test_ucie_b3_b4_clean_full_vendor_release_v01.py'
+      - 'docs/UCIE_B3_B4_RELEASE_ENGINEERING_BUNDLE_20261113.md'
+      - '.github/workflows/ucie-b3-b4-full-vendor-recipient.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/ucie_miner/customer_private_entitlement_v01.py'
+      - 'tests/runtime_ucie_b3_b4_clean_full_vendor_release_v01.py'
+      - '.github/workflows/ucie-b3-b4-full-vendor-recipient.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  current-product-three-vendors:
+    name: Win315 real signed synthetic entitlement plus fully pinned native vendor offline install and reinstall
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.15'
+      - name: Test independent owner-pin entitlement and exact CI scope
+        run: python -B -m unittest discover -s tests -p "test_ucie_customer_private_entitlement_v01.py" -v
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
+      - name: Test strict Windows recipient CI-only preflight and fixed PyPI policy
+        run: python -B -m unittest discover -s tests -p "test_ucie_b3_b4_clean_full_vendor_release_v01.py" -v
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
+      - name: Real clean Windows current four-pillar product with three SHA/RECORD-pinned official vendor wheels, no-index install, native ABI, V04, uninstall and reinstall
+        run: python -B tests/runtime_ucie_b3_b4_clean_full_vendor_release_v01.py
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
+          UCIE_B3_B4_CURRENT_FULL_VENDOR_CI_ONLY: '1'
+          PIP_DISABLE_PIP_VERSION_CHECK: '1'
