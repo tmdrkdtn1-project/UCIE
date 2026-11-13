@@ -241,7 +241,7 @@ def owner_sign_once(
         "four_pillars":list(PILLARS),"serial":serial,
         "owner_key_id":expected_owner_key_id,
         "issued_utc":auth._stamp(issued),
-        "expires_utc":auth._stamp(issued+timedelta(days=c3.MAX_DAYS)),
+        "expires_utc":auth._stamp(issued+timedelta(days=c3.SUBSCRIPTION_PRODUCT_ARTIFACT_DAYS)),
     }
     body,signed=_real_record_and_detached_signature(record,private,consent=consent)
     verified=c3.verify_private_entitlement(
