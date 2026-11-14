@@ -15,6 +15,10 @@ UCIE's four equal product goals include coding-error prevention; development/mai
 
 The current `ucie_miner.skillbook_blueprint` builds **non-exportable, unverified metadata-only blueprints**, not finished SkillBooks. It does not authorize new sources, run external code, modify schedules, retrain models, grant licenses, publish packages or change the operating DB.
 
+## UCIE 작업방 인계·Slack 기록
+
+UCIE의 새 채팅방·업무 담당 전환에서는 먼저 [현재 인계 상태](docs/UCIE_HANDOFF_CURRENT.md)를 읽고, [Slack 기록·수신 확인 규약](docs/UCIE_SLACK_HANDOFF_PROTOCOL_V1_20261102.md)에 따라 GitHub PR/CI 및 실제 호스트 증거를 재확인합니다. 중요한 설계 결정·분기·차단·완료 상태는 `#ucie-project`에 근거와 다음 담당자를 기록하며, 메시지 전송과 새 방 인계 수신을 별도 상태로 관리합니다. 새 채팅이 문서를 자동 로드하거나 Slack에 자동 게시하는 기능은 아직 없습니다. 자세한 규칙은 [AGENTS.md](AGENTS.md)를 따릅니다.
+
 ## Hard security boundaries
 
 1. The global collector must not access any user project repository, code, database, logs, conversation, credentials, model memory, or project metadata — including publicly visible user projects.
