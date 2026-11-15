@@ -127,9 +127,12 @@ def _public_rate_failure_gate(prior: dict, *, now: datetime) -> dict | None:
                 due = rate_guard._parse(stamp)
             except (ValueError, TypeError) as exc:
                 raise ValueError("invalid public rate pause timestamp") from exc
-            if now >= due:
+            if now >= due and not active_stage:
                 return None
-            pause_until = stamp
+            # Even after an HTTP reset, an independent Stage10/Stage13
+            # shared-rate pause remains an owner-review hold.
+            if now < due:
+                pause_until = stamp
     return {
         "schema": "UCIE_MINER_CYCLE_V1",
         "status": ("SKIPPED_PUBLIC_RATE_PAUSED_NO_GET" if pause_until
