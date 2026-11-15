@@ -181,7 +181,7 @@ def _home() -> str:
         '<p>코딩 중 막힌 문제를 선택하면 가능한 원인과'
         ' 확인할 순서부터 안내합니다. 자료 검색과 예제는 그다음입니다.</p>'
         '<p><a class="start-task-link" href="/local/ask">'
-        '내 문제 직접 설명하기 →</a></p>'
+        '내 문제 해결하기 →</a></p>'
         '<p><a href="/local/solve">대표 문제에서 선택하기 →</a></p>'
         '<div class="intro-note"><span>EXPLORE</span>'
         '<span>관심 있는 기술을 입력해 바로 시작하세요.</span></div>'
@@ -231,7 +231,7 @@ def _solve(raw: str) -> str:
 def _ask() -> str:
     """GET displays only an empty form; never accepts question text in URLs."""
     from .local_question_intake_v01 import render_question_form
-    return _page("질문으로 문제 해결", render_question_form())
+    return _page("오류 예방", render_question_form())
 
 
 def _evidence_rows(report: dict, *, guidance: bool = False,
@@ -2305,13 +2305,13 @@ def make_handler(root: Path):
                 # Never log, echo, persist, reuse as a search query,
                 # or forward the user text to a model or public source.
                 receipt = triage_question(self.rfile.read(size))
-                html = _page("질문으로 문제 해결",
+                html = _page("오류 예방",
                              render_question_result(receipt))
                 return self.reply(200, html)
             except QuestionInputError:
                 # The response contains no submitted bytes or excerpts.
                 html = _page(
-                    "질문으로 문제 해결",
+                    "오류 예방",
                     '<section class="search-panel" data-question-rejected="true">'
                     '<h2>개인정보나 긴 자료 없이 일반적인 증상만 적어주세요</h2>'
                     '<p>코드·로그·파일 경로·이메일·비밀번호는 받지 않습니다.'
