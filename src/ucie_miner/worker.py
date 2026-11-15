@@ -307,9 +307,11 @@ def run_cycle(
                         "stage17_quality_candidate_count", 0)
                     quality_delta = optional_stage.get(
                         "stage17_quality_candidate_delta", 0)
-                    if (type(quality_count) is not int or not 0 <= quality_count <= 1000
+                    from .library_audit_v07 import MAX_ROWS as audit_cap
+                    if (type(quality_count) is not int
+                            or not 0 <= quality_count <= audit_cap
                             or type(quality_delta) is not int
-                            or not -1000 <= quality_delta <= 1000
+                            or not -audit_cap <= quality_delta <= audit_cap
                             or (quality_status == "STAGE17_QUALITY_DISABLED"
                                 and (quality_count != 0 or quality_delta != 0))):
                         raise ValueError("invalid Stage17 quality counters")
