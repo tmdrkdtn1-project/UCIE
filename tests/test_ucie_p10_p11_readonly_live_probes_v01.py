@@ -42,9 +42,11 @@ def _p11_summary(root: Path) -> dict:
     from ucie_miner.p11_closed_loop import status
     result = status(root)
     return {key: result.get(key) for key in (
-        "status", "last_public_attempt_utc", "last_public_attempt_failed",
-        "next_public_get_due_utc", "total_successful_public_gets",
-        "unverified_leads", "first_party_experiences",
+        "status", "sources", "next_source_id", "quiet_collection_backoff",
+        "effective_interval_minutes", "last_public_attempt_utc",
+        "last_public_attempt_failed", "next_public_get_due_utc",
+        "total_successful_public_gets", "unverified_leads",
+        "awaiting_synthetic_experiment", "first_party_experiences",
         "improvement_review_record_count", "production_improvements_auto_applied",
         "auto_promoted",
     )}
