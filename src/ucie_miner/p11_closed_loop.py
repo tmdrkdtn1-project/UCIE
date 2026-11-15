@@ -33,6 +33,7 @@ from .p11_improvement_gate import (
     GOOD as IMPROVEMENT_GOOD, PROPOSAL as IMPROVEMENT_PROPOSAL,
 )
 from . import pending_queue as queue
+from . import p11_rate_guard_v03 as rate_guard
 
 SCHEMA = "UCIE_P11_PUBLIC_EXPERIENCE_CLOSED_LOOP_V1"
 ERROR_TABLE = "p11_last_public_failure_v02"
@@ -202,7 +203,8 @@ def activate(root: Path) -> dict:
 
 
 def _record_public_failure(root: Path, *, index: int, attempt: str,
-                           failure_class: str) -> None:
+                           failure_class: str, error: BaseException,
+                           now: datetime) -> None:
     """Commit only a first-party enum to P11's isolated ledger, never text.
 
     Called after the existing failed-attempt cursor reservation; refuses
@@ -240,6 +242,16 @@ def _record_public_failure(root: Path, *, index: int, attempt: str,
             "attempt_utc=excluded.attempt_utc,"
             "failure_class=excluded.failure_class",
             (index, attempt, failure_class))
+        # RATE failure and the bounded classification are a SINGLE
+        # SQLite commit, so no HTTP 403/429 can lose its pause receipt
+        # while retaining only generic RETRYABLE_ERROR.
+        prior = rate_guard.existing(conn)
+        advice = rate_guard.calculate(error, now=now, prior=prior)
+        if advice is not None:
+            rate_guard.persist(conn, source_index=index,
+                               attempt_utc=attempt, advice=advice)
+        else:
+            rate_guard.clear_on_success(conn)
         conn.execute("COMMIT")
 
 
@@ -265,6 +277,21 @@ def collect_one(root: Path, *, fetch=public_feed_get,
         if cursor is None:
             raise P11Error("missing P11 cursor")
         previous = cursor["last_attempt_at"]
+        rate = rate_guard.view(conn, source_index=cursor["source_index"],
+                               now=now)
+        if rate["active"]:
+            conn.execute("COMMIT")
+            return {
+                "schema": SCHEMA,
+                "status": "P11_UPSTREAM_RATE_PAUSED_NO_GET",
+                "public_api_gets_this_call": 0,
+                "rate_pause_reason": rate["reason"],
+                "rate_pause_until_utc": rate["not_before_utc"],
+                "rate_owner_review_required": rate["owner_review_required"],
+                "new_unverified_leads": 0,
+                "source_cursor_advanced": False,
+                "auto_promoted": False,
+            }
         # Source-neutral, no-new-evidence idle backoff. Reuse the existing
         # ledger/cursor only: NO schema migration, no extra API request.
         # Pending experiments and failed sources always use the base cadence.
@@ -323,7 +350,8 @@ def collect_one(root: Path, *, fetch=public_feed_get,
         # message, URL, response body, PR title, or credentials are stored.
         failure_class = classify_stage10_discovery_error(exc)
         _record_public_failure(root, index=selected, attempt=time_value,
-                               failure_class=failure_class)
+                               failure_class=failure_class, error=exc,
+                               now=now)
         raise
     added = 0
     with closing(_conn(root)) as conn:
@@ -346,6 +374,9 @@ def collect_one(root: Path, *, fetch=public_feed_get,
             except sqlite3.Error as exc:
                 raise P11Error("failed first-party metadata insert") from exc
             added += result.rowcount
+        # A truly completed public GET clears prior rate pause in the same
+        # transaction that advances the validated source cursor.
+        rate_guard.clear_on_success(conn)
         # Advance only after the validated metadata and deduping have committed.
         conn.execute("UPDATE cursor SET source_index=?,last_attempt_failed=0,"
                      "total_public_gets=total_public_gets+1 WHERE slot=1",
@@ -503,6 +534,7 @@ def status(root: Path) -> dict:
         }
     with closing(sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True,
                                  timeout=0.25)) as conn:
+        conn.row_factory = sqlite3.Row
         cursor = conn.execute(
             "SELECT source_index,last_attempt_at,last_attempt_failed,total_public_gets FROM cursor"
         ).fetchone()
@@ -532,6 +564,8 @@ def status(root: Path) -> dict:
                          "FROM " + ERROR_TABLE + " WHERE slot=1").fetchone()
             if has_failure else None
         )
+        rate_info = rate_guard.view(
+            conn, source_index=cursor[0], now=datetime.now(timezone.utc))
     now = datetime.now(timezone.utc)
     quiet = (
         cursor[2] == 0 and cursor[3] >= QUIET_MIN_GETS
@@ -542,6 +576,13 @@ def status(root: Path) -> dict:
     next_due = (
         _stamp(_parse(cursor[1]) + interval) if cursor[1] else None
     )
+    if rate_info["active"]:
+        if rate_info["owner_review_required"]:
+            next_due = None  # No unattended GET for ambiguous 403/headers.
+        elif rate_info["not_before_utc"] is not None:
+            if next_due is None or _parse(next_due) < _parse(
+                    rate_info["not_before_utc"]):
+                next_due = rate_info["not_before_utc"]
     return {
         "schema": SCHEMA,
         "status": "P11_PUBLIC_EVIDENCE_EXPERIENCE_READ_ONLY",
@@ -558,6 +599,12 @@ def status(root: Path) -> dict:
         "quiet_collection_backoff": quiet,
         "effective_interval_minutes": int(interval.total_seconds() // 60),
         "next_public_get_due_utc": next_due,
+        "rate_guard_active": rate_info["active"],
+        "rate_guard_reason": rate_info["reason"],
+        "rate_guard_not_before_utc": rate_info["not_before_utc"],
+        "rate_guard_owner_review_required":
+            rate_info["owner_review_required"],
+        "public_rate_budget_independently_verified": False,
         "total_successful_public_gets": cursor[3],
         "unverified_leads": leads, "awaiting_synthetic_experiment": unchecked,
         "first_party_experiences": events, "synthetic_equivalence_observed": good,
