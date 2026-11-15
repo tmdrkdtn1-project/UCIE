@@ -2282,34 +2282,54 @@ def make_handler(root: Path):
                 content = skin_nested_local_page(content)
             return super().reply(status, content, mime)
 
+        def _reject_post(self, status, reason):
+            # A short denied POST can arrive with a body already on the socket.
+            # Closing with unread body bytes can reset the TCP connection on
+            # Windows before the caller receives the expected HTTP 4xx.
+            # Discard (never inspect, echo, persist or log) only one verified,
+            # small content-length. For malformed/large/chunked requests,
+            # fail closed immediately without attempting to drain.
+            lengths = self.headers.get_all("Content-Length", [])
+            if (self.headers.get("Transfer-Encoding") is None
+                    and len(lengths) == 1
+                    and re.fullmatch(r"[1-9][0-9]{0,3}", lengths[0]) is not None):
+                from .local_question_intake_v01 import MAX_BODY_BYTES
+                size = int(lengths[0])
+                if size <= MAX_BODY_BYTES + 2048:
+                    try:
+                        # A stalled client must not hold the single-threaded
+                        # local HTTP server indefinitely.
+                        self.connection.settimeout(0.5)
+                        self.rfile.read(size)
+                    except (OSError, TimeoutError):
+                        pass
+            self.close_connection = True
+            return self.reply(status, reason, "text/plain; charset=utf-8")
+
         def do_POST(self):
             # Only this exact loopback route accepts an ephemeral general
             # symptom description. Never open POST on the existing routes.
             if self.path != "/local/ask":
-                return self.reply(405, "LOCAL_PRODUCT_READ_ONLY",
-                                  "text/plain; charset=utf-8")
+                return self._reject_post(405, "LOCAL_PRODUCT_READ_ONLY")
             host = "127.0.0.1:" + str(self.server.server_port)
             if (self.headers.get("Host") != host
                     or self.headers.get("Origin") != "http://" + host
                     or self.headers.get("Transfer-Encoding") is not None
                     or self.headers.get("Content-Encoding") is not None):
-                return self.reply(403, "LOCAL_QUESTION_SAME_ORIGIN_REQUIRED",
-                                  "text/plain; charset=utf-8")
+                return self._reject_post(403, "LOCAL_QUESTION_SAME_ORIGIN_REQUIRED")
             lengths = self.headers.get_all("Content-Length", [])
             if (self.headers.get("Content-Type") !=
                     "application/x-www-form-urlencoded"
                     or len(lengths) != 1
                     or re.fullmatch(r"[1-9][0-9]{0,3}", lengths[0]) is None):
-                return self.reply(400, "INVALID_LOCAL_QUESTION_FORM",
-                                  "text/plain; charset=utf-8")
+                return self._reject_post(400, "INVALID_LOCAL_QUESTION_FORM")
             from .local_question_intake_v01 import (
                 MAX_BODY_BYTES, QuestionInputError, triage_question,
                 render_question_result, render_question_form,
             )
             size = int(lengths[0])
             if size > MAX_BODY_BYTES:
-                return self.reply(413, "LOCAL_QUESTION_TOO_LONG",
-                                  "text/plain; charset=utf-8")
+                return self._reject_post(413, "LOCAL_QUESTION_TOO_LONG")
             try:
                 # Never log, echo, persist, reuse as a search query,
                 # or forward the user text to a model or public source.
