@@ -70,7 +70,7 @@ if ($Evidence) {
         )
         $intervals = @($task.Triggers | ForEach-Object { [string]$_.Repetition.Interval })
         $cadenceConfigured = (
-            $intervals.Count -eq 1 -and $intervals[0] -eq 'PT1H' -and
+            $intervals.Count -eq 1 -and $intervals[0] -eq 'PT10M' -and
             [string]::Equals([string]$task.Settings.MultipleInstances, 'IgnoreNew', [StringComparison]::OrdinalIgnoreCase)
         )
         $lastResultOk = ($info.LastTaskResult -eq 0)
@@ -216,8 +216,8 @@ if ($Evidence) {
                     $latest.consecutive_failures -eq 0 -and
                     $pStart -le $pEnd -and $pEnd -le $cStart -and
                     $cStart -le $cEnd -and $cEnd -le $now.AddMinutes(5) -and
-                    $cEnd -ge $now.AddMinutes(-90) -and
-                    $gapMinutes -ge 45 -and $gapMinutes -le 75
+                    $cEnd -ge $now.AddMinutes(-30) -and
+                    $gapMinutes -ge 8 -and $gapMinutes -le 12
                 )
             }
         } catch {
@@ -249,7 +249,10 @@ if ($Evidence) {
         principal_identity_resolution = $principalIdentityResolution
         principal_logon_type = $principalLogonType
         principal_run_level = $principalRunLevel
+        # Legacy field retained for consumers; now means verified 10-minute cadence.
         hourly_no_overlap_configured = $cadenceConfigured
+        ten_minute_no_overlap_configured = $cadenceConfigured
+        cadence_minutes = 10
         last_task_result_zero = $lastResultOk
         last_scheduled_run_utc = if ($null -eq $lastTaskUtc) { $null } else { $lastTaskUtc.ToString('o') }
         last_scheduled_run_matches_receipt = $taskReceiptBound
