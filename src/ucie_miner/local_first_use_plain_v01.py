@@ -16,12 +16,12 @@ STATUS = "OWNER_LOCAL_PURPOSE_FIRST_NO_RELEASE_CLAIM"
 # These are already implemented, fixed Local V1 GET routes, not new actions.
 START_TASKS = (
     (
-        "find",
-        "오류 사례를 찾아보고 싶어요",
-        "Python 관련 공개 사례와 확인할 점을 찾아보세요.",
-        "공개 오류 사례 찾아보기",
-        "/local/error?q=Python",
-        "공개 자료 검색",
+        "solve",
+        "지금 겪는 문제부터 해결하고 싶어요",
+        "대표 오류 증상 중 하나를 선택해 원인과 확인 방법을 알아보세요.",
+        "내 문제 해결 시작하기",
+        "/local/solve",
+        "문제 해결 시작",
     ),
     (
         "try",
@@ -72,7 +72,7 @@ def human_pattern(pattern: object) -> str:
 def render_first_use() -> str:
     require_local_work("LOCAL_APP")
     if (len(START_TASKS) != 3
-            or {t[0] for t in START_TASKS} != {"find", "try", "learn"}
+            or {t[0] for t in START_TASKS} != {"solve", "try", "learn"}
             or len({t[4] for t in START_TASKS}) != 3):
         raise FirstUseError("reviewed three-action journey contract changed")
     rows = []
@@ -103,12 +103,12 @@ def render_first_use() -> str:
         '<div class="start-task-grid" aria-label="하고 싶은 일 선택">' +
         "".join(rows) + '</div>'
         '<div class="start-truth" aria-label="현재 할 수 있는 일과 제한">'
-        '<p><strong>지금 가능한 것:</strong> 공개 기술 자료 검색, '
-        'UCIE 자체 예제 실행, 기술 사용 가이드 읽기.</p>'
+        '<p><strong>지금 가능한 것:</strong> 대표 문제의 확인 방법 안내, '
+        '공개 기술 자료 검색, UCIE 자체 예제 실행, 기술 가이드 읽기.</p>'
         '<p><strong>아직 확인이 필요한 것:</strong> 외부 공개 자료의 '
         '실제 수정 효과와 적용 가능한 버전.</p>'
-        '<p><strong>아직 제공하지 않는 것:</strong> 사용자의 프로젝트 파일을 '
-        '자동으로 검사하거나 코드를 대신 수정하는 기능.</p>'
+        '<p><strong>아직 제공하지 않는 것:</strong> 자유 문장을 이해하는'
+        ' AI 맞춤 답변, 사용자 프로젝트 파일 자동 검사 또는 코드 자동 수정.</p>'
         '</div>'
         '<details class="technical-details" data-plain-glossary="true">'
         '<summary>낯선 용어 쉽게 알아보기</summary>'

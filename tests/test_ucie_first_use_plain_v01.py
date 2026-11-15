@@ -28,7 +28,7 @@ class FirstUsePlainKoreanTests(unittest.TestCase):
         self.assertEqual(html.count('class="start-task"'),3)
         self.assertLess(html.index('data-first-use="v01"'),
                         html.index('data-more-functions="true"'))
-        for intent in ("오류 사례를 찾아보고 싶어요","직접 실행해 보고 싶어요",
+        for intent in ("지금 겪는 문제부터 해결하고 싶어요","직접 실행해 보고 싶어요",
                        "사용법과 기술 자료를 찾고 싶어요"):
             self.assertIn(intent,visible_text(html))
         self.assertEqual(html.count('class="pillar-card"'),4)
@@ -36,7 +36,7 @@ class FirstUsePlainKoreanTests(unittest.TestCase):
     def test_02_existing_real_routes_have_descriptive_action_labels(self):
         html=simple.render_first_use()
         expected={
-            "/local/error?q=Python":"공개 오류 사례 찾아보기",
+            "/local/solve":"내 문제 해결 시작하기",
             "/local/engine?purpose=SKILL_TEST_AUTOMATION":"예제 직접 체험하기",
             "/local/library?q=Git":"기술 사용 가이드 찾아보기",
         }
@@ -52,7 +52,7 @@ class FirstUsePlainKoreanTests(unittest.TestCase):
         text=visible_text(app._home())
         for sentence in ("지금 가능한 것:", "아직 확인이 필요한 것:",
                          "아직 제공하지 않는 것:",
-                         "사용자의 프로젝트 파일을 자동으로 검사하거나"):
+                         "사용자 프로젝트 파일 자동 검사"):
             self.assertIn(sentence,text)
         self.assertNotIn("고객 출시",text)
         self.assertNotIn("진단 완료",text)

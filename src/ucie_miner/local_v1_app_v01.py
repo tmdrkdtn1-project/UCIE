@@ -178,8 +178,10 @@ def _home() -> str:
         '<span class="eyebrow">THE UCIE EXPERIENCE</span>'
         '<h2 class="intro-title" id="hero-title">'
         '더 좋은 코드를 위한<br><em>더 나은 선택.</em></h2>'
-        '<p>문제를 예방하고, 새로운 방법을 발견하고,'
-        ' 필요한 기술을 더 쉽게 찾아보세요.</p>'
+        '<p>코딩 중 막힌 문제를 선택하면 가능한 원인과'
+        ' 확인할 순서부터 안내합니다. 자료 검색과 예제는 그다음입니다.</p>'
+        '<p><a class="start-task-link" href="/local/solve">'
+        '내 문제 해결하기 →</a></p>'
         '<div class="intro-note"><span>EXPLORE</span>'
         '<span>관심 있는 기술을 입력해 바로 시작하세요.</span></div>'
         '</div>'
@@ -213,6 +215,16 @@ def _home() -> str:
         '</section>'
     )
     return _page("시작", body)
+
+
+def _solve(raw: str) -> str:
+    """Owner-local one-click symptom guidance; no free text or private code."""
+    require_local_work("LOCAL_APP")
+    from .local_problem_solver_v01 import render_guidance
+    args = _params(raw, ("case",))
+    if "case" in args and not args["case"]:
+        raise LocalProductError("blank problem selection")
+    return _page("오류 예방", render_guidance(args.get("case", "")))
 
 
 def _evidence_rows(report: dict, *, guidance: bool = False,
@@ -2165,10 +2177,12 @@ def _policy() -> str:
         "개발 규칙",
         '<section class="search-panel">'
         '<h2>UCIE는 어떤 서비스인가요?</h2>'
-        '<p>UCIE는 공개된 기술 자료를 찾고, 개발 도구를 체험하며,'
-        ' 개선 방향을 살펴보는 기술 탐색 공간입니다.</p>'
+        '<p>UCIE는 대표 코딩 문제의 가능한 원인과 확인 방법을 안내하고,'
+        ' 공개된 기술 근거와 자체 예제로 문제 해결을 돕는 제품입니다.'
+        ' 자유 질문을 분석하는 AI 기능은 아직 연결되지 않았습니다.</p>'
         '<div class="page-controls">'
-        '<a href="/local/error">문제 예방 살펴보기 →</a>'
+        '<a href="/local/solve">내 문제 해결하기 →</a>'
+        '<a href="/local/error">공개 문제 사례 검색 →</a>'
         '<a href="/local/library">라이브러리 열기 →</a>'
         '</div></section>'
         '<section><h2>자료는 어떻게 활용하나요?</h2>'
@@ -2260,7 +2274,7 @@ def make_handler(root: Path):
             parts = urlsplit(self.path)
             if parts.path not in (
                     "/", "/local", "/local/", "/local/health", "/local/error",
-                    "/local/engine", "/local/books", "/local/library",
+                    "/local/solve", "/local/engine", "/local/books", "/local/library",
                     "/local/evolution", "/local/review", "/local/policy",
                     "/local/skillbook-run", "/local/guide/mcp-prompts",
                     "/local/guide/mcp-prompts.json",
@@ -2306,6 +2320,8 @@ def make_handler(root: Path):
                     html = _home()
                 elif parts.path == "/local/error":
                     html = _error(root, parts.query)
+                elif parts.path == "/local/solve":
+                    html = _solve(parts.query)
                 elif parts.path == "/local/review":
                     html = _review(root, parts.query)
                 elif parts.path == "/local/engine":
