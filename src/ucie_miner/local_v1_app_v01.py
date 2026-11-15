@@ -2219,6 +2219,13 @@ def make_handler(root: Path):
     parent = base_handler(root)
 
     class LocalHandler(parent):
+        def log_message(self, format, *args):
+            # Even an accidentally pasted GET /local/ask?question=... must
+            # never appear in server access logs or customer receipts.
+            if self.path.split("?", 1)[0] == "/local/ask":
+                return
+            return super().log_message(format, *args)
+
         def reply(self, status, content, mime="text/html; charset=utf-8"):
             route = urlsplit(self.path).path
             if route == "/" or route.startswith("/local"):
