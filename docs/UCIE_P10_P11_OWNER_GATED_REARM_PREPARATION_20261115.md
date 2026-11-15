@@ -12,6 +12,12 @@ read-only owner-host preflight. It does not authorize or perform recovery.
   for recovery. The most recent real public attempt in the P11 ledger was
   2026-11-01 09:03:02 UTC and failed; 450 historical successful GETs and
   91 first-party synthetic experiences are not ongoing success evidence.
+  The latest read-only P11 cursor points to next_source=repo:python/cpython,
+  with five approved sources and a nominal 5-minute retry interval.
+  This cursor is NOT an HTTP 429 or network-failure classification.
+  The existing worker stores only a generic RETRYABLE_ERROR and discards
+  child stdout/stderr, so the original exception category is unavailable.
+  No public GET or actual retry was performed.
 - 2026-11-15 exact Windows read-only dependency test:
   PUBLIC_METADATA_REVIEW current search completed with 1,310 grouped /
   1,318 source-linked revision records. UCIE_REPORT_PREPARATION current
