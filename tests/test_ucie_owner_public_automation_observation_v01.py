@@ -68,8 +68,15 @@ class OwnerPublicAutomationObservationTests(unittest.TestCase):
         p10_error=None
         p11_error=None
         try:
-            q=inspect_queue(ROOT,limit=1)
-            p10={"queue_status":q.get("status"),"job_counts":q.get("counts")}
+            q=inspect_queue(ROOT,limit=20)
+            pending=[{"kind":item.get("kind"),"status":item.get("status"),
+                      "attempts":item.get("attempts"),
+                      "max_attempts":item.get("max_attempts"),
+                      "last_reason":item.get("last_reason")}
+                     for item in q.get("jobs", [])
+                     if item.get("status") in ("REVIEW_REQUIRED","PENDING")]
+            p10={"queue_status":q.get("status"),"job_counts":q.get("counts"),
+                 "held_jobs":pending[:10]}
         except (OSError, ValueError, sqlite3.Error) as exc:
             p10_error=type(exc).__name__
         try:
