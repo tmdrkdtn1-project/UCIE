@@ -17,7 +17,8 @@ import os
 from pathlib import Path
 import tempfile
 
-from .library_audit_v07 import audit_existing_public_library, STATUS as AUDIT_OK
+from .library_audit_v07 import (audit_existing_public_library,
+                                STATUS as AUDIT_OK, MAX_ROWS as AUDIT_MAX_ROWS)
 from .library_review_records_v05 import _root
 
 OPT_IN_FILENAME = "stage17_quality_opt_in.txt"
@@ -81,9 +82,9 @@ def _snapshot(record: object) -> dict:
     if (record.get("schema") != SCHEMA
             or record.get("status") not in (OBSERVED, REVIEW)
             or type(record.get("source_candidate_count")) is not int
-            or not 0 <= record["source_candidate_count"] <= 1000
+            or not 0 <= record["source_candidate_count"] <= AUDIT_MAX_ROWS
             or type(record.get("candidate_delta")) is not int
-            or not -1000 <= record["candidate_delta"] <= 1000
+            or not -AUDIT_MAX_ROWS <= record["candidate_delta"] <= AUDIT_MAX_ROWS
             or type(record.get("latest_source_audit_sha256")) is not str
             or len(record["latest_source_audit_sha256"]) != 64
             or any(c not in "0123456789abcdef"
@@ -173,7 +174,7 @@ def optional_hourly_library_quality(
             or audit.get("exportable_rules") != 0
             or audit.get("operating_database_writes") != 0
             or type(audit.get("source_linked_candidates")) is not int
-            or not 0 <= audit["source_linked_candidates"] <= 1000
+            or not 0 <= audit["source_linked_candidates"] <= AUDIT_MAX_ROWS
             or audit.get("status") not in (
                 "AUDIT_REVIEW_REQUIRED_NO_GO",
                 "SOURCE_LINKAGE_INCOMPLETE_NO_GO",
@@ -187,7 +188,7 @@ def optional_hourly_library_quality(
             (datetime.now(timezone.utc) if clock is None else clock)):
         raise QualityError("previous quality receipt in future")
     delta = 0 if previous is None else current - previous["source_candidate_count"]
-    if not -1000 <= delta <= 1000:
+    if not -AUDIT_MAX_ROWS <= delta <= AUDIT_MAX_ROWS:
         raise QualityError("unbounded source candidate change")
     now = datetime.now(timezone.utc) if clock is None else clock
     if not isinstance(now, datetime) or now.tzinfo is None or (
