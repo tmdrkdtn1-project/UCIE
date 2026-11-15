@@ -141,8 +141,29 @@ class UCIEPublicMinerRateHoldTests(unittest.TestCase):
         self.assertIsNone(worker._public_rate_failure_gate(
             {"error_http_status":404}, now=datetime.now(timezone.utc)))
 
+    def test_07_expired_http_reset_cannot_override_stage13_hold(self):
+        now = datetime.now(timezone.utc)
+        result = worker._public_rate_failure_gate({
+            "error_http_status": 429,
+            "public_rate_pause_reason": "HTTP_429_RETRY_AFTER",
+            "public_rate_pause_not_before_utc":
+                (now-timedelta(minutes=1)).isoformat(),
+            "stage13_history_status":
+                "EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO",
+        }, now=now)
+        self.assertEqual(result["status"],
+                         "SKIPPED_PUBLIC_RATE_OWNER_REVIEW_NO_GET")
+        self.assertEqual(result["public_gets_this_run"], 0)
+
+    def test_08_safe_skip_is_not_mislabeled_as_collected(self):
+        script = (ROOT / "scripts" / "public_miner_cycle.py").read_text(
+            encoding="utf-8-sig")
+        self.assertIn("SKIPPED_PUBLIC_RATE_OWNER_REVIEW_NO_GET", script)
+        self.assertIn("SKIPPED_PUBLIC_RATE_PAUSED_NO_GET", script)
+        self.assertIn('"COLLECTED_UNVERIFIED"', script)
+
     @unittest.skipUnless(os.name == "nt", "real owner Windows only")
-    def test_07_real_owner_last_receipt_readonly_rate_gate(self):
+    def test_09_real_owner_last_receipt_readonly_rate_gate(self):
         if ROOT.resolve() != Path("D:/UCIE").resolve() or ROOT.is_symlink():
             self.skipTest("exact owner UCIE checkout missing")
         path = ROOT/"runtime"/"last_run.json"
