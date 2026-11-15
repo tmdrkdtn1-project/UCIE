@@ -130,9 +130,34 @@ class PublicMiner10MinuteCadenceTests(unittest.TestCase):
         # the real Windows mutation cmdlet on either apply or rollback path.
         script = r"""
 $ErrorActionPreference='Stop'
-$task=Get-ScheduledTask -TaskPath '\' -TaskName 'UCIE-PublicMiner-Hourly'
-$original=[string]@($task.Triggers)[0].Repetition.Interval
-if ($original -ne 'PT1H') { throw 'SKIP_ONLY_ORIGINAL_PT1H_SYNTHETIC_FAULT_TEST' }
+$actual=Get-ScheduledTask -TaskPath '\' -TaskName 'UCIE-PublicMiner-Hourly'
+$realInterval=[string]@($actual.Triggers)[0].Repetition.Interval
+if ($realInterval -notin @('PT1H', 'PT10M')) {
+    throw 'UNEXPECTED_OWNER_CADENCE_NO_MOCK'
+}
+# This standalone test's 60m fixture is always SYNTHETIC, regardless of
+# the now-live 10m task. The real TaskScheduler is read only.
+$mockTask=[pscustomobject]@{
+    Actions=@($actual.Actions)
+    Principal=$actual.Principal
+    Settings=$actual.Settings
+    State='Ready'
+    Triggers=@([pscustomobject]@{
+        StartBoundary=[string]@($actual.Triggers)[0].StartBoundary
+        Repetition=[pscustomobject]@{
+            Interval='PT1H'
+            Duration=[string]@($actual.Triggers)[0].Repetition.Duration
+        }
+    })
+}
+$original='PT1H'
+function global:Get-ScheduledTask {
+    param($TaskPath,$TaskName,$ErrorAction)
+    if ($TaskPath -cne '\' -or $TaskName -cne 'UCIE-PublicMiner-Hourly') {
+        throw 'UNAPPROVED_TASK_READ'
+    }
+    return $mockTask
+}
 $global:attempts=0
 function global:Set-ScheduledTask {
     [CmdletBinding()]
