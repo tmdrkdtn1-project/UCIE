@@ -222,10 +222,12 @@ def _solve(raw: str) -> str:
     """Owner-local one-click symptom guidance; no free text or private code."""
     require_local_work("LOCAL_APP")
     from .local_problem_solver_v01 import render_guidance
-    args = _params(raw, ("case",))
-    if "case" in args and not args["case"]:
-        raise LocalProductError("blank problem selection")
-    return _page("오류 예방", render_guidance(args.get("case", "")))
+    args = _params(raw, ("case", "check"))
+    if (("case" in args and not args["case"])
+            or ("check" in args and (not args["check"] or "case" not in args))):
+        raise LocalProductError("missing or blank checked symptom")
+    return _page("오류 예방", render_guidance(
+        args.get("case", ""), check=args.get("check", "")))
 
 
 def _ask() -> str:
