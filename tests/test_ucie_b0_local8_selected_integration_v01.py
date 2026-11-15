@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ucie_miner.worker import run_cycle
+from ucie_miner.library_audit_v07 import MAX_ROWS as AUDIT_MAX_ROWS
 
 
 def report(root: Path) -> Path:
@@ -70,7 +71,7 @@ class TestUCIEB0Local8SelectedIntegration(unittest.TestCase):
 
     def test_stage17_forged_unbounded_quality_rejected(self):
         for count, status in (
-            (1001, "STAGE17_QUALITY_OBSERVED_UNVERIFIED_NO_GO"),
+            (AUDIT_MAX_ROWS + 1, "STAGE17_QUALITY_OBSERVED_UNVERIFIED_NO_GO"),
             (3, "STAGE17_QUALITY_DISABLED"),
         ):
             with self.subTest(count=count):
