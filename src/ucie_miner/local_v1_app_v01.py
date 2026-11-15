@@ -155,6 +155,7 @@ def _page(name: str, main: str) -> str:
 def _home() -> str:
     require_local_work("LOCAL_APP")
     from .local_owner_play_v01 import render_owner_play
+    from .local_first_use_plain_v01 import render_first_use
     names = (
         ("문제 예방", "공개 기술 사례를 살펴보고 해결 방향을 확인하세요."),
         ("개발 도구", "유용한 개발 도구와 실행 예제를 만나보세요."),
@@ -193,13 +194,16 @@ def _home() -> str:
         '<button type="submit">검색하기 <span aria-hidden="true">→</span></button>'
         '</form>'
         '<span class="quick-examples">PYTHON · GIT · API</span>'
-        '</div></section>'
+        '</div></section>' +
+        render_first_use() +
+        '<details class="technical-details more-functions" data-more-functions="true">'
+        '<summary>다른 기능과 메뉴도 살펴보기</summary>'
         '<section class="section-heading">'
         '<span class="eyebrow">EXPLORE UCIE</span>'
         '<h2>주요 기능</h2>'
         '<p>원하는 작업을 선택하세요.</p></section>'
         '<section class="pillar-grid" aria-label="UCIE 주요 기능">' +
-        ''.join(entries) + '</section>' +
+        ''.join(entries) + '</section></details>' +
         render_owner_play() +
         '<section class="workbench-note">'
         '<h2>자료를 살펴보실 때</h2>'
@@ -217,6 +221,7 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
                    source_filter: str = "") -> str:
     """Display a clear customer summary; preserve inspectable evidence."""
     from .rule_candidates import GUIDANCE
+    from .local_first_use_plain_v01 import human_pattern
 
     if (report.get("portable_reference_mode") is not None
             and report.get("portable_snapshot_status") is None):
@@ -271,12 +276,16 @@ def _evidence_rows(report: dict, *, guidance: bool = False,
         )
         source = str(row.get("source_id", "")).removeprefix("repo:")
         pattern = _e(row.get("purpose_code", "기술 사례"))
+        friendly = _e(human_pattern(row.get("purpose_code")))
         item = (
             '<article class="evidence-item">'
             '<header class="evidence-title"><div>'
-            '<span class="card-kicker">' + _e(source) + '</span>'
-            '<h3>' + pattern + '</h3>'
-            '<p class="customer-note">공개된 기술 변경을 바탕으로 정리한 참고 사례입니다.</p>'
+            '<span class="card-kicker">공개 기술 사례 · ' +
+            _e(row.get("domain", "기술")) + '</span>'
+            '<h3>' + friendly + '</h3>'
+            '<p class="customer-note">무엇을 얻나요? 공개 변경의 출처와'
+            ' 적용 전에 확인할 점을 알아볼 수 있습니다.'
+            ' 검증된 자동 수정 기능은 아닙니다.</p>'
             '</div><span class="record-stamp">검토 전</span></header>'
             '<div class="evidence-actions">'
             + ('<span>이식된 공개 후보 · 독립 출처 확인 전 검토 보류</span>'
