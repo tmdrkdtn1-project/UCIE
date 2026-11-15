@@ -117,6 +117,49 @@ failure category reviewed before another authorized -Apply attempt.
 No manual unregister/re-register, forced collection, broad ACL change
 or task enable/disable as an improvised workaround.
 
+## Actual Set-ScheduledTask failure category (2026-11-15)
+
+The owner provided the original PowerShell $Error summary from the SAME
+window as the failing operation:
+
+    Command=Set-ScheduledTask; Type=CimException;
+    HResult=0x80131500; Category=PermissionDenied
+    Command=Set-ScheduledTask; Type=CimException;
+    HResult=0x80131500; Category=PermissionDenied
+
+The leading RuntimeException/0x80131501 is the script's own rollback
+error wrapper. The two CIM PermissionDenied responses prove both the
+initial Set and the unnecessary rollback Set were denied; the general
+.NET/CIM HRESULT alone does NOT identify the Windows native cause.
+Do not label this a Python collector or 10m trigger validation bug.
+
+Dedicated **read-only** ACL probe
+tests/test_ucie_owner_exact_task_acl_readonly_v02.py, owner 2/2 PASS:
+- exact UCIE-PublicMiner-Hourly is Ready, still PT1H
+- diagnostic subprocess has elevated admin token, task file is present,
+  task file DACL and Task Scheduler COM DACL readable
+- task file owner SID differs from diagnostic process user SID
+- current token SIDs matched 2 file write allow ACEs, 0 explicit write
+  deny ACEs; 2 WriteDAC allow and 0 explicit deny; task COM DACL
+  exposes 3 matching allow ACEs, 0 matching deny ACEs
+- matching ACEs are not a definitive effective-access authorization.
+  Diagnostic subprocess and the user's original interactive session
+  may have **different** elevated tokens. Also, run-as task principal
+  matching a user is not proof of task-file ownership.
+- No ACL, Windows task, task file, or database was modified.
+
+**Next mandatory read-only same-window check:** evaluate only
+[Security.Principal.WindowsPrincipal]::new(
+[Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+[Security.Principal.WindowsBuiltInRole]::Administrator)
+in the original PowerShell session. If False, close that non-elevated
+context and perform an exact-task preflight using an approved elevated
+PowerShell window in the same account; do not blindly run -Apply.
+If True, stop and independently inspect exact task permission and
+Windows Task Scheduler event category before any additional write.
+Never delete/re-register the task, grant broad ACL rights, or change
+another project's task as a workaround.
+
 ## Quotas, safety and exclusions
 
 Ten-minute cadence permits up to 6 scheduled cycles/hour rather than 1,
