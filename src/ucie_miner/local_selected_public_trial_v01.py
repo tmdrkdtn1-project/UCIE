@@ -12,7 +12,7 @@ import re
 
 from .local_v1_priority_v01 import require_local_work
 from .local_v1_public_review_v01 import (
-    SCHEMA as REVIEW_SCHEMA, ALLOWED_SOURCES, ReviewWorksheetError,
+    SCHEMA as REVIEW_SCHEMA, ALLOWED_SOURCES,
 )
 from .rule_candidates import REQUIRED_GATES
 
