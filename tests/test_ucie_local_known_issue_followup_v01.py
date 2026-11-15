@@ -33,6 +33,10 @@ class LocalKnownIssueSelfCheckTests(unittest.TestCase):
                     self.assertIn('/local/solve?case='+case+'&amp;check='+answer,
                                   html)
                 self.assertNotIn("data-followup-result=",html)
+                self.assertLess(html.index('data-problem-checks="2"'),
+                                html.index('data-followup-question='))
+                self.assertLess(html.index('data-followup-question='),
+                                html.index('data-problem-next="true"'))
                 self.assertIn("실제 PC를 자동으로 검사한 결과는 아닙니다.",html)
 
     def test_02_all_twelve_user_selected_outcomes_get_an_actual_next_action(self):
