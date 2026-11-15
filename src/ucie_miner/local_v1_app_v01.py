@@ -178,8 +178,10 @@ def _home() -> str:
         '<span class="eyebrow">THE UCIE EXPERIENCE</span>'
         '<h2 class="intro-title" id="hero-title">'
         '더 좋은 코드를 위한<br><em>더 나은 선택.</em></h2>'
-        '<p>문제를 예방하고, 새로운 방법을 발견하고,'
-        ' 필요한 기술을 더 쉽게 찾아보세요.</p>'
+        '<p>코딩 중 막힌 문제를 선택하면 가능한 원인과'
+        ' 확인할 순서부터 안내합니다. 자료 검색과 예제는 그다음입니다.</p>'
+        '<p><a class="start-task-link" href="/local/solve">'
+        '내 문제 해결하기 →</a></p>'
         '<div class="intro-note"><span>EXPLORE</span>'
         '<span>관심 있는 기술을 입력해 바로 시작하세요.</span></div>'
         '</div>'
@@ -213,6 +215,14 @@ def _home() -> str:
         '</section>'
     )
     return _page("시작", body)
+
+
+def _solve(raw: str) -> str:
+    """Owner-local one-click symptom guidance; no free text or private code."""
+    require_local_work("LOCAL_APP")
+    from .local_problem_solver_v01 import render_guidance
+    args = _params(raw, ("case",))
+    return _page("오류 예방", render_guidance(args.get("case", "")))
 
 
 def _evidence_rows(report: dict, *, guidance: bool = False,
@@ -2260,7 +2270,7 @@ def make_handler(root: Path):
             parts = urlsplit(self.path)
             if parts.path not in (
                     "/", "/local", "/local/", "/local/health", "/local/error",
-                    "/local/engine", "/local/books", "/local/library",
+                    "/local/solve", "/local/engine", "/local/books", "/local/library",
                     "/local/evolution", "/local/review", "/local/policy",
                     "/local/skillbook-run", "/local/guide/mcp-prompts",
                     "/local/guide/mcp-prompts.json",
@@ -2306,6 +2316,8 @@ def make_handler(root: Path):
                     html = _home()
                 elif parts.path == "/local/error":
                     html = _error(root, parts.query)
+                elif parts.path == "/local/solve":
+                    html = _solve(parts.query)
                 elif parts.path == "/local/review":
                     html = _review(root, parts.query)
                 elif parts.path == "/local/engine":
