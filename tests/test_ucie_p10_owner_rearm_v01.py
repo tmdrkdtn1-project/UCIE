@@ -17,7 +17,8 @@ import sqlite3
 from ucie_miner import pending_queue as q
 from ucie_miner.runtime_pipeline import DEDUPES
 from ucie_miner.p10_owner_rearm_v01 import (
-    OwnerRearmError, SAFE_KINDS, TABLE, apply_one, preview, rollback_one,
+    OwnerRearmError, SAFE_KINDS, TABLE, SYNTH_MARKER,
+    _require_synthetic_root, apply_one, preview, rollback_one,
 )
 
 NOW = datetime(2026, 11, 15, 0, 0, tzinfo=timezone.utc)
@@ -29,6 +30,8 @@ class P10OwnerOneRowSyntheticTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / "UCIE"
         (self.root / "runtime").mkdir(parents=True)
+        (self.root / "runtime" / "UCIE_P10_REARM_SYNTH_ONLY.marker").write_text(
+            SYNTH_MARKER, encoding="ascii")
         q.initialize_queue(self.root)
         self.kind = "PUBLIC_METADATA_REVIEW"
         self.job_id = q.enqueue(
@@ -198,9 +201,25 @@ class P10OwnerOneRowSyntheticTests(unittest.TestCase):
         self.assertTrue(preview(self.root, kind=other)["held"])
 
 
+    def test_15_missing_synthetic_marker_blocks_apply_and_rollback(self):
+        marker = self.root / "runtime" / "UCIE_P10_REARM_SYNTH_ONLY.marker"
+        marker.unlink()
+        before = self._p()
+        with self.assertRaises(OwnerRearmError):
+            self._a()
+        with self.assertRaises(OwnerRearmError):
+            rollback_one(self.root, operation_sha256="a" * 64,
+                         owner_authorized=True,
+                         task_evidence_independently_verified=True,
+                         now=NOW)
+        self.assertEqual(self._p()["exact_row_fingerprint_sha256"],
+                         before["exact_row_fingerprint_sha256"])
+        self.assertEqual(self._table_exists(), 0)
+
+
 class P10OwnerRealReadOnlyPreview(unittest.TestCase):
     @unittest.skipUnless(os.name == "nt", "real owner Windows only")
-    def test_15_owner_previews_but_cannot_apply_via_cli(self):
+    def test_16_owner_previews_but_cannot_apply_via_cli(self):
         root = Path(__file__).resolve().parents[1]
         if (root.resolve() != Path("D:/UCIE").resolve()
                 or root.is_symlink() or not (root / ".git").is_dir()):
@@ -211,6 +230,9 @@ class P10OwnerRealReadOnlyPreview(unittest.TestCase):
         self.assertEqual(len(report), 2)
         self.assertTrue(all(r["db_writes"] == 0 for r in report))
         self.assertTrue(all(not r["actual_rearm_authorized"] for r in report))
+        # This check does not invoke apply_one or open an operating write DB.
+        with self.assertRaises(OwnerRearmError):
+            _require_synthetic_root(root)
 
 
 if __name__ == "__main__":
