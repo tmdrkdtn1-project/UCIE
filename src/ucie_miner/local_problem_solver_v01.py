@@ -113,7 +113,8 @@ def render_guidance(case_id: str = "", *, check: str = "") -> str:
             '<p>명령은 자동 실행되지 않습니다. 내 작업 환경에 맞는지'
             ' 먼저 확인하고 필요한 경우 직접 실행하세요.</p>'
             '<ol class="review-steps">' + "".join(checks) +
-            '</ol></section>'
+            '</ol></section>' +
+            render_followup(case_id, check) +
             '<section class="shelf-entry" data-problem-next="true">'
             '<h2>3. 안전한 다음 단계</h2><p>' +
             escape(case["safe_next"]) + '</p>'
@@ -131,8 +132,7 @@ def render_guidance(case_id: str = "", *, check: str = "") -> str:
             ' 맞춰 기존 공식 자료의 점검 방법을 안내합니다.</p>'
             '<p>비공개 코드·로그·비밀번호·개인정보는 입력하거나'
             ' 업로드하지 마세요. 현재 화면에는 업로드 기능이 없고,'
-            ' 문제 내용을 외부로 보내지 않습니다.</p></section>' +
-            render_followup(case_id, check)
+            ' 문제 내용을 외부로 보내지 않습니다.</p></section>'
         )
     cards = []
     for case_id, domain, symptom, summary in _SYMPTOMS:
