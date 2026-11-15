@@ -1115,9 +1115,9 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
             _e(out["synthetic_records"]) + '개</dd></div>'
             '<div><dt>질의 / 반복</dt><dd>' +
             _e(out["queries"]) + ' / ' + _e(out["repetitions"]) + '</dd></div>'
-            '<div><dt>기준 모델 연산 수</dt><dd>' +
+            '<div><dt>기준 연산 · 모델 수</dt><dd>' +
             _e(out["baseline_operations"]) + '</dd></div>'
-            '<div><dt>후보 모델 연산 수 · 준비 포함</dt><dd>' +
+            '<div><dt>후보 연산 · 모델 수 · 준비 포함</dt><dd>' +
             _e(out["candidate_operations_including_setup"]) + '</dd></div>'
             '<div><dt>연산 차이 (기준 − 후보)</dt><dd>' +
             _e(difference) + '</dd></div>'
