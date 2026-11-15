@@ -13,7 +13,9 @@ from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
 from pathlib import Path
+import os
 import sqlite3
+import tempfile
 
 from . import pending_queue as queue
 from .runtime_pipeline import DEDUPES
@@ -29,6 +31,26 @@ COLUMNS = ("job_id", "dedupe_key", "kind", "status", "due_at", "attempts",
 
 class OwnerRearmError(ValueError):
     pass
+
+
+# There is no live owner launcher yet. Fail closed even when a caller sets
+# both Boolean flags to True: they are not owner identity/task attestations.
+SYNTH_MARKER = "UCIE_P10_REARM_SYNTH_ONLY_V1"
+
+
+def _require_synthetic_root(root: Path) -> None:
+    if not isinstance(root, Path) or root.is_symlink():
+        raise OwnerRearmError("synthetic UCIE root required")
+    resolved = root.resolve()
+    if (resolved == Path("D:/UCIE").resolve()
+            or resolved.name.casefold() != "ucie"
+            or not resolved.is_relative_to(Path(tempfile.gettempdir()).resolve())):
+        raise OwnerRearmError("operating UCIE recovery is not enabled")
+    marker = resolved / "runtime" / "UCIE_P10_REARM_SYNTH_ONLY.marker"
+    if (marker.is_symlink() or not marker.is_file()
+            or marker.stat().st_size != len(SYNTH_MARKER)
+            or marker.read_text(encoding="ascii") != SYNTH_MARKER):
+        raise OwnerRearmError("disposable synthetic marker required")
 
 
 def _clock(now):
@@ -131,6 +153,7 @@ def apply_one(root: Path, *, kind: str, expected_sha256: str,
     if (owner_authorized is not True
             or task_evidence_independently_verified is not True):
         raise OwnerRearmError("independent owner/task authorization required")
+    _require_synthetic_root(root)
     current = _clock(now)
     due = queue._stamp(current + COOLDOWN)
     with closing(_conn(root, readonly=False)) as db:
@@ -187,6 +210,7 @@ def rollback_one(root: Path, *, operation_sha256: str,
     if (owner_authorized is not True
             or task_evidence_independently_verified is not True):
         raise OwnerRearmError("independent owner/task authorization required")
+    _require_synthetic_root(root)
     current = _clock(now)
     if (type(operation_sha256) is not str or len(operation_sha256) != 64
             or any(c not in "0123456789abcdef" for c in operation_sha256)):
