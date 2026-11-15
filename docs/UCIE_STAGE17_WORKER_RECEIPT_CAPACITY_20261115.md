@@ -41,8 +41,15 @@ external GET, queue rearm, scheduler registration, P11 action, model or release.
   +2001/-2001 delta rejected, -2000 accepted; actual owner-host
   receipt observed read-only. Windows owner 6/6 after patch.
 - Existing test_ucie_worker.py: Windows owner 12/12 after patch.
+  Existing test_ucie_b0_local8_selected_integration_v01.py had one
+  obsolete synthetic expectation that 1001 rows MUST be rejected. The
+  first GitHub Linux CI exposed that regression test mismatch; replaced
+  its magic 1001 threshold with audit MAX_ROWS+1 (2001) and the same
+  owner Windows test returned 6/6 PASS.
   Existing test_ucie_owner_public_automation_observation_v01.py:
   read-only Windows 1/1, quality snapshot 1313, P10/P11 unchanged.
+  Owner total across these four suites = 24/24 PASS, independent GitHub
+  four-platform exact-head CI still required.
   The latest actual operating receipt is still the PRE-PATCH failure
   until the next natural scheduled invocation; do not claim runtime GO.
 
