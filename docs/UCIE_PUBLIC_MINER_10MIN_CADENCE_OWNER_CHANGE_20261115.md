@@ -68,6 +68,55 @@ D:\UCIE checkout:
   Two new 10-minute completed-cycle receipts are needed for future
   event-to-receipt operational acceptance.
 
+## Update failure and independent owner reconciliation (2026-11-15)
+
+An owner invocation of -Apply returned
+UCIE_TEN_MINUTE_APPLY_FAILED_ROLLBACK_UNCONFIRMED at the old catch block.
+That string is NOT evidence that the task was actually changed, because
+the former catch swallowed the original Set-ScheduledTask exception,
+then attempted a second Set of the original trigger even when no first
+write had occurred.
+
+Read-only owner Windows rechecks AFTER the failure:
+- Exact task still found, Ready, single trigger, actual interval PT1H,
+  last task result decimal 2. Principal SID matches current owner;
+  installed Python action and task settings match approved UCIE path.
+- Current diagnostic subprocess uses an elevated administrator token,
+  can read the task file ACL and exact Task Scheduler DACL, and can
+  successfully construct the intended PT10M trigger IN MEMORY with the
+  existing 3,650-day duration. None of these checks PROVES the specific
+  owner interactive PowerShell session has task modify permission, nor
+  whether Windows rejected Set for another reason.
+- The original Set-ScheduledTask exception category and HRESULT were
+  not captured in the old script. Do NOT call a permission/error root cause
+  proven or retry blindly.
+
+Safe updater repair:
+- Separate first Set from post-update verification; on exception, query
+  ONLY the exact task read-only. If the original trigger including interval,
+  start boundary, duration, approved action and owner is still unchanged,
+  emit status SET_FAILED_ORIGINAL_PT1H_INTACT_NO_ROLLBACK_NEEDED and a
+  bounded error class/category/HRESULT, with no second Set attempt.
+- If the first Set reports failure but the task is modified or unreadable,
+  STOP with STATE_UNCERTAIN and do not blindly rollback.
+- If Set returns success but post-verification fails, attempt one
+  tightly scoped rollback and then verify the original interval/boundary;
+  no rollback PASS if re-read does not confirm it.
+- One owner read-only source parser/preflight and an injected PowerShell
+  Set-ScheduledTask function (which deliberately throws without calling
+  the actual cmdlet) verified that the repaired failure branch performs
+  one mocked Set attempt and zero real task writes. Owner revised test
+  5/5 PASS plus independent diagnostic 2/2 PASS.
+- The live Windows task remains PT1H, NOT yet 10 minutes.
+
+Next owner action: from the SAME original interactive PowerShell window
+after the failure, inspect only the error object types, numeric HRESULTs
+and error categories stored in $Error. Do not disclose raw messages,
+task XML, account identities or source text. Have the actual first Set
+failure category reviewed before another authorized -Apply attempt.
+No manual unregister/re-register, forced collection, broad ACL change
+or task enable/disable as an improvised workaround.
+
 ## Quotas, safety and exclusions
 
 Ten-minute cadence permits up to 6 scheduled cycles/hour rather than 1,
