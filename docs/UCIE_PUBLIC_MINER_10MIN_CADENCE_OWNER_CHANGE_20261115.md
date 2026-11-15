@@ -1,0 +1,85 @@
+# UCIE PublicMiner 60 -> 10 minute change (2026-11-15, KST)
+
+Scope: isolated D:\UCIE, fixed task name \UCIE-PublicMiner-Hourly,
+base official/approved public-only candidate miner. Task name stays
+historically stable; its cadence changes to 10 minutes.
+
+## Owner evidence and implementation state
+
+- Actual owner Windows PREVIEW ONLY of
+  scripts/set_public_miner_10min.ps1 returned:
+  status=PREVIEW_ONLY_NO_TASK_CHANGES,
+  existing_interval=PT1H,
+  requested_interval=PT10M,
+  exact_task_action_and_owner_verified=true,
+  scheduler_changed=false,
+  collection_run_requested=false,
+  existing_last_task_result=2.
+- DO NOT claim the Windows task has changed until owner-only APPLY returns
+  status=EXACT_TASK_SET_TO_10_MINUTES and a subsequent independent read-only
+  task query confirms an exact PT10M repetition interval.
+- src/ucie_miner/schedule_policy.py uses INTERVAL=timedelta(minutes=10).
+  Existing completed cycles have 30s bounded trigger jitter.
+  Consecutive failures preserve a growing retry/backoff up to 60 minutes:
+  a 10-minute scheduled trigger does NOT guarantee a new collection during
+  a rate-limit, failing source, live worker or other safety gate.
+- Existing source-only installer scripts/install_hourly_task.ps1 has a
+  10-minute trigger for a FRESH install; because the owner task ALREADY
+  EXISTS it refuses to overwrite it. Do NOT invoke that installer to
+  migrate a live owner task.
+- scripts/task_status.ps1 -Evidence expects PT10M and 8-12 minute
+  completed-cycle separation. It preserves the historical task name and
+  backward-compatible hourly_no_overlap_configured output key, but adds
+  cadence_minutes=10 and ten_minute_no_overlap_configured. The output's
+  historical "hourly" schema name is not proof of a 60-minute cadence.
+- tests/test_ucie_schedule_policy.py and
+  tests/test_ucie_public_miner_10min_cadence_v01.py execute offline and
+  owner preview checks. UCIE Windows owner 14/14 + 3/3 PASS, existing
+  worker tests 12/12 PASS. All operating records remain unmodified
+  by those checks.
+
+## Exact one-owner task update (not automatically invoked)
+
+In the owner's Windows PowerShell session, from the already approved
+D:\UCIE checkout:
+
+    cd D:\UCIE
+    .\scripts\set_public_miner_10min.ps1
+    .\scripts\set_public_miner_10min.ps1 -Apply
+    .\scripts\task_status.ps1 -Evidence
+
+- First command is read-only and must show the exact preflight status,
+  one approved task owner and action, and PT1H or PT10M. The second
+  command changes ONLY the existing TaskScheduler trigger for the
+  fixed UCIE-PublicMiner-Hourly task when -Apply is explicitly provided.
+  It refuses task identity drift, wrong user SID, state != Ready,
+  unapproved cadence and missing Python/policy. Attempts trigger
+  rollback if post-update verification fails.
+- First new scheduled activation is about 10 minutes after APPLY.
+  It does not call Start-ScheduledTask, does not call a collector
+  and does not modify the queue or operating SQLite itself.
+- Verify Get-ScheduledTask for the exact UCIE task: PT10M, matching
+  action/principal/IgnoreNew and NextRunTime. An operating PASS still
+  requires actual scheduled run and source-linked receipt/event binding.
+- If Windows TaskScheduler permissions deny Set-ScheduledTask, this
+  change stays NO_GO and the owner must diagnose that scoped privilege
+  error; do not elevate indiscriminately or delete/re-register a task.
+- Existing 60-minute receipt history is intentionally preserved.
+  Two new 10-minute completed-cycle receipts are needed for future
+  event-to-receipt operational acceptance.
+
+## Quotas, safety and exclusions
+
+Ten-minute cadence permits up to 6 scheduled cycles/hour rather than 1,
+so public GitHub requests may increase. Keep allowlist, source caps,
+HTTP quota guard, backoff, 0 automatic promotions and no customer release.
+A 403/429/network failure must not trigger a tight retry loop. If API
+limits are reached, report the actual status and allow safety backoff.
+
+No change to UCIE-Internal-Minute/P10, P11 network job, C40, other
+projects, customer UI, AI/Qwen, memory, personal data or private code.
+
+STATUS=TEN_MINUTE_CODE_AND_OWNER_APPLY_SCRIPT_READY;
+OWNER_WINDOWS_SCHEDULE_LAST_OBSERVED_PT1H;
+REAL_TASK_APPLY_NOT_EXECUTED_BY_BRIDGE;
+OPERATING_ACCEPTANCE_PENDING.
