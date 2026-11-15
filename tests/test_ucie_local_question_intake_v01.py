@@ -153,6 +153,13 @@ class LocalQuestionIntakeTests(unittest.TestCase):
                             self.assertIn('data-question-result="known"',page)
                             self.assertNotIn(question,page)
                             self.assertIn("no-store",headers["Cache-Control"])
+                    prefix="일반적인 코딩 문제 해결 방법을 확인하고 싶습니다."
+                    long_korean=prefix+"가"*(360-len(prefix))
+                    self.assertEqual(len(long_korean),360)
+                    code,page,_=send("/local/ask",method="POST",text=long_korean)
+                    self.assertEqual(code,200)
+                    self.assertIn('data-question-result="unmatched"',page)
+                    self.assertNotIn(long_korean,page)
                     secret="Python ModuleNotFoundError, token=do_not_echo"
                     code,page,_=send("/local/ask",method="POST",text=secret)
                     self.assertEqual(code,422)
@@ -170,7 +177,7 @@ class LocalQuestionIntakeTests(unittest.TestCase):
                     self.assertEqual(send("/local/ask",method="POST",text=EXAMPLES[0][0],
                                           headers={"Content-Type":"application/json"})[0],400)
                     self.assertEqual(send("/local/ask",method="POST",
-                                          content=b"question="+b"a"*1401)[0],413)
+                                          content=b"question="+b"a"*6145)[0],413)
                 finally:
                     server.shutdown()
                     thread.join(timeout=6)
