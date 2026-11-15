@@ -14,6 +14,7 @@ from html import escape
 from urllib.parse import quote
 
 from .local_v1_priority_v01 import require_local_work
+from .local_solution_followup_v01 import ANSWERS, render_followup
 from .local_error_actionable_workflow_v01 import (
     CASE_IDS, SCHEMA as CASE_SCHEMA, STATUS as CASE_STATUS, get_case,
 )
@@ -73,11 +74,12 @@ def _validated_case(case_id: str) -> dict:
     return case
 
 
-def render_guidance(case_id: str = "") -> str:
-    """First select a known symptom, then read a careful next action."""
+def render_guidance(case_id: str = "", *, check: str = "") -> str:
+    """First select a known symptom, then complete a bounded human self-check."""
     require_local_work("LOCAL_APP")
-    if type(case_id) is not str:
-        raise ProblemGuidanceError("problem selection must be a fixed ID")
+    if (type(case_id) is not str or type(check) is not str
+            or (check and (not case_id or check not in ANSWERS))):
+        raise ProblemGuidanceError("unregistered symptom or self-check")
     if case_id:
         case = _validated_case(case_id)
         _, domain, symptom, summary = next(
@@ -129,7 +131,8 @@ def render_guidance(case_id: str = "") -> str:
             ' 맞춰 기존 공식 자료의 점검 방법을 안내합니다.</p>'
             '<p>비공개 코드·로그·비밀번호·개인정보는 입력하거나'
             ' 업로드하지 마세요. 현재 화면에는 업로드 기능이 없고,'
-            ' 문제 내용을 외부로 보내지 않습니다.</p></section>'
+            ' 문제 내용을 외부로 보내지 않습니다.</p></section>' +
+            render_followup(case_id, check)
         )
     cards = []
     for case_id, domain, symptom, summary in _SYMPTOMS:
