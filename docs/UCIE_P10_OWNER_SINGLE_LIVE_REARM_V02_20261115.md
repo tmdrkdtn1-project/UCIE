@@ -53,6 +53,36 @@ b409b363490200412e972b41fab031aacef444f03ce7060923814c1e57d1b820
 For UCIE_REPORT_PREPARATION, job_id=5, fingerprint:
 3518c2977eeb1e03efc4aca2bcbff67d132181b6141a8d4222b2a1106e5f44d5
 
+## Simplified one-command owner PowerShell wrapper
+
+To avoid manually typing a SHA-256 fingerprint or job ID, an additional
+exact UCIE-only wrapper computes and validates a FRESH read-only preview
+first. It uses the reviewed fixed venv Python and exact module arguments.
+Then, and ONLY if -Approve was explicitly supplied, it passes the fresh
+SHA256 to the actual Python CLI. The Python CLI independently reattests
+the Windows owner and task inside its process and atomically compares
+the same row SHA. This prevents preview/apply TOCTOU drift.
+
+Safe preview:
+
+    cd D:\UCIE
+    .\scripts\p10_owner_rearm_one_v02.ps1 -Kind PUBLIC_METADATA_REVIEW
+
+Single approved mutation (MUST be done by owner after CI/source review):
+
+    .\scripts\p10_owner_rearm_one_v02.ps1 -Kind PUBLIC_METADATA_REVIEW -Approve
+
+The wrapper accepts only PUBLIC_METADATA_REVIEW and
+UCIE_REPORT_PREPARATION. It refuses P11, unexpected job IDs, task/owner
+drift, malformed fingerprint, or a non-eligible held row. It does NOT
+run a worker or GET, start/stop/set a scheduler task, or rearm all jobs.
+
+Actual owner Windows preview:
+UCIE_P10_OWNER_ONE_JOB_PS_V02 / PREVIEW_ONLY_NO_QUEUE_CHANGE,
+kind PUBLIC_METADATA_REVIEW, job_id 2, owner_task_verified=true,
+public_gets=0, queue_modified=false. Windows one-file static/parser/
+read-only wrapper tests 3/3 PASS. Live -Approve NOT called.
+
 ## Explicit owner APPLY (MUTATES ONLY ONE P10 ROW)
 
 Do NOT use until code and CI reviewed. Run only against a new PREVIEW
