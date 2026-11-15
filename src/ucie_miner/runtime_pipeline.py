@@ -265,6 +265,7 @@ def _safe_handler(root: Path, kind: str) -> bool:
         return collect_one(root)["status"] in (
             "P11_PUBLIC_HASH_METADATA_STAGED_UNVERIFIED",
             "P11_RATE_WINDOW_NOT_DUE",
+            "P11_UPSTREAM_RATE_PAUSED_NO_GET",
         )
     if kind == "EXPERIENCE_CLOSED_LOOP":
         from .p11_closed_loop import learn_one
