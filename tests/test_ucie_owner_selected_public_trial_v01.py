@@ -57,7 +57,7 @@ class SelectedPublicEvidenceTrialTests(unittest.TestCase):
         with patch.object(app, "_search", return_value=selection()):
             rendered = app._review(Path("UCIE"), BASE)
         self.assertIn('data-selected-trial="available"', rendered)
-        self.assertIn("관련 UCIE 자체 안전 실험 실행", rendered)
+        self.assertIn("안전한 예제 실행해 보기", rendered)
         self.assertIn("&amp;trial=1", rendered)
         self.assertIn("155365", rendered)
         self.assertIn("NOT_VERIFIED", rendered)
