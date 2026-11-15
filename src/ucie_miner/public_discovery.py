@@ -106,7 +106,7 @@ def public_feed_url(source: str, page: int = 1) -> str:
     return url if page == 1 else url + f"&page={page}"
 
 
-def public_feed_get(url: str) -> object:
+def public_feed_get(url: str, *, observe_rate_headers=None) -> object:
     """Anonymous exact-URL GET; never follow redirects or remote instructions."""
     if (not isinstance(url, str) or url not in {
             public_feed_url(source, page)
@@ -121,6 +121,8 @@ def public_feed_get(url: str) -> object:
     opener = urllib.request.build_opener(NoRedirect)
     try:
         with opener.open(request, timeout=12) as response:
+            if observe_rate_headers is not None:
+                observe_rate_headers(response.headers)
             if response.status != 200:
                 raise DiscoveryError("public feed not successful")
             if "json" not in response.headers.get("Content-Type", ""):
