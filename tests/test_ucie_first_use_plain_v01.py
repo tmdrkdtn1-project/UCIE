@@ -56,7 +56,7 @@ class FirstUsePlainKoreanTests(unittest.TestCase):
             self.assertIn(sentence,text)
         self.assertNotIn("고객 출시",text)
         self.assertNotIn("진단 완료",text)
-        self.assertNotIn("승인된 수정",text)
+        self.assertNotIn("검증 완료된 수정본",text)
 
     def test_04_optional_advanced_navigation_and_examples_start_closed(self):
         html=app._home()
