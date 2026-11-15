@@ -1,5 +1,5 @@
 # UCIE-owned Windows Task Scheduler installer.
-# Runs one small public-source collection cycle hourly; current-user / least privilege.
+# Runs one small public-source collection cycle every 10 minutes; current-user / least privilege.
 # Never registers any task for another project and never modifies another task.
 [CmdletBinding()]
 param([switch]$Install)
@@ -39,7 +39,7 @@ Write-Output "UCIE_ROOT=$root"
 Write-Output "PYTHON=$version"
 Write-Output "TASK_NAME=$taskName"
 Write-Output "TASK_USER=$identity"
-Write-Output 'SCHEDULE=HOURLY_CURRENT_USER_ONLY'
+Write-Output 'SCHEDULE=EVERY_10_MINUTES_CURRENT_USER_ONLY'
 Write-Output 'MINING_STATUS=UNVERIFIED_CANDIDATES_ONLY'
 Write-Output 'NO_PROJECT_ACCESS=ENFORCED_BY_PUBLIC_SOURCE_ALLOWLIST'
 if (-not $Install) {
@@ -48,7 +48,7 @@ if (-not $Install) {
 }
 
 $action = New-ScheduledTaskAction -Execute $python -Argument ('"' + $worker + '"') -WorkingDirectory $root
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(3) -RepetitionInterval (New-TimeSpan -Hours 1) -RepetitionDuration (New-TimeSpan -Days 3650)
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(3) -RepetitionInterval (New-TimeSpan -Minutes 10) -RepetitionDuration (New-TimeSpan -Days 3650)
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
 # Interactive + limited means no stored password, no SYSTEM or elevation.
 # Runs only while this user has an interactive session; sleeping/logged-out PCs do not mine.
