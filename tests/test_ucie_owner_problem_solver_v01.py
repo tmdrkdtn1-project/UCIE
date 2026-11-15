@@ -82,7 +82,7 @@ class OwnerGuidedProblemSolverTests(unittest.TestCase):
         with patch("urllib.request.urlopen",side_effect=AssertionError("network forbidden")):
             with patch("subprocess.run",side_effect=AssertionError("no commands")):
                 for case in ("python-env","powershell-command","git-repository","mcp-prompts"):
-                    self.assertIn("확인 방법",solve.render_guidance(case))
+                    self.assertIn("확인해 볼 방법",solve.render_guidance(case))
 
     def test_08_source_claim_and_approval_forgeries_fail_closed(self):
         from ucie_miner import local_error_actionable_workflow_v01 as catalog
