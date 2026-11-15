@@ -55,7 +55,8 @@ class P11ClosedCategoryReceiptsTests(unittest.TestCase):
         self.assertEqual(report["next_source_id"], "repo:python/cpython")
         result = p11.collect_one(self.root, now=T0 + timedelta(minutes=1),
                                  fetch=lambda _: self.fail("unexpected GET"))
-        self.assertEqual(result["status"], "P11_FAILED_SOURCE_REMAINS_PENDING")
+        self.assertEqual(result["status"], "P11_UPSTREAM_RATE_PAUSED_NO_GET")
+        self.assertEqual(result["public_api_gets_this_call"], 0)
         raw = (self.root / "runtime" / p11.DB_NAME).read_bytes()
         self.assertNotIn(POISON.encode(), raw)
         self.assertNotIn(b"https://invalid.test", raw)
@@ -70,11 +71,20 @@ class P11ClosedCategoryReceiptsTests(unittest.TestCase):
         error.close()
         self.assertEqual(a["last_failed_public_attempt_category"],
                          "UPSTREAM_HTTP_403")
-        # Exact one-source cursor remains held on failure, not rotated.
-        b = self._fail(URLError("disconnected " + POISON),
-                       clock=T0 + timedelta(minutes=5))
-        self.assertEqual(b["last_failed_public_attempt_category"],
+        # 403 without reset/Retry-After is ambiguous authorization denial;
+        # do not issue a second public GET without explicit owner review.
+        paused = p11.collect_one(
+            self.root, now=T0 + timedelta(minutes=5),
+            fetch=lambda _url: self.fail("403 may not auto retry"))
+        self.assertEqual(paused["status"], "P11_UPSTREAM_RATE_PAUSED_NO_GET")
+        self.assertTrue(paused["rate_owner_review_required"])
+        self.assertEqual(paused["public_api_gets_this_call"], 0)
+
+    def test_02b_network_failure_distinct_in_independent_ledger(self):
+        report = self._fail(URLError("disconnected " + POISON))
+        self.assertEqual(report["last_failed_public_attempt_category"],
                          "UPSTREAM_NETWORK_FAILURE")
+        self.assertFalse(report["rate_guard_active"])
 
     def test_03_malformed_response_has_generic_validation_class(self):
         a = self._fail(DiscoveryError("malformed " + POISON))
