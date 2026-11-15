@@ -222,6 +222,8 @@ def _solve(raw: str) -> str:
     require_local_work("LOCAL_APP")
     from .local_problem_solver_v01 import render_guidance
     args = _params(raw, ("case",))
+    if "case" in args and not args["case"]:
+        raise LocalProductError("blank problem selection")
     return _page("오류 예방", render_guidance(args.get("case", "")))
 
 
