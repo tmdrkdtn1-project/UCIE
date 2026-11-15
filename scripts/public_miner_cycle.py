@@ -78,9 +78,8 @@ def main() -> int:
 
     try:
         result = run_cycle(ROOT, collect=collect, enforce_schedule=True)
-        if (result.get("status") in ("COLLECTED_UNVERIFIED",
-                                     "COLLECTED_UNVERIFIED_PARTIAL_NO_GO")
-                and stage10 is not None):
+        if result.get("status") in (
+                "COLLECTED_UNVERIFIED", "COLLECTED_UNVERIFIED_PARTIAL_NO_GO") and stage10 is not None:
             result["stage10"] = stage10
     except Exception as exc:
         result = {"status": "FAIL_CLOSED", "error_type": type(exc).__name__}
@@ -88,9 +87,14 @@ def main() -> int:
     if result.get("stage10", {}).get("status") in (
             "STAGE10_HOURLY_FAILED_NO_GO", "STAGE10_HOURLY_PARTIAL_NO_GO"):
         return 2
-    return 0 if result["status"] == "COLLECTED_UNVERIFIED" else (
-        3 if result["status"] == "SKIPPED_ALREADY_RUNNING" else (0 if result["status"] == "SKIPPED_NOT_DUE" else 2)
-    )
+    # An upstream quota/permission hold is a successful SAFE SKIP, not a
+    # successful collection. Keep OS task scheduled; never retry the GET.
+    return 0 if result["status"] in (
+        "COLLECTED_UNVERIFIED",
+        "SKIPPED_NOT_DUE",
+        "SKIPPED_PUBLIC_RATE_PAUSED_NO_GET",
+        "SKIPPED_PUBLIC_RATE_OWNER_REVIEW_NO_GET",
+    ) else (3 if result["status"] == "SKIPPED_ALREADY_RUNNING" else 2)
 
 
 if __name__ == "__main__":

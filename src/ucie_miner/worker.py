@@ -18,6 +18,7 @@ from typing import Callable, Iterator
 
 from .core import mine_once, report
 from .schedule_policy import next_cycle
+from . import p11_rate_guard_v03 as rate_guard
 
 
 def _utc() -> str:
@@ -99,6 +100,52 @@ def _write_receipt(runtime: Path, result: dict) -> None:
         os.fsync(fp.fileno())
 
 
+def _public_rate_failure_gate(prior: dict, *, now: datetime) -> dict | None:
+    """Fail closed on prior public HTTP 403/429 before ANY new GET.
+
+    Exact last_run.json is first-party UCIE only, not an external authority.
+    No new files or task mutations. Unknown historical limit => owner HOLD.
+    """
+    if not isinstance(prior, dict):
+        raise ValueError("untrusted public miner receipt")
+    code = prior.get("error_http_status")
+    category = prior.get("stage10_error_category")
+    stage13 = prior.get("stage13_history_status")
+    stage16 = prior.get("stage16_safe_qa_status")
+    active_http = (type(code) is int and code in (403, 429))
+    active_stage = (category in ("UPSTREAM_HTTP_403", "UPSTREAM_HTTP_429")
+                    or stage13 == "EXTERNAL_HISTORY_RATE_BUDGET_PAUSED_NO_GO"
+                    or stage16 in ("STAGE16_SAFE_QA_RATE_PAUSED_NO_GO",
+                                   "STAGE16_SAFE_QA_24H_BUDGET_PAUSED_NO_GO"))
+    if not active_http and not active_stage:
+        return None
+    pause_until = None
+    if active_http and prior.get("public_rate_pause_reason") in rate_guard.RATE_REASONS:
+        stamp = prior.get("public_rate_pause_not_before_utc")
+        if stamp is not None:
+            try:
+                due = rate_guard._parse(stamp)
+            except (ValueError, TypeError) as exc:
+                raise ValueError("invalid public rate pause timestamp") from exc
+            if now >= due and not active_stage:
+                return None
+            # Even after an HTTP reset, an independent Stage10/Stage13
+            # shared-rate pause remains an owner-review hold.
+            if now < due:
+                pause_until = stamp
+    return {
+        "schema": "UCIE_MINER_CYCLE_V1",
+        "status": ("SKIPPED_PUBLIC_RATE_PAUSED_NO_GET" if pause_until
+                   else "SKIPPED_PUBLIC_RATE_OWNER_REVIEW_NO_GET"),
+        "public_gets_this_run": 0, "sources_checked": 0,
+        "rate_owner_review_required": pause_until is None,
+        "next_allowed_utc": pause_until,
+        "scheduler_modified": False,
+        "verification_pass": 0, "production_approved": False,
+        "auto_promoted": False,
+    }
+
+
 def run_cycle(
     repo_root: Path,
     *,
@@ -143,6 +190,10 @@ def run_cycle(
                     failures = payload.get("consecutive_failures", 0)
                 except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
                     raise ValueError("invalid prior receipt") from exc
+                rate_pause = _public_rate_failure_gate(
+                    payload, now=datetime.now(timezone.utc))
+                if rate_pause is not None:
+                    return rate_pause
             decision = next_cycle(
                 prior, now=datetime.now(timezone.utc),
                 consecutive_failures=failures, last_started=prior_started)
@@ -161,8 +212,8 @@ def run_cycle(
             "production_approved": False,
             "consecutive_failures": 0,
         }
-        failure_phase = "BASE_COLLECTION"
         try:
+            failure_phase = "BASE_COLLECTION"
             collect_clock_ns = perf_counter_ns()
             try:
                 result = collect(repo_root)
@@ -181,19 +232,18 @@ def run_cycle(
                 raise ValueError("invalid source statistics")
             if result["status"] == "COLLECTED_UNVERIFIED_PARTIAL_NO_GO":
                 from .core import PUBLIC_SOURCES
-                count = result.get("rejected_public_pr_count")
+                rejected_count = result.get("rejected_public_pr_count")
                 rejected_source = result.get("rejected_public_source")
-                reason = result.get("rejected_public_reason_code")
-                # The base collector permits at most five PR-files attempts
-                # per approved source; the normal hourly caller uses two.
-                if (type(count) is not int or not 1 <= count <= source_count * 5
+                rejected_reason = result.get("rejected_public_reason_code")
+                if (type(rejected_count) is not int
+                        or not 1 <= rejected_count <= source_count * 2
                         or rejected_source not in PUBLIC_SOURCES
-                        or reason != "PUBLIC_PATCH_METADATA_REJECTED"):
+                        or rejected_reason != "PUBLIC_PATCH_METADATA_REJECTED"):
                     raise ValueError("invalid partial collector evidence")
                 receipt["collector_partial_status"] = "BASE_PUBLIC_PATCH_REJECTED_PARTIAL_NO_GO"
-                receipt["collector_rejected_count"] = count
+                receipt["collector_rejected_count"] = rejected_count
                 receipt["collector_rejected_source"] = rejected_source
-            elif any(k in result for k in (
+            elif any(key in result for key in (
                     "rejected_public_pr_count", "rejected_public_source",
                     "rejected_public_reason_code")):
                 raise ValueError("unexpected rejected evidence on complete collector status")
@@ -365,26 +415,43 @@ def run_cycle(
                 report_path=report_path.relative_to(repo_root.resolve()).as_posix(),
             )
         except Exception as exc:
-            # Only fixed UCIE-owned codes, never exception messages, URLs,
-            # headers, response bodies, or unsupported public identities.
+            # Exceptions can contain externally controlled text: store type ONLY.
             receipt["status"] = "COLLECTION_FAILED"
             receipt["error_type"] = type(exc).__name__
             receipt["error_phase"] = failure_phase
             from .core import PUBLIC_SOURCES
             public_source = getattr(exc, "ucie_public_source", None)
             public_operation = getattr(exc, "ucie_public_operation", None)
-            if type(public_source) is str and public_source in PUBLIC_SOURCES:
+            if public_source in PUBLIC_SOURCES:
                 receipt["error_public_source"] = public_source
-            if type(public_operation) is str and public_operation in (
-                    "FETCH_PR_LIST", "VALIDATE_PR_LIST", "VALIDATE_PR_ROW",
-                    "FETCH_PR_FILES", "VALIDATE_PR_FILES", "RECORD_PR",
-                    "RECORD_RUN"):
+            if public_operation in ("FETCH_PR_LIST", "VALIDATE_PR_LIST",
+                                    "VALIDATE_PR_ROW", "FETCH_PR_FILES",
+                                    "VALIDATE_PR_FILES", "RECORD_PR", "RECORD_RUN"):
                 receipt["error_public_operation"] = public_operation
             from urllib.error import HTTPError
             cause = exc.__cause__
             if isinstance(cause, HTTPError) and type(cause.code) is int:
                 if cause.code in (403, 404, 429, 500, 502, 503, 504):
                     receipt["error_http_status"] = cause.code
+            # Persist only a bounded enum + UTC deadline derived from
+            # explicit HTTPError cause and numeric rate headers. No raw
+            # response/header text or URL is retained.
+            try:
+                previous = None
+                if enforce_schedule and 'payload' in locals() and isinstance(payload, dict):
+                    strikes = payload.get("public_rate_pause_strikes")
+                    if type(strikes) is int and 1 <= strikes <= rate_guard.MAX_STRIKES:
+                        previous = {"strikes": strikes}
+                advice = rate_guard.calculate(
+                    exc, now=datetime.now(timezone.utc), prior=previous)
+                if advice is not None:
+                    receipt["public_rate_pause_reason"] = advice["reason"]
+                    receipt["public_rate_pause_not_before_utc"] = advice["not_before_utc"]
+                    receipt["public_rate_pause_strikes"] = advice["strikes"]
+            except (ValueError, TypeError):
+                # Missing headers must never authorize a fresh GET:
+                # recorded bare HTTP 403/429 still triggers owner HOLD.
+                pass
             if enforce_schedule:
                 receipt["consecutive_failures"] = min(6, failures + 1)
         finally:
