@@ -14,6 +14,7 @@ from tempfile import TemporaryDirectory
 from threading import Thread
 from unittest.mock import patch
 import os
+import json
 import unittest
 
 from ucie_miner import local_v1_app_v01 as app
@@ -235,6 +236,34 @@ class ActualOwnerSelectedEvidenceReadOnlyTests(unittest.TestCase):
         self.assertIn(selected["public_url"], actual)
         self.assertIn('data-selected-trial="executed"', actual)
         self.assertIn("실제 회귀시험: NOT_EXECUTED", actual)
+
+
+    def test_14_actual_owner_public_candidate_trial_coverage_readonly(self):
+        root = Path("D:/UCIE")
+        queries = ("API_CONTRACT", "scandir", "MCP")
+        checks = []
+        for query in queries:
+            report = search_existing_public_library(root, query=query, limit=20)
+            self.assertEqual(report["status"], "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO")
+            self.assertTrue(all(
+                item.get("human_approved") is False and
+                item.get("export_allowed") is False
+                for item in report["items"]))
+            rows = [
+                {"source": item["source_id"],
+                 "pattern": item["purpose_code"],
+                 "url": item["public_url"]}
+                for item in report["items"][:5]
+            ]
+            checks.append({
+                "query": query, "total": report["total_matches"],
+                "first_page": rows,
+                "real_source_selected_trial_currently_available": sum(
+                    trial.available_trial(create_review_worksheet(item))["available"]
+                    for item in report["items"]),
+            })
+        print("UCIE_OWNER_REAL_PUBLIC_TRIAL_COVERAGE=" +
+              json.dumps(checks, sort_keys=True))
 
 
 if __name__ == "__main__":
