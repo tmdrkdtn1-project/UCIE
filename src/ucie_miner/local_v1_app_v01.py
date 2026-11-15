@@ -707,7 +707,7 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
     require_local_work("DEV_ENGINE_SKILL")
     from .capability_trials import RECIPES, evaluate_ucie_owned_recipe
 
-    args = _params(raw, ("purpose", "case", "scenario"))
+    args = _params(raw, ("purpose", "case", "scenario", "rows", "queries", "repeats"))
     purpose = args.get("purpose", "")
     selected_case = args.get("case", "")
     scenario = args.get("scenario", "")
@@ -722,6 +722,22 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
                                    "MCP_PROMPTS_CONTRACT",
                                    "PYTHON_SCANDIR_SAFE", "B2_CONNECTED_TRIAGE"):
         raise LocalProductError("unregistered development engine")
+    # Owner may change ONLY bounded first-party synthetic workload sizes.
+    # No source paths, file content, private project text or arbitrary commands.
+    bounds = {"rows": (64, 512), "queries": (8, 64), "repeats": (1, 5)}
+    if purpose not in RECIPES and any(k in args for k in bounds):
+        raise LocalProductError("workload controls are only for UCIE authored recipes")
+    workload = {"rows": 128, "queries": 16, "repeats": 2}
+    if purpose in RECIPES:
+        for key, (minimum, maximum) in bounds.items():
+            value = args.get(key)
+            if value is not None:
+                if re.fullmatch(r"[1-9][0-9]{0,2}", value) is None:
+                    raise LocalProductError("invalid synthetic workload integer")
+                number = int(value)
+                if not minimum <= number <= maximum:
+                    raise LocalProductError("synthetic workload outside safe bounds")
+                workload[key] = number
     friendly = {
         "ENGINE_INCREMENTAL_BUILD": ("증분 빌드 실험", "변경된 부분만 다시 계산하는 방법"),
         "SKILL_TEST_AUTOMATION": ("테스트 탐색 도구", "필요한 테스트를 더 빠르게 찾아보는 방법"),
@@ -1056,25 +1072,61 @@ def _engine(raw: str, *, root: Path | None = None) -> str:
             '공개 기술 변경 전후 비교 보기 →</a></p></section>'
         )
     elif purpose:
-        out = evaluate_ucie_owned_recipe(
-            purpose, rows=128, queries=16, repeats=2)
+        out = evaluate_ucie_owned_recipe(purpose, **workload)
         if (out.get("purpose_code") != purpose
+                or out.get("synthetic_records") != workload["rows"]
+                or out.get("queries") != workload["queries"]
+                or out.get("repetitions") != workload["repeats"]
                 or out.get("exact_result_equivalence_observed") is not True
-                or out.get("production_adopted") is True):
+                or out.get("mismatched_queries_across_repetitions") != 0
+                or out.get("upstream_benefit_verified") is not False
+                or out.get("production_adopted") is not False
+                or out.get("auto_promoted") is not False
+                or out.get("network_requests") != 0
+                or out.get("operating_database_writes") != 0
+                or type(out.get("baseline_operations")) is not int
+                or type(out.get("candidate_operations_including_setup")) is not int):
             raise LocalProductError("UCIE engine result not safe for local use")
+        difference = (out["baseline_operations"] -
+                      out["candidate_operations_including_setup"])
         body += (
-            '<section><h2>실행 결과</h2>'
-            '<p>엔진 ID: <code>' + _e(out.get("recipe_id")) + '</code></p>'
+            '<section class="search-panel" data-owner-workload="true">'
+            '<h2>시험 조건 직접 바꾸기</h2>'
+            '<p>숫자를 바꿔 다시 실행해 보세요. UCIE 자체 알고리즘이'
+            ' 생성한 합성 데이터만 처리합니다.</p>'
+            '<form action="/local/engine" method="get">'
+            '<input type="hidden" name="purpose" value="' + _e(purpose) + '">'
+            '<label>합성 레코드 수 (64–512) '
+            '<input type="number" name="rows" min="64" max="512" step="1"'
+            ' required value="' + _e(workload["rows"]) + '"></label>'
+            '<label>질의 횟수 (8–64) '
+            '<input type="number" name="queries" min="8" max="64" step="1"'
+            ' required value="' + _e(workload["queries"]) + '"></label>'
+            '<label>반복 횟수 (1–5) '
+            '<input type="number" name="repeats" min="1" max="5" step="1"'
+            ' required value="' + _e(workload["repeats"]) + '"></label>'
+            '<button type="submit">선택한 조건으로 다시 실행</button>'
+            '</form></section>'
+            '<section class="shelf-entry" data-owner-workload-result="true">'
+            '<h2>선택한 조건의 실제 실행 결과</h2>'
+            '<p>UCIE 자체 알고리즘: <code>' + _e(out.get("recipe_id")) + '</code></p>'
             '<dl class="inventory-grid">'
-            '<div><dt>기준 연산</dt><dd>' +
-            _e(out.get("baseline_operations")) + '</dd></div>'
-            '<div><dt>후보 연산 · 준비 포함</dt><dd>' +
-            _e(out.get("candidate_operations_including_setup")) + '</dd></div>'
+            '<div><dt>합성 레코드</dt><dd>' +
+            _e(out["synthetic_records"]) + '개</dd></div>'
+            '<div><dt>질의 / 반복</dt><dd>' +
+            _e(out["queries"]) + ' / ' + _e(out["repetitions"]) + '</dd></div>'
+            '<div><dt>기준 모델 연산 수</dt><dd>' +
+            _e(out["baseline_operations"]) + '</dd></div>'
+            '<div><dt>후보 모델 연산 수 · 준비 포함</dt><dd>' +
+            _e(out["candidate_operations_including_setup"]) + '</dd></div>'
+            '<div><dt>연산 차이 (기준 − 후보)</dt><dd>' +
+            _e(difference) + '</dd></div>'
             '<div><dt>결과 동등성</dt><dd>' +
             _e(out["exact_result_equivalence_observed"]) + '</dd></div>'
             '<div><dt>검토 상태</dt><dd><code>' +
             _e(out.get("status")) + '</code></dd></div></dl>'
             '<p><strong>한계:</strong> 합성 workload 비교입니다.'
+            ' 표시한 연산 수는 실제 CPU 명령이나 처리 시간의 보장이 아닙니다.'
             ' 실제 프로젝트 또는 운영환경 개선 효과는 아직 검증하지 않았습니다.</p>'
             '</section>')
     return _page("개발 엔진·스킬", body)
