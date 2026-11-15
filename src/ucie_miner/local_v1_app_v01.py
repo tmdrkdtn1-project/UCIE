@@ -736,9 +736,10 @@ def _review(root: Path, raw: str) -> str:
                 ' 프로젝트를 실행하지 않습니다.</p>'
                 '<p><a href="' + _e(selected_url) +
                 '">관련 UCIE 자체 안전 실험 실행 →</a></p>'
-                '<p class="customer-note">실험이 통과해도 선택한 공개 PR의'
-                ' 수정 효과·영향 버전·배포 승인이나 독립 회귀 검증은'
-                ' 입증되지 않습니다.</p></section>'
+                '<p class="customer-note">이 실험은 같은 기술 분류의'
+                ' UCIE 자체 예시이며, 선택한 PR과 다른 원본을 참고할 수'
+                ' 있습니다. 선택한 PR의 수정 효과·영향 버전·배포 승인이나'
+                ' 독립 회귀 검증은 입증되지 않습니다.</p></section>'
             )
         else:
             result = run_selected_trial(brief)
@@ -754,13 +755,38 @@ def _review(root: Path, raw: str) -> str:
                     or result.get("operating_database_writes") != 0
                     or result.get("network_requests") != 0):
                 raise LocalProductError("untrusted selected UCIE trial result")
+            # An illustrative contract example may use a DIFFERENT PR.
+            # Never merge that example's evidence identity with the owner's
+            # selected W04 candidate identity.
+            illustrative = result.get("illustrative_reference_url")
+            if (illustrative not in (
+                    "https://docs.python.org/3/library/os.html",
+                    "https://github.com/modelcontextprotocol/python-sdk/pull/3696")
+                    or result.get("same_exact_public_reference_as_example") is
+                    not (illustrative == brief["public_url"])
+                    or result.get("same_pattern_domain_only_not_same_fix_verified") is not True):
+                raise LocalProductError("illustrative trial source identity mismatch")
+            reference_relation = (
+                '이 예제의 참조 자료는 선택한 공개 후보의 원본과'
+                ' 다릅니다. 선택한 PR의 코드나 수정 내용을 시험한'
+                ' 것은 아닙니다.'
+                if illustrative != brief["public_url"] else
+                '참조 자료 주소가 같아도 실제 공개 코드의 동작이나'
+                ' 수정 효과를 검증하지는 않았습니다.'
+            )
             markup.append(
                 '<section class="shelf-entry" data-selected-trial="executed">'
                 '<h2>관련 UCIE 자체 안전 실험 결과</h2>'
                 '<p>' + _e(result["observed_result"]) + '</p>'
                 '<p>연결된 공개 후보: <a target="_blank"'
                 ' rel="noopener noreferrer" href="' +
-                _e(brief["public_url"]) + '">원본 PR 보기</a></p>'
+                _e(brief["public_url"]) + '">선택한 PR 보기</a></p>'
+                '<p data-example-reference-separate="' +
+                _e(illustrative != brief["public_url"]) + '">'
+                'UCIE 합성 예제 참고자료: <a target="_blank"'
+                ' rel="noopener noreferrer" href="' +
+                _e(illustrative) + '">예제 출처 열기</a>. ' +
+                _e(reference_relation) + '</p>'
                 '<p class="customer-note">이 결과는 UCIE 자체 합성 사례만'
                 ' 실행한 것입니다. 실제 공개 PR의 수정 효과, 독립 회귀시험,'
                 ' 실제 프로젝트 적용 및 사람 승인: 모두 미검증입니다.'
