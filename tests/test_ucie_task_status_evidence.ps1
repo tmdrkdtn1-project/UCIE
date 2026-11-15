@@ -87,7 +87,7 @@ function Get-ScheduledTask {
             UserId = $user; LogonType = 'Interactive'; RunLevel = 'Limited'
         }
         Triggers = @([pscustomobject]@{
-            Repetition = [pscustomobject]@{Interval = 'PT1H'}
+            Repetition = [pscustomobject]@{Interval = 'PT10M'}
         })
         Settings = [pscustomobject]@{ MultipleInstances = 'IgnoreNew' }
         State = 'Ready'
@@ -98,14 +98,14 @@ function Get-ScheduledTaskInfo {
     return [pscustomobject]@{
         LastTaskResult = $script:mockExit
         LastRunTime = [datetime]::Now.AddMinutes(-$script:mockLastRunMinutesAgo).AddSeconds($script:mockLastRunSecondsOffset)
-        NextRunTime = [datetime]::Now.AddMinutes(55)
+        NextRunTime = [datetime]::Now.AddMinutes(5)
     }
 }
 function Write-SyntheticReceipts {
     param([string]$LastStage, [string]$LastStatus = 'COLLECTED_UNVERIFIED',
-          [int]$GapMinutes = 60,
+          [int]$GapMinutes = 10,
           [string]$PreviousStage = 'EXTERNAL_HISTORY_BACKFILL_OK_NO_GO')
-    $base = [DateTimeOffset]::UtcNow.AddMinutes(-65)
+    $base = [DateTimeOffset]::UtcNow.AddMinutes(-15)
     $two = @()
     foreach ($i in 0,1) {
         $start = $base.AddMinutes($i * $GapMinutes)
