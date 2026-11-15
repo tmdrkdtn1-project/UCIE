@@ -53,15 +53,15 @@ MUST be reported as distinct facts.
 
 ## Owner Windows test evidence
 
-- New test_ucie_public_miner_http_rate_hold_v01.py: 7/7 PASS,
+- New test_ucie_public_miner_http_rate_hold_v01.py: 9/9 PASS,
   including simulated 403 without headers, 429 Retry-After, 403
   primary reset, historical 403 lacking rate evidence, unrelated 404,
   independent Stage10/Stage13 rate holds, and real owner last_run
   read-only 403 gate observation. No public API calls.
 - Existing test_ucie_hourly_stage10_failure_reconciliation_v01.py:
-  7/7 PASS.
+  9/9 PASS.
 - Existing test_ucie_hourly_public_study_loop.py: 11/11 PASS.
-- Combined 25/25 on the source-local owner adapter, with only
+- Combined 27/27 on the source-local owner adapter, with only
   disposable synthetic GET failures and real owner read-only
   observation. No claim that actual upstream API availability is fixed.
 
