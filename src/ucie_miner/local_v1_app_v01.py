@@ -707,7 +707,7 @@ def _review(root: Path, raw: str) -> str:
     # evidence record. This is not upstream PR execution or an approved fix.
     from .local_selected_public_trial_v01 import (
         available_trial, run_selected_trial,
-        SCHEMA as SELECTED_TRIAL_SCHEMA,
+        SCHEMA as SELECTED_TRIAL_SCHEMA, STATUS as SELECTED_TRIAL_STATUS,
     )
     option = available_trial(brief)
     if (option.get("schema") != SELECTED_TRIAL_SCHEMA
@@ -744,6 +744,7 @@ def _review(root: Path, raw: str) -> str:
         else:
             result = run_selected_trial(brief)
             if (result.get("schema") != SELECTED_TRIAL_SCHEMA
+                    or result.get("status") != SELECTED_TRIAL_STATUS
                     or result.get("selected_public_candidate_id") != candidate_id
                     or result.get("selected_public_candidate_url") != brief["public_url"]
                     or result.get("selected_public_evidence_sha256") != brief["evidence_sha256"]
