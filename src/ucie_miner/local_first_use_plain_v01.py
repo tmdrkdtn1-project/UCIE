@@ -18,9 +18,9 @@ START_TASKS = (
     (
         "solve",
         "지금 겪는 문제부터 해결하고 싶어요",
-        "대표 오류 증상 중 하나를 선택해 원인과 확인 방법을 알아보세요.",
-        "내 문제 해결 시작하기",
-        "/local/solve",
+        "일반적인 코딩 문제를 짧게 적고 확인 방법을 찾아보세요.",
+        "내 문제 직접 설명하기",
+        "/local/ask",
         "문제 해결 시작",
     ),
     (
@@ -103,12 +103,12 @@ def render_first_use() -> str:
         '<div class="start-task-grid" aria-label="하고 싶은 일 선택">' +
         "".join(rows) + '</div>'
         '<div class="start-truth" aria-label="현재 할 수 있는 일과 제한">'
-        '<p><strong>지금 가능한 것:</strong> 대표 문제의 확인 방법 안내, '
+        '<p><strong>지금 가능한 것:</strong> 일반 증상의 안전한 입력·1차 분류, 대표 문제의 확인 방법 안내, '
         '공개 기술 자료 검색, UCIE 자체 예제 실행, 기술 가이드 읽기.</p>'
         '<p><strong>아직 확인이 필요한 것:</strong> 외부 공개 자료의 '
         '실제 수정 효과와 적용 가능한 버전.</p>'
-        '<p><strong>아직 제공하지 않는 것:</strong> 자유 문장을 이해하는'
-        ' AI 맞춤 답변, 사용자 프로젝트 파일 자동 검사 또는 코드 자동 수정.</p>'
+        '<p><strong>아직 제공하지 않는 것:</strong> AI 모델의 자유형 맞춤 답변,'
+        ' 사용자 프로젝트 파일 자동 검사 또는 코드 자동 수정.</p>'
         '</div>'
         '<details class="technical-details" data-plain-glossary="true">'
         '<summary>낯선 용어 쉽게 알아보기</summary>'
