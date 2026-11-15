@@ -64,14 +64,24 @@ def available_trial(brief: dict) -> dict:
             and pattern == "PY_SCANDIR_SHARED_ITERATOR_RACE"):
         case = CASE_SCANDIR
     elif source == "repo:modelcontextprotocol/python-sdk" and pattern == "API_CONTRACT":
+        # MCP API-contract candidates share a TOPIC, not proven prompts/get
+        # implementation. We offer one explicitly distinct reference example.
+        case = CASE_MCP
+    reference = None
+    if case == CASE_SCANDIR:
+        reference = "https://docs.python.org/3/library/os.html"
+    elif case == CASE_MCP:
         from .mcp_prompt_regression_v01 import SOURCE_PR
-        if url == SOURCE_PR:
-            case = CASE_MCP
+        reference = SOURCE_PR
     return {
         "schema": SCHEMA,
         "status": STATUS if case else "NO_RELATED_APPROVED_FIRST_PARTY_TRIAL_AVAILABLE",
         "case": case,
         "available": case is not None,
+        "illustrative_reference_url": reference,
+        "same_exact_public_reference_as_example": (
+            url == reference if reference is not None else False),
+        "same_pattern_domain_only_not_same_fix_verified": True,
         "selected_public_candidate_id": brief["library_item_id"],
         "selected_public_candidate_url": url,
         "selected_public_evidence_sha256": brief["evidence_sha256"],
