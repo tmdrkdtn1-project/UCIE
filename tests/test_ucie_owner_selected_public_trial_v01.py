@@ -91,19 +91,28 @@ class SelectedPublicEvidenceTrialTests(unittest.TestCase):
         self.assertIn("서버 오류 대조 2개", html)
         self.assertIn("독립 회귀시험", html)
 
-    def test_05_other_mcp_api_contract_pr_does_not_inherit_prompts_proof(self):
+    def test_05_other_mcp_api_contract_pr_gets_distinct_example_not_fix_proof(self):
         report = selection(
             source_id="repo:modelcontextprotocol/python-sdk",
             public_url="https://github.com/modelcontextprotocol/python-sdk/pull/1928",
             pattern="API_CONTRACT",
         )
-        self.assertFalse(trial.available_trial(selected_review(report))["available"])
+        available = trial.available_trial(selected_review(report))
+        self.assertTrue(available["available"])
+        self.assertFalse(available["same_exact_public_reference_as_example"])
+        self.assertTrue(available["same_pattern_domain_only_not_same_fix_verified"])
+        self.assertEqual(
+            available["illustrative_reference_url"],
+            "https://github.com/modelcontextprotocol/python-sdk/pull/3696")
         with patch.object(app, "_search", return_value=report):
             html = app._review(Path("UCIE"), BASE)
-            self.assertIn('data-selected-trial="unavailable"', html)
-            self.assertNotIn("관련 UCIE 자체 안전 실험 실행", html)
-            with self.assertRaises(app.LocalProductError):
-                app._review(Path("UCIE"), BASE + "&trial=1")
+            self.assertIn('data-selected-trial="available"', html)
+            page = app._review(Path("UCIE"), BASE + "&trial=1")
+        self.assertIn('data-example-reference-separate="True"', page)
+        self.assertIn("pull/1928", page)
+        self.assertIn("pull/3696", page)
+        self.assertIn("선택한 PR의 코드나 수정 내용을 시험한 것은 아닙니다", page)
+        self.assertIn("독립 회귀시험", page)
 
     def test_06_generic_pattern_does_not_claim_or_run_unrelated_trial(self):
         for source_id, url, pattern in (
@@ -264,6 +273,38 @@ class ActualOwnerSelectedEvidenceReadOnlyTests(unittest.TestCase):
             })
         print("UCIE_OWNER_REAL_PUBLIC_TRIAL_COVERAGE=" +
               json.dumps(checks, sort_keys=True))
+
+
+    def test_15_actual_owner_mcp_candidate_clicks_related_ucie_contract_trial(self):
+        root = Path("D:/UCIE")
+        report = search_existing_public_library(root, query="MCP", limit=20)
+        self.assertEqual(report["status"], "READ_ONLY_UNVERIFIED_LIBRARY_SEARCH_NO_GO")
+        entries = [
+            item for item in report["items"]
+            if item["source_id"] == "repo:modelcontextprotocol/python-sdk"
+            and item["purpose_code"] == "API_CONTRACT"
+            and item["human_approved"] is False
+        ]
+        self.assertTrue(entries, "no actual MCP API-contract public candidate")
+        selected = entries[0]
+        page = app._review(
+            root, "q=MCP&page=1&id=" + selected["library_item_id"] +
+            "&from=library&trial=1")
+        self.assertIn(selected["public_url"], page)
+        self.assertIn('data-selected-trial="executed"', page)
+        self.assertIn("JSON-RPC 사례 8개", page)
+        self.assertIn("선택한 PR의 코드나 수정 내용을 시험한 것은 아닙니다", page)
+        self.assertIn("실제 회귀시험: NOT_EXECUTED", page)
+        print("UCIE_OWNER_ACTUAL_MCP_SELECTED_FIRST_PARTY_TRIAL=" +
+              json.dumps({
+                  "actual_source_url": selected["public_url"],
+                  "public_source_count": report["total_matches"],
+                  "ucie_synthetic_mcp_contract_cases": 8,
+                  "selected_upstream_pr_verified": False,
+                  "auto_promoted": False,
+                  "customer_distribution_authorized": False,
+                  "operating_db_writes": 0,
+              }, sort_keys=True))
 
 
 if __name__ == "__main__":
