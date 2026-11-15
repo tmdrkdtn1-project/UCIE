@@ -582,7 +582,10 @@ def _review(root: Path, raw: str) -> str:
         SCHEMA as REVIEW_SCHEMA, create_review_worksheet,
     )
 
-    args = _params(raw, ("q", "page", "id", "from", "source"))
+    args = _params(raw, ("q", "page", "id", "from", "source", "trial"))
+    trial_requested = args.get("trial")
+    if trial_requested is not None and trial_requested != "1":
+        raise LocalProductError("unsupported selected public trial mode")
     term = args.get("q", "")
     page = _page_number(args)
     candidate_id = args.get("id", "")
@@ -700,6 +703,106 @@ def _review(root: Path, raw: str) -> str:
                 '</strong></li>' for name, state in gates.items()) +
         '</ul><p>실제 회귀시험: NOT_EXECUTED · 승인: NO · 배포: NO</p>'
         '</details></section>')
+    # Bind a user-requested UCIE-owned trial to the *freshly selected* W04
+    # evidence record. This is not upstream PR execution or an approved fix.
+    from .local_selected_public_trial_v01 import (
+        available_trial, run_selected_trial,
+        SCHEMA as SELECTED_TRIAL_SCHEMA, STATUS as SELECTED_TRIAL_STATUS,
+    )
+    option = available_trial(brief)
+    if (option.get("schema") != SELECTED_TRIAL_SCHEMA
+            or option.get("selected_public_candidate_id") != candidate_id
+            or option.get("selected_public_candidate_url") != brief["public_url"]
+            or option.get("selected_public_evidence_sha256") != brief["evidence_sha256"]
+            or option.get("source_fix_independently_verified") is not False
+            or option.get("human_approved") is not False
+            or option.get("customer_distribution_authorized") is not False):
+        raise LocalProductError("selected UCIE first-party trial scope drift")
+    if option["available"]:
+        if trial_requested is None:
+            selected_url = (
+                "/local/review?q=" + quote(term, safe="") +
+                "&page=" + str(page) + "&id=" + candidate_id +
+                "&from=" + origin +
+                ("&source=" + quote(source_filter, safe="")
+                 if source_filter else "") +
+                "&trial=1"
+            )
+            markup.append(
+                '<section class="shelf-entry" data-selected-trial="available">'
+                '<h2>이 공개 근거와 관련된 UCIE 안전 실험</h2>'
+                '<p>선택한 공개 후보의 분류와 연관된, UCIE가 직접 작성한'
+                ' 합성 입력 시험입니다. 공개 PR 수정 코드나 실제 사용자의'
+                ' 프로젝트를 실행하지 않습니다.</p>'
+                '<p><a href="' + _e(selected_url) +
+                '">관련 UCIE 자체 안전 실험 실행 →</a></p>'
+                '<p class="customer-note">이 실험은 같은 기술 분류의'
+                ' UCIE 자체 예시이며, 선택한 PR과 다른 원본을 참고할 수'
+                ' 있습니다. 선택한 PR의 수정 효과·영향 버전·배포 승인이나'
+                ' 독립 회귀 검증은 입증되지 않습니다.</p></section>'
+            )
+        else:
+            result = run_selected_trial(brief)
+            if (result.get("schema") != SELECTED_TRIAL_SCHEMA
+                    or result.get("status") != SELECTED_TRIAL_STATUS
+                    or result.get("selected_public_candidate_id") != candidate_id
+                    or result.get("selected_public_candidate_url") != brief["public_url"]
+                    or result.get("selected_public_evidence_sha256") != brief["evidence_sha256"]
+                    or result.get("executed_first_party_synthetic") is not True
+                    or any(result.get(flag) is not False for flag in (
+                        "external_code_executed", "source_fix_independently_verified",
+                        "regression_executed_on_upstream", "human_approved",
+                        "auto_promoted", "customer_distribution_authorized"))
+                    or result.get("operating_database_writes") != 0
+                    or result.get("network_requests") != 0):
+                raise LocalProductError("untrusted selected UCIE trial result")
+            # An illustrative contract example may use a DIFFERENT PR.
+            # Never merge that example's evidence identity with the owner's
+            # selected W04 candidate identity.
+            illustrative = result.get("illustrative_reference_url")
+            if (illustrative not in (
+                    "https://docs.python.org/3/library/os.html",
+                    "https://github.com/modelcontextprotocol/python-sdk/pull/3696")
+                    or result.get("same_exact_public_reference_as_example") is
+                    not (illustrative == brief["public_url"])
+                    or result.get("same_pattern_domain_only_not_same_fix_verified") is not True):
+                raise LocalProductError("illustrative trial source identity mismatch")
+            reference_relation = (
+                '이 예제의 참조 자료는 선택한 공개 후보의 원본과'
+                ' 다릅니다. 선택한 PR의 코드나 수정 내용을 시험한'
+                ' 것은 아닙니다.'
+                if illustrative != brief["public_url"] else
+                '참조 자료 주소가 같아도 실제 공개 코드의 동작이나'
+                ' 수정 효과를 검증하지는 않았습니다.'
+            )
+            markup.append(
+                '<section class="shelf-entry" data-selected-trial="executed">'
+                '<h2>관련 UCIE 자체 안전 실험 결과</h2>'
+                '<p>' + _e(result["observed_result"]) + '</p>'
+                '<p>연결된 공개 후보: <a target="_blank"'
+                ' rel="noopener noreferrer" href="' +
+                _e(brief["public_url"]) + '">선택한 PR 보기</a></p>'
+                '<p data-example-reference-separate="' +
+                _e(illustrative != brief["public_url"]) + '">'
+                'UCIE 합성 예제 참고자료: <a target="_blank"'
+                ' rel="noopener noreferrer" href="' +
+                _e(illustrative) + '">예제 출처 열기</a>. ' +
+                _e(reference_relation) + '</p>'
+                '<p class="customer-note">이 결과는 UCIE 자체 합성 사례만'
+                ' 실행한 것입니다. 실제 공개 PR의 수정 효과, 독립 회귀시험,'
+                ' 실제 프로젝트 적용 및 사람 승인: 모두 미검증입니다.'
+                ' 원본 외부 코드는 실행하지 않았습니다.</p></section>'
+            )
+    elif trial_requested is not None:
+        raise LocalProductError("no source-matched UCIE synthetic trial")
+    else:
+        markup.append(
+            '<section class="workbench-note" data-selected-trial="unavailable">'
+            '<h2>연결된 자체 실험 없음</h2><p>이 공개 후보에 정확히 일치하는'
+            ' UCIE 자체 안전 실험이 아직 없습니다. 기존 검토 계획을'
+            ' 참고할 수 있지만, 무관한 합성시험을 근거 검증으로'
+            ' 표시하지 않습니다.</p></section>'
+        )
     return _page("후보 검토 작업", "".join(markup))
 
 
