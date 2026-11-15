@@ -14,6 +14,7 @@ from html import escape
 from urllib.parse import quote
 
 from .local_v1_priority_v01 import require_local_work
+from .local_solution_followup_v01 import ANSWERS, render_followup
 from .local_error_actionable_workflow_v01 import (
     CASE_IDS, SCHEMA as CASE_SCHEMA, STATUS as CASE_STATUS, get_case,
 )
@@ -73,11 +74,12 @@ def _validated_case(case_id: str) -> dict:
     return case
 
 
-def render_guidance(case_id: str = "") -> str:
-    """First select a known symptom, then read a careful next action."""
+def render_guidance(case_id: str = "", *, check: str = "") -> str:
+    """First select a known symptom, then complete a bounded human self-check."""
     require_local_work("LOCAL_APP")
-    if type(case_id) is not str:
-        raise ProblemGuidanceError("problem selection must be a fixed ID")
+    if (type(case_id) is not str or type(check) is not str
+            or (check and (not case_id or check not in ANSWERS))):
+        raise ProblemGuidanceError("unregistered symptom or self-check")
     if case_id:
         case = _validated_case(case_id)
         _, domain, symptom, summary = next(
@@ -111,7 +113,8 @@ def render_guidance(case_id: str = "") -> str:
             '<p>명령은 자동 실행되지 않습니다. 내 작업 환경에 맞는지'
             ' 먼저 확인하고 필요한 경우 직접 실행하세요.</p>'
             '<ol class="review-steps">' + "".join(checks) +
-            '</ol></section>'
+            '</ol></section>' +
+            render_followup(case_id, check) +
             '<section class="shelf-entry" data-problem-next="true">'
             '<h2>3. 안전한 다음 단계</h2><p>' +
             escape(case["safe_next"]) + '</p>'
