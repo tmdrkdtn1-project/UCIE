@@ -180,8 +180,9 @@ def _home() -> str:
         '더 좋은 코드를 위한<br><em>더 나은 선택.</em></h2>'
         '<p>코딩 중 막힌 문제를 선택하면 가능한 원인과'
         ' 확인할 순서부터 안내합니다. 자료 검색과 예제는 그다음입니다.</p>'
-        '<p><a class="start-task-link" href="/local/solve">'
+        '<p><a class="start-task-link" href="/local/ask">'
         '내 문제 해결하기 →</a></p>'
+        '<p><a href="/local/solve">대표 문제에서 선택하기 →</a></p>'
         '<div class="intro-note"><span>EXPLORE</span>'
         '<span>관심 있는 기술을 입력해 바로 시작하세요.</span></div>'
         '</div>'
@@ -225,6 +226,12 @@ def _solve(raw: str) -> str:
     if "case" in args and not args["case"]:
         raise LocalProductError("blank problem selection")
     return _page("오류 예방", render_guidance(args.get("case", "")))
+
+
+def _ask() -> str:
+    """GET displays only an empty form; never accepts question text in URLs."""
+    from .local_question_intake_v01 import render_question_form
+    return _page("오류 예방", render_question_form())
 
 
 def _evidence_rows(report: dict, *, guidance: bool = False,
@@ -2212,6 +2219,13 @@ def make_handler(root: Path):
     parent = base_handler(root)
 
     class LocalHandler(parent):
+        def log_message(self, format, *args):
+            # Even an accidentally pasted GET /local/ask?question=... must
+            # never appear in server access logs or customer receipts.
+            if self.path.split("?", 1)[0] == "/local/ask":
+                return
+            return super().log_message(format, *args)
+
         def reply(self, status, content, mime="text/html; charset=utf-8"):
             route = urlsplit(self.path).path
             if route == "/" or route.startswith("/local"):
@@ -2267,14 +2281,59 @@ def make_handler(root: Path):
             return super().reply(status, content, mime)
 
         def do_POST(self):
-            return self.reply(405, "LOCAL_PRODUCT_READ_ONLY",
-                              "text/plain; charset=utf-8")
+            # Only this exact loopback route accepts an ephemeral general
+            # symptom description. Never open POST on the existing routes.
+            if self.path != "/local/ask":
+                return self.reply(405, "LOCAL_PRODUCT_READ_ONLY",
+                                  "text/plain; charset=utf-8")
+            host = "127.0.0.1:" + str(self.server.server_port)
+            if (self.headers.get("Host") != host
+                    or self.headers.get("Origin") != "http://" + host
+                    or self.headers.get("Transfer-Encoding") is not None
+                    or self.headers.get("Content-Encoding") is not None):
+                return self.reply(403, "LOCAL_QUESTION_SAME_ORIGIN_REQUIRED",
+                                  "text/plain; charset=utf-8")
+            lengths = self.headers.get_all("Content-Length", [])
+            if (self.headers.get("Content-Type") !=
+                    "application/x-www-form-urlencoded"
+                    or len(lengths) != 1
+                    or re.fullmatch(r"[1-9][0-9]{0,3}", lengths[0]) is None):
+                return self.reply(400, "INVALID_LOCAL_QUESTION_FORM",
+                                  "text/plain; charset=utf-8")
+            from .local_question_intake_v01 import (
+                MAX_BODY_BYTES, QuestionInputError, triage_question,
+                render_question_result, render_question_form,
+            )
+            size = int(lengths[0])
+            if size > MAX_BODY_BYTES:
+                return self.reply(413, "LOCAL_QUESTION_TOO_LONG",
+                                  "text/plain; charset=utf-8")
+            try:
+                # Never log, echo, persist, reuse as a search query,
+                # or forward the user text to a model or public source.
+                receipt = triage_question(self.rfile.read(size))
+                html = _page("오류 예방",
+                             render_question_result(receipt))
+                return self.reply(200, html)
+            except QuestionInputError:
+                # The response contains no submitted bytes or excerpts.
+                html = _page(
+                    "오류 예방",
+                    '<section class="search-panel" data-question-rejected="true">'
+                    '<h2>개인정보나 긴 자료 없이 일반적인 증상만 적어주세요</h2>'
+                    '<p>코드·로그·파일 경로·이메일·비밀번호는 받지 않습니다.'
+                    ' 질문은 저장되지 않았습니다.</p></section>' +
+                    render_question_form())
+                return self.reply(422, html)
+            except (LocalPriorityError, ValueError, TypeError):
+                return self.reply(400, "LOCAL_QUESTION_FAIL_CLOSED",
+                                  "text/plain; charset=utf-8")
 
         def do_GET(self):
             parts = urlsplit(self.path)
             if parts.path not in (
                     "/", "/local", "/local/", "/local/health", "/local/error",
-                    "/local/solve", "/local/engine", "/local/books", "/local/library",
+                    "/local/solve", "/local/ask", "/local/engine", "/local/books", "/local/library",
                     "/local/evolution", "/local/review", "/local/policy",
                     "/local/skillbook-run", "/local/guide/mcp-prompts",
                     "/local/guide/mcp-prompts.json",
@@ -2322,6 +2381,10 @@ def make_handler(root: Path):
                     html = _error(root, parts.query)
                 elif parts.path == "/local/solve":
                     html = _solve(parts.query)
+                elif parts.path == "/local/ask":
+                    if parts.query:
+                        raise LocalProductError("question text never accepted in URL")
+                    html = _ask()
                 elif parts.path == "/local/review":
                     html = _review(root, parts.query)
                 elif parts.path == "/local/engine":

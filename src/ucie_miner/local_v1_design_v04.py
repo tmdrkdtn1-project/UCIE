@@ -316,6 +316,22 @@ a:hover{color:#fff}
  .start-truth{padding:13px 14px}
  .more-functions .pillar-card{gap:10px;padding:16px 12px}
 }
+/* UCIE local owner question input: accessible, no browser script or upload. */
+[data-question-entry="local"] form{display:grid;gap:11px;margin:18px 0}
+[data-question-entry="local"] form label{font-weight:700;color:#f1f3f9}
+[data-question-entry="local"] textarea{display:block;width:100%;box-sizing:border-box;
+ min-height:132px;max-width:100%;padding:14px 15px;resize:vertical;
+ border-radius:12px;border:1px solid #6d7486;color:#f3f5fb;
+ background:#1c222c;font:500 15px/1.65 system-ui,sans-serif}
+[data-question-entry="local"] textarea:focus-visible{outline:3px solid #b6c8ff;
+ outline-offset:3px;border-color:#d2ddff}
+[data-question-entry="local"] button{min-height:48px;border-radius:12px;
+ padding:12px 18px;font:720 14px/1.4 system-ui,sans-serif;
+ color:#161922;background:#e6eaf7;cursor:pointer}
+[data-question-entry="local"] button:focus-visible{outline:3px solid #b6c8ff;
+ outline-offset:3px}
+[data-question-entry="local"] button:hover{background:#cbd8fc}
+@media(max-width:580px){[data-question-entry="local"] textarea{font-size:16px}}
 @media (prefers-reduced-motion:reduce){
  .pillar-card,.main-nav a{transition:none}
  .pillar-card:hover{transform:none}

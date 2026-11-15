@@ -36,7 +36,7 @@ class FirstUsePlainKoreanTests(unittest.TestCase):
     def test_02_existing_real_routes_have_descriptive_action_labels(self):
         html=simple.render_first_use()
         expected={
-            "/local/solve":"내 문제 해결 시작하기",
+            "/local/ask":"내 문제 직접 설명하기",
             "/local/engine?purpose=SKILL_TEST_AUTOMATION":"예제 직접 체험하기",
             "/local/library?q=Git":"기술 사용 가이드 찾아보기",
         }
