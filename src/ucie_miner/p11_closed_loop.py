@@ -25,7 +25,7 @@ import tempfile
 
 from .public_discovery import (
     SOURCES, public_feed_url, public_feed_get, discover_public_leads,
-    DiscoveryError, CATEGORIES,
+    DiscoveryError, CATEGORIES, classify_stage10_discovery_error,
 )
 from .capability_trials import evaluate_ucie_owned_recipe
 from .p11_improvement_gate import (
@@ -35,6 +35,13 @@ from .p11_improvement_gate import (
 from . import pending_queue as queue
 
 SCHEMA = "UCIE_P11_PUBLIC_EXPERIENCE_CLOSED_LOOP_V1"
+ERROR_TABLE = "p11_last_public_failure_v02"
+PUBLIC_FAILURE_CLASSES = frozenset((
+    "UPSTREAM_HTTP_429", "UPSTREAM_HTTP_403", "UPSTREAM_HTTP_OTHER",
+    "UPSTREAM_NETWORK_FAILURE", "UPSTREAM_IO_OR_TIMEOUT",
+    "PUBLIC_JSON_INVALID", "DISCOVERY_VALIDATION_OR_RESPONSE_REJECTED",
+    "OTHER_FAILURE",
+))
 DB_NAME = "ucie_p11_public_experience.sqlite3"
 OPT_IN = "ucie_p11_closed_loop_opt_in.txt"
 TOKEN = "UCIE_P11_PUBLIC_EXPERIENCE_OPT_IN_V1"
@@ -194,6 +201,48 @@ def activate(root: Path) -> dict:
     }
 
 
+def _record_public_failure(root: Path, *, index: int, attempt: str,
+                           failure_class: str) -> None:
+    """Commit only a first-party enum to P11's isolated ledger, never text.
+
+    Called after the existing failed-attempt cursor reservation; refuses
+    stale concurrent attempts and never performs a GET or touches P10.
+    """
+    if (type(index) is not int or not 0 <= index < len(SOURCES)
+            or type(attempt) is not str
+            or failure_class not in PUBLIC_FAILURE_CLASSES):
+        raise P11Error("unapproved P11 failure receipt")
+    with closing(_conn(root)) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT source_index, last_attempt_at, last_attempt_failed "
+            "FROM cursor WHERE slot=1").fetchone()
+        if (row is None or row["source_index"] != index
+                or row["last_attempt_at"] != attempt
+                or row["last_attempt_failed"] != 1):
+            raise P11Error("P11 failure receipt cursor drift")
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS " + ERROR_TABLE + " ("
+            "slot INTEGER PRIMARY KEY CHECK(slot=1),"
+            "source_index INTEGER NOT NULL CHECK(source_index BETWEEN 0 AND 4),"
+            "attempt_utc TEXT NOT NULL,"
+            "failure_class TEXT NOT NULL CHECK(failure_class IN ("
+            "'UPSTREAM_HTTP_429','UPSTREAM_HTTP_403','UPSTREAM_HTTP_OTHER',"
+            "'UPSTREAM_NETWORK_FAILURE','UPSTREAM_IO_OR_TIMEOUT',"
+            "'PUBLIC_JSON_INVALID','DISCOVERY_VALIDATION_OR_RESPONSE_REJECTED',"
+            "'OTHER_FAILURE')))"
+        )
+        conn.execute(
+            "INSERT INTO " + ERROR_TABLE +
+            "(slot,source_index,attempt_utc,failure_class) "
+            "VALUES(1,?,?,?) ON CONFLICT(slot) DO UPDATE SET "
+            "source_index=excluded.source_index,"
+            "attempt_utc=excluded.attempt_utc,"
+            "failure_class=excluded.failure_class",
+            (index, attempt, failure_class))
+        conn.execute("COMMIT")
+
+
 def collect_one(root: Path, *, fetch=public_feed_get,
                 now: datetime | None = None) -> dict:
     """One GET maximum, one source per 5-minute opportunity, round robin.
@@ -252,21 +301,30 @@ def collect_one(root: Path, *, fetch=public_feed_get,
         conn.execute("COMMIT")
     source = SOURCES[selected]
     # Existing first-party exact allowlisted route and redirect-denying GET.
-    payload = fetch(public_feed_url(source))
-    extracted = discover_public_leads(payload, source=source, now=now)
-    if (extracted.get("schema") != "UCIE_APPROVED_PUBLIC_DISCOVERY_V1"
-            or extracted.get("source") != source
-            or type(extracted.get("leads")) is not list
-            or extracted.get("raw_text_retained") is not False
-            or extracted.get("proposals_promoted") != 0):
-        raise P11Error("original discovery contract changed")
-    leads = extracted["leads"]
-    for row in leads:
-        if (row["source"] != source or row["status"] != "UNVERIFIED_PUBLIC_LEAD"
-                or not isinstance(row["tags"], list)
-                or any(tag not in CATEGORIES for tag in row["tags"])
-                or len(row["title_sha256"]) != 64):
-            raise P11Error("untrusted candidate outside source contract")
+    try:
+        payload = fetch(public_feed_url(source))
+        extracted = discover_public_leads(payload, source=source, now=now)
+        if (extracted.get("schema") != "UCIE_APPROVED_PUBLIC_DISCOVERY_V1"
+                or extracted.get("source") != source
+                or type(extracted.get("leads")) is not list
+                or extracted.get("raw_text_retained") is not False
+                or extracted.get("proposals_promoted") != 0):
+            raise P11Error("original discovery contract changed")
+        leads = extracted["leads"]
+        for row in leads:
+            if (row["source"] != source or row["status"] != "UNVERIFIED_PUBLIC_LEAD"
+                    or not isinstance(row["tags"], list)
+                    or any(tag not in CATEGORIES for tag in row["tags"])
+                    or len(row["title_sha256"]) != 64):
+                raise P11Error("untrusted candidate outside source contract")
+    except Exception as exc:
+        # The historical RETRYABLE_ERROR loses its cause; from this point
+        # forward retain only a closed-vocabulary category. No raw exception
+        # message, URL, response body, PR title, or credentials are stored.
+        failure_class = classify_stage10_discovery_error(exc)
+        _record_public_failure(root, index=selected, attempt=time_value,
+                               failure_class=failure_class)
+        raise
     added = 0
     with closing(_conn(root)) as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -466,6 +524,14 @@ def status(root: Path) -> dict:
             review_counts = {r[0]: r[1] for r in review_rows}
         else:
             review_counts = {}
+        has_failure = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            (ERROR_TABLE,)).fetchone() is not None
+        failure_row = (
+            conn.execute("SELECT source_index,attempt_utc,failure_class "
+                         "FROM " + ERROR_TABLE + " WHERE slot=1").fetchone()
+            if has_failure else None
+        )
     now = datetime.now(timezone.utc)
     quiet = (
         cursor[2] == 0 and cursor[3] >= QUIET_MIN_GETS
@@ -482,6 +548,13 @@ def status(root: Path) -> dict:
         "sources": len(SOURCES), "next_source_id": "repo:" + SOURCES[cursor[0]],
         "last_public_attempt_utc": cursor[1],
         "last_public_attempt_failed": bool(cursor[2]),
+        "last_failed_public_attempt_category": (
+            failure_row[2] if (cursor[2] and failure_row is not None
+                               and failure_row[0] == cursor[0]
+                               and failure_row[1] == cursor[1]
+                               and failure_row[2] in PUBLIC_FAILURE_CLASSES)
+            else ("HISTORICAL_CAUSE_NOT_RECORDED" if cursor[2] else None)
+        ),
         "quiet_collection_backoff": quiet,
         "effective_interval_minutes": int(interval.total_seconds() // 60),
         "next_public_get_due_utc": next_due,
