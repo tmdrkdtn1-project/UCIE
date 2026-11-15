@@ -12,7 +12,7 @@ from .local_problem_solver_v01 import render_guidance
 
 SCHEMA = "UCIE_OWNER_LOCAL_TEXT_QUESTION_PREVIEW_V01"
 STATUS = "BOUNDED_TEXT_CLASSIFICATION_NOT_AI_NOT_CUSTOMER_DIAGNOSIS"
-MAX_BODY_BYTES = 1400
+MAX_BODY_BYTES = 6144
 MIN_CHARS, MAX_CHARS = 12, 360
 _EMAIL = re.compile(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", re.ASCII)
 _URL = re.compile(r"(?:https?://|www\.)", re.I)
