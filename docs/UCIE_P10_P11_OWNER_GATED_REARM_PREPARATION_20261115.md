@@ -80,6 +80,23 @@ reports Stage17 failure; the latest quality snapshot is from 2026-11-09.
 A new NORMAL hourly run and two exact scheduler event-to-receipt matches
 are required before claiming operating recovery. Do not run a forced miner.
 
+## Independent Windows minute-task evidence (read-only)
+
+- New `tests/test_ucie_p10_task_owner_readonly_v01.py`: static bounded
+  scope and real exact Windows TaskScheduler query, owner 2/2 PASS.
+- Exact root task `\\UCIE-Internal-Minute` exists, State=Ready,
+  LastTaskResult=0, current owner SID matches, action path + arguments +
+  working directory match installed first-party entrypoint, Interactive/
+  Limited principal matches, PT1M repetition and IgnoreNew match.
+- Bounded exact-task events: 64 returned (limit reached), 16 grouped
+  successful scheduler action instances observed; last run
+  2026-11-15T06:20:20Z and next run 2026-11-15T06:21:21Z at observation.
+  The bounded result is not the full task history.
+- This proves that the TaskScheduler dispatcher itself is currently
+  operating, **not** that the three exhausted jobs resumed or that P11
+  public evidence collection recovered. Event-to-queue-job completion
+  receipt binding remains NOT_VERIFIED, and owner APPLY remains disabled.
+
 ## Status
 
 OWNER_ONLY_PREVIEW_AND_SYNTHETIC_REARM_CORE_READY;
