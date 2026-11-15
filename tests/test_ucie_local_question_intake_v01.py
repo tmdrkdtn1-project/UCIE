@@ -4,6 +4,7 @@ from __future__ import annotations
 from contextlib import closing
 from http.client import HTTPConnection
 from http.server import HTTPServer
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Thread
@@ -165,7 +166,10 @@ class LocalQuestionIntakeTests(unittest.TestCase):
                     self.assertEqual(code,422)
                     self.assertIn('data-question-rejected="true"',page)
                     self.assertNotIn("do_not_echo",page)
-                    self.assertEqual(send("/local/ask?question=abc")[0],400)
+                    with patch("sys.stderr", StringIO()) as access_log:
+                        self.assertEqual(
+                            send("/local/ask?question=PRIVATE_LOG_CANARY")[0], 400)
+                        self.assertNotIn("PRIVATE_LOG_CANARY", access_log.getvalue())
                     self.assertEqual(send("/local/solve",method="POST",text=EXAMPLES[0][0])[0],405)
                     self.assertEqual(send("/local/ask",method="POST",text=EXAMPLES[0][0],
                                           headers={"Origin":"https://evil.example"})[0],403)
