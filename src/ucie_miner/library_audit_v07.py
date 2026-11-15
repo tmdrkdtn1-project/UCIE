@@ -28,7 +28,10 @@ SCHEMA = "UCIE_PUBLIC_SOURCE_LINKED_AUDIT_V07"
 STATUS = "AUDIT_REVIEW_REQUIRED_NO_GO"
 INCOMPLETE = "SOURCE_LINKAGE_INCOMPLETE_NO_GO"
 CONFLICT = "RECEIPT_SOURCE_BINDING_CONFLICT_NO_GO"
-MAX_ROWS = 1000
+# Source-ledger capacity is 10,000; keep a smaller, explicit and finite
+# owner-reviewed hourly audit budget. Prior 1,000 bound blocked 1,310
+# legitimate source-linked groups without indicating corrupt evidence.
+MAX_ROWS = 2000
 MAX_CLAIMS = 500
 GATE_ORDER = (
     "SOURCE_PROVENANCE", "VERSION_APPLICABILITY", "LICENSE",
