@@ -51,10 +51,44 @@ class PublicMiner10MinuteCadenceTests(unittest.TestCase):
         self.assertNotIn("Start-ScheduledTask -TaskPath", updater)
         self.assertNotIn("Unregister-ScheduledTask -TaskPath", updater)
         self.assertNotIn("Stop-ScheduledTask -TaskPath", updater)
+        self.assertIn("SET_FAILED_ORIGINAL_PT1H_INTACT_NO_ROLLBACK_NEEDED",
+                      updater)
+        self.assertIn("if ($sameOriginal)", updater)
+        self.assertIn("if (-not $updateReturnedSuccess)", updater)
+        self.assertIn("UCIE_SET_TASK_ERROR_STATE_UNCERTAIN_NO_BLIND_ROLLBACK_",
+                      updater)
+        self.assertIn("set_error_hresult = $hresult", updater)
+        self.assertNotIn("UCIE_TEN_MINUTE_APPLY_FAILED_ROLLBACK_UNCONFIRMED",
+                         updater)
+
+    @unittest.skipUnless(os.name == "nt" and shutil.which("powershell.exe"),
+                         "Owner Windows PowerShell parser only")
+    def test_03_updater_parse_only_no_execution(self):
+        if (ROOT.resolve() != Path("D:/UCIE").resolve()
+                or ROOT.is_symlink() or not (ROOT / ".git").is_dir()):
+            self.skipTest("exact UCIE owner checkout unavailable")
+        path = ROOT / "scripts" / "set_public_miner_10min.ps1"
+        expression = (
+            "$tokens=$null; $err=$null; "
+            "[System.Management.Automation.Language.Parser]::ParseFile("
+            "'" + str(path).replace("'", "''") + "',[ref]$tokens,"
+            "[ref]$err) | Out-Null; "
+            "if ($err.Count -gt 0) { exit 2 }; 'SYNTAX_OK'"
+        )
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive",
+             "-Command", expression],
+            cwd=str(ROOT), timeout=20, capture_output=True, check=False,
+            env={"SystemRoot": os.environ.get("SystemRoot", "C:\\Windows"),
+                 "PATH": os.environ.get("PATH", "")},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode(
+            "utf-8", "replace")[:500])
+        self.assertIn(b"SYNTAX_OK", result.stdout)
 
     @unittest.skipUnless(os.name == "nt" and shutil.which("powershell.exe"),
                          "Owner Windows PowerShell only")
-    def test_03_owner_task_read_only_preview(self):
+    def test_04_owner_task_read_only_preview(self):
         if (ROOT.resolve() != Path("D:/UCIE").resolve()
                 or ROOT.is_symlink() or not (ROOT / ".git").is_dir()):
             self.skipTest("exact UCIE owner checkout unavailable")
@@ -83,6 +117,74 @@ class PublicMiner10MinuteCadenceTests(unittest.TestCase):
         self.assertFalse(info["production_approved"])
         print("UCIE_10MIN_OWNER_PREVIEW=" + json.dumps(
             info, sort_keys=True, ensure_ascii=True))
+
+
+    @unittest.skipUnless(os.name == "nt" and shutil.which("powershell.exe"),
+                         "exact owner Windows fault injection only")
+    def test_05_mocked_set_failure_never_writes_or_attempts_rollback(self):
+        if (ROOT.resolve() != Path("D:/UCIE").resolve()
+                or ROOT.is_symlink() or not (ROOT / ".git").is_dir()):
+            self.skipTest("exact owner UCIE checkout unavailable")
+        # This subprocess overrides the Set-ScheduledTask command with a
+        # throwing FUNCTION before invoking the updater. It can never reach
+        # the real Windows mutation cmdlet on either apply or rollback path.
+        script = r"""
+$ErrorActionPreference='Stop'
+$task=Get-ScheduledTask -TaskPath '\' -TaskName 'UCIE-PublicMiner-Hourly'
+$original=[string]@($task.Triggers)[0].Repetition.Interval
+if ($original -ne 'PT1H') { throw 'SKIP_ONLY_ORIGINAL_PT1H_SYNTHETIC_FAULT_TEST' }
+$global:attempts=0
+function global:Set-ScheduledTask {
+    [CmdletBinding()]
+    param([string]$TaskPath,[string]$TaskName,[object]$Trigger)
+    if ($TaskPath -cne '\' -or $TaskName -cne 'UCIE-PublicMiner-Hourly') {
+        throw 'SCOPE_VIOLATION'
+    }
+    $global:attempts++
+    throw 'UCIE_SYNTHETIC_ACCESS_DENIED'
+}
+if ((Get-Command Set-ScheduledTask).CommandType -ne 'Function') {
+    throw 'MOCK_NOT_INSTALLED'
+}
+$captured=''
+$failure=''
+try {
+    & 'D:\UCIE\scripts\set_public_miner_10min.ps1' -Apply |
+        ForEach-Object { $captured=[string]$_ }
+} catch {
+    $failure=[string]$_.Exception.Message
+}
+$after=Get-ScheduledTask -TaskPath '\' -TaskName 'UCIE-PublicMiner-Hourly'
+[pscustomobject]@{
+    schema='UCIE_SYNTHETIC_TASK_SET_FAILURE_NO_WRITE_V1'
+    expected_error_code_observed=($failure -ceq 'UCIE_SET_TASK_REJECTED_ORIGINAL_CONFIGURATION_VERIFIED')
+    expected_sanitized_receipt_seen=$captured.Contains('SET_FAILED_ORIGINAL_PT1H_INTACT_NO_ROLLBACK_NEEDED')
+    mocked_set_attempts=$global:attempts
+    original_interval=$original
+    current_interval=[string]@($after.Triggers)[0].Repetition.Interval
+    real_set_scheduledtask_called=$false
+    scheduler_changed=$false
+} | ConvertTo-Json -Compress
+"""
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive",
+             "-Command", script],
+            cwd=str(ROOT), timeout=30, capture_output=True, check=False,
+            env={"SystemRoot": os.environ.get("SystemRoot", "C:\\Windows"),
+                 "PATH": os.environ.get("PATH", "")},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode(
+            "utf-8", "replace")[:600])
+        data = json.loads(result.stdout.decode("utf-8-sig"))
+        self.assertTrue(data["expected_error_code_observed"], data)
+        self.assertTrue(data["expected_sanitized_receipt_seen"], data)
+        self.assertEqual(data["mocked_set_attempts"], 1)
+        self.assertEqual(data["original_interval"], "PT1H")
+        self.assertEqual(data["current_interval"], "PT1H")
+        self.assertFalse(data["scheduler_changed"])
+        self.assertFalse(data["real_set_scheduledtask_called"])
+        print("UCIE_MOCKED_10MIN_SET_FAILURE=" +
+              json.dumps(data, sort_keys=True, ensure_ascii=True))
 
 
 if __name__ == "__main__":
