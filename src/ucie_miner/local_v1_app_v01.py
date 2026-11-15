@@ -649,14 +649,18 @@ def _review(root: Path, raw: str) -> str:
         return_path += "&page=" + str(page)
     if source_filter:
         return_path += "&source=" + quote(source_filter, safe="")
+    from .local_first_use_plain_v01 import human_pattern
     markup = [
         '<section class="search-panel">'
-        '<span class="eyebrow">TECH REVIEW</span>'
+        '<span class="eyebrow">자료 사용 안내</span>'
         '<h2>개선 방향 살펴보기</h2>'
         '<p><a href="' + _e(return_path) +
         '">← 검색 결과로 돌아가기</a></p>'
-        '<p>공개된 기술 사례를 바탕으로 참고할 만한 개선 방향과'
-        ' 검토할 사항을 정리했습니다.</p>'
+        '<p>이 자료는 어떻게 확인하면 좋을까요? 먼저 원본을 열고,'
+        ' 아래에 나온 점검 방법을 살펴보세요.</p>'
+        '<p><strong>지금 할 수 있는 일:</strong> 공개 자료와'
+        ' 확인할 사항 읽기. <strong>아직 할 수 없는 일:</strong>'
+        ' 사용자 코드 자동 수정이나 수정 효과 보장.</p>'
         '<span class="record-stamp">검토 전 자료</span>'
         '<details class="technical-details"><summary>'
         '출처와 검토 정보</summary>'
@@ -675,8 +679,18 @@ def _review(root: Path, raw: str) -> str:
         '<div><dt>증거 SHA-256</dt><dd><code>' +
         _e(brief["evidence_sha256"]) + '</code></dd></div></dl>'
         '</details></section>',
-        '<section><span class="eyebrow">SUGGESTED NEXT STEP</span>'
-        '<h2>참고할 개선 방향</h2><p>' +
+        '<section data-plain-review="true">'
+        '<h2>이 자료를 통해 알 수 있는 것</h2><p>' +
+        _e(human_pattern(brief["pattern_code"])) +
+        '에 관한 공개 기록입니다. 원본을 확인하고 어떤 점을'
+        ' 살펴야 할지 판단하는 데 사용할 수 있습니다.</p>'
+        '<p><a target="_blank" rel="noopener noreferrer" href="' +
+        _e(brief["public_url"]) + '">원본 공개 기록 열어보기 →</a></p>'
+        '<p class="customer-note">이 자료만으로 실제 오류가'
+        ' 수정됐거나 내 프로젝트에 적용할 수 있다는 뜻은 아닙니다.</p>'
+        '<details class="technical-details">'
+        '<summary>개발자용 수정 방향과 시험 계획 보기</summary>'
+        '<h3>참고할 개선 방향</h3><p>' +
         _e(brief["safe_fix_guidance"] or
            "이 사례의 구체적인 해결 방법은 추가 검토가 필요합니다.") +
         '</p><h3>확인해 볼 항목</h3><p>' +
@@ -684,16 +698,18 @@ def _review(root: Path, raw: str) -> str:
            "적용 전 확인할 항목을 먼저 정의해 보세요.") +
         '</p><p class="customer-note">'
         '참고용 제안입니다. 실제 적용 환경에서 별도로 검증해 주세요.'
-        '</p></section>',
+        '</p></details></section>',
     ]
     if brief["fixture_design"] is not None:
         markup.append(
-            '<section><h2>패턴별 한정형 재현 설계</h2>'
+            '<section><details class="technical-details">'
+            '<summary>개발자를 위한 시험 설계 펼치기</summary>'
+            '<h2>패턴별 한정형 재현 설계</h2>'
             '<p>입력/조건: ' + _e(brief["fixture_design"]) + '</p>'
             '<p>기대 불변조건: ' + _e(brief["expected_invariant"]) + '</p>'
             '<p>시험 환경 가정: ' + _e(brief["target_environment"]) + '</p>'
             '<p>이 설계는 독립 실행한 회귀시험의 결과가 아닙니다.</p>'
-            '</section>')
+            '</details></section>')
     else:
         markup.append(
             '<section><h2>개별 재현 설계</h2><p>'
@@ -701,10 +717,12 @@ def _review(root: Path, raw: str) -> str:
             ' 공개 변경 내용을 검토하고 독립 회귀시험을 수동 설계해야 합니다.'
             '</p></section>')
     markup.append(
-        '<section><h2>다음에 할 일</h2><ol class="review-steps">' +
+        '<section><details class="technical-details">'
+        '<summary>실제 코드에 적용하기 전 점검 항목 펼치기</summary>'
+        '<h2>다음에 할 일</h2><ol class="review-steps">' +
         "".join('<li>' + _e(action) + '</li>'
                 for action in brief["manual_actions"]) +
-        '</ol></section>')
+        '</ol></details></section>')
     markup.append(
         '<section><details class="technical-details">'
         '<summary>세부 검증 상태</summary><ul class="review-gates">' +
@@ -744,7 +762,7 @@ def _review(root: Path, raw: str) -> str:
                 ' 합성 입력 시험입니다. 공개 PR 수정 코드나 실제 사용자의'
                 ' 프로젝트를 실행하지 않습니다.</p>'
                 '<p><a href="' + _e(selected_url) +
-                '">관련 UCIE 자체 안전 실험 실행 →</a></p>'
+                '">안전한 예제 실행해 보기 →</a></p>'
                 '<p class="customer-note">이 실험은 같은 기술 분류의'
                 ' UCIE 자체 예시이며, 선택한 PR과 다른 원본을 참고할 수'
                 ' 있습니다. 선택한 PR의 수정 효과·영향 버전·배포 승인이나'
