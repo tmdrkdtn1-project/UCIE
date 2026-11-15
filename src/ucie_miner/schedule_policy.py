@@ -8,12 +8,12 @@ from datetime import datetime, timedelta, timezone
 
 from .core import MiningError
 
-INTERVAL = timedelta(hours=1)
-# The hourly OS trigger is scheduled on a fixed wall-clock boundary; a prior
+INTERVAL = timedelta(minutes=10)
+# The 10-minute OS trigger is scheduled on a fixed wall-clock boundary; a prior
 # collector may start seconds later. Permit bounded trigger jitter without
-# skipping the alternate hour. The OS single-instance lock still applies.
+# skipping the next 10-minute slot. The OS single-instance lock still applies.
 SUCCESS_TRIGGER_JITTER = timedelta(seconds=30)
-# A failed cycle can finish seconds after a fixed Windows hourly trigger.
+# A failed cycle can finish seconds after a fixed Windows 10-minute trigger.
 # Permit 15 seconds of skew only for the capped 60-minute failure backoff.
 FAILURE_TRIGGER_JITTER = timedelta(seconds=15)
 MAX_FAILURES = 6
@@ -22,10 +22,10 @@ MAX_FAILURES = 6
 def next_cycle(last_finished: datetime | None, *, now: datetime,
                consecutive_failures: int = 0,
                last_started: datetime | None = None) -> dict:
-    """Hourly start-to-start cadence with bounded failed-trigger tolerance.
+    """Ten-minute start-to-start cadence with bounded failed-trigger tolerance.
 
-    Windows Task Scheduler fires at the previous scheduled START + 1 hour.
-    Gating from FINISH + 1 hour skips alternate tasks after even an 8-second
+    Windows Task Scheduler fires at the previous scheduled START + 10 minutes.
+    Gating from FINISH + 10 minutes skips alternate slots after even an 8-second
     successful run. Bound normal trigger/start skew to 30 seconds, while
     permitting only 15 seconds of skew at the capped 60-minute failed retry.
     The OS lock prevents overlaps; no retry may be due before last finish.
@@ -56,7 +56,7 @@ def next_cycle(last_finished: datetime | None, *, now: datetime,
             minutes=min(60, 2 ** consecutive_failures))
         due_at = last_finished + delay
         if (consecutive_failures > 0 and last_started is not None
-                and delay == INTERVAL):
+                and delay == timedelta(minutes=60)):
             # Do not grant grace for shorter retries, legacy receipts,
             # or any moment before the previous cycle finished.
             due_at = max(last_finished, due_at - FAILURE_TRIGGER_JITTER)
