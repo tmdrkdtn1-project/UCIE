@@ -131,24 +131,25 @@ def render_owner_play() -> str:
             '</code>. 실제 사용자 환경을 진단한 것이 아닙니다.</p>'
             '<div class="page-controls" aria-label="' +
             escape(case["label"], quote=True) + ' · 4대 기능">'
-            + a(case["error_url"], "1. 오류 점검") +
-            a(case["engine_issue_url"], "2. 엔진 실행") +
-            a(case["library_url"], "3. 도서관 탐색") +
-            a(case["evolution_url"], "4. 개선 근거") +
-            a(case["engine_control_url"], "대조 시험") +
+            + a(case["error_url"], "1. 문제 확인") +
+            a(case["engine_issue_url"], "2. 예제로 비교") +
+            a(case["library_url"], "3. 자료 찾아보기") +
+            a(case["evolution_url"], "4. 개선 사례 읽기") +
+            a(case["engine_control_url"], "다른 결과 비교") +
             '</div></article>'
         )
     return (
-        '<section class="section-heading" aria-labelledby="owner-play-title">'
-        '<span class="eyebrow">FOUR PILLARS · EXPERIENCE</span>'
-        '<h2 id="owner-play-title">내 PC에서 바로 사용해보기</h2>'
-        '<p>네 가지 실제 UCIE 화면을 연결해 살펴보세요. '
-        '결제·고객 설치·로그 업로드 없이 작동합니다.</p></section>'
         '<section class="workbench-note" data-owner-playground="true" '
-        'aria-label="소유자 전용 연결형 기능 체험">'
+        'aria-labelledby="owner-play-title">'
+        '<h2 id="owner-play-title">다른 예제도 살펴보고 싶나요?</h2>'
+        '<p>처음에는 위 세 가지 중 하나만 선택해도 됩니다. '
+        '더 자세히 연습하고 싶다면 아래에서 펼쳐보세요.</p>'
+        '<details class="technical-details" data-more-examples="true">'
+        '<summary>Python · PowerShell · Git · MCP 예제 더 보기</summary>'
         + ''.join(cards) +
-        '<p class="customer-note">엔진 판정은 UCIE 작성 합성 시험입니다. '
-        '도서관·개선 탭은 현재 보유한 공개 기술 근거를 읽으며, '
-        '미검증 후보를 승인된 수정 또는 상용 제품으로 표시하지 않습니다.</p>'
+        '</details>'
+        '<p class="customer-note">여기서 실행하는 결과는 UCIE가 만든'
+        ' 예제입니다. 실제 사용자 파일을 진단한 것이 아닙니다.'
+        ' 기술 자료의 미검증 후보는 승인된 수정으로 표시하지 않습니다.</p>'
         '</section>'
     )
