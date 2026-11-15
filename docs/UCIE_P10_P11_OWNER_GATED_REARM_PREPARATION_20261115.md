@@ -26,8 +26,12 @@ read-only owner-host preflight. It does not authorize or perform recovery.
     UCIE_REPORT_PREPARATION, with no apply/rollback command.
   - Uses mode=ro, query_only SQLite preview, exact job kind/dedupe key and
     pre-transaction row SHA256.
-  - Internal owner apply/rollback core exists for future integration, but
-    is NOT hooked into MCP, scheduler, web app or live owner launcher.
+  - Internal apply/rollback code is now HARD-GATED to a disposable
+    TemporaryDirectory/UCIE root carrying an exact synthetic marker.
+    Even caller-supplied owner_authorized=True and task evidence=True
+    cannot write to D:/UCIE. This is NOT a live production launcher.
+  - Future real owner-only integration requires a separate reviewed
+    implementation with genuine Windows task and owner authentication.
   - Internal apply, when independently authorized by a later owner launcher,
     admits only one REVIEW_REQUIRED row at 5/5, zero RUNNING jobs, zero
     active recovery receipts. It writes only the isolated P10 queue and a
@@ -41,8 +45,8 @@ read-only owner-host preflight. It does not authorize or perform recovery.
   - P11 public GET, experience learning, other P10 kinds, OS tasks and
     operating PublicMiner SQLite are excluded.
 - tests/test_ucie_p10_owner_rearm_v01.py:
-  14 disposable synthetic cases plus one real owner-Windows read-only
-  preview. Actual owner-host runner 15/15 PASS.
+  15 disposable synthetic cases plus one real owner-Windows read-only
+  preview. Actual owner-host runner 16/16 PASS.
 - tests/test_ucie_p10_p11_readonly_live_probes_v01.py:
   one actual owner-Windows read-only dependency test, 1/1 PASS.
 
