@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from ucie_miner import w10_prechange_archive_attestation_v03 as v03
 from ucie_miner.w10_disposable_restore_probe_v02 import git_blob_sha1
@@ -211,6 +212,31 @@ class W10PrechangeGitArchiveReviewTests(unittest.TestCase):
         args["repo_root"] = bad
         with self.assertRaises(v03.AttestationError):
             v03.assess_prechange_archive(**args)
+
+    def test_18_git_metadata_file_indirection_denied(self):
+        external = self.root.parent / "alias" / "UCIE"
+        external.mkdir(parents=True)
+        (external / ".git").write_text(
+            "gitdir: ../../UCIE/.git\n", encoding="ascii")
+        a = self.args()
+        a["repo_root"] = external
+        with self.assertRaises(v03.AttestationError):
+            v03.assess_prechange_archive(**a)
+
+    def test_19_git_env_redirect_and_config_injection_ignored(self):
+        poison = {
+            "GIT_DIR": str(self.root.parent / "OtherProject" / ".git"),
+            "GIT_WORK_TREE": str(self.root.parent / "OtherProject"),
+            "GIT_INDEX_FILE": str(self.root.parent / "wrong-index"),
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "core.worktree",
+            "GIT_CONFIG_VALUE_0": str(self.root.parent / "OtherProject"),
+        }
+        with patch.dict(os.environ, poison):
+            out = v03.assess_prechange_archive(**self.args())
+        self.assertEqual(out["status"], v03.STATUS_NO_ARCHIVE)
+        self.assertTrue(out["git_ancestry_and_commit_tree_blob_verified_locally"])
+        self.assertFalse(out["customer_release_authorized"])
 
     @unittest.skipUnless((REPO / ".git").exists(), "complete UCIE Git checkout only")
     def test_17_real_ucie_committed_source_review_without_owner_archive(self):
