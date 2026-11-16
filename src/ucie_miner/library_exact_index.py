@@ -17,7 +17,7 @@ from pathlib import Path
 from .verification_handoff import _checked_handoff
 from .public_candidate_staging import MAX_ROWS
 from .library_entry import build_library_entry, TOKEN
-from .library_search import ALLOWED_DOMAINS, ALLOWED_KINDS
+from .library_search import ALLOWED_DOMAINS, ALLOWED_KINDS, MAX_PAGE_OFFSET
 from .source_registry import get_source, SourceRegistryError
 from .verification_handoff import prepare_verification_handoff
 
@@ -53,11 +53,13 @@ def _validate_query(value: object) -> tuple[str, str, str, str]:
 
 def exact_search_linked_public_candidates(handoff: dict, *,
                                           queries: tuple[tuple[str, str, str, str], ...],
-                                          limit: int = 10) -> dict:
-    """One read-only index for multiple exact queries, including zero matches."""
+                                          limit: int = 10,
+                                          offset: int = 0) -> dict:
+    """Stable read-only per-key pagination; zero-offset preserves original results."""
     if (type(queries) is not tuple or not 1 <= len(queries) <= MAX_BATCH
-            or type(limit) is not int or not 1 <= limit <= MAX_RESULTS_PER_QUERY):
-        raise ExactLibraryError("unbounded exact Library batch")
+            or type(limit) is not int or not 1 <= limit <= MAX_RESULTS_PER_QUERY
+            or type(offset) is not int or not 0 <= offset <= MAX_PAGE_OFFSET):
+        raise ExactLibraryError("unbounded exact Library batch/page")
     keys = tuple(_validate_query(query) for query in queries)
     complete, tasks = _checked_handoff(handoff)
     if not complete:
@@ -65,6 +67,7 @@ def exact_search_linked_public_candidates(handoff: dict, *,
             "schema": SCHEMA,
             "status": "INCOMPLETE_SOURCE_LINKED_CATALOG_NO_GO",
             "query_count": len(keys), "catalog_items": 0,
+            "page_offset": offset, "has_more_any_query": False,
             "items": [], "network_requests": 0,
             "operating_database_writes": 0,
             "approved_or_exportable_items": 0,
@@ -126,21 +129,29 @@ def exact_search_linked_public_candidates(handoff: dict, *,
             found = sorted(
                 (item for row_key, item in records if row_key == key),
                 key=lambda row: row["library_item_id"])
+        page = list(found[offset:offset+limit])
+        remaining = max(0, len(found) - offset - len(page))
         returned.append({
             "query": {
                 "source_id": key[0], "domain": key[1],
                 "kind": key[2], "purpose_code": key[3],
             },
             "total_matches": len(found),
-            "returned_count": min(len(found), limit),
-            "omitted_count": max(0, len(found) - limit),
-            "items": list(found[:limit]),
+            "page_offset": offset,
+            "returned_count": len(page),
+            "omitted_before_count": min(len(found), offset),
+            "omitted_count": remaining,
+            "next_offset": offset+len(page) if remaining else None,
+            "has_more": bool(remaining),
+            "items": page,
         })
     return {
         "schema": SCHEMA,
         "status": "READ_ONLY_EXACT_PUBLIC_LIBRARY_INDEX_UNVERIFIED_NO_GO",
         "query_mode": "EXACT_SOURCE_DOMAIN_KIND_PURPOSE_ONLY",
         "query_count": len(keys),
+        "page_offset": offset,
+        "has_more_any_query": any(row["has_more"] for row in returned),
         "catalog_items": len(tasks),
         "unique_index_keys": len(index) if index is not None else None,
         "index_built": index is not None,
@@ -167,16 +178,18 @@ def exact_search_linked_public_candidates(handoff: dict, *,
 
 def search_exact_existing_public_library(root: Path, *,
                                          queries: tuple[tuple[str, str, str, str], ...],
-                                         limit: int = 10) -> dict:
+                                         limit: int = 10,
+                                         offset: int = 0) -> dict:
     """Read only the existing dedicated UCIE Stage10-12/15 evidence linkage."""
     if (not isinstance(root, Path) or root.is_symlink()
             or root.name.casefold() != "ucie" or not root.is_dir()):
         raise ExactLibraryError("dedicated UCIE root required")
-    # Validate all exact caller-supplied keys before touching a real ledger.
-    if type(queries) is not tuple or not 1 <= len(queries) <= MAX_BATCH:
-        raise ExactLibraryError("invalid bounded query list")
+    # Reject malformed offsets before reading any existing source-ledger bytes.
+    if (type(offset) is not int or not 0 <= offset <= MAX_PAGE_OFFSET
+            or type(queries) is not tuple or not 1 <= len(queries) <= MAX_BATCH):
+        raise ExactLibraryError("invalid bounded query list/page")
     for query in queries:
         _validate_query(query)
     handoff = prepare_verification_handoff(root)
     return exact_search_linked_public_candidates(
-        handoff, queries=queries, limit=limit)
+        handoff, queries=queries, limit=limit, offset=offset)
