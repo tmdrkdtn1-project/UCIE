@@ -10,6 +10,7 @@ from __future__ import annotations
 from hashlib import sha256
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 
 try:
@@ -135,7 +136,19 @@ class UCIEW10DisposableRestoreProbeTests(unittest.TestCase):
     @unittest.skipUnless(SOURCE_FILE.is_file(),
                          "requires complete UCIE source checkout (CI validates)")
     def test_15_exact_ucie_existing_source_matches_independently_pinned_hashes(self):
-        data = SOURCE_FILE.read_bytes()
+        # The checkout may have Windows CRLF smudge; only the committed
+        # Git object (never the working-tree bytes) is a Git source pin.
+        # All Git invocations are fixed, read-only and repo-scoped.
+        git_target = "src/ucie_miner/library_exact_index.py"
+        tree = subprocess.run(
+            ["git", "rev-parse", "HEAD:" + git_target],
+            cwd=UCIE_REPO, check=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, timeout=10).stdout.decode("ascii").strip()
+        self.assertEqual(tree, PINNED_GIT_BLOB_SHA1)
+        data = subprocess.run(
+            ["git", "cat-file", "blob", PINNED_GIT_BLOB_SHA1],
+            cwd=UCIE_REPO, check=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, timeout=10).stdout
         self.assertEqual(digest(data), PINNED_SOURCE_SHA256)
         self.assertEqual(git_blob_sha1(data), PINNED_GIT_BLOB_SHA1)
         # A harmless fabricated candidate can be restored in TEMP from
