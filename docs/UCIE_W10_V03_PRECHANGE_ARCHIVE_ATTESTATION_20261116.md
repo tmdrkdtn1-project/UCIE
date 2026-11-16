@@ -30,3 +30,7 @@ Scope: UCIE ONLY; isolated reviewer feature, no operating restore or customer re
 STATUS=W10_V03_GIT_TREE_AND_OWNER_ARCHIVE_REVIEW_ONLY__HISTORICAL_DEPLOYMENT_NOT_ATTESTED__REAL_ROLLBACK_NO_GO__P11_HOLD__CUSTOMER_NO_GO
 
 - Hardened Git scope: `.git` must be an in-root directory (external gitdir files/worktrees rejected). Git subprocess calls discard inherited `GIT_*` environment variables to deny `GIT_DIR`/`GIT_WORK_TREE`/Git config redirects. Additional synthetic negative tests check these boundaries.
+
+## Independent CI regression correction
+
+Initial GitHub Actions #43824211477: Ubuntu Python3.13/3.15 PASS; Windows Python3.13/3.15 failed four synthetic temp-root checks each because the first implementation compared `Path.resolve()` against `Path.absolute()` as if Windows' canonical path and displayed temporary path were identical. The check was stricter than the intended safety property. In commit `4abfd3bbc5bfcf3acc1bd62a4274b751a3994410`, only that nonportable spelling comparison was removed; exact UCIE root name, explicit root symlink rejection, in-root `.git` directory, Git-reported top-level match, allowed source path, immutable object bytes, and injected Git-environment rejection remain mandatory. Original failures remain recorded and are not reported as PASS. Re-run full CI on the corrected HEAD.
