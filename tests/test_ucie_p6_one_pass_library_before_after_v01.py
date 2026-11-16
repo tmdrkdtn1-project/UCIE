@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 import statistics
 import subprocess
+import sys
 from time import perf_counter_ns
 import tracemalloc
 import types
@@ -243,6 +244,38 @@ class UCIEP6RealFirstPartyBeforeAfterTests(unittest.TestCase):
         self.assertFalse(report["candidate_production_adopted"])
         self.assertFalse(report["customer_release_approved"])
         print("UCIE_P6_FIRST_PARTY_MEASURED=" + json.dumps(report,sort_keys=True))
+
+
+    def test_07_independent_isolated_python_benchmark_entrypoint(self):
+        result = subprocess.run(
+            [sys.executable, "-I", "-B",
+             str(REPO / "scripts" / "p6_library_one_pass_benchmark.py"),
+             "--rows", "256", "--repeats", "3"],
+            cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=90)
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace")[-700:])
+        report = json.loads(result.stdout.decode("utf-8"))
+        self.assertEqual(report["status"], RESULT_STATUS)
+        self.assertEqual(report["synthetic_rows"], 256)
+        self.assertEqual(report["source_baseline_commit"], REFERENCE_COMMIT)
+        self.assertEqual(set(report["workloads"]), {"linear_sparse", "indexed_repeated"})
+        self.assertFalse(report["candidate_production_adopted"])
+        self.assertFalse(report["customer_release_approved"])
+        self.assertEqual(report["operating_database_writes"], 0)
+        self.assertEqual(report["external_gets"], 0)
+
+    def test_08_independent_benchmark_invalid_size_fails_closed(self):
+        result = subprocess.run(
+            [sys.executable, "-I", "-B",
+             str(REPO / "scripts" / "p6_library_one_pass_benchmark.py"),
+             "--rows", "6001", "--repeats", "3"],
+            cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=20)
+        self.assertEqual(result.returncode, 2)
+        report = json.loads(result.stdout.decode("utf-8"))
+        self.assertEqual(report["status"], "FIRST_PARTY_P6_BENCHMARK_FAIL_CLOSED")
+        self.assertFalse(report["customer_release_approved"])
+
 
 
 if __name__ == "__main__":
