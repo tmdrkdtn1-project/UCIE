@@ -44,8 +44,12 @@ def _root(value: Path) -> Path:
             or value.name.casefold() != "ucie"):
         raise AttestationError("exact dedicated UCIE repository directory required")
     resolved = value.resolve(strict=True)
-    if resolved.name.casefold() != "ucie" or resolved != value.absolute():
-        raise AttestationError("aliased or untrusted UCIE root")
+    # Windows Temp paths can resolve to the same directory under a distinct
+    # case/8.3/junction spelling; comparing resolve() to absolute() is not a
+    # portable path trust test. Root symlinks and indirect gitdirs are still
+    # denied, and Git top-level must match this canonical UCIE directory.
+    if resolved.name.casefold() != "ucie":
+        raise AttestationError("untrusted UCIE root")
     git_meta = resolved / ".git"
     if git_meta.is_symlink() or not git_meta.is_dir():
         raise AttestationError("exact in-root UCIE Git directory required")
