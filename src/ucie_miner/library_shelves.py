@@ -112,9 +112,12 @@ def _observed_utc(value: object) -> datetime:
 def search_official_metadata_shelf(root: Path, *,
                                    source_id: str | None = None,
                                    kind: str | None = None,
-                                   limit: int = 10) -> dict:
-    """Browse read-only Stage14 *hashes*, not original document/code content."""
+                                   limit: int = 10,
+                                   offset: int = 0) -> dict:
+    """Browse read-only Stage14 hashes, with bounded stable pagination."""
     _limit(limit)
+    if type(offset) is not int or not 0 <= offset <= RECORD_CAP:
+        raise LibraryShelfError("invalid bounded official row offset")
     if kind is not None and (type(kind) is not str or kind not in OFFICIAL_KINDS):
         raise LibraryShelfError("invalid official evidence kind")
     repo = None
@@ -137,6 +140,7 @@ def search_official_metadata_shelf(root: Path, *,
             "schema": SCHEMA, "shelf": "OFFICIAL_PUBLIC_METADATA",
             "status": "STAGE14_OFFICIAL_LEDGER_ABSENT_NO_GO",
             "items": [], "total_matches": 0, "returned_count": 0,
+            "page_offset": offset,
             "network_requests": 0, "database_writes": 0,
             "full_library_implemented": False, "auto_promoted": False,
         }
@@ -165,8 +169,8 @@ def search_official_metadata_shelf(root: Path, *,
                 "content_sha256,observed_or_published_utc,review_state "
                 "FROM official_revision" + where +
                 " ORDER BY source,evidence_kind,upstream_reference,"
-                "content_sha256 LIMIT ?",
-                [*params, limit],
+                "content_sha256 LIMIT ? OFFSET ?",
+                [*params, limit, offset],
             ).fetchall()
     except sqlite3.DatabaseError as exc:
         raise LibraryShelfError("read-only Stage14 official ledger unavailable") from exc
@@ -215,7 +219,8 @@ def search_official_metadata_shelf(root: Path, *,
         "status": "STAGE14_OFFICIAL_METADATA_READ_ONLY_UNVERIFIED_NO_GO",
         "source_filter": source_id, "kind_filter": kind,
         "total_matches": total, "returned_count": len(items),
-        "omitted_count": total - len(items),
+        "page_offset": offset,
+        "omitted_count": max(0, total - offset - len(items)),
         "items": items,
         "search_index_persisted": False,
         "network_requests": 0, "database_writes": 0,
