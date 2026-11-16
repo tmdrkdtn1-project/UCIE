@@ -21,6 +21,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          # W10 historical source SHA/commit ancestry checks require the immutable
+          # W09 ancestor, even after legitimate future UCIE source revisions.
+          # This fetches only this first-party UCIE repository history in CI;
+          # it never changes the owner's operating checkout or P11 miner.
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}

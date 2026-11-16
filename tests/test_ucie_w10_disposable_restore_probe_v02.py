@@ -136,12 +136,13 @@ class UCIEW10DisposableRestoreProbeTests(unittest.TestCase):
     @unittest.skipUnless(SOURCE_FILE.is_file(),
                          "requires complete UCIE source checkout (CI validates)")
     def test_15_exact_ucie_existing_source_matches_independently_pinned_hashes(self):
-        # The checkout may have Windows CRLF smudge; only the committed
-        # Git object (never the working-tree bytes) is a Git source pin.
-        # All Git invocations are fixed, read-only and repo-scoped.
+        # A historical W09 source pin MUST reference its immutable original
+        # Git commit, not moving HEAD. Otherwise every legitimate P3 source
+        # improvement falsely fails this W10 v02 baseline regression.
+        # Read only canonical Git bytes, never Windows CRLF worktree bytes.
         git_target = "src/ucie_miner/library_exact_index.py"
         tree = subprocess.run(
-            ["git", "rev-parse", "HEAD:" + git_target],
+            ["git", "rev-parse", PINNED_GIT_COMMIT + ":" + git_target],
             cwd=UCIE_REPO, check=True, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, timeout=10).stdout.decode("ascii").strip()
         self.assertEqual(tree, PINNED_GIT_BLOB_SHA1)

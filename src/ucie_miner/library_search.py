@@ -220,9 +220,13 @@ def main() -> int:
     parser.add_argument("--exact-purpose", action="append", default=None,
                         help="Opt-in exact source/domain/kind/purpose batch lookup")
     parser.add_argument("--limit", type=int, default=10)
+    parser.add_argument("--offset", type=int, default=0,
+                        help="Bounded read-only result page (default 0)")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     try:
+        if not 0 <= args.offset <= MAX_PAGE_OFFSET:
+            raise LibrarySearchError("invalid public Library page offset")
         if args.exact_purpose is not None:
             if (not args.source_id or not args.domain or not args.kind
                     or args.query or args.group_revisions):
@@ -231,16 +235,19 @@ def main() -> int:
             from .library_exact_index import search_exact_existing_public_library
             source = (args.source_id if args.source_id.startswith("repo:")
                       else "repo:" + args.source_id)
-            result = search_exact_existing_public_library(
-                root,
-                queries=tuple((source, args.domain, args.kind, p)
-                              for p in args.exact_purpose),
-                limit=args.limit)
+            params = {"queries": tuple((source, args.domain, args.kind, p)
+                                       for p in args.exact_purpose),
+                      "limit": args.limit}
+            if args.offset:
+                params["offset"] = args.offset
+            result = search_exact_existing_public_library(root, **params)
         else:
-            result = search_existing_public_library(
-                root, query=args.query, kind=args.kind, domain=args.domain,
-                source_id=args.source_id, limit=args.limit,
-                group_revisions=args.group_revisions)
+            params = {"query": args.query, "kind": args.kind,
+                      "domain": args.domain, "source_id": args.source_id,
+                      "limit": args.limit, "group_revisions": args.group_revisions}
+            if args.offset:
+                params["offset"] = args.offset
+            result = search_existing_public_library(root, **params)
     except (ValueError, DiscoveryError) as exc:
         print(json.dumps({"schema": SCHEMA, "status": "FAIL_CLOSED",
                           "error_type": type(exc).__name__,

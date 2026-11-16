@@ -21,6 +21,7 @@ from ucie_miner.w10_disposable_restore_probe_v02 import git_blob_sha1
 REPO = Path(__file__).resolve().parents[1]
 PINNED_SHA = "6e27de83192b066f73b9574d2a591607bcc1bef9512b97f94c5bdd3af528ee7e"
 PINNED_BLOB = "0f92ed46b68685e0edb98f4fc09c3846b5b8d2c6"
+PINNED_W09_COMMIT = "aeecc3fc64dc542daba6e40ef29dce66c296ebdf"
 
 
 class W10PrechangeGitArchiveReviewTests(unittest.TestCase):
@@ -241,7 +242,8 @@ class W10PrechangeGitArchiveReviewTests(unittest.TestCase):
     @unittest.skipUnless((REPO / ".git").exists(), "complete UCIE Git checkout only")
     def test_17_real_ucie_committed_source_review_without_owner_archive(self):
         # No synthetic checkout/source is replaced in the real Git repo.
-        # The pinned file was already independently observed in W09 and W10.
+        # A W09 historical source pin is immutable even when later P3 code
+        # changes legitimately. Never bind old source bytes to moving HEAD.
         archive = (REPO / "runtime" / v03.ARCHIVE_DIR /
                    "library_exact_index.py.prechange.bin")
         if archive.exists() or archive.is_symlink():
@@ -252,13 +254,15 @@ class W10PrechangeGitArchiveReviewTests(unittest.TestCase):
             timeout=10).stdout.decode("ascii").strip()
         out = v03.assess_prechange_archive(
             REPO, target="library_exact_index.py",
-            prechange_commit=head,
+            prechange_commit=PINNED_W09_COMMIT,
             expected_prechange_sha256=PINNED_SHA,
             expected_prechange_git_blob_sha1=PINNED_BLOB,
             expected_archive_sha256=PINNED_SHA,
         )
         self.assertEqual(out["status"], v03.STATUS_NO_ARCHIVE)
         self.assertEqual(out["prechange_git_blob_sha1"], PINNED_BLOB)
+        self.assertEqual(out["prechange_commit_sha1"], PINNED_W09_COMMIT)
+        self.assertEqual(out["current_head_sha1"], head)
         self.assertEqual(out["prechange_source_sha256"], PINNED_SHA)
         self.assertTrue(out["git_ancestry_and_commit_tree_blob_verified_locally"])
         self.assertFalse(out["owner_archive_present"])
