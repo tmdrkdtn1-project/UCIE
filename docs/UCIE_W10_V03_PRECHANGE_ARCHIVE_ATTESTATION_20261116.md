@@ -28,3 +28,5 @@ Scope: UCIE ONLY; isolated reviewer feature, no operating restore or customer re
 4. P11 network job6 REVIEW_REQUIRED 5/5 and base PublicMiner HTTP403 owner HOLD remain untouched. Automatic rule promotion, customer V1 release NO-GO.
 
 STATUS=W10_V03_GIT_TREE_AND_OWNER_ARCHIVE_REVIEW_ONLY__HISTORICAL_DEPLOYMENT_NOT_ATTESTED__REAL_ROLLBACK_NO_GO__P11_HOLD__CUSTOMER_NO_GO
+
+- Hardened Git scope: `.git` must be an in-root directory (external gitdir files/worktrees rejected). Git subprocess calls discard inherited `GIT_*` environment variables to deny `GIT_DIR`/`GIT_WORK_TREE`/Git config redirects. Additional synthetic negative tests check these boundaries.
