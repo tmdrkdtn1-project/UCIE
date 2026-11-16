@@ -76,9 +76,20 @@ def exact_search_linked_public_candidates(handoff: dict, *,
         }
     if len(tasks) > MAX_CATALOG_ROWS:
         raise ExactLibraryError("unbounded source-linked catalog")
-    # Normalize all untrusted input through original W02 provenance first.
-    # Keeping this pass common to both algorithms avoids trusting a fast path.
-    records: list[tuple[tuple[str, str, str, str], dict]] = []
+    # Preserve the original bounded cost-model selection and validate EVERY
+    # untrusted row, including those that cannot match the requested query.
+    # Unlike v01, insert validated results directly into the chosen lookup
+    # structure: no intermediate (key, item) catalog or redundant second pass.
+    linear_cost = len(tasks) * len(keys)
+    index_cost = len(tasks) + len(keys)
+    use_index = index_cost < linear_cost
+    choice = "BUILD_ONCE_COMPOSITE_INDEX" if use_index else "LINEAR_EXACT_SCAN"
+    index: dict[tuple[str, str, str, str], list[dict]] | None = (
+        {} if use_index else None)
+    linear_matches: dict[tuple[str, str, str, str], list[dict]] | None = (
+        {} if not use_index else None)
+    wanted = frozenset(keys) if not use_index else frozenset()
+    materialized = 0
     for task in tasks:
         if (type(task) is not dict or type(task.get("source")) is not str
                 or type(task.get("reference")) is not str
@@ -99,36 +110,33 @@ def exact_search_linked_public_candidates(handoff: dict, *,
             raise ExactLibraryError("provenance/skill classifier disagree")
         key = (entry["source_id"], entry["domain"],
                entry["kind"], entry["purpose_code"])
-        records.append((key, {
-            "library_item_id": entry["library_item_id"],
-            "public_url": entry["public_url"],
-            "evidence_sha256": entry["evidence_sha256"],
-            "revision_hint": entry["revision_hint"],
-            "lifecycle": "UNVERIFIED_CANDIDATE_ONLY",
-            "human_approved": False,
-            "export_allowed": False,
-        }))
+        # Linear single-key path only materializes requested keys; all other
+        # rows were nevertheless normalized by build_library_entry above.
+        # Indexed multiquery path still retains ALL catalog keys, preserving
+        # unique_index_keys and existing source/approval semantics exactly.
+        if index is not None or key in wanted:
+            item = {
+                "library_item_id": entry["library_item_id"],
+                "public_url": entry["public_url"],
+                "evidence_sha256": entry["evidence_sha256"],
+                "revision_hint": entry["revision_hint"],
+                "lifecycle": "UNVERIFIED_CANDIDATE_ONLY",
+                "human_approved": False,
+                "export_allowed": False,
+            }
+            materialized += 1
+            if index is not None:
+                index.setdefault(key, []).append(item)
+            else:
+                linear_matches.setdefault(key, []).append(item)
 
-    linear_cost = len(records) * len(keys)
-    index_cost = len(records) + len(keys)
-    use_index = index_cost < linear_cost  # tie goes to simpler linear search
-    choice = "BUILD_ONCE_COMPOSITE_INDEX" if use_index else "LINEAR_EXACT_SCAN"
-    index: dict[tuple[str, str, str, str], list[dict]] | None = None
-    if use_index:
-        index = {}
-        for key, item in records:
-            index.setdefault(key, []).append(item)
-        for items in index.values():
-            items.sort(key=lambda row: row["library_item_id"])
+    selected = index if index is not None else linear_matches
+    for items in selected.values():
+        items.sort(key=lambda row: row["library_item_id"])
 
     returned = []
     for key in keys:
-        if index is not None:
-            found = index.get(key, ())
-        else:
-            found = sorted(
-                (item for row_key, item in records if row_key == key),
-                key=lambda row: row["library_item_id"])
+        found = selected.get(key, ())
         page = list(found[offset:offset+limit])
         remaining = max(0, len(found) - offset - len(page))
         returned.append({
@@ -153,6 +161,10 @@ def exact_search_linked_public_candidates(handoff: dict, *,
         "page_offset": offset,
         "has_more_any_query": any(row["has_more"] for row in returned),
         "catalog_items": len(tasks),
+        "one_pass_source_normalization": True,
+        "separate_intermediate_record_catalog_created": False,
+        "validated_source_rows": len(tasks),
+        "materialized_result_records": materialized,
         "unique_index_keys": len(index) if index is not None else None,
         "index_built": index is not None,
         "selected_strategy": choice,
