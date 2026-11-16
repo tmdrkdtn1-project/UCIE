@@ -37,3 +37,8 @@ Verify historical owner-retained exact prechange restoration archive and capture
 - Existing docs/ROADMAP.md on owner PC was observed locally modified; do not overwrite that file or attempt a Git reset/checkout on D:/UCIE. Maintain this addendum in GitHub and record its exact PR/CI receipt.
 
 STATUS=P3_P6_REAL_FUNCTIONAL_PAGINATION_DEVELOPMENT__OWNER_LOCAL_UNCHANGED__V1_RELEASE_NO_GO
+
+## Discovered nonloop regression blocker (P3 functionality vs W10 historical pins)
+
+Initial exact-head CI #43829319690 ran new P3/P6 tests 12/12 OK on Ubuntu Python3.13/3.15, but each full suite reported 1 failure and 1 error in older W10 v02/v03 tests: W09 historical pinned source SHA was compared to **moving HEAD** after the real W04 source changed. This is a stale regression-test premise, not evidence that the new pagination is an unapproved source change or that the original historical bytes were altered.
+Correction: W10 v02 test uses exact original W09 immutable commit aeecc3fc64dc542daba6e40ef29dce66c296ebdf with its original blob SHA1 0f92ed46b68685e0edb98f4fc09c3846b5b8d2c6; W10 v03 historical ancestor/archival test also uses that fixed commit, while independently reporting current HEAD as a separate value. The real original source SHA256 6e27de83192b066f73b9574d2a591607bcc1bef9512b97f94c5bdd3af528ee7e remains checked. **No security test removed or skipped; do not claim PASS until new exact-head matrix CI validates all old and new tests.**
