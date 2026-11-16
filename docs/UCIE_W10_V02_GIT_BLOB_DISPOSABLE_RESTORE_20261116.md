@@ -22,7 +22,7 @@ Scope: UCIE ONLY; first-party tests and approved UCIE GitHub source. NO OPERATIN
 ## Tests and promotion boundary
 
 - Local Python 3.13.5 standalone independent invocation: 14 tests PASS, one source-check test SKIP because the complete UCIE Git checkout is absent in the isolated development container. Do not count this skip as pass.
-- The 15th test checks actual first-party source bytes against both pinned SHA-256 and Git blob SHA-1 and does a disposable roundtrip. Require the full GitHub Actions matrix to pass before merging this PR.
+- The 15th test uses fixed **read-only Git object commands** (`git rev-parse HEAD:src/ucie_miner/library_exact_index.py` and `git cat-file blob <pinned SHA-1>`), not Windows checkout bytes. This verifies the committed first-party tree/blob and canonical LF bytes against both pinned SHA-256 and Git blob SHA-1 before an inert disposable roundtrip. GitHub's separately retrieved historical W09 commit path is a distinct source observation; neither test proves a real owner-retained prechange backup. Require full Actions CI 4/4 PASS before merge.
 - No operating SQLite, source file, Windows task, model weights, rule signature, P11 job6, source collection permissions, deployment or customer release may be changed by this branch.
 
 ## Remaining requirements (all NO-GO)
