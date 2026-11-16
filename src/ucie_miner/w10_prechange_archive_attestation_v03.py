@@ -39,7 +39,7 @@ class AttestationError(ValueError):
 
 
 def _root(value: Path) -> Path:
-    if (type(value) is not Path
+    if (not isinstance(value, Path)
             or value.is_symlink() or not value.is_dir()
             or value.name.casefold() != "ucie"):
         raise AttestationError("exact dedicated UCIE repository directory required")
@@ -153,12 +153,7 @@ def assess_prechange_archive(
     head = _git(root, "rev-parse", "--verify", "HEAD").strip().decode("ascii")
     if SHA1.fullmatch(head) is None:
         raise AttestationError("invalid current Git HEAD")
-    if _git(root, "merge-base", "--is-ancestor",
-            prechange_commit, head, accept=(0, 1)) != b"":
-        raise AttestationError("unexpected ancestry output")
-    # merge-base returns no stdout on success OR false. Explicitly require
-    # successful 0 status separately, using a marker command below.
-    # _git(accept=(0,)) independently rejects a nonancestor exit=1.
+    # A nonancestor exits 1 and is denied, never silently accepted.
     _git(root, "merge-base", "--is-ancestor", prechange_commit, head)
     relative = "src/ucie_miner/" + target
     prior_blob, prior = _tree_blob(root, prechange_commit, relative)
