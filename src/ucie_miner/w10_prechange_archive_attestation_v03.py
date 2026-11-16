@@ -46,17 +46,19 @@ def _root(value: Path) -> Path:
     resolved = value.resolve(strict=True)
     if resolved.name.casefold() != "ucie" or resolved != value.absolute():
         raise AttestationError("aliased or untrusted UCIE root")
-    if not (resolved / ".git").exists():
-        raise AttestationError("exact local UCIE Git repository required")
-    if (resolved / ".git").is_symlink():
-        raise AttestationError("indirect Git directory forbidden")
+    git_meta = resolved / ".git"
+    if git_meta.is_symlink() or not git_meta.is_dir():
+        raise AttestationError("exact in-root UCIE Git directory required")
     return resolved
 
 
 def _git(root: Path, *argv: str, accept: tuple[int, ...] = (0,)) -> bytes:
     # These subcommands only read local immutable objects / ancestry.
     # The caller supplies only full hex commit IDs and a literal file path.
-    env = dict(os.environ)
+    # Never inherit GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_CONFIG_*
+    # or equivalent knobs that can redirect Git outside the UCIE root.
+    env = {key: value for key, value in os.environ.items()
+           if not key.upper().startswith("GIT_")}
     env.update({
         "GIT_OPTIONAL_LOCKS": "0",
         "GIT_NO_REPLACE_OBJECTS": "1",
