@@ -31,3 +31,13 @@ Successful first-party synthetic equivalence/measurement means only **P6 self-ow
 NEXT after measured evidence: compare real existing UCIE source-linked read-only catalog **only when owner host sync/read access is explicitly safe and source-hash leased**, then UX + private-customer full product gates. P11 job6 REVIEW_REQUIRED5/5 and PublicMiner 403 remain HOLD.
 
 STATUS=P6_FIRST_PARTY_GIT_BASELINE_COMPARISON_PENDING_EXACT_HEAD_CI__OWNER_HOST_NO_CHANGE__CUSTOMER_V1_NO_GO
+
+## Independent standalone Python diagnostic
+
+After the approved UCIE checkout is separately synchronized, the same baseline/candidate measurement can also run in an **independent isolated Python process** using:
+
+```shell
+python -I -B scripts/p6_library_one_pass_benchmark.py --rows 3000 --repeats 5
+```
+
+Only first-party UCIE `src` and `tests` paths are added by the bounded script; it uses the exact historical Git object, synthetic in-memory linked evidence and standard-library median/tracemalloc. It does not inspect any owner operating SQLite or project file. The CLI prints JSON to stdout and never publishes/saves measurement receipts automatically. Separate CI tests invoke this command with rows=256/repeats=3, plus invalid rows=6001 fail-close. This test is only available after test/scripts source synchronization, which has NOT happened on owner's D:/UCIE.
