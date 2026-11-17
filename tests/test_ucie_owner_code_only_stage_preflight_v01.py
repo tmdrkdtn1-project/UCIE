@@ -115,5 +115,33 @@ class ImmutableCodeStageTests(unittest.TestCase):
         self.assertIn("git_blob_sha1", source)
 
 
+    def test_08_git_checkout_lf_and_windows_crlf_share_canonical_identity(self):
+        original = MANIFEST.read_bytes()
+        lf = original.replace(b"\r\n", b"\n")
+        self.assertNotIn(b"\r", lf)
+        with tempfile.TemporaryDirectory(prefix="UCIE_PR305_EOL_") as td:
+            dest = Path(td) / "manifest.json"
+            for tag, data in (("lf", lf), ("crlf", lf.replace(b"\n", b"\r\n"))):
+                with self.subTest(newlines=tag):
+                    dest.write_bytes(data)
+                    obj, files = mod.load_manifest(dest)
+                    self.assertEqual(obj["source_commit_sha"], mod.EXPECTED_COMMIT)
+                    self.assertEqual(len(files), mod.EXPECTED_COUNT)
+
+    def test_09_noncanonical_and_tampered_manifest_fail_closed(self):
+        original = MANIFEST.read_bytes().replace(b"\r\n", b"\n")
+        with tempfile.TemporaryDirectory(prefix="UCIE_PR305_EOL_") as td:
+            dest = Path(td) / "manifest.json"
+            for tag, data in (
+                ("mixed", original.replace(b"\n", b"\r\n", 1)),
+                ("lone_cr", original.replace(b"\n", b"\r", 1)),
+                ("byte_tamper", original.replace(b"source_commit_sha", b"source_commiT_sha", 1)),
+            ):
+                with self.subTest(change=tag):
+                    dest.write_bytes(data)
+                    with self.assertRaises(mod.StageRejected):
+                        mod.load_manifest(dest)
+
+
 if __name__ == "__main__":
     unittest.main()
