@@ -78,11 +78,19 @@ def load_manifest(path: Path) -> tuple[dict, list[dict]]:
     if path.stat().st_size > 60000:
         raise StageRejected("manifest too large")
     raw = path.read_bytes()
-    digest = sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
+    # Git canonical LF is the source of truth. Windows Git checkout may
+    # expand only line endings to CRLF; reject lone CR and mixed endings.
+    if b"\r" in raw:
+        if raw.count(b"\r") != raw.count(b"\r\n") or raw.count(b"\n") != raw.count(b"\r\n"):
+            raise StageRejected("noncanonical mixed manifest line endings")
+        canonical = raw.replace(b"\r\n", b"\n")
+    else:
+        canonical = raw
+    digest = sha1(b"blob " + str(len(canonical)).encode("ascii") + b"\0" + canonical).hexdigest()
     if digest != EXPECTED_MANIFEST_BLOB:
         raise StageRejected("immutable manifest Git blob lease mismatch")
     try:
-        obj = json.loads(raw)
+        obj = json.loads(canonical)
     except (UnicodeError, ValueError) as exc:
         raise StageRejected("invalid manifest") from exc
     if (type(obj) is not dict
@@ -141,7 +149,7 @@ def preflight(snapshot: Path, manifest: Path) -> dict:
         "schema": SCHEMA,
         "status": "UCIE_CODE_ONLY_SOURCE_BYTES_VERIFIED__OWNER_STAGE_NOT_APPLIED",
         "source_commit_sha": obj["source_commit_sha"],
-        "manifest_sha256": sha256(manifest.read_bytes()).hexdigest(),
+        "manifest_sha256": sha256(manifest.read_bytes().replace(b"\r\n", b"\n")).hexdigest(),
         "file_count": len(hashes),
         "total_bytes": EXPECTED_BYTES,
         "file_sha256": dict(hashes),
