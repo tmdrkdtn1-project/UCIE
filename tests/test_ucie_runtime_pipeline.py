@@ -236,7 +236,11 @@ class P10WorkerTests(unittest.TestCase):
         self.assertIn("internal_minute_tick.py", installer)
         self.assertIn("New-TimeSpan -Minutes 1", installer)
         self.assertIn("MultipleInstances IgnoreNew", installer)
-        self.assertIn("param([switch]$Install)", installer)
+        # A backward-compatible, explicit read-only source-stage switch does
+        # not alter the original opt-in minute task installer semantics.
+        self.assertIn("param([switch]$Install, [switch]$StagePreview)", installer)
+        self.assertIn("if ($StagePreview)", installer)
+        self.assertIn("UCIE_STAGE_PREVIEW_MUTATING_ACTION_DENIED", installer)
         self.assertIn("PREVIEW_ONLY_NO_QUEUE_OR_TASK_CREATION", installer)
         self.assertNotIn("UCIE-PublicMiner-Hourly", installer)
 
