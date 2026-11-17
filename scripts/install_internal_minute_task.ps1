@@ -16,7 +16,7 @@ if ($StagePreview) {
         [StringComparison]::OrdinalIgnoreCase)) {
         throw 'UCIE_STAGE_PREVIEW_EXACT_HIERARCHY_REQUIRED'
     }
-    foreach ($path in @($parent, $root)) {
+    foreach ($path in @($parent, $root, $PSScriptRoot, $PSCommandPath)) {
         $entry = Get-Item -LiteralPath $path -Force -ErrorAction Stop
         if (-not $entry.PSIsContainer -or
             (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
