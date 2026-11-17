@@ -38,6 +38,9 @@ backups/
 secrets/
 credentials/
 *.token
+# UCIE owner-only bridge runtime state (never publish health receipts or local tokens)
+/.ucie_bridge_state/
+
 # Owner-local public metadata transfer receipts (never accidentally commit)
 .ucie_b2_public_pr_metadata_v01.json
 .ucie_b2_public_pr_metadata_v01.sha256
