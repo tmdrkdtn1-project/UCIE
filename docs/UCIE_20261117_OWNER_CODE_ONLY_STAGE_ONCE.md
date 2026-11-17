@@ -5,7 +5,7 @@ Scope: UCIE **only**. Depends on PR #306's merged immutable Git-object manifest 
 ## What's implemented
 
 - The owner CLI targets ONLY D:\UCIE_PROJECT\UCIE on Windows. It is **preview by default**.
-- The source must be a separately obtained, clean UCIE PR #305 pinned Git commit snapshot under an independent directory (for example C:\TEMP\UCIE_PR305_SOURCE), not the dirty D:\UCIE checkout. PR #306's full 232-file Git-blob and SHA-256 leases must pass first.
+- The source must be a separately obtained and reviewed clean UCIE PR #307 (or its eventual merged-main commit) snapshot under an independent directory (for example C:\TEMP\UCIE_PR305_SOURCE), **whose 232 original source files match PR #305's pinned Git commit**. The PR #307 stage tool and PR #306 verifier are not present in the original PR #305 archive: do not claim that archive alone is executable. Never use the dirty D:\UCIE checkout. PR #306's full 232-file Git-blob and SHA-256 leases must pass first.
 - D:\UCIE_PROJECT must already exist as a verified direct directory. The UCIE child must **not exist at all** (even empty is rejected). No junction, symlink, reparse ancestor or prior data is overwritten.
 - --mode apply additionally requires --owner-approval APPROVE_UCIE_CODE_ONLY_STAGE_ONCE; there is no automatic owner action from ChatGPT or GitHub CI.
 - Under that exact new child, only manifest-allowlisted first-party Python and four smoke/StagePreview scripts are written. Each source is re-hashed before copy, the new file is created exclusively, flushed, read back, and the complete 232-file destination is independently reverified before writing the final UCIE_CODE_ONLY_STAGE_VERIFIED_V01.json receipt.
