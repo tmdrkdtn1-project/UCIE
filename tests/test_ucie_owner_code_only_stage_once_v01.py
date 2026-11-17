@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -105,7 +106,10 @@ class OwnerCodeOnlyStageTests(unittest.TestCase):
         self.assertFalse(dest.exists())
 
     def test_04_real_all_232_disposable_apply_then_verified_receipt(self):
-        dest = self._stage_destination("UCIE_P04")
+        # Match PR #304/305 realistic UCIE_PROJECT/UCIE code-only hierarchy.
+        parent = self.temp / "UCIE_PROJECT"
+        parent.mkdir(exist_ok=True)
+        dest = parent / "UCIE"
         report = stage.stage_once(
             self.source, MANIFEST, dest, mode="apply",
             owner_approval=stage.OWNER_APPROVAL, owner_only=False)
@@ -121,6 +125,41 @@ class OwnerCodeOnlyStageTests(unittest.TestCase):
             self.assertTrue(p.is_file())
             self.assertEqual(p.stat().st_size, row["bytes"])
             self.assertEqual(stage._git_blob(p.read_bytes()), row["git_blob_sha1"])
+        # Real relocated P3/P6 search runs in an isolated Python -I -B process
+        # with all 27 UCIE-authored synthetic revisions and no operating DB.
+        for forbidden in (".git", ".venv", "runtime", ".ucie_bridge_state"):
+            self.assertFalse((dest / forbidden).exists())
+        source_digest = sha256((dest / "src" / "ucie_miner" /
+                                "library_exact_index.py").read_bytes()).hexdigest()
+        smoke = subprocess.run([
+            sys.executable, "-I", "-B",
+            str(dest / "scripts" / "ucie_isolated_library_smoke_v01.py"),
+            "--source-sha256", source_digest,
+        ], capture_output=True, timeout=40, check=False, cwd=dest)
+        self.assertEqual(smoke.returncode, 0,
+                         smoke.stderr.decode("utf-8", "replace")[-1000:])
+        proof = json.loads(smoke.stdout.decode("utf-8"))
+        self.assertEqual(proof["results_retrieved"], 27)
+        self.assertEqual(proof["network_requests"], 0)
+        self.assertEqual(proof["operating_database_writes"], 0)
+        self.assertFalse(proof["real_owner_windows_drive_migrated"])
+
+        # All three PR #305 owner script previews run as real native PowerShell
+        # on Windows, without executing -Install, -Setup, or any live Task.
+        if os.name == "nt":
+            ps = shutil.which("powershell.exe")
+            self.assertIsNotNone(ps, "native Windows PowerShell required")
+            for name in ("bootstrap_local.ps1", "install_hourly_task.ps1",
+                         "install_internal_minute_task.ps1"):
+                with self.subTest(owner_preview=name):
+                    run = subprocess.run([
+                        ps, "-NoProfile", "-NonInteractive", "-File",
+                        str(dest / "scripts" / name), "-StagePreview",
+                    ], cwd=dest, capture_output=True, timeout=25, check=False)
+                    self.assertEqual(run.returncode, 0,
+                                     run.stderr.decode("utf-8", "replace")[-600:])
+                    self.assertIn("UCIE_STAGE_PREVIEW_ONLY_NO_SETUP_OR_TASK_MUTATION",
+                                  run.stdout.decode("utf-8-sig", "replace"))
         with self.assertRaises(stage.StageCopyRejected):
             stage.stage_once(self.source, MANIFEST, dest, mode="apply",
                              owner_approval=stage.OWNER_APPROVAL, owner_only=False)
