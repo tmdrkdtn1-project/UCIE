@@ -15,12 +15,17 @@ if ($StagePreview) {
         [StringComparison]::OrdinalIgnoreCase)) {
         throw 'UCIE_STAGE_PREVIEW_EXACT_HIERARCHY_REQUIRED'
     }
-    foreach ($path in @($parent, $root, $PSScriptRoot, $PSCommandPath)) {
+    foreach ($path in @($parent, $root, $PSScriptRoot)) {
         $entry = Get-Item -LiteralPath $path -Force -ErrorAction Stop
         if (-not $entry.PSIsContainer -or
             (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
             throw 'UCIE_STAGE_PREVIEW_INDIRECT_PATH_DENIED'
         }
+    }
+    $scriptEntry = Get-Item -LiteralPath $PSCommandPath -Force -ErrorAction Stop
+    if ($scriptEntry.PSIsContainer -or
+        (($scriptEntry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        throw 'UCIE_STAGE_PREVIEW_INDIRECT_SCRIPT_DENIED'
     }
     Write-Output 'UCIE_STAGE_PREVIEW_ONLY_NO_SETUP_OR_TASK_MUTATION'
     Write-Output ('STAGED_CODE_ROOT=' + $root)
