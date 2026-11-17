@@ -1,4 +1,4 @@
-"""One-time UCIE first-party code-only staging, never an operating root cutover.
+r"""One-time UCIE first-party code-only staging, never an operating root cutover.
 
 Default mode is preview. The CLI can only write the absent
 D:\UCIE_PROJECT\UCIE folder on Windows after explicit owner authorization.
