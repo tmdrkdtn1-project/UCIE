@@ -1,0 +1,1169 @@
+{
+  "schema": "UCIE_PR305_IMMUTABLE_CODE_ONLY_STAGE_MANIFEST_V01",
+  "source_commit_sha": "96c6187430fc126214e93f57cfcd0b86331dc1a4",
+  "code_only_file_count": 232,
+  "code_only_total_bytes": 2934205,
+  "copy_policy": "ONLY_LISTED_UCIE_FIRST_PARTY_FILES_NO_LIVE_REPO_RUNTIME_DB_GIT_MCP_TUNNEL",
+  "files": [
+    {
+      "path": "scripts/bootstrap_local.ps1",
+      "git_blob_sha1": "711ed8141d2595b72638ad1cd965e2d1a9072721",
+      "bytes": 4024
+    },
+    {
+      "path": "scripts/install_hourly_task.ps1",
+      "git_blob_sha1": "e319046a865a178d38d5c3bd7c1a644edad98904",
+      "bytes": 4915
+    },
+    {
+      "path": "scripts/install_internal_minute_task.ps1",
+      "git_blob_sha1": "0d03b70945761debf0390a0963a5ae8aa3b6057d",
+      "bytes": 4744
+    },
+    {
+      "path": "scripts/ucie_isolated_library_smoke_v01.py",
+      "git_blob_sha1": "95ce5455699405e2074bdeec4da6933defbd250e",
+      "bytes": 9307
+    },
+    {
+      "path": "src/ucie_miner/__init__.py",
+      "git_blob_sha1": "cffb47f11207512a235db1aa77456a2534fc60e7",
+      "bytes": 101
+    },
+    {
+      "path": "src/ucie_miner/__main__.py",
+      "git_blob_sha1": "1adbcdb64241442f018637ec453a2c6f835da0f2",
+      "bytes": 28671
+    },
+    {
+      "path": "src/ucie_miner/acceptance_bundle.py",
+      "git_blob_sha1": "5df1c0a6471eae217ac1f42973936116ca33b6d4",
+      "bytes": 4571
+    },
+    {
+      "path": "src/ucie_miner/adapter.py",
+      "git_blob_sha1": "65e2022a224acc267475b98c94f9fdd025c8717e",
+      "bytes": 2573
+    },
+    {
+      "path": "src/ucie_miner/adaptive_priority.py",
+      "git_blob_sha1": "4e9935a80dc2c1bf0243ff62f1c620e7ba6e490f",
+      "bytes": 7815
+    },
+    {
+      "path": "src/ucie_miner/automated_candidate_qa.py",
+      "git_blob_sha1": "f7234d7f86858a31eaaef65887e68249afe9a450",
+      "bytes": 8821
+    },
+    {
+      "path": "src/ucie_miner/capability_evaluator.py",
+      "git_blob_sha1": "ff5492e6bd51724147c74e81bbeb800a991fd898",
+      "bytes": 10721
+    },
+    {
+      "path": "src/ucie_miner/capability_evidence_trial_board_v01.py",
+      "git_blob_sha1": "eda9601920cfe416db6d6eb09c7569f822dcbde4",
+      "bytes": 8624
+    },
+    {
+      "path": "src/ucie_miner/capability_experience.py",
+      "git_blob_sha1": "e46b2ce481e93f6d7314a767afa91834030e428c",
+      "bytes": 18016
+    },
+    {
+      "path": "src/ucie_miner/capability_trials.py",
+      "git_blob_sha1": "5b2bd9fcaabb4c553c5b29e52ff6cdc7300a0b88",
+      "bytes": 16030
+    },
+    {
+      "path": "src/ucie_miner/code_review_v1.py",
+      "git_blob_sha1": "111fcb194f88448e6f5f004af8ab5a41ce1d0338",
+      "bytes": 22713
+    },
+    {
+      "path": "src/ucie_miner/core.py",
+      "git_blob_sha1": "9d825276411ebd7d3ebd7f090fabec262b2b79b9",
+      "bytes": 15603
+    },
+    {
+      "path": "src/ucie_miner/customer_c2_bundled_openssl_advisory_v01.py",
+      "git_blob_sha1": "f73417af7dff528d53ef6be6deee08b93c2a9e70",
+      "bytes": 4414
+    },
+    {
+      "path": "src/ucie_miner/customer_c2_existing_owner_license_integrity_v01.py",
+      "git_blob_sha1": "2bef4f35cfebeb58e53ebe2b83459e90e956aaac",
+      "bytes": 11167
+    },
+    {
+      "path": "src/ucie_miner/customer_c2_license_copy_bundle_v01.py",
+      "git_blob_sha1": "95402e4f1f47da31556d61fac706fc0b10b7da83",
+      "bytes": 9829
+    },
+    {
+      "path": "src/ucie_miner/customer_c2_owner_license_review_packet_v01.py",
+      "git_blob_sha1": "48aa44276042c6c7b4c229d27a88703fe02dc156",
+      "bytes": 12591
+    },
+    {
+      "path": "src/ucie_miner/customer_c2_private_notice_draft_v01.py",
+      "git_blob_sha1": "6aaf550abe542a8609bf1cc966133452051862a3",
+      "bytes": 13491
+    },
+    {
+      "path": "src/ucie_miner/customer_c2_pypi_advisory_provenance_v01.py",
+      "git_blob_sha1": "48ac685fd0d6de077cfdcf05a9af1de12b120355",
+      "bytes": 19468
+    },
+    {
+      "path": "src/ucie_miner/customer_c2_supply_chain_review_v01.py",
+      "git_blob_sha1": "90ec71087266d1ba117578190174d5e2638a5d24",
+      "bytes": 12157
+    },
+    {
+      "path": "src/ucie_miner/customer_c3_owner_existing_key_product_sign_v01.py",
+      "git_blob_sha1": "553eeb416b69c5457f48aafe405012625fb787ce",
+      "bytes": 17956
+    },
+    {
+      "path": "src/ucie_miner/customer_c4_owner_vendor_inplace_aba_v01.py",
+      "git_blob_sha1": "66cd2c5b46e2f813d298fee7b89a0d9ee75d8ca2",
+      "bytes": 16615
+    },
+    {
+      "path": "src/ucie_miner/customer_c4_physical_windows_recipient_readonly_v01.py",
+      "git_blob_sha1": "09df2a5ccf8647d4c4eb3af5a82f99ccecdb2c11",
+      "bytes": 9453
+    },
+    {
+      "path": "src/ucie_miner/customer_component_lifecycle_v01.py",
+      "git_blob_sha1": "5442e902a40b0980bb3da1df510aae27f4063823",
+      "bytes": 12673
+    },
+    {
+      "path": "src/ucie_miner/customer_full_product_offline_rehearsal_v01.py",
+      "git_blob_sha1": "ce7d218804cfdf608e3b3028632f610ed759aada",
+      "bytes": 26273
+    },
+    {
+      "path": "src/ucie_miner/customer_full_release_preflight_v01.py",
+      "git_blob_sha1": "1b7935dddea0ec8d03b35f3302380a96de29a463",
+      "bytes": 7262
+    },
+    {
+      "path": "src/ucie_miner/customer_functional_ab_lifecycle_v01.py",
+      "git_blob_sha1": "edede0e6a6d87ff3e2acc1714885273be5b7c3ad",
+      "bytes": 21223
+    },
+    {
+      "path": "src/ucie_miner/customer_installed_health_v01.py",
+      "git_blob_sha1": "89f2cfc16ca773bad5f61611644dcb14e55c9427",
+      "bytes": 3804
+    },
+    {
+      "path": "src/ucie_miner/customer_membership_owner_sign_v01.py",
+      "git_blob_sha1": "bf15ed8876192fe70aef4087c93966cecae219ca",
+      "bytes": 11917
+    },
+    {
+      "path": "src/ucie_miner/customer_membership_recipient_v01.py",
+      "git_blob_sha1": "98dc0c2b13432c377e67b4c56353a06c14da7165",
+      "bytes": 12173
+    },
+    {
+      "path": "src/ucie_miner/customer_membership_subscription_v01.py",
+      "git_blob_sha1": "aca9d158a98f7763586406e3480a45c6bfa86a81",
+      "bytes": 13634
+    },
+    {
+      "path": "src/ucie_miner/customer_offline_capsule_v01.py",
+      "git_blob_sha1": "ff09461ad62aff14fa25877c98a03f5b19d1bc48",
+      "bytes": 17067
+    },
+    {
+      "path": "src/ucie_miner/customer_offline_dependency_gate_v01.py",
+      "git_blob_sha1": "036399e09b2af8a589998b8afd9c1ea8adb20009",
+      "bytes": 17098
+    },
+    {
+      "path": "src/ucie_miner/customer_offline_install_rehearsal_v01.py",
+      "git_blob_sha1": "c9b71cf3c140fddf9e4c15435ae31d96bb58fedb",
+      "bytes": 15309
+    },
+    {
+      "path": "src/ucie_miner/customer_owner_wheelhouse_acquire_v01.py",
+      "git_blob_sha1": "a6bc3790a300f5cdc6c8d44abd71e28e71cc7752",
+      "bytes": 18419
+    },
+    {
+      "path": "src/ucie_miner/customer_pinned_git_source_v01.py",
+      "git_blob_sha1": "7b55ed0ba5b3680e98cae79dea473e248cc991f1",
+      "bytes": 33200
+    },
+    {
+      "path": "src/ucie_miner/customer_portable_preview_v01.py",
+      "git_blob_sha1": "08c67d26fd71f102a4268bd38659bd6dcbdb3bcd",
+      "bytes": 6345
+    },
+    {
+      "path": "src/ucie_miner/customer_private_entitlement_v01.py",
+      "git_blob_sha1": "77c0b9a12dc35e4c0e90a8115b4ec2cc853e8eb7",
+      "bytes": 11825
+    },
+    {
+      "path": "src/ucie_miner/customer_private_offline_bootstrap_v01.py",
+      "git_blob_sha1": "9c58a45006632156c2913f541b5d33bf58d9b30d",
+      "bytes": 10750
+    },
+    {
+      "path": "src/ucie_miner/customer_private_offline_lifecycle_v01.py",
+      "git_blob_sha1": "094da656539131c1aa03f63244c146fa4f9d2f5d",
+      "bytes": 46411
+    },
+    {
+      "path": "src/ucie_miner/customer_runtime_closure_v01.py",
+      "git_blob_sha1": "a83ea72c627978e23ffdebce01a1ea0f57164c45",
+      "bytes": 23240
+    },
+    {
+      "path": "src/ucie_miner/customer_staging_v01.py",
+      "git_blob_sha1": "911e1c25ebcb0daf4dc651b4c015798663eba116",
+      "bytes": 11296
+    },
+    {
+      "path": "src/ucie_miner/daily_0500_cutoff_v01.py",
+      "git_blob_sha1": "d9b544ed1ec1e1a9d05427ff07eb5deb62d1ed0a",
+      "bytes": 4821
+    },
+    {
+      "path": "src/ucie_miner/evidence_binding.py",
+      "git_blob_sha1": "c2bc6cf116cd1deecfe4210d2e9aeb31af48bc37",
+      "bytes": 11170
+    },
+    {
+      "path": "src/ucie_miner/evidence.py",
+      "git_blob_sha1": "79b768bd083a5a578630d2b9f03b93a5b5288970",
+      "bytes": 7069
+    },
+    {
+      "path": "src/ucie_miner/existing_rule_inspection.py",
+      "git_blob_sha1": "193b6993af5d2dd0f62fb347578f41baae884d72",
+      "bytes": 20142
+    },
+    {
+      "path": "src/ucie_miner/experience_application.py",
+      "git_blob_sha1": "f8255e692fa010af14f4e1291ea3d9da39c46556",
+      "bytes": 11576
+    },
+    {
+      "path": "src/ucie_miner/experience_evolution.py",
+      "git_blob_sha1": "4647d7916d766991b10d93f2489fd6a2a7a41e96",
+      "bytes": 15314
+    },
+    {
+      "path": "src/ucie_miner/experience_library.py",
+      "git_blob_sha1": "e1be52d0459473d5c38fe57597efe1ec08f5b049",
+      "bytes": 19132
+    },
+    {
+      "path": "src/ucie_miner/guarded_scandir.py",
+      "git_blob_sha1": "335f75ace49d06194d1e8a97e9be97e3e27d14df",
+      "bytes": 1507
+    },
+    {
+      "path": "src/ucie_miner/host_preflight.py",
+      "git_blob_sha1": "349805df9c99979ea4ed22652910354591d60368",
+      "bytes": 3529
+    },
+    {
+      "path": "src/ucie_miner/hosting_origin_v01.py",
+      "git_blob_sha1": "4ea300bc37a4269368f64f029892bf3f9763c5b2",
+      "bytes": 6609
+    },
+    {
+      "path": "src/ucie_miner/integration.py",
+      "git_blob_sha1": "607106a889e5b987ba1495c226d4af1f02e48817",
+      "bytes": 4466
+    },
+    {
+      "path": "src/ucie_miner/knowledge.py",
+      "git_blob_sha1": "8ef30c1cc7f9f3ecc3d19057c92bf7121c17dced",
+      "bytes": 6605
+    },
+    {
+      "path": "src/ucie_miner/latest_hourly_review.py",
+      "git_blob_sha1": "0ee82320ccca42d93088c6ae151a10c50fc67d2d",
+      "bytes": 16560
+    },
+    {
+      "path": "src/ucie_miner/layout_audit_v01.py",
+      "git_blob_sha1": "da4bd49a1cd291a17b2ab58258840271f116a26e",
+      "bytes": 12268
+    },
+    {
+      "path": "src/ucie_miner/library_approved_document_shelf_v01.py",
+      "git_blob_sha1": "4109f5c4310a8439c50fc57ec6915df91a460dbc",
+      "bytes": 12422
+    },
+    {
+      "path": "src/ucie_miner/library_audit_v07.py",
+      "git_blob_sha1": "a9ab8bc687babb8b1e63284ee6f9d140d09ffb4a",
+      "bytes": 14353
+    },
+    {
+      "path": "src/ucie_miner/library_browser_skillbook_v01.py",
+      "git_blob_sha1": "da460b26e2223f6c6a10a4fabb4317c49688f5f2",
+      "bytes": 19427
+    },
+    {
+      "path": "src/ucie_miner/library_browser_v02.py",
+      "git_blob_sha1": "0f5ae37bc3cc55a65a8ddd837b8f143228a862dc",
+      "bytes": 20712
+    },
+    {
+      "path": "src/ucie_miner/library_browser_v03.py",
+      "git_blob_sha1": "d59f572128a49f96bf14bf1a160a691828460904",
+      "bytes": 19578
+    },
+    {
+      "path": "src/ucie_miner/library_browser_v04.py",
+      "git_blob_sha1": "5fafc532f7e13841d1ad8e4b20b519160858cb47",
+      "bytes": 11627
+    },
+    {
+      "path": "src/ucie_miner/library_browser_v05.py",
+      "git_blob_sha1": "c7430e22666ff4c07f08fe987c1b8ef87c0e0a33",
+      "bytes": 9754
+    },
+    {
+      "path": "src/ucie_miner/library_browser_v07.py",
+      "git_blob_sha1": "442e944202e96c402fc87b2964a66d5089915185",
+      "bytes": 14685
+    },
+    {
+      "path": "src/ucie_miner/library_browser_v09.py",
+      "git_blob_sha1": "083bfe01009880eafc9c7fb24a3ec7f2dcf5fa69",
+      "bytes": 24462
+    },
+    {
+      "path": "src/ucie_miner/library_browser_v10.py",
+      "git_blob_sha1": "505e6b1876b6b516d72ca5bf718edc8d36f3935b",
+      "bytes": 12483
+    },
+    {
+      "path": "src/ucie_miner/library_browser_v11.py",
+      "git_blob_sha1": "fb263d4fcbec666db9467b82d0354af84ec66921",
+      "bytes": 8985
+    },
+    {
+      "path": "src/ucie_miner/library_browser.py",
+      "git_blob_sha1": "07e6ac42b5c03f95ba94d493cd1d21cc65c7ce7b",
+      "bytes": 17557
+    },
+    {
+      "path": "src/ucie_miner/library_compare.py",
+      "git_blob_sha1": "efff5d31755c15368fbe8ff6321b2779d542d72b",
+      "bytes": 4585
+    },
+    {
+      "path": "src/ucie_miner/library_entry.py",
+      "git_blob_sha1": "4764293f142a7c7d212f7a48dbc1e91964580aa3",
+      "bytes": 6358
+    },
+    {
+      "path": "src/ucie_miner/library_exact_index.py",
+      "git_blob_sha1": "2dbbff6ab6fcbc7b4ef509db1c32cd7792235e10",
+      "bytes": 10123
+    },
+    {
+      "path": "src/ucie_miner/library_explore.py",
+      "git_blob_sha1": "e576000a916d23cb506406c9524ab494b547ee43",
+      "bytes": 10425
+    },
+    {
+      "path": "src/ucie_miner/library_federated_official_v02.py",
+      "git_blob_sha1": "f083302eee91dc6153c0b3e3ef1e8e6a8e1c249d",
+      "bytes": 13355
+    },
+    {
+      "path": "src/ucie_miner/library_federated_readonly_v01.py",
+      "git_blob_sha1": "81a6b457fa086e02c34935c33e1c6da05f29af0c",
+      "bytes": 19988
+    },
+    {
+      "path": "src/ucie_miner/library_hourly_proof_v12.py",
+      "git_blob_sha1": "0ea2b6b1ab714482ac7a9fae873ca2090b44336e",
+      "bytes": 11034
+    },
+    {
+      "path": "src/ucie_miner/library_observation_receipts_v10.py",
+      "git_blob_sha1": "c616d55feb4a2fcda89e8cee894e2b16068795db",
+      "bytes": 18596
+    },
+    {
+      "path": "src/ucie_miner/library_proof_assessment_v06.py",
+      "git_blob_sha1": "34e893eef4ed61bd3aaf4f27a15b0aca25c4e0f2",
+      "bytes": 4376
+    },
+    {
+      "path": "src/ucie_miner/library_public_probe_v08.py",
+      "git_blob_sha1": "65eef53b6580949b0e47916dd04b39ade6de908d",
+      "bytes": 11078
+    },
+    {
+      "path": "src/ucie_miner/library_public_proof_v09.py",
+      "git_blob_sha1": "be1aba8a7ef0e4b63c6c64233fa1e19bdda0cd4c",
+      "bytes": 8172
+    },
+    {
+      "path": "src/ucie_miner/library_python_recipe_shelf_v01.py",
+      "git_blob_sha1": "1cb9b848e90931e4124ddf7e554c9dc84c9ac2b2",
+      "bytes": 9732
+    },
+    {
+      "path": "src/ucie_miner/library_quality_loop_v12.py",
+      "git_blob_sha1": "4ae338bd51e9789eb1a48d429351cd826526dbdb",
+      "bytes": 12800
+    },
+    {
+      "path": "src/ucie_miner/library_release_ancestry_v11.py",
+      "git_blob_sha1": "78c99ca5370bdefbe895858629e0062e3eebb7ed",
+      "bytes": 11582
+    },
+    {
+      "path": "src/ucie_miner/library_review_readiness_v10.py",
+      "git_blob_sha1": "c22a429e0da6f4ae1bae764da9414b126d6eaabf",
+      "bytes": 8008
+    },
+    {
+      "path": "src/ucie_miner/library_review_records_v05.py",
+      "git_blob_sha1": "76e636c7314c945c376beb8be2f3720f9c25a6a4",
+      "bytes": 13947
+    },
+    {
+      "path": "src/ucie_miner/library_review_v04.py",
+      "git_blob_sha1": "bf840d244eaa8f59d310323d5ca5e68ffab4f73f",
+      "bytes": 6979
+    },
+    {
+      "path": "src/ucie_miner/library_safety_regression_v10.py",
+      "git_blob_sha1": "b8ce543eda3ab5634eac079b85bf32958e70bf2b",
+      "bytes": 4083
+    },
+    {
+      "path": "src/ucie_miner/library_search.py",
+      "git_blob_sha1": "3654bc95fc344e9855153c750948c0974731219b",
+      "bytes": 12716
+    },
+    {
+      "path": "src/ucie_miner/library_shelves.py",
+      "git_blob_sha1": "c9fb8702b21b1a12d4737aaf3ea7a2982cbb7157",
+      "bytes": 13696
+    },
+    {
+      "path": "src/ucie_miner/library_upstream_review_v11.py",
+      "git_blob_sha1": "19a27506103e5d6a3b091287c2cc8e1bebd910f7",
+      "bytes": 9601
+    },
+    {
+      "path": "src/ucie_miner/license_review.py",
+      "git_blob_sha1": "2461a9e7ad2a8ea3f18c404ecb761620e8dd3b83",
+      "bytes": 3616
+    },
+    {
+      "path": "src/ucie_miner/local_b2_connected_workbench_v01.py",
+      "git_blob_sha1": "ee16a14b6447766e32487e82de533ea69a6ccd33",
+      "bytes": 6721
+    },
+    {
+      "path": "src/ucie_miner/local_error_actionable_workflow_v01.py",
+      "git_blob_sha1": "2347602ed4b03198509c7bfd77f067c6388544c1",
+      "bytes": 6596
+    },
+    {
+      "path": "src/ucie_miner/local_first_use_plain_v01.py",
+      "git_blob_sha1": "91b2b59262516894c2f9e9fcd99abf1ca76ec20a",
+      "bytes": 6423
+    },
+    {
+      "path": "src/ucie_miner/local_owner_play_v01.py",
+      "git_blob_sha1": "c3d7e815c0334a81c1153ff8af2bcfa2e12de1a2",
+      "bytes": 7541
+    },
+    {
+      "path": "src/ucie_miner/local_portable_official_reference_v01.py",
+      "git_blob_sha1": "dfda6fcd897d68bea8c63b5147cc63fc67553f95",
+      "bytes": 4969
+    },
+    {
+      "path": "src/ucie_miner/local_problem_solver_v01.py",
+      "git_blob_sha1": "6f0289ec8b63d4d258a5a0c37837dce9a226c78c",
+      "bytes": 8814
+    },
+    {
+      "path": "src/ucie_miner/local_public_pr_capsule_v01.py",
+      "git_blob_sha1": "3c0fc26f299b3b13adc4c92bfd5ee68e5b43648f",
+      "bytes": 21799
+    },
+    {
+      "path": "src/ucie_miner/local_public_pr_owner_auth_v01.py",
+      "git_blob_sha1": "67d26a5415b0d00c5beb1cd0606d0fb81df28e69",
+      "bytes": 19526
+    },
+    {
+      "path": "src/ucie_miner/local_public_pr_recipient_import_v01.py",
+      "git_blob_sha1": "3df7a957baed15aa55abd98fb86a2176c0ea3dd8",
+      "bytes": 10232
+    },
+    {
+      "path": "src/ucie_miner/local_public_pr_trusted_recipient_v01.py",
+      "git_blob_sha1": "dde15d3277275bc0ede6b6b069250d6b23bda329",
+      "bytes": 11512
+    },
+    {
+      "path": "src/ucie_miner/local_question_intake_v01.py",
+      "git_blob_sha1": "7f6d5ac986075afe36815f87fa6f3a32e2f55a26",
+      "bytes": 8770
+    },
+    {
+      "path": "src/ucie_miner/local_selected_public_trial_v01.py",
+      "git_blob_sha1": "e50365552d11547487a32e884146f297c6edf5e0",
+      "bytes": 9011
+    },
+    {
+      "path": "src/ucie_miner/local_solution_followup_v01.py",
+      "git_blob_sha1": "dabf31654f76a6ea516fa59cabc66a8df5db70fa",
+      "bytes": 9632
+    },
+    {
+      "path": "src/ucie_miner/local_v1_app_v01.py",
+      "git_blob_sha1": "66f5824aed9410dde193461d44f4848ee8fbd1cd",
+      "bytes": 137864
+    },
+    {
+      "path": "src/ucie_miner/local_v1_design_v02.py",
+      "git_blob_sha1": "e9fb06acc644188206b7d5f70a5e1412816bde54",
+      "bytes": 22496
+    },
+    {
+      "path": "src/ucie_miner/local_v1_design_v03.py",
+      "git_blob_sha1": "0729990807fa9fe81e8bf45682b3e4ee2c1f1ab1",
+      "bytes": 26028
+    },
+    {
+      "path": "src/ucie_miner/local_v1_design_v04.py",
+      "git_blob_sha1": "7904ad1a18476cffecbad13ea84ca51a5e7962cb",
+      "bytes": 23939
+    },
+    {
+      "path": "src/ucie_miner/local_v1_priority_v01.py",
+      "git_blob_sha1": "58ffaf97b92dab1023c2794ca57c35323e7de39a",
+      "bytes": 5531
+    },
+    {
+      "path": "src/ucie_miner/local_v1_public_review_v01.py",
+      "git_blob_sha1": "283bfdaacdb618068c98e3162211425f8df33c01",
+      "bytes": 4721
+    },
+    {
+      "path": "src/ucie_miner/manual_consumer_v1.py",
+      "git_blob_sha1": "d6336e97b70123f32c635a6757fccd465ca4876c",
+      "bytes": 16403
+    },
+    {
+      "path": "src/ucie_miner/mcp_prompt_regression_v01.py",
+      "git_blob_sha1": "6464c8a2b975cacb5b05bc3a81f0b5318ffc69c7",
+      "bytes": 10690
+    },
+    {
+      "path": "src/ucie_miner/mcp_prompts_guide_v01.py",
+      "git_blob_sha1": "46f642df54a121f9e74e4b2273caf55e58116396",
+      "bytes": 6535
+    },
+    {
+      "path": "src/ucie_miner/merge_snapshot.py",
+      "git_blob_sha1": "85c5370b6ac0225b42f2139415edcf5c84e5bda6",
+      "bytes": 7862
+    },
+    {
+      "path": "src/ucie_miner/operational_acceptance.py",
+      "git_blob_sha1": "db58bf686825f8799667d38b13f2789fbabccd3d",
+      "bytes": 1288
+    },
+    {
+      "path": "src/ucie_miner/p10_owner_single_live_rearm_v02.py",
+      "git_blob_sha1": "bee2c0d7aa2de671c501bf7a75ef784f9a3e4afe",
+      "bytes": 24992
+    },
+    {
+      "path": "src/ucie_miner/p11_closed_loop.py",
+      "git_blob_sha1": "692e09cb88167d3342ce37151709dcacc211abaa",
+      "bytes": 30236
+    },
+    {
+      "path": "src/ucie_miner/p11_host_sync.py",
+      "git_blob_sha1": "35adc4620037842e275186ffecea615c410d685d",
+      "bytes": 17334
+    },
+    {
+      "path": "src/ucie_miner/p11_improvement_gate.py",
+      "git_blob_sha1": "c68891ee136cb4de41e9913fd48afb799fd2d937",
+      "bytes": 5577
+    },
+    {
+      "path": "src/ucie_miner/p11_owner_one_get_trial_v01.py",
+      "git_blob_sha1": "a019e7840ff7220f421206ecbc2b9876866e498c",
+      "bytes": 16923
+    },
+    {
+      "path": "src/ucie_miner/p11_rate_guard_v03.py",
+      "git_blob_sha1": "8cfa0be54bc45b7bbde510b7c512abc3f77f9bf3",
+      "bytes": 8262
+    },
+    {
+      "path": "src/ucie_miner/p11_retest.py",
+      "git_blob_sha1": "080716d4de7251d82779124336dc402c4b425fa0",
+      "bytes": 11558
+    },
+    {
+      "path": "src/ucie_miner/p13_decimal_unbounded_guard.py",
+      "git_blob_sha1": "5e06fd9d9302031767861417dafb741d477effe1",
+      "bytes": 6759
+    },
+    {
+      "path": "src/ucie_miner/p9_auto_retest.py",
+      "git_blob_sha1": "998a125c154b07916ff3203f0526d758b332fde5",
+      "bytes": 8038
+    },
+    {
+      "path": "src/ucie_miner/p9_pinned_public_review.py",
+      "git_blob_sha1": "66b1e74812773234219a5c771713a29f640f68da",
+      "bytes": 14236
+    },
+    {
+      "path": "src/ucie_miner/patterns.py",
+      "git_blob_sha1": "9a8ca9a9c600453c8f7b9365d9c7758fb34d46fd",
+      "bytes": 3390
+    },
+    {
+      "path": "src/ucie_miner/pending_queue.py",
+      "git_blob_sha1": "4e8b856e114ece47c0a06b200a8fbb2bf1c8044d",
+      "bytes": 18647
+    },
+    {
+      "path": "src/ucie_miner/portable_consumer_qa.py",
+      "git_blob_sha1": "42bdc860365c3d6669b2fe7583c88649fef3a668",
+      "bytes": 16075
+    },
+    {
+      "path": "src/ucie_miner/portable_exact.py",
+      "git_blob_sha1": "0701a90e8921dd2a5502fba73e1be4285ab74383",
+      "bytes": 5965
+    },
+    {
+      "path": "src/ucie_miner/portable_release_readiness.py",
+      "git_blob_sha1": "1ac34004d8c6e91ba5183155550e0609fc0e1620",
+      "bytes": 8634
+    },
+    {
+      "path": "src/ucie_miner/portable_zip_main.py",
+      "git_blob_sha1": "e5fd1553bcc9f4f7a05571d63fc414ed10dd246a",
+      "bytes": 3846
+    },
+    {
+      "path": "src/ucie_miner/positive_capability_discovery.py",
+      "git_blob_sha1": "26cb30921d2e825a132713710598d4b483a6b71c",
+      "bytes": 11579
+    },
+    {
+      "path": "src/ucie_miner/preapproval.py",
+      "git_blob_sha1": "eddc12f7df7c3001bd72ded8d8052db5e6a2949d",
+      "bytes": 4090
+    },
+    {
+      "path": "src/ucie_miner/product_plan.py",
+      "git_blob_sha1": "0ae647c948853251cadfda269c36e17303ba813d",
+      "bytes": 11263
+    },
+    {
+      "path": "src/ucie_miner/product_v1.py",
+      "git_blob_sha1": "1017941372cfde0cd922f7fb660e832866a422a5",
+      "bytes": 79081
+    },
+    {
+      "path": "src/ucie_miner/provenance_review.py",
+      "git_blob_sha1": "bf6aed87ad9d28832404a27ad7c3f024767a90d7",
+      "bytes": 5108
+    },
+    {
+      "path": "src/ucie_miner/public_batch_host.py",
+      "git_blob_sha1": "2552f9cb745a91f59e58ff023159e0d9d4fd0e34",
+      "bytes": 3046
+    },
+    {
+      "path": "src/ucie_miner/public_batch.py",
+      "git_blob_sha1": "d2f1df534d3b7769fd5feb43ce99b3016bd2ee4f",
+      "bytes": 16758
+    },
+    {
+      "path": "src/ucie_miner/public_candidate_learning.py",
+      "git_blob_sha1": "f6e9fc7ba46714e697e5bfd1009687eb89f6541d",
+      "bytes": 16377
+    },
+    {
+      "path": "src/ucie_miner/public_candidate_staging.py",
+      "git_blob_sha1": "1d572989e88a3aa60940e5372201712e0480d24f",
+      "bytes": 16034
+    },
+    {
+      "path": "src/ucie_miner/public_capability_survey.py",
+      "git_blob_sha1": "0a7a2115c06f48a674d1645fd4332b884f9907ab",
+      "bytes": 10949
+    },
+    {
+      "path": "src/ucie_miner/public_collection_inventory_v01.py",
+      "git_blob_sha1": "f34f800c55e4d08e36b1f9a6631bc579e57eef7b",
+      "bytes": 14587
+    },
+    {
+      "path": "src/ucie_miner/public_discovery.py",
+      "git_blob_sha1": "63402a58dad9c7cb32c0fe2cb19a5fe2d970cddc",
+      "bytes": 12023
+    },
+    {
+      "path": "src/ucie_miner/public_evidence_chain_audit.py",
+      "git_blob_sha1": "91e9dcc3c7a649f9b217a80a92af229d8dfc03e0",
+      "bytes": 8690
+    },
+    {
+      "path": "src/ucie_miner/public_evidence_maturity_v01.py",
+      "git_blob_sha1": "ec01d15d56662499b018eb211386b5643f64e3dd",
+      "bytes": 7820
+    },
+    {
+      "path": "src/ucie_miner/public_evidence_routes.py",
+      "git_blob_sha1": "b0d086e923075b43c3089714fec9c9d4ccc19a91",
+      "bytes": 14163
+    },
+    {
+      "path": "src/ucie_miner/public_external_history.py",
+      "git_blob_sha1": "6839bd4e82ecb2ee8914076209d2575f56c42966",
+      "bytes": 16059
+    },
+    {
+      "path": "src/ucie_miner/public_fix_evidence.py",
+      "git_blob_sha1": "2694bdb63086a054dd7faa9a9d05490e38cb78dd",
+      "bytes": 15981
+    },
+    {
+      "path": "src/ucie_miner/public_git_commit_skills.py",
+      "git_blob_sha1": "99a9830a8579fd999c351fec2c17dc0ff2f65882",
+      "bytes": 5075
+    },
+    {
+      "path": "src/ucie_miner/public_hourly_staging.py",
+      "git_blob_sha1": "cfef9df4e5b718432c49208633eb2eda738218b3",
+      "bytes": 11929
+    },
+    {
+      "path": "src/ucie_miner/public_intelligence.py",
+      "git_blob_sha1": "da999276970ce8e1dbb5a2613b64f968182784bb",
+      "bytes": 5606
+    },
+    {
+      "path": "src/ucie_miner/public_knowledge_pipeline.py",
+      "git_blob_sha1": "ac0b991f2eb941134befb668b9a102675bd3f86f",
+      "bytes": 9260
+    },
+    {
+      "path": "src/ucie_miner/public_miner_exit_probe_v01.py",
+      "git_blob_sha1": "5429aa605b98fdebbcf8bcb7285427c7f1d08510",
+      "bytes": 9433
+    },
+    {
+      "path": "src/ucie_miner/public_miner_exit_timeline_v01.py",
+      "git_blob_sha1": "c0376fa51e255dd76beb0c1b17b18e49f0df1fbd",
+      "bytes": 7956
+    },
+    {
+      "path": "src/ucie_miner/public_miner_shutdown_phase_w11.py",
+      "git_blob_sha1": "78322b906346d06e5c4efe1090b45d1911d83247",
+      "bytes": 11638
+    },
+    {
+      "path": "src/ucie_miner/public_official_evidence.py",
+      "git_blob_sha1": "08c0a195ba39c8ead66ccef94624dd1ea8d03e57",
+      "bytes": 17278
+    },
+    {
+      "path": "src/ucie_miner/public_owner_one_403_probe_v01.py",
+      "git_blob_sha1": "049bc78a298739b87ec4d10881fe9bc0e1f0b468",
+      "bytes": 11473
+    },
+    {
+      "path": "src/ucie_miner/public_pr_coverage_audit.py",
+      "git_blob_sha1": "3a4e3f2128ceba76c80e600c13a76d5171bf6162",
+      "bytes": 13931
+    },
+    {
+      "path": "src/ucie_miner/public_provenance.py",
+      "git_blob_sha1": "80fcde2e2e1a3029ff25ceb30d55e6e4acf32d06",
+      "bytes": 2443
+    },
+    {
+      "path": "src/ucie_miner/public_review_triage.py",
+      "git_blob_sha1": "4cdc50e523b009a70d903b0bc99a128ec99faa70",
+      "bytes": 6469
+    },
+    {
+      "path": "src/ucie_miner/public_safe_qa_cycle.py",
+      "git_blob_sha1": "7cacb1bbff438f36b31726f5ecf0a644243bae05",
+      "bytes": 7628
+    },
+    {
+      "path": "src/ucie_miner/public_scheduler_diagnostic_v01.py",
+      "git_blob_sha1": "a369467ec86a726bd4fbed9286f2437851deb7ea",
+      "bytes": 8297
+    },
+    {
+      "path": "src/ucie_miner/public_skill_digest.py",
+      "git_blob_sha1": "39aedaa465bf085a4605eb15cb371a8ff68ba9f3",
+      "bytes": 9173
+    },
+    {
+      "path": "src/ucie_miner/public_source_adapter.py",
+      "git_blob_sha1": "285fb63c96167840541bcacd5d6669eeca592e1d",
+      "bytes": 5381
+    },
+    {
+      "path": "src/ucie_miner/python_scandir_guide_v01.py",
+      "git_blob_sha1": "af0735d8cee6d2284ea34b1d53afcdf14f789d2b",
+      "bytes": 7926
+    },
+    {
+      "path": "src/ucie_miner/python_scandir_pinned_playbook_v02.py",
+      "git_blob_sha1": "93399b42e27afea4aef3d27bc555677db711ba87",
+      "bytes": 6684
+    },
+    {
+      "path": "src/ucie_miner/python_scandir_review_v01.py",
+      "git_blob_sha1": "495579718d0728ae91a37ebd0709524d49ed3f36",
+      "bytes": 7797
+    },
+    {
+      "path": "src/ucie_miner/regression_plans.py",
+      "git_blob_sha1": "e6f0b9217271194eabe0f2afb7a6ab89b6dbc912",
+      "bytes": 6038
+    },
+    {
+      "path": "src/ucie_miner/regression_receipts.py",
+      "git_blob_sha1": "5cdf2374cefb23af0e5f32124508bcaedd75a5e7",
+      "bytes": 9421
+    },
+    {
+      "path": "src/ucie_miner/review_docket.py",
+      "git_blob_sha1": "c7fe19382bba4832d1c54d49e8581ff3ace43aba",
+      "bytes": 10266
+    },
+    {
+      "path": "src/ucie_miner/review.py",
+      "git_blob_sha1": "b351a34993613bb99229481a43105d6426ae92d5",
+      "bytes": 17029
+    },
+    {
+      "path": "src/ucie_miner/rule_candidates.py",
+      "git_blob_sha1": "965a83d672b34577815c9b80aead82b8a2b96fc4",
+      "bytes": 6435
+    },
+    {
+      "path": "src/ucie_miner/runtime_pipeline.py",
+      "git_blob_sha1": "b33c99f66ddac43c2cc01444efb92b4b0f0d5136",
+      "bytes": 18100
+    },
+    {
+      "path": "src/ucie_miner/schedule_policy.py",
+      "git_blob_sha1": "2a645afa8986b3e09f451f5c69b2334d3d1a3740",
+      "bytes": 3471
+    },
+    {
+      "path": "src/ucie_miner/signed_rule_library.py",
+      "git_blob_sha1": "d7ad13bfb13efb026ef916a2224a635d50a50b74",
+      "bytes": 10586
+    },
+    {
+      "path": "src/ucie_miner/skill_profiles.py",
+      "git_blob_sha1": "d4b9b34896d7abab85d73a2ebbfbe4b1f9564d92",
+      "bytes": 4642
+    },
+    {
+      "path": "src/ucie_miner/skillbook_blueprint.py",
+      "git_blob_sha1": "ff0c8fa39a3e0bf4a3694175096076562d831024",
+      "bytes": 3438
+    },
+    {
+      "path": "src/ucie_miner/skillbook_catalog_union_v01.py",
+      "git_blob_sha1": "1fb32d738f91f8295faf5985984e422bf0b7e78d",
+      "bytes": 53406
+    },
+    {
+      "path": "src/ucie_miner/skillbook_consumer_pilot_v01.py",
+      "git_blob_sha1": "f6260748b67461dd8ad14582f9654d46166ed7a4",
+      "bytes": 7425
+    },
+    {
+      "path": "src/ucie_miner/skillbook_editorial_production_v01.py",
+      "git_blob_sha1": "4831c5df02e7ffc379253b6006e19f216ce70572",
+      "bytes": 18851
+    },
+    {
+      "path": "src/ucie_miner/skillbook_git_porcelain_product_v01.py",
+      "git_blob_sha1": "eb92f23cd6865ca55e11e491d968f10f00220b0f",
+      "bytes": 11981
+    },
+    {
+      "path": "src/ucie_miner/skillbook_git_porcelain_recipe_v01.py",
+      "git_blob_sha1": "aff4375e5fd964edf8e47b46f171e676e768f6b2",
+      "bytes": 4270
+    },
+    {
+      "path": "src/ucie_miner/skillbook_official_doc_observation_v01.py",
+      "git_blob_sha1": "faf443c144866f81cb8e7794d9122ee85a3c78a3",
+      "bytes": 21995
+    },
+    {
+      "path": "src/ucie_miner/skillbook_owner_pinned_acceptance_v01.py",
+      "git_blob_sha1": "e50307526c4edd8b4b36577853078c40b65033a6",
+      "bytes": 13489
+    },
+    {
+      "path": "src/ucie_miner/skillbook_pinned_source_review_v01.py",
+      "git_blob_sha1": "2e036452d8117c660230d1b1a039ff1691b081d9",
+      "bytes": 23976
+    },
+    {
+      "path": "src/ucie_miner/skillbook_principle_composer_v01.py",
+      "git_blob_sha1": "a22a5278f716234e19661525d1b51c90043ad04e",
+      "bytes": 14769
+    },
+    {
+      "path": "src/ucie_miner/skillbook_product_v01.py",
+      "git_blob_sha1": "666d4c3bd1549b353748f6ada6dc4eb8f9924e98",
+      "bytes": 12334
+    },
+    {
+      "path": "src/ucie_miner/skillbook_revision_review_v01.py",
+      "git_blob_sha1": "88cb94407b42d1ab8bcb3e22d19e183d3141fc16",
+      "bytes": 7911
+    },
+    {
+      "path": "src/ucie_miner/skillbook_scandir_qa_v01.py",
+      "git_blob_sha1": "1eb454e6986dc85d3ca75617769bf21df2fdecaa",
+      "bytes": 9492
+    },
+    {
+      "path": "src/ucie_miner/skillbook_scandir_recipe_v01.py",
+      "git_blob_sha1": "6a26ea59cfebdd8d548fb88fd8a5039c5e16ac38",
+      "bytes": 2631
+    },
+    {
+      "path": "src/ucie_miner/skillbook_two_recipe_disposable_v01.py",
+      "git_blob_sha1": "8fff35047afc725c9879c8912f645861cc48124f",
+      "bytes": 29156
+    },
+    {
+      "path": "src/ucie_miner/skillbook_w09_release_gate_v01.py",
+      "git_blob_sha1": "1dd2f6a4a95f2cd2b53fdd4c16b1561bf6d1bc7a",
+      "bytes": 10769
+    },
+    {
+      "path": "src/ucie_miner/source_registry.py",
+      "git_blob_sha1": "1fdddb05caa9d91253ea7a362c58d3d1f24d28dc",
+      "bytes": 5196
+    },
+    {
+      "path": "src/ucie_miner/stage15_review_window.py",
+      "git_blob_sha1": "b086369d2ed1b420567a651aedb20de7469923fd",
+      "bytes": 878
+    },
+    {
+      "path": "src/ucie_miner/stage17_priority_handoff.py",
+      "git_blob_sha1": "83f5f32a2b81d8814300f614eb2d096748fdc5f0",
+      "bytes": 10822
+    },
+    {
+      "path": "src/ucie_miner/stage17_review_docket.py",
+      "git_blob_sha1": "8ecf39b5020643614626f1a6cf88d55f92c5bade",
+      "bytes": 11735
+    },
+    {
+      "path": "src/ucie_miner/stage18_first_rule.py",
+      "git_blob_sha1": "4a56e506375feadceec827e75ad76cfc8b890498",
+      "bytes": 9611
+    },
+    {
+      "path": "src/ucie_miner/stage3_public_window.py",
+      "git_blob_sha1": "ee6a56fc17f9b3c31b0d2fda3cfe1f70aea8ab20",
+      "bytes": 775
+    },
+    {
+      "path": "src/ucie_miner/staging_wheel_integrity_v01.py",
+      "git_blob_sha1": "16d41a066f68fdc91ca3d9b108a21ea9ff3da0f4",
+      "bytes": 8044
+    },
+    {
+      "path": "src/ucie_miner/static_accuracy.py",
+      "git_blob_sha1": "5e819e781b618a367a11b8379d339a59314612d7",
+      "bytes": 3585
+    },
+    {
+      "path": "src/ucie_miner/static_asyncio_resource.py",
+      "git_blob_sha1": "1897623dc90c05f22aee16fdcce50a0ff116cce1",
+      "bytes": 9726
+    },
+    {
+      "path": "src/ucie_miner/static_concurrency.py",
+      "git_blob_sha1": "9eee53f25f234e173bfbf04e50cfdb17fbfb295e",
+      "bytes": 11494
+    },
+    {
+      "path": "src/ucie_miner/static_mcp_empty_meta.py",
+      "git_blob_sha1": "55a6fb56d65aecaaddf7250cd0dd0a73fb9648f0",
+      "bytes": 6233
+    },
+    {
+      "path": "src/ucie_miner/static_mcp_header.py",
+      "git_blob_sha1": "3aa988f9981874440c8c6c5dddff8da487f57c33",
+      "bytes": 7744
+    },
+    {
+      "path": "src/ucie_miner/static_rule_bridge.py",
+      "git_blob_sha1": "379918759d7abb8cb54bb4ea19fbc99ef63e7f5d",
+      "bytes": 11323
+    },
+    {
+      "path": "src/ucie_miner/ucie_git_baseline_v01.py",
+      "git_blob_sha1": "33f008c8e2ddf49667d0ad6d56ac93992d774f85",
+      "bytes": 5724
+    },
+    {
+      "path": "src/ucie_miner/v1_host_readiness.py",
+      "git_blob_sha1": "80898001136c586b8df55cce1558606e181c00f2",
+      "bytes": 15523
+    },
+    {
+      "path": "src/ucie_miner/verification_handoff.py",
+      "git_blob_sha1": "4f707fc48bd410e16222f155c0977e086253eb63",
+      "bytes": 12381
+    },
+    {
+      "path": "src/ucie_miner/w07_w08_independent_readiness_v01.py",
+      "git_blob_sha1": "d8feb0f0df947036d52d86883ce89e731d3b903b",
+      "bytes": 17160
+    },
+    {
+      "path": "src/ucie_miner/w09_consumer_acceptance_v01.py",
+      "git_blob_sha1": "3a24cd059b7a51f0b49338524f6033fecabc902f",
+      "bytes": 21252
+    },
+    {
+      "path": "src/ucie_miner/w10_disposable_restore_probe_v02.py",
+      "git_blob_sha1": "7c3753034e2d1f5cba30ed3e0352b04ed72dd600",
+      "bytes": 5932
+    },
+    {
+      "path": "src/ucie_miner/w10_prechange_archive_attestation_v03.py",
+      "git_blob_sha1": "9b0aa2ff53305dab68336b113fafe3debea5e56a",
+      "bytes": 12775
+    },
+    {
+      "path": "src/ucie_miner/w10_revision_rollback_review_v01.py",
+      "git_blob_sha1": "2e7b9404edefce3bd99bfdf06db151dc32668514",
+      "bytes": 16924
+    },
+    {
+      "path": "src/ucie_miner/w10_selected_candidate_review_v04.py",
+      "git_blob_sha1": "cb2862c7e5fc391e6fb29ffc2e2f36f4b23b0ed6",
+      "bytes": 14592
+    },
+    {
+      "path": "src/ucie_miner/worker.py",
+      "git_blob_sha1": "ae851800bdeef77968d806db14148215edd54723",
+      "bytes": 25094
+    },
+    {
+      "path": "src/ucie_public/__init__.py",
+      "git_blob_sha1": "6d0780dbc2b5d73afcea9395105f9b39442b07b6",
+      "bytes": 156
+    },
+    {
+      "path": "src/ucie_public/cli.py",
+      "git_blob_sha1": "67e600f80c505e20b126183a22ff604835e559ff",
+      "bytes": 26342
+    },
+    {
+      "path": "src/ucie_public/fifth_owner_addendum.py",
+      "git_blob_sha1": "b008c5454f9b027aea17f875acb3b2aab4e16a73",
+      "bytes": 12199
+    },
+    {
+      "path": "src/ucie_public/mixed_release.py",
+      "git_blob_sha1": "94ade71120472041853cc4766d8aecb18942a4d3",
+      "bytes": 14877
+    },
+    {
+      "path": "src/ucie_public/multi_owner_release.py",
+      "git_blob_sha1": "09570ef3ed220c46eaeee287b1ccabcd7cb5a6d7",
+      "bytes": 14612
+    },
+    {
+      "path": "src/ucie_public/multi_review.py",
+      "git_blob_sha1": "c3d2cbc33d2c1086db87a3c31c827dfca560ef25",
+      "bytes": 9184
+    },
+    {
+      "path": "src/ucie_public/owner_release.py",
+      "git_blob_sha1": "c5daccf97f21aa067b4c01de0b944e424fec8715",
+      "bytes": 15675
+    },
+    {
+      "path": "src/ucie_public/owner_risk_preflight_v01.py",
+      "git_blob_sha1": "603ceceafeef33d128ebca8bf90b7290d16db363",
+      "bytes": 4110
+    },
+    {
+      "path": "src/ucie_public/policy.py",
+      "git_blob_sha1": "e3ef44d9774566caf128be7c5d61b2b88723a0c6",
+      "bytes": 6091
+    },
+    {
+      "path": "src/ucie_public/prevention_rulepack.py",
+      "git_blob_sha1": "bf3c32554a4e521a817f987a7cc97022f873e253",
+      "bytes": 7674
+    },
+    {
+      "path": "src/ucie_public/production_release.py",
+      "git_blob_sha1": "f9150542bb6e774bdfb80ebc5c850cef5bea3860",
+      "bytes": 10700
+    },
+    {
+      "path": "src/ucie_public/rule_admission.py",
+      "git_blob_sha1": "93c68b051399506f197dd9357de7931c1ac70c68",
+      "bytes": 14454
+    },
+    {
+      "path": "src/ucie_public/rule_matcher.py",
+      "git_blob_sha1": "ea6331777786b2665ed5656688ddea0c4940b28c",
+      "bytes": 4215
+    },
+    {
+      "path": "src/ucie_public/rulepack.py",
+      "git_blob_sha1": "4841f6f3436d52a6312207596d2e29b3dd8e6a06",
+      "bytes": 11029
+    },
+    {
+      "path": "src/ucie_public/selected_release.py",
+      "git_blob_sha1": "86a3d6edfa5cd4e51e0c6df06905fdce9fb8e231",
+      "bytes": 16151
+    }
+  ]
+}
