@@ -15,6 +15,7 @@ import stat
 
 SCHEMA = "UCIE_PR305_CODE_ONLY_STAGE_PREFLIGHT_V01"
 EXPECTED_COMMIT = "96c6187430fc126214e93f57cfcd0b86331dc1a4"
+EXPECTED_MANIFEST_BLOB = "7932913bc45875639d3bdf7caf7f31f279c2a0fb"
 EXPECTED_COUNT = 232
 EXPECTED_BYTES = 2934205
 ALLOWED_SCRIPTS = frozenset({
@@ -77,6 +78,9 @@ def load_manifest(path: Path) -> tuple[dict, list[dict]]:
     if path.stat().st_size > 60000:
         raise StageRejected("manifest too large")
     raw = path.read_bytes()
+    digest = sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
+    if digest != EXPECTED_MANIFEST_BLOB:
+        raise StageRejected("immutable manifest Git blob lease mismatch")
     try:
         obj = json.loads(raw)
     except (UnicodeError, ValueError) as exc:
