@@ -1,0 +1,259 @@
+"""UCIE-only layout/cleanup inventory: disposable Git repo, no owner writes."""
+from __future__ import annotations
+
+from hashlib import sha256
+import os
+from pathlib import Path
+import subprocess
+from tempfile import TemporaryDirectory
+import unittest
+from unittest.mock import patch
+
+from ucie_miner import layout_audit_v01 as layout
+
+
+class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = TemporaryDirectory(prefix="UCIE_LAYOUT_ONLY_")
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / "UCIE"
+        self.root.mkdir()
+        self._git("init", "-q")
+        self._git("config", "user.email", "ucie-layout@invalid.example")
+        self._git("config", "user.name", "Synthetic UCIE Layout")
+        self._git("config", "core.autocrlf", "false")
+        (self.root / "scripts").mkdir()
+        (self.root / "src" / "ucie_miner").mkdir(parents=True)
+        (self.root / "tests").mkdir()
+        (self.root / ".github" / "workflows").mkdir(parents=True)
+        (self.root / "runtime").mkdir()
+        (self.root / ".venv").mkdir()
+        (self.root / ".ucie_bridge_state").mkdir()
+        (self.root / ".gitignore").write_text(
+            "/runtime/\n/.venv/\n/.ucie_bridge_state/\n__pycache__/\n",
+            encoding="utf-8")
+        (self.root / "scripts" / "live.ps1").write_text(
+            "$root='D:\\UCIE'\n$cfg='D:\\UCIE_DATA\\mcp_tunnel_profiles'\n"
+            "$admin='D:\\UCIE_PREVIEW\\UCIE_ADMIN'\n", encoding="utf-8")
+        (self.root / "src" / "ucie_miner" / "engine.py").write_text(
+            "def main():\n    return 'UCIE'\n", encoding="utf-8")
+        (self.root / "tests" / "test_layout_ref.py").write_text(
+            "OLD_UCIE_PATH = r'D:\\UCIE'\n", encoding="utf-8")
+        (self.root / "runtime" / "public_miner.sqlite3").write_bytes(
+            b"UCIE-only protected fake database bytes")
+        (self.root / "runtime" / "stage10_hourly_opt_in.txt").write_bytes(
+            b"synthetic owner opt-in\n")
+        (self.root / ".ucie_bridge_state" / "health.json").write_bytes(
+            b'{"UCIE_only":"private-state"}')
+        (self.root / ".venv" / "python.exe").write_bytes(
+            b"private synthetic virtualenv")
+        self._git("add", "--", ".gitignore", "scripts/live.ps1",
+                  "src/ucie_miner/engine.py", "tests/test_layout_ref.py")
+        self._git("commit", "-qm", "UCIE-only original receipt")
+        self.original = self._git("rev-parse", "HEAD").strip()
+        self.protected = {
+            rel: sha256((self.root / rel).read_bytes()).hexdigest()
+            for rel in ("runtime/public_miner.sqlite3",
+                        "runtime/stage10_hourly_opt_in.txt",
+                        ".ucie_bridge_state/health.json",
+                        ".venv/python.exe")
+        }
+
+    def _git(self, *args: str) -> bytes:
+        return subprocess.run(
+            ["git", "-C", str(self.root), *args],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=15).stdout
+
+    def _assert_state_unchanged(self):
+        self.assertEqual(self._git("rev-parse", "HEAD").strip(), self.original)
+        for rel, digest in self.protected.items():
+            self.assertEqual(
+                sha256((self.root / rel).read_bytes()).hexdigest(), digest)
+        self.assertFalse((self.root / "UCIE_PROJECT").exists())
+
+    def test_01_clean_synthetic_repo_stays_no_go_for_live_move(self):
+        r = layout.inspect_ucie_layout(self.root)
+        self.assertEqual(r["schema"], layout.SCHEMA)
+        self.assertIn("MIGRATION_BLOCKED", r["status"])
+        self.assertTrue(r["git"]["working_tree_clean_certified"])
+        self.assertFalse(r["path_dependencies"]["safe_to_move_live_root"])
+        self.assertFalse(r["owner_runtime_moved"])
+        self.assertEqual(r["operating_db_writes"], 0)
+        self.assertFalse(r["cache"]["cache_removed_or_quarantined"])
+        self._assert_state_unchanged()
+
+    def test_02_scan_records_only_exact_ucie_path_dependencies(self):
+        r = layout.inspect_ucie_layout(self.root)
+        refs = r["path_dependencies"]
+        self.assertEqual(refs["literal_path_reference_counts"], {
+            "live_root": 2, "data_root": 1, "preview_root": 1})
+        self.assertEqual(
+            refs["affected_ucie_source_files"]["live_root"],
+            ["scripts/live.ps1", "tests/test_layout_ref.py"])
+        self.assertFalse(r["other_drive_roots_or_projects_scanned"])
+        self.assertFalse(r["ucie_data_or_preview_presence_verified"])
+
+    def test_03_real_git_status_detects_modified_and_untracked(self):
+        (self.root / "scripts" / "live.ps1").write_text(
+            "# UCIE modified synthetic script\n", encoding="utf-8")
+        (self.root / "docs").mkdir()
+        (self.root / "docs" / "untracked-important.md").write_text(
+            "important source evidence", encoding="utf-8")
+        r = layout.inspect_ucie_layout(self.root)
+        self.assertEqual(r["git"]["tracked_changed_records"], 1)
+        self.assertEqual(r["git"]["untracked_records"], 1)
+        self.assertFalse(r["git"]["working_tree_clean_certified"])
+        self.assertEqual(r["git"]["counts_by_ucie_subdir"], {
+            "docs": 1, "scripts": 1})
+        self.assertTrue((self.root / "docs" / "untracked-important.md").exists())
+        self._assert_state_unchanged()
+
+    def test_04_fast_git_does_not_misreport_clean_if_untracked_skipped(self):
+        (self.root / "docs").mkdir()
+        (self.root / "docs" / "untracked-important.md").write_text("KEEP")
+        r = layout.inspect_ucie_layout(self.root, fast_git=True)
+        self.assertEqual(r["git"]["mode"], "FAST_TRACKED_ONLY")
+        self.assertIsNone(r["git"]["untracked_records"])
+        self.assertTrue(r["git"]["untracked_scan_skipped"])
+        self.assertFalse(r["git"]["working_tree_clean_certified"])
+        self._assert_state_unchanged()
+
+    def test_05_real_git_full_mode_does_not_delete_untracked_evidence(self):
+        d = self.root / "docs"
+        d.mkdir()
+        precious = d / "signed_approval_unverified.md"
+        precious.write_bytes(b"owner review draft DO NOT DELETE")
+        layout.inspect_ucie_layout(self.root)
+        self.assertEqual(precious.read_bytes(), b"owner review draft DO NOT DELETE")
+        self._assert_state_unchanged()
+
+    def test_06_cache_candidate_is_only_inventory_not_quarantined(self):
+        cache = self.root / "tests" / "__pycache__"
+        cache.mkdir()
+        (cache / "synthetic.pyc").write_bytes(b"123456789")
+        result = layout.inspect_ucie_layout(self.root)
+        rows = result["cache"]["read_only_cache_candidates"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ucie_relative_path"], "tests/__pycache__")
+        self.assertEqual(rows[0]["estimated_bytes"], 9)
+        self.assertEqual(rows[0]["file_count"], 1)
+        self.assertFalse(rows[0]["approved_for_deletion"])
+        self.assertEqual((cache / "synthetic.pyc").read_bytes(), b"123456789")
+        self._assert_state_unchanged()
+
+    def test_07_does_not_count_runtime_or_private_files_as_cache(self):
+        result = layout.inspect_ucie_layout(self.root)
+        self.assertEqual(result["cache"]["cache_files_observed"], 0)
+        self.assertEqual(result["cache"]["cache_bytes_observed"], 0)
+        self.assertFalse(result["operating_sqlite_opened"])
+        self._assert_state_unchanged()
+
+    def test_08_wrong_or_nonexistent_git_root_is_denied(self):
+        other = Path(self.tmp.name) / "Unrelated"
+        other.mkdir()
+        with self.assertRaises(layout.LayoutAuditError):
+            layout.inspect_ucie_layout(other)
+        empty = Path(self.tmp.name) / "Empty" / "UCIE"
+        empty.mkdir(parents=True)
+        with self.assertRaises(layout.LayoutAuditError):
+            layout.inspect_ucie_layout(empty)
+
+    def test_09_gitdir_file_indirection_denied(self):
+        other = Path(self.tmp.name) / "Secondary" / "UCIE"
+        other.mkdir(parents=True)
+        (other / ".git").write_text(
+            "gitdir: ../../UCIE/.git\n", encoding="utf-8")
+        with self.assertRaises(layout.LayoutAuditError):
+            layout.inspect_ucie_layout(other)
+
+    def test_10_indirected_runtime_denied_if_symlink_allowed(self):
+        target = Path(self.tmp.name) / "external-ucie-synthetic-runtime"
+        target.mkdir()
+        path = self.root / "runtime"
+        try:
+            path.rename(self.root / "old_runtime")
+            path.symlink_to(target, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("Windows symlink privilege unavailable in runner")
+        with self.assertRaises(layout.LayoutAuditError):
+            layout.inspect_ucie_layout(self.root)
+
+    def test_11_symlinked_root_denied_if_supported(self):
+        alias = Path(self.tmp.name) / "aliases" / "UCIE"
+        alias.parent.mkdir()
+        try:
+            alias.symlink_to(self.root, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("Windows symlink privilege unavailable in runner")
+        with self.assertRaises(layout.LayoutAuditError):
+            layout.inspect_ucie_layout(alias)
+
+    def test_12_source_scan_symlink_denied_if_supported(self):
+        symlink = self.root / "scripts" / "leak.ps1"
+        target = Path(self.tmp.name) / "do-not-read-external.txt"
+        target.write_text("D:\\UCIE_DATA\\PRIVATE", encoding="utf-8")
+        try:
+            symlink.symlink_to(target)
+        except (OSError, NotImplementedError):
+            self.skipTest("Windows symlink privilege unavailable in runner")
+        result = layout.inspect_ucie_layout(self.root)
+        self.assertTrue(result["path_dependencies"]["source_scan_truncated_or_unreadable"])
+        self.assertEqual(result["path_dependencies"]["literal_path_reference_counts"]["data_root"], 1)
+
+    def test_13_git_environment_redirection_ignored(self):
+        poison = {
+            "GIT_DIR": str(Path(self.tmp.name) / "foreign_git"),
+            "GIT_WORK_TREE": str(Path(self.tmp.name) / "foreign_worktree"),
+            "GIT_INDEX_FILE": str(Path(self.tmp.name) / "foreign_index"),
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "core.worktree",
+            "GIT_CONFIG_VALUE_0": str(Path(self.tmp.name) / "foreign_worktree"),
+        }
+        with patch.dict(os.environ, poison):
+            result = layout.inspect_ucie_layout(self.root)
+        self.assertTrue(result["git"]["working_tree_clean_certified"])
+        self._assert_state_unchanged()
+
+    def test_14_nonbool_fast_flag_denied(self):
+        for bad in (1, 0, None, "True", [], {}):
+            with self.subTest(flag=bad):
+                with self.assertRaises(layout.LayoutAuditError):
+                    layout.inspect_ucie_layout(self.root, fast_git=bad)
+
+    def test_15_invalid_source_directory_symlink_denied(self):
+        other = self.root / "scripts"
+        other.rename(self.root / "scripts_backup")
+        target = Path(self.tmp.name) / "foreign-scripts"
+        target.mkdir()
+        try:
+            other.symlink_to(target, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("Windows symlink privilege unavailable in runner")
+        with self.assertRaises(layout.LayoutAuditError):
+            layout.inspect_ucie_layout(self.root)
+
+    def test_16_no_git_gc_prune_reset_clean_checkout_or_mutation(self):
+        with patch.object(layout.subprocess, "run",
+                          wraps=subprocess.run) as call:
+            layout.inspect_ucie_layout(self.root)
+        calls = [c.args[0] for c in call.call_args_list]
+        self.assertEqual(len(calls), 1)
+        args = calls[0]
+        self.assertIn("status", args)
+        self.assertIn("--no-optional-locks", args)
+        self.assertFalse(any(x in args for x in (
+            "gc", "prune", "reset", "clean", "checkout", "fetch", "pull", "push")))
+        self._assert_state_unchanged()
+
+    def test_17_protected_bridge_state_not_added_to_git(self):
+        # Exact UCIE-only .gitignore protection, never source file blanket ignore.
+        ignored = self._git("check-ignore", ".ucie_bridge_state/health.json").strip()
+        self.assertEqual(ignored.decode("utf-8"), ".ucie_bridge_state/health.json")
+        r = layout.inspect_ucie_layout(self.root)
+        self.assertEqual(r["git"]["untracked_records"], 0)
+        self.assertFalse(r["cache"]["cache_removed_or_quarantined"])
+
+
+if __name__ == "__main__":
+    unittest.main()
