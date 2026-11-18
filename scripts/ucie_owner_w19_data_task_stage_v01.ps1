@@ -83,7 +83,12 @@ function Direct([string]$path,[bool]$directory) {
     }
 }
 function AssertAbsent([string]$path) {
-    if (Test-Path -LiteralPath $path) { throw 'UCIE_W19_ALREADY_EXISTS_NO_REAPPLY' }
+    # Get-Item also catches dangling reparse entries which Test-Path can miss.
+    $entry=Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    if ($null -ne $entry -or [IO.File]::Exists($path) -or
+        [IO.Directory]::Exists($path)) {
+        throw 'UCIE_W19_ALREADY_EXISTS_NO_REAPPLY'
+    }
 }
 function ShaText([string]$value) {
     $h=[Security.Cryptography.SHA256]::Create()
