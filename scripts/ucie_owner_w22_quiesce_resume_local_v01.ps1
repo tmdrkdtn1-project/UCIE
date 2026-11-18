@@ -17,6 +17,14 @@ $w21Journal=$archive+'\UCIE_W21_LOCAL_MAINTENANCE_INTENT_V01.json'
 $w19Journal=$archive+'\UCIE_W19_OWNER_DATA_TASK_STAGE_JOURNAL_V01.json'
 $w13Journal=$archive+'\UCIE_W13_TASK_REBIND_V01.json'
 $w20Journal=$archive+'\UCIE_W20_LOCAL_PILOT_JOURNAL_V01.json'
+$w19Rollback=$archive+'\UCIE_W19_OWNER_DATA_TASK_ROLLBACK_V01.json'
+$w20Rollback=$archive+'\UCIE_W20_LOCAL_PILOT_ROLLBACK_V01.json'
+$w21Rollback=$archive+'\UCIE_W21_LOCAL_MAINTENANCE_ROLLBACK_V01.json'
+$targetRuntime=$root+'\runtime'
+$w19Data=$archive+'\UCIE_W19_LOCKSTEP_FINAL_DATA_V01'
+$marker=$archive+'\.ucie_owner_runtime_opt_in_v01'
+$python=$root+'\.venv\Scripts\python.exe'
+$w19Python=$root+'\scripts\ucie_owner_w19_lockstep_handoff_v01.py'
 $intent=$archive+'\UCIE_W22_OWNER_MAINTENANCE_INTENT_V01.json'
 $resumeReceipt=$archive+'\UCIE_W22_ORIGINAL_AVAILABILITY_RESTORED_V01.json'
 $approvalApply='AUTHORIZE_UCIE_W22_EXACT_OLD_TASK_QUIESCE_AND_W21_LOCAL_ONLY'
@@ -196,7 +204,31 @@ $baseline=C40ActionHash
 if($ApplyLocal) {
     Absent $intent
     Absent $resumeReceipt
-    foreach($p in @($w21Journal,$w19Journal,$w13Journal,$w20Journal)) {Absent $p}
+    foreach($p in @($w21Journal,$w19Journal,$w13Journal,$w20Journal,
+                    $w19Rollback,$w20Rollback,$w21Rollback,$targetRuntime,
+                    $w19Data,$marker)) {Absent $p}
+    # Prove historical W14/W16/W18 receipts are internally consistent
+    # BEFORE any legacy task is disabled. This reads only protected UCIE
+    # metadata; no operating SQLite files, task changes or network access.
+    Direct $python $false
+    Direct $w19Python $false
+    $preflight=@'
+import importlib.util
+from pathlib import Path
+path=Path(r"D:\UCIE_PROJECT\UCIE\scripts\ucie_owner_w19_lockstep_handoff_v01.py")
+spec=importlib.util.spec_from_file_location("ucie_w19_private_gate",path)
+if spec is None or spec.loader is None:
+    raise SystemExit(2)
+module=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+rows=module._private_prerequisites()
+if len(rows)!=10 or "public_miner.sqlite3" not in rows:
+    raise SystemExit(3)
+'@
+    & $python -I -B -c $preflight
+    if($LASTEXITCODE -ne 0) {
+        throw 'UCIE_W22_W19_PRIVATE_LINEAGE_GATE_HOLD_BEFORE_OUTAGE'
+    }
     $states=@('Ready','Ready','Running')
     foreach($i in 0..2){
         $t=CheckOld $i
