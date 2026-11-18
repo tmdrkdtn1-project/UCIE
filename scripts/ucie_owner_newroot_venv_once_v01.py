@@ -236,7 +236,11 @@ def _subprocess_prepare(target_commit: str) -> dict:
         timeout=300, check=False, text=True, encoding="utf-8", errors="replace",
     )
     if run.returncode:
-        raise OwnerPrepError("UCIE_W17_W14_VENV_PREPARATION_FAILED_HOLD")
+        # Only first-party bounded status tokens are exposed. Do not print
+        # stderr, paths, package filenames or private archive details.
+        codes = re.findall(r"UCIE_W14_[A-Z0-9_]{3,90}", run.stderr)
+        code = codes[-1] if codes else "UCIE_W17_W14_VENV_PREPARATION_FAILED_HOLD"
+        raise OwnerPrepError(code)
     try:
         w14 = json.loads(run.stdout.strip())
     except (ValueError, TypeError) as exc:
@@ -283,8 +287,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = _subprocess_prepare(args.target_commit)
     except (OwnerPrepError, OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        safe_reason = (
+            str(exc) if isinstance(exc, OwnerPrepError)
+            and re.fullmatch(r"UCIE_W(?:14|17)_[A-Z0-9_]{3,90}", str(exc))
+            else type(exc).__name__
+        )
         print(json.dumps({
             "schema": SCHEMA, "status": "UCIE_W17_NEWROOT_ENV_PREPARATION_HOLD",
+            "reason_code": safe_reason,
             "reason_type": type(exc).__name__,
             "do_not_retry_or_remove_partial_files": True,
             "c40_or_scheduled_tasks_modified": False,
