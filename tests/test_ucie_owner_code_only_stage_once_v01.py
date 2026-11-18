@@ -40,7 +40,11 @@ class OwnerCodeOnlyStageTests(unittest.TestCase):
 
         # Confirm Git's indexed commit tree maps every claimed path to the
         # manifest identity; never just trust that an arbitrary blob exists.
-        args = ["git", "-C", str(ROOT), "ls-tree", "-rz", "HEAD", "--",
+        # The PR305 manifest pins a historical source snapshot, not the
+        # mutable modern HEAD. Compare to its exact source commit so future
+        # first-party fixes do not falsely invalidate the immutable archive.
+        args = ["git", "-C", str(ROOT), "ls-tree", "-rz",
+                verifier.EXPECTED_COMMIT, "--",
                 "src/ucie_miner", "src/ucie_public",
                 "scripts/bootstrap_local.ps1",
                 "scripts/install_hourly_task.ps1",
