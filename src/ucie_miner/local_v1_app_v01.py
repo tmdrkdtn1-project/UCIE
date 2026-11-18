@@ -2495,13 +2495,9 @@ def main(argv: list[str] | None = None) -> int:
                     r"D:\UCIE_PROJECT\UCIE"):
                 invalid_root = True
             else:
-                import sys
-                script_dir = str(root / "scripts")
-                if script_dir not in sys.path:
-                    sys.path.insert(0, script_dir)
                 try:
-                    from ucie_owner_root_gate_v01 import (
-                        OwnerRootError, require_owner_runtime_root,
+                    from .owner_root_gate_v01 import (
+                        require_owner_runtime_root,
                     )
                     require_owner_runtime_root(
                         root, relocated=True, platform=os.name)
