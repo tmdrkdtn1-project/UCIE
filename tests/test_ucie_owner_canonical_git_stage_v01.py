@@ -105,6 +105,7 @@ class W15CanonicalGitSourceTests(unittest.TestCase):
         script_path = str(SCRIPT).replace("'", "''")
         command = (
             "$ErrorActionPreference='Stop';"
+            "Set-StrictMode -Version Latest;"
             "$t=$null;$e=$null;"
             "$ast=[Management.Automation.Language.Parser]::ParseFile("
             f"'{script_path}',[ref]$t,[ref]$e);"
