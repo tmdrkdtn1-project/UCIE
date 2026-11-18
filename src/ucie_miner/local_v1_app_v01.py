@@ -2505,7 +2505,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     require_owner_runtime_root(
                         root, relocated=True, platform=os.name)
-                except (ImportError, OSError, OwnerRootError):
+                except (ImportError, OSError, ValueError):
                     invalid_root = True
     elif os.name == "nt" and root.resolve() != Path("D:/UCIE").resolve():
         invalid_root = True
