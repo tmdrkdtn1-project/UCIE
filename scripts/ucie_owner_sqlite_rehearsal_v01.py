@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
-from hashlib import sha256
+from hashlib import file_digest
 import json
 import os
 from pathlib import Path
@@ -117,7 +117,8 @@ def snapshot_databases(source: Path, destination: Path) -> dict:
                     result = dst.execute("PRAGMA quick_check").fetchall()
                     if result != [("ok",)]:
                         raise PrivateSnapshotError("SNAPSHOT_QUICK_CHECK_FAILED")
-            digest = sha256(output.read_bytes()).hexdigest()
+            with output.open('rb') as reader:
+                digest = file_digest(reader, 'sha256').hexdigest()
             receipts.append({
                 "name": original.name,
                 "bytes": output.stat().st_size,
