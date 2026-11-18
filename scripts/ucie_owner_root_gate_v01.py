@@ -58,7 +58,7 @@ def require_owner_runtime_root(root: Path, *, relocated: bool = False,
 
     Neither function modifies the filesystem. The opt-in marker must be created
     separately by the owner after an offline recovery/Task/C40 plan is approved.
-    The marker is a local explicit-consent gate, NOT proof of tunnel health.
+    The marker lives in the separate private ARCHIVE, never in Git. It is\n    a local explicit-consent gate, NOT proof of tunnel health.
     """
     platform = os.name if platform is None else platform
     mode = classify_root(str(root), platform=platform, relocated=relocated)
@@ -76,11 +76,11 @@ def require_owner_runtime_root(root: Path, *, relocated: bool = False,
         (root / "src" / "ucie_miner", True),
         (root / "scripts", True),
         (root / "runtime", True),
-        (root / MARKER, False),
+        (root.parent / "ARCHIVE" / MARKER, False),
     )
     if any(not _direct(p, directory=d) for p, d in requirements):
         raise OwnerRootError("RELOCATED_RUNTIME_INCOMPLETE")
-    marker = root / MARKER
+    marker = root.parent / "ARCHIVE" / MARKER
     try:
         if marker.stat().st_size != len(MARKER_BYTES) or marker.read_bytes() != MARKER_BYTES:
             raise OwnerRootError("RELOCATION_MARKER_INVALID")
