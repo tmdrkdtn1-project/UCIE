@@ -94,6 +94,14 @@ class W15CanonicalGitSourceTests(unittest.TestCase):
         self.assertIn("$node=$node.Directory", code)
         self.assertIn("$node=$node.Parent", code)
         self.assertIn("Direct $sourceReceipt $false", code)
+        # W13/W14 used the same faulty FileInfo.Parent traversal.
+        for filename in ("ucie_owner_task_rebind_v01.ps1",
+                         "ucie_owner_offline_runtime_prepare_v01.ps1"):
+            with self.subTest(filename=filename):
+                other = (ROOT / "scripts" / filename).read_text("utf-8")
+                self.assertIn("$node -is [System.IO.FileInfo]", other)
+                self.assertIn("$node=$node.Directory", other)
+                self.assertIn("$node=$node.Parent", other)
 
     @unittest.skipUnless(os.name == "nt", "Windows PowerShell 5.1 only")
     def test_windows_real_file_and_directory_direct_path_fixture(self):
