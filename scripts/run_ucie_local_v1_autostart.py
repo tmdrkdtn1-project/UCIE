@@ -107,7 +107,10 @@ def main(argv: list[str] | None = None) -> int:
         # No --open-browser: the fixed local URL is a user bookmark.
         # An occupied port causes app_main to fail closed; no other
         # listener is killed or adopted.
-        return app_main(["--port", str(args.port)])
+        app_argv = ["--port", str(args.port)]
+        if args.owner_relocated_runtime:
+            app_argv.append("--owner-relocated-runtime")
+        return app_main(app_argv)
     except (AutostartPreflightError, ImportError, ValueError) as exc:
         print(json.dumps({
             "schema": SCHEMA,
