@@ -132,16 +132,14 @@ function CheckOld([int]$index) {
 }
 function C40ActionHash {
     $task=OwnerTask 'UCIE-C40-Recover'
-    if ([string]$task.State -ne 'Running') {
-        throw 'UCIE_W22_C40_TASK_NOT_RUNNING_HOLD'
-    }
     $a=$task.Actions[0]
     return ShaText ((@([string]$a.Execute,[string]$a.Arguments,
                       [string]$a.WorkingDirectory)) -join [char]0)
 }
 function PortState {
     # No process/commandline introspection; only count and exact bound IP.
-    $listeners=@(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
+    $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop |
+        Where-Object {$_.LocalPort -eq $port})
     if(@($listeners).Count -eq 0){return 'FREE'}
     if(@($listeners).Count -ne 1){return 'MULTIPLE_HOLD'}
     if([string]$listeners[0].LocalAddress -ne '127.0.0.1') {
@@ -205,6 +203,9 @@ if($ApplyLocal) {
         if([string]$t.State -cne $states[$i]){
             throw 'UCIE_W22_EXACT_ORIGINAL_STATES_REQUIRED'
         }
+    }
+    if([string](OwnerTask 'UCIE-C40-Recover').State -ne 'Running') {
+        throw 'UCIE_W22_C40_TASK_NOT_RUNNING_HOLD'
     }
     if((PortState) -ne 'ONE_LOOPBACK_LISTENER' -or -not (HealthyOld)) {
         throw 'UCIE_W22_ORIGINAL_LOCALV1_HEALTH_OR_PORT_HOLD'
@@ -293,23 +294,35 @@ if(Test-Path -LiteralPath $w21Journal) {
     if($LASTEXITCODE -is [int] -and $LASTEXITCODE -ne 0) {
         throw 'UCIE_W22_W21_ROLLBACK_RETURNED_ERROR'
     }
-} elseif(Test-Path -LiteralPath $w19Journal -or
-         Test-Path -LiteralPath $w20Journal -or
-         Test-Path -LiteralPath $w13Journal) {
+} elseif((Test-Path -LiteralPath $w19Journal) -or
+         (Test-Path -LiteralPath $w20Journal) -or
+         (Test-Path -LiteralPath $w13Journal)) {
     throw 'UCIE_W22_PARTIAL_STAGE_WITHOUT_W21_JOURNAL_MANUAL_HOLD'
 }
-# If the existing old LocalV1 is already Running + healthy, avoid restarting.
-$states=@((CheckOld 0).State,(CheckOld 1).State,(CheckOld 2).State)
-if($states[0] -eq 'Ready' -and $states[1] -eq 'Ready' -and
-   $states[2] -eq 'Running' -and (HealthyOld)) {
-    $restored='ALREADY_AVAILABLE'
+# Partial quiescence may have disabled only one task. Do not reject an
+# otherwise exact OLD task merely because maintenance interrupted halfway.
+foreach($i in 0,1) {
+    $state=[string](CheckOld $i).State
+    if($state -notin @('Disabled','Ready','Running')) {
+        throw 'UCIE_W22_UNEXPECTED_OLD_WRITER_STATE_HOLD'
+    }
+}
+$localState=[string](CheckOld 2).State
+if($localState -notin @('Disabled','Ready','Running')) {
+    throw 'UCIE_W22_UNEXPECTED_OLD_LOCAL_STATE_HOLD'
+}
+if($localState -eq 'Running' -and (PortState) -eq 'ONE_LOOPBACK_LISTENER' -and
+   (HealthyOld)) {
+    $localRestored='ALREADY_RUNNING_HTTP_HEALTHY'
 } else {
-    CheckOldDisabled
+    # Never start the old LocalV1 while a foreign or unknown listener holds
+    # port 18767. The presence of HTTP schema does not prove task identity.
     if((PortState) -ne 'FREE') {
         throw 'UCIE_W22_PORT_OCCUPIED_NO_BLIND_OLD_RESTART'
     }
-    # Bring back old UI before reactivating the two writer schedules.
-    Enable-ScheduledTask -TaskPath '\' -TaskName $names[2] -ErrorAction Stop | Out-Null
+    if($localState -eq 'Disabled') {
+        Enable-ScheduledTask -TaskPath '\' -TaskName $names[2] -ErrorAction Stop | Out-Null
+    }
     Start-ScheduledTask -TaskPath '\' -TaskName $names[2] -ErrorAction Stop
     $healthy=$false
     for($i=0;$i -lt 25;$i++){
@@ -323,24 +336,28 @@ if($states[0] -eq 'Ready' -and $states[1] -eq 'Ready' -and
     if(-not $healthy) {
         throw 'UCIE_W22_OLD_LOCALV1_RESUME_FAILED_MANUAL_HOLD'
     }
-    foreach($i in 0,1){
-        [void](CheckOld $i)
+    $localRestored='START_REQUESTED_HTTP_HEALTHY'
+}
+foreach($i in 0,1) {
+    $task=CheckOld $i
+    if([string]$task.State -eq 'Disabled') {
         Enable-ScheduledTask -TaskPath '\' -TaskName $names[$i] -ErrorAction Stop | Out-Null
     }
-    foreach($i in 0,1){
-        if([string](CheckOld $i).State -notin @('Ready','Running')){
-            throw 'UCIE_W22_ORIGINAL_WRITER_SCHEDULE_NOT_RESTORED'
-        }
-    }
-    $restored='ORIGINAL_READY_RUNNING_RESTORED'
 }
+foreach($i in 0,1) {
+    if([string](CheckOld $i).State -notin @('Ready','Running')) {
+        throw 'UCIE_W22_ORIGINAL_WRITER_SCHEDULE_NOT_RESTORED'
+    }
+}
+$restored='ORIGINAL_SCHEDULE_STATES_RESTORED__LOCAL_HTTP_HEALTHY'
 if((C40ActionHash) -ne $baseline){
     throw 'UCIE_W22_C40_ACTION_DRIFT_AFTER_RECOVERY'
 }
 SavePrivate $resumeReceipt ([ordered]@{
-    schema=$schema;status='UCIE_W22_ORIGINAL_TASK_AVAILABILITY_RESTORED'
+    schema=$schema;status='UCIE_W22_ORIGINAL_TASK_SCHEDULES_AND_LOCAL_HTTP_RESTORED'
     restoration=$restored
     old_local_http_healthy=$true
+    listener_task_pid_identity_verified=$false
     original_writer_schedules_enabled=2
     c40_action_unchanged=$true
     c40_mcp_round_trip_verified=$false
@@ -350,9 +367,10 @@ SavePrivate $resumeReceipt ([ordered]@{
 })
 [pscustomobject]@{
     schema=$schema
-    status='UCIE_W22_ORIGINAL_LOCALV1_AND_WRITER_SCHEDULES_RESTORED__C40_HOLD'
+    status='UCIE_W22_ORIGINAL_SCHEDULES_RESTORED__HTTP_HEALTHY_PID_AND_C40_HOLD'
     restoration=$restored
     old_local_http_healthy=$true
+    listener_task_pid_identity_verified=$false
     original_writer_schedules_enabled=2
     c40_action_unchanged=$true
     old_sqlite_unchanged_by_w22=$true
