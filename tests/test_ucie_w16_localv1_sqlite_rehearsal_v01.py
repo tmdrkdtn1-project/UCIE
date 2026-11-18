@@ -120,6 +120,28 @@ class UCIEW16OwnerRehearsalTests(unittest.TestCase):
         self.assertIn('app_argv.append("--owner-relocated-runtime")', launcher)
         self.assertIn('return app_main(app_argv)', launcher)
 
+    def test_package_and_script_owner_gate_have_identical_critical_checks(self):
+        # Future edits must not silently diverge the package's local app
+        # gate from the W12 public-miner and scheduler entrypoint gate.
+        pkg = (ROOT / "src" / "ucie_miner" /
+               "owner_root_gate_v01.py").read_text("utf-8")
+        script = (ROOT / "scripts" /
+                  "ucie_owner_root_gate_v01.py").read_text("utf-8")
+        for needle in (
+            'LEGACY = PureWindowsPath(r"D:\\UCIE")',
+            'TARGET = PureWindowsPath(r"D:\\UCIE_PROJECT\\UCIE")',
+            "MARKER_BYTES = b",
+            "def _direct(",
+            "def require_owner_runtime_root(",
+            'root.parent / "ARCHIVE" / MARKER',
+        ):
+            self.assertIn(needle, script)
+            self.assertIn(needle, pkg)
+        self.assertEqual(
+            script[script.index("def classify_root("):],
+            pkg[pkg.index("def classify_root("):],
+        )
+
     def test_localv1_relocation_does_not_start_server_without_owner_root(self):
         from ucie_miner import local_v1_app_v01 as app
         with redirect_stdout(io.StringIO()) as out:
