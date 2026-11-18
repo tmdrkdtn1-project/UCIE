@@ -88,6 +88,7 @@ def _approved_source_rows(source: Path, *, count: int | None,
             or manifest.get("rehearsal_only") is not True
             or manifest.get("single_global_transaction") is not False
             or manifest.get("cutover_data_freshness_accepted") is not False
+            or manifest.get("original_sqlite_updated_by_ucie_sql") is not False
             or manifest.get("tasks_or_c40_modified") is not False
             or manifest.get("owner_live_cutover_authorized") is not False):
         raise RestoreHold("UCIE_W18_W16_REHEARSAL_PROVENANCE_INVALID")
@@ -130,7 +131,9 @@ def restore_rehearsal(source: Path, destination: Path, *,
                       expected_count: int | None = None,
                       expected_total: int | None = None) -> dict:
     """Reconstitute only a private sandbox; never the future live runtime."""
-    if not direct(destination.parent, directory=True) or source == destination:
+    if (not direct(destination.parent, directory=True)
+            or source == destination or source in destination.parents
+            or destination in source.parents):
         raise RestoreHold("UCIE_W18_OUTPUT_PARENT_INVALID")
     if destination.exists() or destination.is_symlink():
         raise RestoreHold("UCIE_W18_DESTINATION_EXISTS_NO_OVERWRITE")
