@@ -4,7 +4,7 @@ No D: reads, PyPI, C40, Windows Task Scheduler, or operating DB access in CI.
 """
 from __future__ import annotations
 
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
 from hashlib import file_digest
 import importlib.util
 import io
@@ -33,7 +33,7 @@ def synthetic_w16(folder: Path, *, extra=False) -> tuple[Path, int, dict]:
     rows: list[dict] = []
     for name in ("public_miner.sqlite3", "ucie_queue.sqlite3"):
         database = source / name
-        with sqlite3.connect(database) as conn:
+        with closing(sqlite3.connect(database)) as conn, conn:
             conn.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, value TEXT)")
             conn.execute("INSERT INTO sample(value) VALUES (?)", ("FIRST_PARTY_SYNTHETIC",))
         with database.open("rb") as stream:
@@ -84,7 +84,7 @@ class W18RestoreSandboxTests(unittest.TestCase):
             self.assertFalse(status["new_root_runtime_data_written"])
             self.assertFalse(status["live_cutover_authorized"])
             for row in old_manifest["dbs"]:
-                with sqlite3.connect(dest / row["name"]) as conn:
+                with closing(sqlite3.connect(dest / row["name"])) as conn:
                     self.assertEqual(
                         conn.execute("SELECT value FROM sample").fetchone()[0],
                         "FIRST_PARTY_SYNTHETIC")
