@@ -55,9 +55,7 @@ class W21OwnerMaintenanceContractTests(unittest.TestCase):
         self.assertIn("UCIE_W21_LOCAL_MAINTENANCE_INTENT_V01.json", s)
         self.assertIn("UCIE_W21_LOCAL_ONCE_FAILED_PRESERVE_RECEIPTS", s)
         self.assertIn("UCIE_W21_LOCAL_ONLY_HEALTHY__WRITERS_AND_C40_HOLD", s)
-        self.assertIn("UCIE_W21_WRITER_TASK_MUST_REMAIN_DISABLED", s.replace(
-            "UCIE_W21_TWO_WRITER_TASKS_NOT_DISABLED",
-            "UCIE_W21_WRITER_TASK_MUST_REMAIN_DISABLED"))
+        self.assertIn("UCIE_W21_TWO_WRITER_TASKS_NOT_DISABLED", s)
         self.assertIn("writer_tasks_enabled=0", s)
 
     def test_rollback_prioritizes_partial_w20_then_exact_w19(self):
@@ -95,8 +93,7 @@ class W21OwnerMaintenanceContractTests(unittest.TestCase):
         self.assertIn("LOCAL_V1_OWNER_ACCEPTED_LOCAL_GO_NO_ONLINE_RELEASE", s)
         self.assertIn("$p.online_release_authorized -eq $false", s)
         self.assertIn("$p.operating_database_writes -eq 0", s)
-        self.assertIn("c40_tunnel", s.lower() if "c40_tunnel" in s.lower()
-                      else "# c40_tunnel is never asserted")
+        self.assertIn("c40_mcp_round_trip_verified=$false", s)
         self.assertNotIn("c40_mcp_round_trip_verified=$true", s)
 
     def test_native_powershell_parser_contract_and_denials(self):
