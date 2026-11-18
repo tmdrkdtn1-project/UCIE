@@ -11,6 +11,7 @@ copies are REHEARSAL ONLY and MUST NOT be promoted as cutover data.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 from datetime import datetime, timezone
 from hashlib import file_digest
 import json
@@ -111,8 +112,10 @@ def snapshot_databases(source: Path, destination: Path) -> dict:
             pass
         try:
             source_uri = original.as_uri() + "?mode=ro"
-            with sqlite3.connect(source_uri, uri=True, timeout=4.0) as src:
-                with sqlite3.connect(str(output), timeout=4.0) as dst:
+            with closing(sqlite3.connect(
+                    source_uri, uri=True, timeout=4.0)) as src:
+                with closing(sqlite3.connect(
+                        str(output), timeout=4.0)) as dst:
                     src.backup(dst, pages=256, sleep=0.05)
                     result = dst.execute("PRAGMA quick_check").fetchall()
                     if result != [("ok",)]:
