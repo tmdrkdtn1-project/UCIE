@@ -207,8 +207,8 @@ def _subprocess_prepare(target_commit: str) -> dict:
     # fetches wheels to private quarantine. No sdist or backend build is run.
     PENDING.mkdir(mode=0o700)
     p = subprocess.run(
-        [sys.executable, "-I", "-B", "-m", "pip", "download",
-         "--isolated", "--no-cache-dir", "--disable-pip-version-check",
+        [sys.executable, "-I", "-B", "-m", "pip", "--isolated", "download",
+         "--no-cache-dir", "--disable-pip-version-check",
          "--only-binary=:all:", "--index-url", "https://pypi.org/simple",
          "--dest", str(PENDING), *REQUIREMENTS],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
