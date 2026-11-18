@@ -137,8 +137,18 @@ foreach ($item in $all) {
     }
 }
 
-$launcher=Get-Command py -ErrorAction Stop
-$version=(& $launcher.Source -3.15 --version 2>&1 | Out-String).Trim()
+# First use the installed per-user Python 3.15 interpreter, if present.
+# Do not assume the legacy 'py' launcher was installed on the owner PC.
+$baseArgs=@()
+$basePython=Join-Path $env:LOCALAPPDATA 'Python\pythoncore-3.15-64\python.exe'
+if (Test-Path -LiteralPath $basePython) {
+    Assert-Direct $basePython $false
+} else {
+    $launcher=Get-Command py -ErrorAction Stop
+    $basePython=$launcher.Source
+    $baseArgs=@('-3.15')
+}
+$version=(& $basePython @baseArgs --version 2>&1 | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or -not $version.StartsWith('Python 3.15')) {
     throw 'UCIE_W14_PYTHON_315_NOT_AVAILABLE'
 }
@@ -146,7 +156,7 @@ if ($LASTEXITCODE -ne 0 -or -not $version.StartsWith('Python 3.15')) {
 # Single owner-controlled mutation: create a fresh venv in the new location.
 # If creation/install fails, preserve the partial venv for review; do not
 # delete/retry it or touch the operating D:\UCIE venv.
-& $launcher.Source -3.15 -m venv $venv
+& $basePython @baseArgs -m venv $venv
 if ($LASTEXITCODE -ne 0) { throw 'UCIE_W14_VENV_CREATE_FAILED_HOLD' }
 Assert-Direct $py $false
 Assert-Direct (Join-Path $venv 'Scripts\pythonw.exe') $false

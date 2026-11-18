@@ -36,7 +36,7 @@ class W14OfflineRuntimeTests(unittest.TestCase):
     def test_real_functionality_creates_fresh_offline_venv(self):
         s=self.text
         self.assertIn("UCIE_W14_ALREADY_PARTIALLY_OR_FULLY_PREPARED_NO_OVERWRITE",s)
-        self.assertIn("& $launcher.Source -3.15 -m venv $venv",s)
+        self.assertIn("& $basePython @baseArgs -m venv $venv",s)
         self.assertIn("-m pip install --no-index --no-cache-dir",s)
         self.assertIn("--only-binary ':all:'",s)
         self.assertIn("cryptography>=50.0.2,<51",s)
