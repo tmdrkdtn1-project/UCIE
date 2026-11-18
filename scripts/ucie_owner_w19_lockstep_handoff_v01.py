@@ -99,6 +99,12 @@ def _private_prerequisites() -> set[str]:
             or environment.get("offline_dependency_import_ok") is not True):
         raise HandoffHold("UCIE_W19_OWNER_W14_W16_W18_GATE_NOT_PASSED")
     rows = historical.get("dbs")
+    # W18 bound the historical W16 manifest by hash. Do not accept a
+    # subsequently swapped manifest or a mismatched set of restored rows.
+    if (restore.get("source_w16_manifest_sha256") !=
+            sha256(W16.read_bytes()).hexdigest() or
+            restore.get("restored_rows") != rows):
+        raise HandoffHold("UCIE_W19_W16_W18_PROVENANCE_MISMATCH")
     if not isinstance(rows, list) or len(rows) != EXPECTED_COUNT:
         raise HandoffHold("UCIE_W19_HISTORICAL_DB_SET_UNVERIFIED")
     names = [row.get("name") for row in rows if isinstance(row, dict)]
