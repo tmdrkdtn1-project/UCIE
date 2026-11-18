@@ -22,13 +22,24 @@ class AutostartPreflightError(ValueError):
 
 
 def validate_owner_environment(
-    root: Path, executable: Path, *, platform: str
+    root: Path, executable: Path, *, platform: str,
+    relocated: bool = False
 ) -> Path:
-    """Fail closed before importing any application modules."""
-    expected_root = Path("D:/UCIE")
-    if (platform != "nt"
-            or root.resolve() != expected_root.resolve()
-            or root.is_symlink()
+    """Fail closed before importing application modules or starting a listener."""
+    if platform != "nt":
+        raise AutostartPreflightError("UCIE_EXACT_OWNER_WINDOWS_ROOT_REQUIRED")
+    # This helper sits beside the launcher; no unrelated packages are imported.
+    scripts = str(Path(__file__).resolve().parent)
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    from ucie_owner_root_gate_v01 import (
+        OwnerRootError, require_owner_runtime_root,
+    )
+    try:
+        require_owner_runtime_root(root, relocated=relocated, platform=platform)
+    except OwnerRootError as exc:
+        raise AutostartPreflightError("UCIE_EXACT_OWNER_WINDOWS_ROOT_REQUIRED") from exc
+    if (root.is_symlink()
             or not (root / ".git").is_dir()
             or not (root / "src" / "ucie_miner" / "local_v1_app_v01.py").is_file()
             or not (root / "docs" / "UCIE_LOCAL_V1_OWNER_ACCEPTANCE_20261108.md").is_file()):
@@ -63,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="UCIE Local V1 Windows logon auto-start (private loopback only)")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--owner-relocated-runtime", action="store_true",
+                        help="Explicit owner-only gated relocation; never migrates tasks")
     args = parser.parse_args(argv)
     if not 1024 <= args.port <= 65535 or args.port == 8767:
         print(json.dumps({
@@ -72,7 +85,8 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(__file__).resolve().parents[1]
     try:
         src = validate_owner_environment(root, Path(sys.executable),
-                                         platform=os.name)
+                                         platform=os.name,
+                                         relocated=args.owner_relocated_runtime)
         _configure_windowless_log(root, Path(sys.executable))
         # Do not import any unrelated project; no browser launch and no
         # privileged service process. Existing W04 storage remains read-only.
