@@ -2474,14 +2474,42 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=0,
                         help="0 = automatically choose a free local port")
     parser.add_argument("--open-browser", action="store_true")
+    parser.add_argument("--owner-relocated-runtime", action="store_true",
+                        help="Owner-only W12 guarded root; does not change tunnel")
     args = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[2]
-    if (args.port != 0 and not 1024 <= args.port <= 65535
-            or root.is_symlink()
-            or root.name.casefold() != "ucie"
-            or not (root / ".git").is_dir()
-            or (os.name == "nt"
-                and root.resolve() != Path("D:/UCIE").resolve())):
+    invalid_root = (
+        (args.port != 0 and not 1024 <= args.port <= 65535)
+        or root.is_symlink()
+        or root.name.casefold() != "ucie"
+        or not (root / ".git").is_dir()
+    )
+    if args.owner_relocated_runtime:
+        # The application must independently enforce the same W12 gate as
+        # its launcher. Passing a flag may never bypass the original rule.
+        if os.name != "nt":
+            invalid_root = True
+        else:
+            from pathlib import PureWindowsPath
+            if PureWindowsPath(root) != PureWindowsPath(
+                    r"D:\UCIE_PROJECT\UCIE"):
+                invalid_root = True
+            else:
+                import sys
+                script_dir = str(root / "scripts")
+                if script_dir not in sys.path:
+                    sys.path.insert(0, script_dir)
+                try:
+                    from ucie_owner_root_gate_v01 import (
+                        OwnerRootError, require_owner_runtime_root,
+                    )
+                    require_owner_runtime_root(
+                        root, relocated=True, platform=os.name)
+                except (ImportError, OSError, OwnerRootError):
+                    invalid_root = True
+    elif os.name == "nt" and root.resolve() != Path("D:/UCIE").resolve():
+        invalid_root = True
+    if invalid_root:
         print(json.dumps({
             "schema": APP_SCHEMA,
             "status": "UCIE_LOCAL_V1_EXACT_OWNER_ROOT_REQUIRED",
