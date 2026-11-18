@@ -70,7 +70,11 @@ function Assert-Direct([string]$path,[bool]$directory) {
         if (($node.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw 'UCIE_W13_REPARSE_ANCESTOR'
         }
-        $node=$node.Parent
+        if ($node -is [System.IO.FileInfo]) {
+            $node=$node.Directory
+        } else {
+            $node=$node.Parent
+        }
     }
 }
 function Get-OneTask([string]$name) {

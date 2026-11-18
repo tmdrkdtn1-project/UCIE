@@ -88,6 +88,67 @@ class W15CanonicalGitSourceTests(unittest.TestCase):
         self.assertIn("new_runtime_or_venv_created=$false", code)
         self.assertIn("live_cutover_authorized=$false", code)
 
+    def test_fileinfo_and_directoryinfo_ancestors_use_correct_members(self):
+        code = self.code
+        self.assertIn("$node -is [System.IO.FileInfo]", code)
+        self.assertIn("$node=$node.Directory", code)
+        self.assertIn("$node=$node.Parent", code)
+        self.assertIn("Direct $sourceReceipt $false", code)
+        # W13/W14 used the same faulty FileInfo.Parent traversal.
+        for filename in ("ucie_owner_task_rebind_v01.ps1",
+                         "ucie_owner_offline_runtime_prepare_v01.ps1"):
+            with self.subTest(filename=filename):
+                other = (ROOT / "scripts" / filename).read_text("utf-8")
+                self.assertIn("$node -is [System.IO.FileInfo]", other)
+                self.assertIn("$node=$node.Directory", other)
+                self.assertIn("$node=$node.Parent", other)
+
+    @unittest.skipUnless(os.name == "nt", "Windows PowerShell 5.1 only")
+    def test_windows_real_file_and_directory_direct_path_fixture(self):
+        # Tests actual FileInfo/DirectoryInfo objects in a temporary CI folder.
+        # Extracts only first-party Direct function; NEVER invokes W15 -Apply.
+        ps = shutil.which("powershell.exe")
+        if not ps:
+            self.skipTest("Windows PowerShell unavailable")
+        script_path = str(SCRIPT).replace("'", "''")
+        command = (
+            "$ErrorActionPreference='Stop';"
+            "Set-StrictMode -Version Latest;"
+            "$t=$null;$e=$null;"
+            "$ast=[Management.Automation.Language.Parser]::ParseFile("
+            f"'{script_path}',[ref]$t,[ref]$e);"
+            "if($e.Count -gt 0){throw 'UCIE_W15_SCRIPT_PARSE_FAILED'};"
+            "$fn=$ast.Find({param($x) $x -is "
+            "[Management.Automation.Language.FunctionDefinitionAst] -and "
+            "$x.Name -eq 'Direct'},$true);"
+            "if($null -eq $fn){throw 'UCIE_W15_DIRECT_MISSING'};"
+            "Invoke-Expression $fn.Extent.Text;"
+            "$tmp=Join-Path $env:TEMP ('UCIE_W15_FILEINFO_' + "
+            "[guid]::NewGuid().ToString('N'));"
+            "try {"
+            "  [void](New-Item -ItemType Directory -Path $tmp -ErrorAction Stop);"
+            "  $file=Join-Path $tmp 'accepted_receipt.json';"
+            "  [IO.File]::WriteAllText($file,'{}');"
+            "  if(-not ((Get-Item -LiteralPath $file) -is [IO.FileInfo]))"
+            "  {throw 'UCIE_W15_FILE_FIXTURE_NOT_FILEINFO'};"
+            "  Direct $tmp $true;"
+            "  Direct $file $false;"
+            "  'UCIE_W15_FILEINFO_DIRECTORYINFO_PATH_PASS';"
+            "} finally {"
+            "  if(Test-Path -LiteralPath $tmp){"
+            "    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction Stop"
+            "  }"
+            "}"
+        )
+        result = subprocess.run(
+            [ps, "-NoProfile", "-NonInteractive", "-Command", command],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            check=False, timeout=30)
+        self.assertEqual(result.returncode, 0,
+                         result.stderr + result.stdout)
+        self.assertIn("UCIE_W15_FILEINFO_DIRECTORYINFO_PATH_PASS",
+                      result.stdout)
+
     @unittest.skipUnless(os.name == "nt", "Windows PowerShell 5.1 only")
     def test_windows_powershell_contract_parser_and_approval_rejection(self):
         ps = shutil.which("powershell.exe")
