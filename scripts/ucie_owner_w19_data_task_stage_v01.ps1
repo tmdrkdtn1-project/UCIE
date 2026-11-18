@@ -179,17 +179,21 @@ if ($Apply) {
         tasks_enabled=0;sqlite_handoff_completed=$false
         rollback_requires_disabled_tasks=$true
     })
-    $result=(& $python -I -B $handoff --prepare --owner-approval $w19DataApproval | Out-String).Trim()
+    # Direct host invocation preserves stdin TTY; piping to Out-String
+    # can make Python's interactive owner gate fail on Windows PowerShell.
+    & $python -I -B $handoff --prepare --owner-approval $w19DataApproval
     if ($LASTEXITCODE -ne 0) {
         throw 'UCIE_W19_FINAL_HANDOFF_FAILED_PRESERVE_PARTIAL_NO_RETRY'
     }
-    try {$handoffReceipt=$result | ConvertFrom-Json -ErrorAction Stop}
-    catch {throw 'UCIE_W19_PYTHON_HANDOFF_RECEIPT_INVALID'}
+    $privateManifest=Join-Path $privateData 'private_handoff_manifest.json'
+    Direct $privateManifest $false
+    $handoffReceipt=Get-Content -LiteralPath $privateManifest -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($handoffReceipt.schema -ne 'UCIE_W19_OWNER_LOCKSTEP_SQLITE_HANDOFF_V01' -or
-        $handoffReceipt.status -ne 'UCIE_W19_FINAL_SQLITE_DATA_STAGED__TASK_C40_ACTIVATION_HOLD' -or
-        $handoffReceipt.database_count -ne 10 -or
+        $handoffReceipt.status -ne 'UCIE_W19_ALL_SQLITE_WRITER_LOCKS_HELD_DURING_HANDOFF' -or
+        @($handoffReceipt.dbs).Count -ne 10 -or
         $handoffReceipt.sqlite_writer_barrier_held -ne $true -or
-        $handoffReceipt.sqlite_quick_check -ne 'PASS' -or
+        $handoffReceipt.tasks_rebound_or_enabled -ne $false -or
+        $handoffReceipt.c40_tunnel_health_verified -ne $false -or
         $handoffReceipt.live_cutover_authorized -ne $false) {
         throw 'UCIE_W19_DATA_RECEIPT_NOT_ACCEPTED'
     }
@@ -197,15 +201,11 @@ if ($Apply) {
     if ((C40Hash) -ne $priorC40) {throw 'UCIE_W19_C40_ACTION_DRIFT'}
     AssertAbsent $marker
     [IO.File]::WriteAllBytes($marker,[Text.Encoding]::ASCII.GetBytes($markerText))
-    $rebinderResult=(& powershell.exe -NoProfile -NonInteractive -File $rebinder -Apply -OwnerApproval $w13Approval | Out-String).Trim()
+    & powershell.exe -NoProfile -NonInteractive -File $rebinder -Apply -OwnerApproval $w13Approval
     if ($LASTEXITCODE -ne 0) {
         throw 'UCIE_W19_W13_APPLY_FAILED_USE_OWNER_ROLLBACK_REVIEW'
     }
-    try {$rebinderReceipt=$rebinderResult | ConvertFrom-Json -ErrorAction Stop}
-    catch {throw 'UCIE_W19_W13_RECEIPT_INVALID'}
-    if ($rebinderReceipt.status -ne 'UCIE_W13_THREE_TASK_ACTIONS_REBOUND_DISABLED_NOT_STARTED') {
-        throw 'UCIE_W19_W13_RECEIPT_NOT_PASS'
-    }
+    Direct $w13Journal $false
     ConfirmThree $true
     if ((C40Hash) -ne $priorC40) {throw 'UCIE_W19_C40_ACTION_DRIFT'}
     [pscustomobject]@{
@@ -246,7 +246,7 @@ for ($i=0;$i -lt $bytes.Length;$i++) {
     if ($bytes[$i] -ne $expected[$i]) {throw 'UCIE_W19_OWNER_MARKER_DRIFT'}
 }
 # W13 rollback independently checks Disabled task owners and C40 hash.
-$oldActions=(& powershell.exe -NoProfile -NonInteractive -File $rebinder -Rollback -OwnerApproval $w13Approval | Out-String).Trim()
+& powershell.exe -NoProfile -NonInteractive -File $rebinder -Rollback -OwnerApproval $w13Approval
 if ($LASTEXITCODE -ne 0) {
     throw 'UCIE_W19_W13_ROLLBACK_FAILED_MANUAL_REVIEW'
 }
