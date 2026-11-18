@@ -35,15 +35,18 @@ def classify_root(value: str, *, platform: str, relocated: bool) -> str:
 
 
 def _direct(path: Path, *, directory: bool | None = None) -> bool:
+    """Every ancestor must also be direct: no junctioned venv or runtime."""
     try:
-        metadata = path.lstat()
-        if (stat.S_ISLNK(metadata.st_mode)
-                or getattr(metadata, "st_file_attributes", 0) & 0x400):
-            return False
+        meta0 = path.lstat()
+        for node in (path, *path.parents):
+            meta = node.lstat()
+            if (stat.S_ISLNK(meta.st_mode)
+                    or getattr(meta, "st_file_attributes", 0) & 0x400):
+                return False
         if directory is True:
-            return stat.S_ISDIR(metadata.st_mode)
+            return stat.S_ISDIR(meta0.st_mode)
         if directory is False:
-            return stat.S_ISREG(metadata.st_mode)
+            return stat.S_ISREG(meta0.st_mode)
         return True
     except OSError:
         return False
