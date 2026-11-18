@@ -196,8 +196,19 @@ if(-not $acl.AreAccessRulesProtected -or
 }
 $previous=$env:GIT_OPTIONAL_LOCKS;$env:GIT_OPTIONAL_LOCKS='0'
 try {
+    $remote=(& git -C $root remote get-url origin 2>$null | Out-String).Trim()
+    if($LASTEXITCODE -ne 0 -or
+       -not [string]::Equals($remote,
+           'https://github.com/tmdrkdtn1-project/UCIE.git',
+           [StringComparison]::Ordinal)) {
+        throw 'UCIE_W22_CANONICAL_FIRST_PARTY_REMOTE_REQUIRED'
+    }
     & git -C $root merge-base --is-ancestor $base HEAD 2>$null | Out-Null
     if($LASTEXITCODE -ne 0){throw 'UCIE_W22_W21_ANCESTOR_REQUIRED'}
+    $dirty=(& git -C $root status --porcelain --untracked-files=all 2>$null | Out-String).Trim()
+    if($LASTEXITCODE -ne 0 -or $dirty.Length -gt 0) {
+        throw 'UCIE_W22_STAGED_GIT_WORKTREE_NOT_CLEAN'
+    }
 } finally {$env:GIT_OPTIONAL_LOCKS=$previous}
 Import-Module ScheduledTasks -ErrorAction Stop
 $baseline=C40ActionHash
@@ -215,14 +226,14 @@ if($ApplyLocal) {
     $preflight=@'
 import importlib.util
 from pathlib import Path
-path=Path(r"D:\UCIE_PROJECT\UCIE\scripts\ucie_owner_w19_lockstep_handoff_v01.py")
+path=Path(r'D:\UCIE_PROJECT\UCIE\scripts\ucie_owner_w19_lockstep_handoff_v01.py')
 spec=importlib.util.spec_from_file_location("ucie_w19_private_gate",path)
 if spec is None or spec.loader is None:
     raise SystemExit(2)
 module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 rows=module._private_prerequisites()
-if len(rows)!=10 or "public_miner.sqlite3" not in rows:
+if len(rows)!=10 or 'public_miner.sqlite3' not in rows:
     raise SystemExit(3)
 '@
     & $python -I -B -c $preflight
