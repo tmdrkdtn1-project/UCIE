@@ -9,10 +9,9 @@ import os
 from pathlib import Path
 import sys
 
-from ucie_owner_root_gate_v01 import OwnerRootError, require_owner_runtime_root
-
 ROOT = Path(__file__).resolve().parents[1]
 if os.name == "nt":
+    expected = Path("D:/UCIE").resolve()
     relocated = (__name__ == "__main__"
                  and sys.argv[1:] == ["--owner-relocated-runtime"])
     if __name__ == "__main__" and sys.argv[1:] not in (
@@ -20,11 +19,19 @@ if os.name == "nt":
         print(json.dumps({"status": "FAIL_CLOSED",
                           "reason": "UCIE_UNKNOWN_LAUNCH_ARGUMENTS"}))
         raise SystemExit(2)
-    try:
-        require_owner_runtime_root(ROOT, relocated=relocated, platform=os.name)
-    except OwnerRootError:
+    if relocated:
+        from ucie_owner_root_gate_v01 import (
+            OwnerRootError, require_owner_runtime_root,
+        )
+        try:
+            require_owner_runtime_root(ROOT, relocated=True, platform=os.name)
+        except OwnerRootError:
+            print(json.dumps({"status": "FAIL_CLOSED",
+                              "reason": "UCIE_OWNER_RUNTIME_ROOT_NOT_APPROVED"}))
+            raise SystemExit(2)
+    elif ROOT.resolve() != expected or ROOT.is_symlink():
         print(json.dumps({"status": "FAIL_CLOSED",
-                          "reason": "UCIE_OWNER_RUNTIME_ROOT_NOT_APPROVED"}))
+                          "reason": "UCIE checkout is not D:/UCIE"}))
         raise SystemExit(2)
 
 sys.path.insert(0, str(ROOT / "src"))
