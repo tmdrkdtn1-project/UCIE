@@ -33,12 +33,18 @@ if ($env:OS -ne 'Windows_NT' -or -not [Environment]::UserInteractive) {
 function Direct([string]$path,[bool]$folder) {
     $item=Get-Item -LiteralPath $path -Force -ErrorAction Stop
     if ([bool]$item.PSIsContainer -ne $folder) { throw 'UCIE_W15_PATH_TYPE_MISMATCH' }
+    # Get-Item returns FileInfo for receipt/script files. FileInfo has
+    # Directory, not Parent; DirectoryInfo has Parent (Windows PS 5.1).
     $node=$item
     while ($null -ne $node) {
         if (($node.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw 'UCIE_W15_REPARSE_PATH_DENIED'
         }
-        $node=$node.Parent
+        if ($node -is [System.IO.FileInfo]) {
+            $node=$node.Directory
+        } else {
+            $node=$node.Parent
+        }
     }
 }
 function Absent([string]$path) {
