@@ -51,9 +51,11 @@ class UCIEW16OwnerRehearsalTests(unittest.TestCase):
                 c.execute("PRAGMA journal_mode=WAL")
                 c.execute("CREATE TABLE miner_rows(id INTEGER PRIMARY KEY, value TEXT)")
                 c.execute("INSERT INTO miner_rows(value) VALUES('UCIE_PUBLIC_SYNTHETIC')")
+            c.close()
             with sqlite3.connect(secondary) as c:
                 c.execute("CREATE TABLE queue_rows(id INTEGER PRIMARY KEY)")
                 c.execute("INSERT INTO queue_rows VALUES(42)")
+            c.close()
             dest = top / "private_rehearsal"
             report = mod.snapshot_databases(source, dest)
             self.assertEqual(
@@ -71,9 +73,11 @@ class UCIEW16OwnerRehearsalTests(unittest.TestCase):
                 self.assertEqual(
                     c.execute("SELECT value FROM miner_rows").fetchone()[0],
                     "UCIE_PUBLIC_SYNTHETIC")
+            c.close()
             with sqlite3.connect(dest / "ucie_queue.sqlite3") as c:
                 self.assertEqual(c.execute(
                     "SELECT id FROM queue_rows").fetchone()[0], 42)
+            c.close()
 
     def test_existing_destination_is_held_without_overwrite(self):
         mod = load_snapshot()
@@ -83,6 +87,7 @@ class UCIEW16OwnerRehearsalTests(unittest.TestCase):
             src.mkdir()
             with sqlite3.connect(src / "public_miner.sqlite3") as c:
                 c.execute("CREATE TABLE v(i INTEGER)")
+            c.close()
             target = top / "stage"
             target.mkdir()
             with self.assertRaises(mod.PrivateSnapshotError):
@@ -97,6 +102,7 @@ class UCIEW16OwnerRehearsalTests(unittest.TestCase):
             src.mkdir()
             with sqlite3.connect(src / "unrelated.sqlite3") as c:
                 c.execute("CREATE TABLE sample(i INTEGER)")
+            c.close()
             target = top / "stage"
             with self.assertRaises(mod.PrivateSnapshotError):
                 mod.snapshot_databases(src, target)
