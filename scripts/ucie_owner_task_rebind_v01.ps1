@@ -145,6 +145,19 @@ function RequireTarget {
     foreach ($p in @('.git','runtime')) {
         Assert-Direct (Join-Path $new $p) $true
     }
+    # W14's offline venv does not migrate ANY live state. A data-bearing new
+    # runtime and private W14 setup receipt are mandatory before rebinding.
+    Assert-Direct (Join-Path $new 'runtime\public_miner.sqlite3') $false
+    $envReceipt=Join-Path $archive 'UCIE_W14_OFFLINE_RUNTIME_RECEIPT_V01.json'
+    Assert-Direct $envReceipt $false
+    $prepared=Get-Content -LiteralPath $envReceipt -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($prepared.schema -ne 'UCIE_W14_OFFLINE_RUNTIME_V01' -or
+        $prepared.status -ne 'UCIE_W14_ISOLATED_OFFLINE_PYTHON_RUNTIME_PREPARED' -or
+        $prepared.offline_dependency_import_ok -ne $true -or
+        $prepared.operating_root_modified -ne $false -or
+        $prepared.runtime_database_migrated -ne $false) {
+        throw 'UCIE_W13_W14_ENVIRONMENT_RECEIPT_INVALID'
+    }
     foreach ($p in @('.venv\Scripts\python.exe','.venv\Scripts\pythonw.exe',
                      'scripts\ucie_owner_root_gate_v01.py',
                      'docs\UCIE_LOCAL_V1_OWNER_ACCEPTANCE_20261108.md')) {
