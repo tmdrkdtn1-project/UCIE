@@ -169,10 +169,14 @@ function StopDisableLocal {
     $t=Task $known[2].Name
     if (-not (SameNew $t $known[2])) {throw 'UCIE_W20_ROLLBACK_UNKNOWN_LOCAL_TASK'}
     Disable-ScheduledTask -TaskPath '\' -TaskName $known[2].Name -ErrorAction Stop | Out-Null
-    # Only this exactly matching UCIE LocalV1 task is controlled; C40 untouched.
-    $t=Task $known[2].Name
-    if ([string]$t.State -eq 'Running') {
+    # Scheduler may report Disabled while the previously started process
+    # remains alive; stopping exact owner LocalV1 is allowed, C40 untouched.
+    try {
         Stop-ScheduledTask -TaskPath '\' -TaskName $known[2].Name -ErrorAction Stop
+    } catch {
+        if ((ListenerCount) -ne 0) {
+            throw 'UCIE_W20_LOCAL_TASK_STOP_UNVERIFIED'
+        }
     }
     for ($i=0;$i -lt 20;$i++) {
         $t=Task $known[2].Name
@@ -260,8 +264,8 @@ if ($PilotLocal) {
         RequireTwoDisabled
         if ((C40Hash) -ne $originalC40) {throw 'UCIE_W20_C40_ACTION_CHANGED'}
         [pscustomobject]@{
-            schema=$schema;status='UCIE_W20_LOCALV1_PILOT_HEALTHY__C40_AND_TWO_TASKS_HOLD'
-            localv1_health='PASS';localv1_started_by_owner_task=$true
+            schema=$schema;status='UCIE_W20_LOCALV1_LOOPBACK_HEALTH_PASS__C40_AND_TWO_TASKS_HOLD'
+            localv1_health='HTTP_SCHEMA_PASS';localv1_start_requested=$true
             public_miner_enabled=$false;internal_minute_enabled=$false
             c40_action_unchanged=$true;c40_mcp_round_trip_verified=$false
             old_data_restored_or_deleted=$false;live_cutover_authorized=$false
