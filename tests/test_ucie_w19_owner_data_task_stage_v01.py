@@ -48,9 +48,11 @@ class W19OwnerStageContractTests(unittest.TestCase):
     def test_private_journal_before_final_db_handoff(self):
         text = self.src
         self.assertIn("UCIE_W19_OWNER_DATA_TASK_STAGE_JOURNAL_V01.json", text)
-        self.assertLess(text.index("PrivateJson $journal"), text.index("$result=(& $python"))
-        self.assertLess(text.index("$result=(& $python"),
-                        text.index("$rebinderResult=(& powershell.exe"))
+        self.assertLess(text.index("PrivateJson $journal"),
+                        text.index("& $python -I -B $handoff --prepare"))
+        self.assertLess(text.index("& $python -I -B $handoff --prepare"),
+                        text.index("& powershell.exe -NoProfile -NonInteractive -File $rebinder -Apply"))
+        self.assertIn("private_handoff_manifest.json", text)
         self.assertIn("UCIE_W13_TASK_REBIND_V01.json", text)
         self.assertIn("UCIE_W19_LOCKSTEP_FINAL_DATA_V01", text)
         self.assertIn("-Rollback -OwnerApproval $w13Approval", text)
