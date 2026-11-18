@@ -66,6 +66,9 @@ class W22OwnerQuiescenceContractTests(unittest.TestCase):
         self.assertLess(code.index("Absent $p", code.index("if($ApplyLocal)")),
                         first_stop)
         self.assertIn("UCIE_W19_LOCKSTEP_FINAL_DATA_V01", code)
+        self.assertIn("UCIE_W22_CANONICAL_FIRST_PARTY_REMOTE_REQUIRED", code)
+        self.assertIn("UCIE_W22_STAGED_GIT_WORKTREE_NOT_CLEAN", code)
+        self.assertLess(code.index("UCIE_W22_STAGED_GIT_WORKTREE_NOT_CLEAN"), first_stop)
         self.assertIn("UCIE_W21_LOCAL_MAINTENANCE_INTENT_V01", code)
         self.assertIn("UCIE_W22_EXACT_ORIGINAL_STATES_REQUIRED", code)
         self.assertIn("UCIE_W22_ORIGINAL_LOCALV1_HEALTH_OR_PORT_HOLD", code)
