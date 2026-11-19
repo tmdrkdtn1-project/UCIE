@@ -52,10 +52,9 @@ $staged=@(
     $archive+'\UCIE_W30_OWNER_SECONDARY_RESTORED_V01.json'
 )
 if(-not $CheckLocal){
-    if($OwnerApproval -or $ContractOnly.IsPresent -eq $false -and $PSBoundParameters.ContainsKey('ContractOnly') -eq $false){
-        # Default no-host remains accepted; an orphan approval never does.
-        if($OwnerApproval){throw 'UCIE_W31_APPROVAL_WITHOUT_CHECK_DENIED'}
-    }
+    # Default contract-only mode never touches host data. An orphan
+    # approval is not evidence that owner checks were performed.
+    if($OwnerApproval){throw 'UCIE_W31_APPROVAL_WITHOUT_CHECK_DENIED'}
     [pscustomobject]@{
         schema=$schema
         status='UCIE_W31_CONTRACT_ONLY_NO_HOST_ACCESS'
@@ -227,6 +226,10 @@ foreach($functionName in @(
     if($found.Count -ne 1){throw 'UCIE_W31_W29_AST_FUNCTION_NOT_UNIQUE_HOLD'}
     . ([scriptblock]::Create($found[0].Extent.Text))
 }
+# W29 Direct verifies parent path components on D: as well, not only
+# the leaf roots and script files checked above.
+foreach($path in @($old,$root,$archive)){Direct $path $true}
+foreach($path in @($self,$w29Source)){Direct $path $false}
 Import-Module ScheduledTasks -ErrorAction Stop
 $c40Baseline=C40Hash
 AssertRecoveredHistory $c40Baseline
