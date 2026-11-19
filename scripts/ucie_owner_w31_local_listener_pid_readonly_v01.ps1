@@ -159,6 +159,15 @@ function AssertOwnerLocalListenerPidIdentity {
     [void](AssertExactOriginalCommandLine (
         [string]$item.CommandLine
     ) $expected.Exe $expected.Arguments)
+    # The listener may have exited/rebound while CIM owner and argv were
+    # inspected. Requery ONLY the same UCIE port; a changed PID is a HOLD.
+    $confirmed=@(Get-NetTCPConnection -LocalPort 18767 -State Listen -ErrorAction Stop)
+    if($confirmed.Count -ne 1 -or
+       [string]$confirmed[0].LocalAddress -cne '127.0.0.1' -or
+       [int]$confirmed[0].LocalPort -ne 18767 -or
+       [int]$confirmed[0].OwningProcess -ne $listenerProcessId){
+        throw 'UCIE_W31_LISTENER_PID_CHANGED_DURING_READONLY_HOLD'
+    }
     return $true
 }
 # Host source, task and historical provenance checks happen only AFTER
