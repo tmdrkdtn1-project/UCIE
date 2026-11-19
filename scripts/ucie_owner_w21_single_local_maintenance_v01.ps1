@@ -258,89 +258,11 @@ if ($ApplyLocal) {
         # preserve the original stable W21 failure identifier for callers.
         $raw=[string]$_.Exception.Message
         $reason='UCIE_W25_NONCANONICAL_CHILD_EXCEPTION'
-        if($raw -cmatch '^UCIE_[A-Z0-9_]{5,100}
-}
-# Rollback runs only after exact owner approval; never rewrites either DB set.
-Direct $journal $false
-Absent $rollbackReceipt
-$record=Get-Content -LiteralPath $journal -Raw -Encoding UTF8 |
-    ConvertFrom-Json -ErrorAction Stop
-if ($record.schema -ne $schema -or
-    $record.status -ne 'UCIE_W21_LOCAL_MAINTENANCE_INTENT_HOLD' -or
-    $record.owner_sid_sha256 -ne (HashText $script:ownerSid) -or
-    $record.c40_action_sha256 -ne $c40Before -or
-    $record.source_root -ne $old -or $record.new_root -ne $root) {
-    throw 'UCIE_W21_ROLLBACK_INTENT_INVALID'
-}
-if (Test-Path -LiteralPath $w20Journal) {
-    Absent $w20Rollback
-    & $w20 -RollbackLocal -OwnerApproval $w20RollbackApproval
-} elseif (Test-Path -LiteralPath $w13Journal) {
-    Direct $marker $false
-    & $w19 -Rollback -OwnerApproval $w19RollbackApproval
-} else {
-    throw 'UCIE_W21_PRE_REBIND_PARTIAL_DATA_HOLD'
-}
-OriginalDisabled
-if ((C40Hash) -ne $c40Before) {throw 'UCIE_W21_C40_CHANGED_DURING_ROLLBACK'}
-SavePrivate $rollbackReceipt ([ordered]@{
-    schema=$schema;status='UCIE_W21_ROLLBACK_OLD_ACTIONS_DISABLED'
-    writer_tasks_enabled=0;original_sqlite_overwritten=$false
-    new_private_sqlite_kept=$true;c40_action_unchanged=$true
-    full_operating_cutover_authorized=$false
-})
-[pscustomobject]@{
-    schema=$schema
-    status='UCIE_W21_LOCAL_MAINTENANCE_ROLLBACK_RECORDED__DATA_PRESERVED'
-    original_three_task_actions_restored_disabled=$true
-    new_private_sqlite_kept=$true
-    c40_action_unchanged=$true
-    full_operating_cutover_authorized=$false
-} | ConvertTo-Json -Compress
-){
+        if($raw -cmatch '^UCIE_[A-Z0-9_]{5,100}$'){
             $reason=$raw
         }
         $kind=$_.Exception.GetType().Name
-        if($kind -notmatch '^[A-Za-z][A-Za-z0-9]{0,60}
-}
-# Rollback runs only after exact owner approval; never rewrites either DB set.
-Direct $journal $false
-Absent $rollbackReceipt
-$record=Get-Content -LiteralPath $journal -Raw -Encoding UTF8 |
-    ConvertFrom-Json -ErrorAction Stop
-if ($record.schema -ne $schema -or
-    $record.status -ne 'UCIE_W21_LOCAL_MAINTENANCE_INTENT_HOLD' -or
-    $record.owner_sid_sha256 -ne (HashText $script:ownerSid) -or
-    $record.c40_action_sha256 -ne $c40Before -or
-    $record.source_root -ne $old -or $record.new_root -ne $root) {
-    throw 'UCIE_W21_ROLLBACK_INTENT_INVALID'
-}
-if (Test-Path -LiteralPath $w20Journal) {
-    Absent $w20Rollback
-    & $w20 -RollbackLocal -OwnerApproval $w20RollbackApproval
-} elseif (Test-Path -LiteralPath $w13Journal) {
-    Direct $marker $false
-    & $w19 -Rollback -OwnerApproval $w19RollbackApproval
-} else {
-    throw 'UCIE_W21_PRE_REBIND_PARTIAL_DATA_HOLD'
-}
-OriginalDisabled
-if ((C40Hash) -ne $c40Before) {throw 'UCIE_W21_C40_CHANGED_DURING_ROLLBACK'}
-SavePrivate $rollbackReceipt ([ordered]@{
-    schema=$schema;status='UCIE_W21_ROLLBACK_OLD_ACTIONS_DISABLED'
-    writer_tasks_enabled=0;original_sqlite_overwritten=$false
-    new_private_sqlite_kept=$true;c40_action_unchanged=$true
-    full_operating_cutover_authorized=$false
-})
-[pscustomobject]@{
-    schema=$schema
-    status='UCIE_W21_LOCAL_MAINTENANCE_ROLLBACK_RECORDED__DATA_PRESERVED'
-    original_three_task_actions_restored_disabled=$true
-    new_private_sqlite_kept=$true
-    c40_action_unchanged=$true
-    full_operating_cutover_authorized=$false
-} | ConvertTo-Json -Compress
-){
+        if($kind -notmatch '^[A-Za-z][A-Za-z0-9]{0,60}$'){
             $kind='UnclassifiedError'
         }
         [pscustomobject]@{
