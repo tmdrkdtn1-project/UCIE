@@ -66,6 +66,8 @@ $script:cim=@([pscustomobject]@{{
 $script:cimOwner=$script:ownerSid
 $script:cimReturn=0
 $script:log=[System.Collections.Generic.List[string]]::new()
+$script:tcpQueries=0
+$script:forceRebindOnSecond=$false
 function Get-NetTCPConnection{{
     [CmdletBinding()]
     param([int]$LocalPort,[string]$State)
@@ -73,6 +75,10 @@ function Get-NetTCPConnection{{
         throw 'UCIE_W31_BROADER_LISTENER_SCAN_DENIED'
     }}
     $script:log.Add('GET_EXACT_PORT_18767')
+    $script:tcpQueries++
+    if($script:forceRebindOnSecond -and $script:tcpQueries -eq 2){{
+        return @([pscustomobject]@{{LocalAddress='127.0.0.1';LocalPort=18767;OwningProcess=42421}})
+    }}
     return $script:tcp
 }}
 function Get-CimInstance{{
@@ -144,7 +150,7 @@ if(-not (AssertExactOriginalCommandLine $argv $expected.Exe $expected.Arguments)
     throw 'UCIE_W31_VALID_UNQUOTED_REJECTED'
 }
 if(-not (AssertOwnerLocalListenerPidIdentity)){throw 'UCIE_W31_EXACT_LISTENER_REJECTED'}
-if(($script:log -join ',') -cne 'GET_EXACT_PORT_18767,GET_ONLY_LISTENER_PID,GET_PROCESS_SID_ONLY'){
+if(($script:log -join ',') -cne 'GET_EXACT_PORT_18767,GET_ONLY_LISTENER_PID,GET_PROCESS_SID_ONLY,GET_EXACT_PORT_18767'){
     throw 'UCIE_W31_UNEXPECTED_HOST_DATA_QUERY'
 }
 Write-Output 'UCIE_W31_REAL_EXACT_PID_CLI_SID_MOCK_PASS'
@@ -191,9 +197,26 @@ Write-Output 'UCIE_W31_FOREIGN_PORT_PID_OWNER_BINARY_FAIL_CLOSED_PASS'
 """)
         self.assertIn("UCIE_W31_FOREIGN_PORT_PID_OWNER_BINARY_FAIL_CLOSED_PASS", out)
 
+    def test_pid_changed_between_listener_and_cim_verification_hold(self):
+        out = self.native(r"""
+$script:forceRebindOnSecond=$true
+try{
+    [void](AssertOwnerLocalListenerPidIdentity)
+    throw 'UCIE_W31_RACE_NOT_DETECTED'
+}catch{
+    if($_.Exception.Message -cne 'UCIE_W31_LISTENER_PID_CHANGED_DURING_READONLY_HOLD'){throw}
+}
+if(($script:log -join ',') -cne 'GET_EXACT_PORT_18767,GET_ONLY_LISTENER_PID,GET_PROCESS_SID_ONLY,GET_EXACT_PORT_18767'){
+    throw 'UCIE_W31_RACE_PROBE_OUTSIDE_EXACT_PORT'
+}
+Write-Output 'UCIE_W31_LISTENER_PID_REBIND_RACE_REJECTED_PASS'
+""")
+        self.assertIn("UCIE_W31_LISTENER_PID_REBIND_RACE_REJECTED_PASS", out)
+
     def test_source_readonly_constraints_and_no_false_task_pid_claim(self):
         source = self.source
         self.assertIn("Get-NetTCPConnection -LocalPort 18767 -State Listen", source)
+        self.assertIn("UCIE_W31_LISTENER_PID_CHANGED_DURING_READONLY_HOLD", source)
         self.assertIn("Get-CimInstance -ClassName Win32_Process -Filter", source)
         self.assertIn("-MethodName GetOwnerSid", source)
         self.assertIn("listener_pid_launched_by_task_scheduler_verified=$false", source)
