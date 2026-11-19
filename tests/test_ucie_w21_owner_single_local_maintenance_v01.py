@@ -64,8 +64,13 @@ class W21OwnerMaintenanceContractTests(unittest.TestCase):
                         s.index("elseif (Test-Path -LiteralPath $w13Journal)"))
         self.assertIn("& $w20 -RollbackLocal -OwnerApproval $w20RollbackApproval", s)
         self.assertIn("& $w19 -Rollback -OwnerApproval $w19RollbackApproval", s)
-        self.assertIn("UCIE_W21_PRE_REBIND_PARTIAL_DATA_HOLD", s)
-        self.assertIn("new_private_sqlite_kept=$true", s)
+        # W27 adds an exact no-stage rollback branch; it still refuses
+        # any W19/W13/W20 journal, marker, staged runtime or C40 drift.
+        self.assertIn("AssertPreRebindNoStage", s)
+        self.assertIn("W27_PRE_REBIND_ORIGINAL_DISABLED_NO_DATA_STAGE", s)
+        self.assertIn("UCIE_W27_PRE_REBIND_C40_ACTION_DRIFT_HOLD", s)
+        self.assertIn("new_private_sqlite_kept=($rollbackPhase -cne", s)
+        self.assertIn("pre_rebind_no_w19_stage=", s)
         self.assertIn("original_sqlite_overwritten=$false", s)
         self.assertNotIn("Remove-Item -LiteralPath $old", s)
         self.assertNotIn("git clean", s)

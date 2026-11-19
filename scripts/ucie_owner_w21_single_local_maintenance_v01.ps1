@@ -131,11 +131,11 @@ function GetOwnerTask([string]$name) {
 function ActionEquals($task,$spec,[bool]$isNew) {
     $action=$task.Actions[0]
     $exe=if($isNew){$spec.NewExe}else{$spec.OldExe}
-    $args=if($isNew){$spec.NewArgs}else{$spec.OldArgs}
+    $expectedArguments=if($isNew){$spec.NewArgs}else{$spec.OldArgs}
     $work=if($isNew){$root}else{$old}
     return ([string]::Equals([string]$action.Execute,$exe,
                 [StringComparison]::OrdinalIgnoreCase) -and
-            [string]::Equals([string]$action.Arguments,$args,
+            [string]::Equals([string]$action.Arguments,$expectedArguments,
                 [StringComparison]::Ordinal) -and
             [string]::Equals([string]$action.WorkingDirectory,$work,
                 [StringComparison]::OrdinalIgnoreCase))
@@ -161,6 +161,23 @@ function NewLocalOnly {
         if ($index -eq 2 -and [string]$task.State -eq 'Disabled') {
             throw 'UCIE_W21_LOCAL_PILOT_NOT_ENABLED'
         }
+    }
+}
+# W27 pre-rebind rollback gate: this is only a RECORD-ONLY rollback
+# eligibility gate for a failed W19 BEFORE its own journal. The original
+# three tasks must still be Disabled with OLD_EXACT actions; W22/W24 owner
+# ResumeOld is the distinct operation that may later start LocalV1/writers.
+# A partial W19 stage, relocated runtime, marker, or any W13/W20 artifact
+# MUST stay on the manual-review path. Never erase the failed intent.
+function AssertPreRebindNoStage {
+    foreach($p in @($w19Journal,$w13Journal,$w20Journal,
+                    $w20Rollback,$w19Rollback,$marker,
+                    $privateData,$targetRuntime)) {
+        Absent $p
+    }
+    OriginalDisabled
+    if ((C40Hash) -ne $c40Before) {
+        throw 'UCIE_W27_PRE_REBIND_C40_ACTION_DRIFT_HOLD'
     }
 }
 function C40Hash {
@@ -292,28 +309,40 @@ if ($record.schema -ne $schema -or
     $record.source_root -ne $old -or $record.new_root -ne $root) {
     throw 'UCIE_W21_ROLLBACK_INTENT_INVALID'
 }
+$rollbackPhase='STAGED_REBIND'
 if (Test-Path -LiteralPath $w20Journal) {
     Absent $w20Rollback
     & $w20 -RollbackLocal -OwnerApproval $w20RollbackApproval
+    $rollbackPhase='W20_PILOT_ROLLBACK'
 } elseif (Test-Path -LiteralPath $w13Journal) {
     Direct $marker $false
     & $w19 -Rollback -OwnerApproval $w19RollbackApproval
+    $rollbackPhase='W13_W19_REBIND_ROLLBACK'
 } else {
-    throw 'UCIE_W21_PRE_REBIND_PARTIAL_DATA_HOLD'
+    # W27: W19 never journaled, W13/W20 never staged. Do not call either
+    # W19/W20 rollback: neither has a stage to reverse. This branch is
+    # deliberately blocked by ANY W19 journal, marker, copied DB path,
+    # W13/W20 journal or rollback, or mismatched original task/C40 action.
+    AssertPreRebindNoStage
+    $rollbackPhase='W27_PRE_REBIND_ORIGINAL_DISABLED_NO_DATA_STAGE'
 }
 OriginalDisabled
 if ((C40Hash) -ne $c40Before) {throw 'UCIE_W21_C40_CHANGED_DURING_ROLLBACK'}
 SavePrivate $rollbackReceipt ([ordered]@{
     schema=$schema;status='UCIE_W21_ROLLBACK_OLD_ACTIONS_DISABLED'
     writer_tasks_enabled=0;original_sqlite_overwritten=$false
-    new_private_sqlite_kept=$true;c40_action_unchanged=$true
+    new_private_sqlite_kept=($rollbackPhase -cne 'W27_PRE_REBIND_ORIGINAL_DISABLED_NO_DATA_STAGE');c40_action_unchanged=$true
+    rollback_phase=$rollbackPhase
+    pre_rebind_no_w19_stage=($rollbackPhase -ceq 'W27_PRE_REBIND_ORIGINAL_DISABLED_NO_DATA_STAGE')
     full_operating_cutover_authorized=$false
 })
 [pscustomobject]@{
     schema=$schema
     status='UCIE_W21_LOCAL_MAINTENANCE_ROLLBACK_RECORDED__DATA_PRESERVED'
     original_three_task_actions_restored_disabled=$true
-    new_private_sqlite_kept=$true
+    new_private_sqlite_kept=($rollbackPhase -cne 'W27_PRE_REBIND_ORIGINAL_DISABLED_NO_DATA_STAGE')
+    rollback_phase=$rollbackPhase
+    pre_rebind_no_w19_stage=($rollbackPhase -ceq 'W27_PRE_REBIND_ORIGINAL_DISABLED_NO_DATA_STAGE')
     c40_action_unchanged=$true
     full_operating_cutover_authorized=$false
 } | ConvertTo-Json -Compress
