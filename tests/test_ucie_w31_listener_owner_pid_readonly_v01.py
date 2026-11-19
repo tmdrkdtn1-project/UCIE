@@ -160,9 +160,9 @@ function MustDeny([string]$cmd,[string]$reason){
 }
 MustDeny '"D:\UCIE\.venv\Scripts\pythonw.exe" -B "D:\UCIE\scripts\run_ucie_local_v1_autostart.py" --port 18768' 'UCIE_W31_LISTENER_ARGS_COMMANDLINE_MISMATCH_HOLD'
 MustDeny '"D:\UCIE\.venv\Scripts\pythonw.exe" -B "D:\UCIE\scripts\run_ucie_local_v1_autostart.py" --port 18767 --other' 'UCIE_W31_LISTENER_ARGS_COMMANDLINE_MISMATCH_HOLD'
-MustDeny '"D:\UCIE\.venv\Scripts\pythonw.exe.bak" '+$specs[2].Arguments 'UCIE_W31_LISTENER_EXE_COMMANDLINE_MISMATCH_HOLD'
-MustDeny '"D:\OTHER\pythonw.exe" '+$specs[2].Arguments 'UCIE_W31_LISTENER_EXE_COMMANDLINE_MISMATCH_HOLD'
-MustDeny ' "D:\UCIE\.venv\Scripts\pythonw.exe"'+$specs[2].Arguments 'UCIE_W31_LISTENER_ARGS_COMMANDLINE_MISMATCH_HOLD'
+MustDeny ('"D:\UCIE\.venv\Scripts\pythonw.exe.bak" '+$specs[2].Arguments) 'UCIE_W31_LISTENER_EXE_COMMANDLINE_MISMATCH_HOLD'
+MustDeny ('"D:\OTHER\pythonw.exe" '+$specs[2].Arguments) 'UCIE_W31_LISTENER_EXE_COMMANDLINE_MISMATCH_HOLD'
+MustDeny (' "D:\UCIE\.venv\Scripts\pythonw.exe"'+$specs[2].Arguments) 'UCIE_W31_LISTENER_ARGS_COMMANDLINE_MISMATCH_HOLD'
 Write-Output 'UCIE_W31_PRODUCTION_CLI_REJECTION_MATRIX_PASS'
 """)
         self.assertIn("UCIE_W31_PRODUCTION_CLI_REJECTION_MATRIX_PASS", out)
