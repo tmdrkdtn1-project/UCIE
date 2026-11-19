@@ -112,16 +112,16 @@ function TaskItem([string]$name) {
     if ($sid -ne $script:ownerSid) { throw 'UCIE_W19_TASK_OWNER_MISMATCH' }
     return $t
 }
-function Same($action,[string]$exe,[string]$args,[string]$work) {
+function Same($action,[string]$exe,[string]$expectedArguments,[string]$work) {
     return ([string]::Equals([string]$action.Execute,$exe,[StringComparison]::OrdinalIgnoreCase) -and
-            [string]::Equals([string]$action.Arguments,$args,[StringComparison]::Ordinal) -and
+            [string]::Equals([string]$action.Arguments,$expectedArguments,[StringComparison]::Ordinal) -and
             [string]::Equals([string]$action.WorkingDirectory,$work,[StringComparison]::OrdinalIgnoreCase))
 }
 function ConfirmThree([bool]$newMode) {
     foreach ($s in $specs) {
         $t=TaskItem $s.Name
-        $valid=if ($newMode) {Same $t.Actions[0] $s.NewExe $s.NewArgs $root}
-               else {Same $t.Actions[0] $s.OldExe $s.OldArgs $old}
+        $valid=if ($newMode) {Same ($t.Actions[0]) $s.NewExe $s.NewArgs $root}
+               else {Same ($t.Actions[0]) $s.OldExe $s.OldArgs $old}
         if (-not $valid) { throw 'UCIE_W19_TASK_ACTION_DRIFT_HOLD' }
     }
 }
