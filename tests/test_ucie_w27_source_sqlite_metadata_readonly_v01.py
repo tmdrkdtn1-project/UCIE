@@ -81,11 +81,12 @@ class W27MetadataOnlyOwnerPreflightTests(unittest.TestCase):
             with self.assertRaisesRegex(gate.InventoryHold,
                                         "SOURCE_DB_SIZE_OUT_OF_BOUNDS"):
                 gate.inventory(source, set(NAMES))
-            with (source / "synthetic_00.sqlite3").open("wb") as f:
-                f.truncate(gate.MAX_DB + 1)
-            with self.assertRaisesRegex(gate.InventoryHold,
-                                        "SOURCE_DB_SIZE_OUT_OF_BOUNDS"):
-                gate.inventory(source, set(NAMES))
+            # Avoid allocating or reserving 512 MiB on CI disks.
+            (source / "synthetic_00.sqlite3").write_bytes(b"x" * 2048)
+            with patch.object(gate, "MAX_DB", 1024):
+                with self.assertRaisesRegex(gate.InventoryHold,
+                                            "SOURCE_DB_SIZE_OUT_OF_BOUNDS"):
+                    gate.inventory(source, set(NAMES))
 
     def test_symlinked_source_entry_rejected(self):
         with tempfile.TemporaryDirectory(prefix="ucie_w27_link_") as td:
