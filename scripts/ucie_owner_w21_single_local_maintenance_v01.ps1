@@ -214,18 +214,27 @@ if ($ApplyLocal) {
         c40_mcp_round_trip_verified=$false
         owner_live_cutover_authorized=$false
     })
+    $childStage='W19_OWNER_APPLY'
     try {
         # Preserve interactive Python input: DO NOT pipe this to Out-String.
         & $w19 -Apply -OwnerApproval $w19Approval
+        $childStage='W19_STAGE_JOURNAL_REQUIRED'
         Direct $w19Journal $false
+        $childStage='W13_REBIND_JOURNAL_REQUIRED'
         Direct $w13Journal $false
+        $childStage='POST_W19_C40_ACTION_CHECK'
         if ((C40Hash) -ne $c40Before) {
             throw 'UCIE_W21_C40_ACTION_DRIFT_AFTER_W19'
         }
+        $childStage='W20_LOCAL_PILOT'
         & $w20 -PilotLocal -OwnerApproval $w20Approval
+        $childStage='W20_PILOT_JOURNAL_REQUIRED'
         Direct $w20Journal $false
+        $childStage='NEW_LOCALV1_TASK_ACTIONS_CHECK'
         NewLocalOnly
+        $childStage='NEW_LOCALV1_HTTP_HEALTH_CHECK'
         if (-not (HealthyLocal)) {throw 'UCIE_W21_LOCAL_HEALTH_NOT_ACCEPTED'}
+        $childStage='POST_W20_C40_ACTION_CHECK'
         if ((C40Hash) -ne $c40Before) {
             throw 'UCIE_W21_C40_ACTION_DRIFT_AFTER_W20'
         }
@@ -242,6 +251,31 @@ if ($ApplyLocal) {
         } | ConvertTo-Json -Compress
         return
     } catch {
+        # Never echo untrusted exception text: it may contain private paths,
+        # task arguments, or other sensitive information. Report only a
+        # restricted UCIE error identifier (if exact) and exception class.
+        # This first-party diagnostic is an additional stdout receipt;
+        # preserve the original stable W21 failure identifier for callers.
+        $raw=[string]$_.Exception.Message
+        $reason='UCIE_W25_NONCANONICAL_CHILD_EXCEPTION'
+        if($raw -cmatch '^UCIE_[A-Z0-9_]{5,100}$'){
+            $reason=$raw
+        }
+        $kind=$_.Exception.GetType().Name
+        if($kind -notmatch '^[A-Za-z][A-Za-z0-9]{0,60}$'){
+            $kind='UnclassifiedError'
+        }
+        [pscustomobject]@{
+            schema='UCIE_W25_W21_SANITIZED_CHILD_FAILURE_V01'
+            status='UCIE_W21_NESTED_STAGE_FAILURE__REVIEW_REQUIRED'
+            stage=$childStage
+            reason_code=$reason
+            exception_class=$kind
+            private_path_or_error_text_exposed=$false
+            recovery_requires_owner_review=$true
+            owner_maintenance_retry_authorized=$false
+            full_cutover_authorized=$false
+        } | ConvertTo-Json -Compress
         # Preserve all partial state. NO blind retry or automatic DB rollback.
         throw 'UCIE_W21_LOCAL_ONCE_FAILED_PRESERVE_RECEIPTS_EXPLICIT_ROLLBACK_ONLY'
     }
