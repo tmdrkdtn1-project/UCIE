@@ -26,6 +26,12 @@ W21's `-ApplyLocal` catches nested errors and previously emitted only the stable
 
 Source ancestry for W19 expected W18 base `853736a0c82c0c348665b6b8acb99e3c3a6d4825` was checked in first-party GitHub and is an ancestor of W24 main; this narrows *only* the source version concern. It does not prove Windows owner's on-host prejournal checks passed.
 
+## W25 synthetic reproduction of W19 prejournal false drift (NOT owner-host proof)
+
+The first W25 PR attempt added a CI test extracting the existing W19 `Same` and `ConfirmThree` function bodies, replacing only `TaskItem` with an in-memory ScheduledTask-shaped object. Three disposable UCIE original-task records had matching OLD execute paths, arguments and working directories, and state `Disabled`. On Ubuntu pwsh in CI the previously shipped W19 functions nonetheless raised `UCIE_W19_TASK_ACTION_DRIFT_HOLD` from `ConfirmThree`. This is **reproducible evidence of a task-action comparison bug** in the same pre-journal class as the owner W24/W21 failure.
+
+The focused W19 repair uses an ordinary function parameter `$expectedArguments` rather than PowerShell's special automatic variable `$args`, and explicitly wraps the task action index as `($t.Actions[0])` when forwarding the object into `Same`. The exact same fixture is rerun as a regression. This improves confidence in a mechanism but does **not** prove the owner host's previously masked W19 inner exception was identical, and no actual owner Windows Task Scheduler activity has been performed by W25.
+
 ## W25 non-mutating source improvements
 
 1. Existing `scripts/ucie_owner_w21_single_local_maintenance_v01.ps1` has a stable error ID, but now additionally prints a JSON `UCIE_W25_W21_SANITIZED_CHILD_FAILURE_V01` with the last nested stage (`W19_OWNER_APPLY`, `W19_STAGE_JOURNAL_REQUIRED`, etc.), exactly matching canonical first-party UCIE error identifiers when present and otherwise a generic noncanonical exception class. It does **not** emit raw exception text, command line, stack trace, private archive path, private task arguments, or secrets. Keeps one-shot journal and fail-closed behavior.
