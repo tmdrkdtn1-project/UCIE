@@ -46,6 +46,8 @@ class W26RealOwnerTaskComparatorContracts(unittest.TestCase):
         self.assertIn("FunctionDefinitionAst", s)
         self.assertIn("ParseFile(", s)
         self.assertIn(". ([scriptblock]::Create($pure))", s)
+        self.assertIn("$sameFunctionAsts=@($ast.FindAll({", s)
+        self.assertNotIn("$matches=@($ast.FindAll({", s)
         self.assertIn("function Same($action,[string]$exe,[string]$expectedArguments,[string]$work)", s)
         self.assertIn("Same ($t.Actions[0]) $spec.Execute $spec.Arguments $old", s)
         self.assertNotIn("& $w19 -Apply", s)
