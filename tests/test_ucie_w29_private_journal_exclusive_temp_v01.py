@@ -58,8 +58,13 @@ try{{
     if($_.Exception.Message -cne 'UCIE_W29_UNEXPECTED_EXISTING_PRIVATE_OUTPUT_HOLD'){{throw}}
 }}
 $after=[IO.File]::ReadAllBytes($intent)
-if(-not [Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after)){{
+if($before.Length -ne $after.Length){{
     throw 'UCIE_W29_DUPLICATE_CHANGED_EXISTING_RECEIPT'
+}}
+for($idx=0;$idx -lt $before.Length;$idx++){{
+    if($before[$idx] -ne $after[$idx]){{
+        throw 'UCIE_W29_DUPLICATE_CHANGED_EXISTING_RECEIPT'
+    }}
 }}
 try{{
     SavePrivate $other ([ordered]@{{schema='UNLISTED_WRITE_ATTEMPT'}})
