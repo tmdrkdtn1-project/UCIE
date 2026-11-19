@@ -70,7 +70,9 @@ class W25OriginalW19SyntheticTaskActionTests(unittest.TestCase):
 
     def test_w19_actual_functions_contain_no_host_access(self):
         code = function_source()
-        self.assertIn("Same $t.Actions[0] $s.OldExe $s.OldArgs $old", code)
+        self.assertIn("Same ($t.Actions[0]) $s.OldExe $s.OldArgs $old", code)
+        self.assertIn("function Same($action,[string]$exe,[string]$expectedArguments,", code)
+        self.assertNotIn("[string]$args,", code)
         self.assertNotIn("Get-ScheduledTask", code)
         self.assertNotIn("Set-ScheduledTask", code)
         self.assertNotIn("Get-Content", code)
