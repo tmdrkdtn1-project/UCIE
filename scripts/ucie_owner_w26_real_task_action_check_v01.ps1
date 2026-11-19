@@ -109,13 +109,13 @@ $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile(
     $w19,[ref]$tokens,[ref]$errors)
 if(@($errors).Count -gt 0){throw 'UCIE_W26_W19_SOURCE_PARSE_HOLD'}
-$matches=@($ast.FindAll({
+$sameFunctionAsts=@($ast.FindAll({
     param($node)
     ($node -is [Management.Automation.Language.FunctionDefinitionAst] -and
      $node.Name -ceq 'Same')
 },$true))
-if($matches.Count -ne 1){throw 'UCIE_W26_EXACTLY_ONE_W19_SAME_REQUIRED'}
-$pure=$matches[0].Extent.Text
+if($sameFunctionAsts.Count -ne 1){throw 'UCIE_W26_EXACTLY_ONE_W19_SAME_REQUIRED'}
+$pure=$sameFunctionAsts[0].Extent.Text
 if(-not $pure.StartsWith(
        'function Same($action,[string]$exe,[string]$expectedArguments,[string]$work) {',
        [StringComparison]::Ordinal) -or
