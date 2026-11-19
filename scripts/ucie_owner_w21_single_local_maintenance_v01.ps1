@@ -331,7 +331,7 @@ if ((C40Hash) -ne $c40Before) {throw 'UCIE_W21_C40_CHANGED_DURING_ROLLBACK'}
 SavePrivate $rollbackReceipt ([ordered]@{
     schema=$schema;status='UCIE_W21_ROLLBACK_OLD_ACTIONS_DISABLED'
     writer_tasks_enabled=0;original_sqlite_overwritten=$false
-    new_private_sqlite_kept=$true;c40_action_unchanged=$true
+    new_private_sqlite_kept=($rollbackPhase -cne 'W27_PRE_REBIND_ORIGINAL_DISABLED_NO_DATA_STAGE');c40_action_unchanged=$true
     rollback_phase=$rollbackPhase
     pre_rebind_no_w19_stage=($rollbackPhase -ceq 'W27_PRE_REBIND_ORIGINAL_DISABLED_NO_DATA_STAGE')
     full_operating_cutover_authorized=$false
@@ -340,7 +340,7 @@ SavePrivate $rollbackReceipt ([ordered]@{
     schema=$schema
     status='UCIE_W21_LOCAL_MAINTENANCE_ROLLBACK_RECORDED__DATA_PRESERVED'
     original_three_task_actions_restored_disabled=$true
-    new_private_sqlite_kept=$true
+    new_private_sqlite_kept=($rollbackPhase -cne 'W27_PRE_REBIND_ORIGINAL_DISABLED_NO_DATA_STAGE')
     rollback_phase=$rollbackPhase
     pre_rebind_no_w19_stage=($rollbackPhase -ceq 'W27_PRE_REBIND_ORIGINAL_DISABLED_NO_DATA_STAGE')
     c40_action_unchanged=$true
