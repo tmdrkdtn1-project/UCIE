@@ -37,6 +37,8 @@ tests/test_ucie_w29_oldroot_restore_core_injected_v01.py parses actual first-par
 - failed second writer enable creates no restored receipt, preserves intent, rejects blind retry;
 - only three original tasks quiesced and only old LocalV1 stopped.
 
+tests/test_ucie_w29_private_journal_exclusive_temp_v01.py also extracts actual W29 Absent/SavePrivate PowerShell functions and runs them against a disposable CI temporary folder, verifying atomic destination creation, no overwrite on replay, rejection of historical receipt destinations, unchanged legacy dummy-file bytes, and no orphan W29 temporary files. It never accesses the owner's protected archive.
+
 Windows/Ubuntu Python3.13+3.15 CI executes no owner Task Scheduler/SQLite/C40 mutations. CI success does NOT prove the owner host task DACL can always enable tasks or that an unknown process can be safely stopped. Real owner -RehearseOld is not requested, and if such a future test fails, old service may still need manual repair.
 
 ## Explicit remaining gates
