@@ -116,6 +116,16 @@ class W27MetadataOnlyOwnerPreflightTests(unittest.TestCase):
                 gate.inventory(source, {"public_miner.sqlite3"}
                                | {f"invalid/{i:02}.sqlite3" for i in range(9)})
 
+    def test_private_archive_sid_acl_before_historical_receipts(self):
+        source = SOURCE.read_text("utf-8")
+        self.assertIn("UCIE_W27_OWNER_ONLY_ARCHIVE_ACL_REQUIRED", source)
+        self.assertIn("AreAccessRulesProtected", source)
+        self.assertIn("Get-Acl -LiteralPath", source)
+        self.assertLess(source.index("    verify_owner_archive_acl()"),
+                        source.index("        summary = inventory(SOURCE, historical_names())"))
+        self.assertNotIn("Get-ScheduledTask", source)
+        self.assertNotIn("Set-ScheduledTask", source)
+
     def test_source_declares_no_db_open_or_task_mutation(self):
         source = SOURCE.read_text("utf-8")
         self.assertNotIn("sqlite3.connect", source)
