@@ -209,6 +209,9 @@ function AssertRecoveredHistory([string]$baseline) {
        $w22.status -ne 'UCIE_W22_OWNER_MAINTENANCE_QUIESCE_INTENT' -or
        $w22done.status -ne 'UCIE_W22_ORIGINAL_TASK_SCHEDULES_AND_LOCAL_HTTP_RESTORED' -or
        $w22done.old_local_http_healthy -ne $true -or
+       $w22done.schema -ne 'UCIE_W22_OWNER_QUIESCE_LOCAL_MAINTENANCE_V01' -or
+       $w22done.original_writer_schedules_enabled -ne 2 -or
+       $w22done.c40_action_unchanged -ne $true -or
        $w24.schema -ne 'UCIE_W24_OWNER_RECOVERED_RETRY_V01' -or
        $w24.status -ne 'UCIE_W24_OWNER_RECOVERED_RETRY_INTENT' -or
        $w21.schema -ne 'UCIE_W21_OWNER_SINGLE_LOCAL_MAINTENANCE_V01' -or
@@ -219,6 +222,8 @@ function AssertRecoveredHistory([string]$baseline) {
        $restoration.status -ne 'UCIE_W24_PRE_REBIND_ORIGINAL_SERVICE_RESTORED' -or
        $restoration.localv1_http_healthy -ne $true -or
        $restoration.original_writer_schedules_enabled -ne 2 -or
+       $restoration.c40_action_unchanged -ne $true -or
+       $restoration.original_sqlite_overwritten_by_recovery -ne $false -or
        $w22.owner_sid_sha256 -cne $hash -or
        $w24.owner_sid_sha256 -cne $hash -or
        $w21.owner_sid_sha256 -cne $hash -or
@@ -260,6 +265,10 @@ function WaitHealthyOld {
 }
 function ReadW29Intent([string]$baseline) {
     Direct $intent $false
+    $file=Get-Item -LiteralPath $intent -Force -ErrorAction Stop
+    if($file.Length -lt 2 -or $file.Length -gt 1048576){
+        throw 'UCIE_W29_OWNER_INTENT_SIZE_BOUND_HOLD'
+    }
     $record=Get-Content -LiteralPath $intent -Encoding UTF8 -Raw |
         ConvertFrom-Json -ErrorAction Stop
     if($record.schema -ne $schema -or
