@@ -17,7 +17,7 @@ Source: scripts/ucie_owner_w31_local_listener_pid_readonly_v01.ps1
 - An explicit same-owner UAC-elevated -CheckLocal invocation checks exact newroot source path, clean pinned first-party Git remote, W30 ancestral SHA and immutable W29 PowerShell Git blob, owner-only protected archive, original six W22/W24/W21/emergency restoration private receipts, original three old exact task actions/states and C40 Action hash.
 - Rejects any W19/W13/W20/W28 stage or W29/W30 one-shot intent/recovery/restored files; never removes or overwrites those files.
 - Verifies original old LocalV1 HTTP health. Filters ONLY TCP listener port 18767 using Get-NetTCPConnection with LocalPort 18767 and Listen; requires exactly one listener bound to 127.0.0.1. Retrieves only the listener's OwningProcess PID and issues a PID-filtered Win32_Process CIM query; it does not enumerate unrelated processes.
-- Compares actual process ExecutablePath and parsed CommandLine exactly against ORIGINAL old UCIE LocalV1 Task Action execute/arguments, and calls read-only CIM GetOwnerSid ONLY for that PID, requiring exact signed-in owner SID. Reconfirms C40 Action hash is unchanged.
+- Compares actual process ExecutablePath and parsed CommandLine exactly against ORIGINAL old UCIE LocalV1 Task Action execute/arguments, and calls read-only CIM GetOwnerSid ONLY for that PID, requiring exact signed-in owner SID. Rechecks only port 18767 after the process inspection and refuses a changed or missing listener PID; this reduces a PID-rebinding race without claiming immutable process identity. Reconfirms C40 Action hash is unchanged.
 - All mismatches fail CLOSED without process kill, Scheduler action, newroot runtime, journal writing, SQLite open or C40/tunnel activity.
 
 ### Accurate pass interpretation
