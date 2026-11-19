@@ -103,6 +103,25 @@ def _git_checked(*args: str) -> str:
     return result.stdout.strip()
 
 
+def verify_owner_archive_acl() -> None:
+    # Elevated admin is not sufficient: protected UCIE archive must belong
+    # to the same Windows SID that initiated this single read-only check.
+    # No Task Scheduler or C40 commands, files written, or user SID output.
+    command = (
+        "$ErrorActionPreference='Stop';"
+        "$who=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;"
+        "$acl=Get-Acl -LiteralPath 'D:\\UCIE_PROJECT\\ARCHIVE' -ErrorAction Stop;"
+        "if(-not $acl.AreAccessRulesProtected -or "
+        "$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $who)"
+        "{exit 3};exit 0"
+    )
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+        capture_output=True, text=True, timeout=15, check=False, errors="replace")
+    if result.returncode:
+        raise InventoryHold("UCIE_W27_OWNER_ONLY_ARCHIVE_ACL_REQUIRED")
+
+
 def validate_canonical() -> None:
     if (not direct(ROOT, directory=True)
             or not direct(OLD_ROOT, directory=True)
@@ -124,6 +143,7 @@ def validate_canonical() -> None:
         raise InventoryHold("UCIE_W27_W19_HANDOFF_SOURCE_BLOB_DRIFT")
     if _git_checked("status", "--porcelain", "--untracked-files=all"):
         raise InventoryHold("UCIE_W27_DIRTY_WORKTREE_HOLD")
+    verify_owner_archive_acl()
     if (not _absent(ARCHIVE / "UCIE_W19_OWNER_DATA_TASK_STAGE_JOURNAL_V01.json")
             or not _absent(ARCHIVE / "UCIE_W13_TASK_REBIND_V01.json")
             or not _absent(ARCHIVE / "UCIE_W20_LOCAL_PILOT_JOURNAL_V01.json")
