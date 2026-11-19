@@ -60,7 +60,10 @@ class W22OwnerQuiescenceContractTests(unittest.TestCase):
         code = self.src
         first_stop = code.index("Disable-ScheduledTask -TaskPath '\\' -TaskName $names[$i]")
         self.assertLess(code.index("SavePrivate $intent"), first_stop)
-        self.assertLess(code.index("module._private_prerequisites()"), first_stop)
+        self.assertLess(code.index("& $python -I -B $w23Lineage --check-owner --owner-approval $w23Approval"), first_stop)
+        self.assertIn("ucie_owner_w23_w19_lineage_gate_v01.py", code)
+        self.assertNotIn("& $python -I -B -c $preflight", code)
+        self.assertNotIn("$preflight=@", code)
         self.assertLess(code.index("UCIE_W22_W19_PRIVATE_LINEAGE_GATE_HOLD_BEFORE_OUTAGE"),
                         first_stop)
         self.assertLess(code.index("Absent $p", code.index("if($ApplyLocal)")),
