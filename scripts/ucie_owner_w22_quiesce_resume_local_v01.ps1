@@ -4,7 +4,7 @@
 # stop at HOLD and preserve a private journal. C40 task is never mutated.
 [CmdletBinding()]
 param([switch]$ContractOnly,[switch]$ApplyLocal,[switch]$ResumeOld,
-      [string]$OwnerApproval='')
+      [switch]$RecoveredAttempt,[string]$OwnerApproval='')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $schema='UCIE_W22_OWNER_QUIESCE_LOCAL_MAINTENANCE_V01'
@@ -27,10 +27,25 @@ $python=$root+'\.venv\Scripts\python.exe'
 $w19Python=$root+'\scripts\ucie_owner_w19_lockstep_handoff_v01.py'
 $w23Lineage=$root+'\scripts\ucie_owner_w23_w19_lineage_gate_v01.py'
 $w23Approval='AUTHORIZE_UCIE_W23_READONLY_W19_LINEAGE_BEFORE_TASK_STOP'
-$intent=$archive+'\UCIE_W22_OWNER_MAINTENANCE_INTENT_V01.json'
-$resumeReceipt=$archive+'\UCIE_W22_ORIGINAL_AVAILABILITY_RESTORED_V01.json'
+$priorW22Intent=$archive+'\UCIE_W22_OWNER_MAINTENANCE_INTENT_V01.json'
+$priorW22Restore=$archive+'\UCIE_W22_ORIGINAL_AVAILABILITY_RESTORED_V01.json'
+$intent=$priorW22Intent
+$resumeReceipt=$priorW22Restore
 $approvalApply='AUTHORIZE_UCIE_W22_EXACT_OLD_TASK_QUIESCE_AND_W21_LOCAL_ONLY'
 $approvalResume='AUTHORIZE_UCIE_W22_RESTORE_ORIGINAL_SCHEDULES_AND_LOCALV1'
+$intentStatus='UCIE_W22_OWNER_MAINTENANCE_QUIESCE_INTENT'
+$resumeStatus='UCIE_W22_ORIGINAL_TASK_SCHEDULES_AND_LOCAL_HTTP_RESTORED'
+# W24 is an isolated second attempt ONLY after W22 was fully recovered.
+# Never move, delete, overwrite or repurpose the original W22 receipts.
+if ($RecoveredAttempt) {
+    $schema='UCIE_W24_OWNER_RECOVERED_RETRY_V01'
+    $intent=$archive+'\UCIE_W24_OWNER_RECOVERED_RETRY_INTENT_V01.json'
+    $resumeReceipt=$archive+'\UCIE_W24_OWNER_RECOVERED_RETRY_RESTORED_V01.json'
+    $approvalApply='AUTHORIZE_UCIE_W24_OWNER_RECOVERED_RETRY_LOCAL_ONLY'
+    $approvalResume='AUTHORIZE_UCIE_W24_OWNER_RECOVERED_RETRY_RESUME_OLD'
+    $intentStatus='UCIE_W24_OWNER_RECOVERED_RETRY_INTENT'
+    $resumeStatus='UCIE_W24_ORIGINAL_TASK_SCHEDULES_RESTORED'
+}
 $w21Apply='AUTHORIZE_UCIE_W21_SINGLE_FINAL_DATA_AND_LOCALV1_MAINTENANCE'
 $w21Rollback='AUTHORIZE_UCIE_W21_SINGLE_LOCAL_MAINTENANCE_ROLLBACK'
 $base='44ae75fdcdcbdd4940076e0e58c3b6ea7bed729f'
@@ -74,6 +89,15 @@ if (-not [string]::Equals($OwnerApproval,$required,[StringComparison]::Ordinal))
 }
 if ($env:OS -ne 'Windows_NT' -or -not [Environment]::UserInteractive) {
     throw 'UCIE_W22_INTERACTIVE_WINDOWS_OWNER_REQUIRED'
+}
+# Explicit UAC token test before reading/modifying any owner Task Scheduler
+# object and, crucially, BEFORE writing a protected maintenance intent.
+# Ownership by SID alone is NOT evidence of the right to disable a task.
+$caller=[Security.Principal.WindowsIdentity]::GetCurrent()
+$principal=[Security.Principal.WindowsPrincipal]::new($caller)
+if (-not $principal.IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw 'UCIE_W24_ELEVATED_TOKEN_REQUIRED_BEFORE_INTENT_NO_TASK_CHANGE'
 }
 function Direct([string]$p,[bool]$dir) {
     $node=Get-Item -LiteralPath $p -Force -ErrorAction Stop
@@ -183,6 +207,39 @@ function CheckOldDisabled {
         }
     }
 }
+function RequireRecoveredW22History {
+    # Historical W22 attempt has been fully resumed and its two original
+    # owner-only receipts are preserved verbatim, including source SID/C40.
+    Direct $priorW22Intent $false
+    Direct $priorW22Restore $false
+    $before=Get-Content -LiteralPath $priorW22Intent -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    $after=Get-Content -LiteralPath $priorW22Restore -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    $expectedNames=@('UCIE-PublicMiner-Hourly','UCIE-Internal-Minute','UCIE-LocalV1-Web')
+    $expectedStates=@('Ready','Ready','Running')
+    if ($before.schema -ne 'UCIE_W22_OWNER_QUIESCE_LOCAL_MAINTENANCE_V01' -or
+        $before.status -ne 'UCIE_W22_OWNER_MAINTENANCE_QUIESCE_INTENT' -or
+        $before.owner_sid_sha256 -ne (ShaText $script:ownerSid) -or
+        $before.c40_action_sha256 -ne $baseline -or
+        $before.original_tasks_exact_old_actions -ne $true -or
+        @($before.original_task_names).Count -ne 3 -or
+        @($before.original_task_states).Count -ne 3 -or
+        $after.schema -ne 'UCIE_W22_OWNER_QUIESCE_LOCAL_MAINTENANCE_V01' -or
+        $after.status -ne 'UCIE_W22_ORIGINAL_TASK_SCHEDULES_AND_LOCAL_HTTP_RESTORED' -or
+        $after.restoration -ne 'ORIGINAL_SCHEDULE_STATES_RESTORED__LOCAL_HTTP_HEALTHY' -or
+        $after.old_local_http_healthy -ne $true -or
+        $after.original_writer_schedules_enabled -ne 2 -or
+        $after.c40_action_unchanged -ne $true -or
+        $after.original_sqlite_restored_or_overwritten -ne $false -or
+        $after.full_cutover_authorized -ne $false) {
+        throw 'UCIE_W24_PRIOR_W22_RECOVERY_NOT_PROVEN_NO_RETRY'
+    }
+    foreach($idx in 0..2) {
+        if($before.original_task_names[$idx] -cne $expectedNames[$idx] -or
+           $before.original_task_states[$idx] -cne $expectedStates[$idx]) {
+            throw 'UCIE_W24_PRIOR_W22_ORIGINAL_STATES_MISMATCH'
+        }
+    }
+}
 $expected=[IO.Path]::GetFullPath($scriptPath)
 if(-not [string]::Equals([IO.Path]::GetFullPath($PSCommandPath),
                         $expected,[StringComparison]::OrdinalIgnoreCase)){
@@ -190,7 +247,7 @@ if(-not [string]::Equals([IO.Path]::GetFullPath($PSCommandPath),
 }
 foreach($p in @($old,$root,$archive)) {Direct $p $true}
 foreach($p in @($scriptPath,$w21)) {Direct $p $false}
-$script:ownerSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$script:ownerSid=$caller.User.Value
 $acl=Get-Acl -LiteralPath $archive -ErrorAction Stop
 if(-not $acl.AreAccessRulesProtected -or
    $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $script:ownerSid){
@@ -214,6 +271,9 @@ try {
 } finally {$env:GIT_OPTIONAL_LOCKS=$previous}
 Import-Module ScheduledTasks -ErrorAction Stop
 $baseline=C40ActionHash
+if($RecoveredAttempt) {
+    RequireRecoveredW22History
+}
 if($ApplyLocal) {
     Absent $intent
     Absent $resumeReceipt
@@ -246,7 +306,7 @@ if($ApplyLocal) {
     }
     # PRIVATE intent before disabling, stopping, or writing SQLite.
     SavePrivate $intent ([ordered]@{
-        schema=$schema;status='UCIE_W22_OWNER_MAINTENANCE_QUIESCE_INTENT'
+        schema=$schema;status=$intentStatus
         owner_sid_sha256=(ShaText $script:ownerSid)
         c40_action_sha256=$baseline
         original_task_names=@($names)
@@ -287,7 +347,7 @@ if($ApplyLocal) {
     # W21 itself verifies new-root LocalV1 and writer Disabled states.
     [pscustomobject]@{
         schema=$schema
-        status='UCIE_W22_W21_LOCAL_ONLY_PILOT_STAGED__TWO_WRITERS_C40_HOLD'
+        status=$(if($RecoveredAttempt){'UCIE_W24_LOCAL_ONLY_PILOT_STAGED__WRITERS_C40_HOLD'}else{'UCIE_W22_W21_LOCAL_ONLY_PILOT_STAGED__TWO_WRITERS_C40_HOLD'})
         old_three_tasks_quiesced_before_handoff=$true
         original_local_listener_released_before_pilot=$true
         owner_w21_local_stage_invoked=$true
@@ -307,7 +367,7 @@ Absent $resumeReceipt
 $record=Get-Content -LiteralPath $intent -Raw -Encoding UTF8 |
     ConvertFrom-Json -ErrorAction Stop
 if($record.schema -ne $schema -or
-   $record.status -ne 'UCIE_W22_OWNER_MAINTENANCE_QUIESCE_INTENT' -or
+   $record.status -ne $intentStatus -or
    $record.owner_sid_sha256 -ne (ShaText $script:ownerSid) -or
    $record.c40_action_sha256 -ne $baseline -or
    @($record.original_task_states).Count -ne 3 -or
@@ -388,7 +448,7 @@ if((C40ActionHash) -ne $baseline){
     throw 'UCIE_W22_C40_ACTION_DRIFT_AFTER_RECOVERY'
 }
 SavePrivate $resumeReceipt ([ordered]@{
-    schema=$schema;status='UCIE_W22_ORIGINAL_TASK_SCHEDULES_AND_LOCAL_HTTP_RESTORED'
+    schema=$schema;status=$resumeStatus
     restoration=$restored
     old_local_http_healthy=$true
     listener_task_pid_identity_verified=$false
@@ -401,7 +461,7 @@ SavePrivate $resumeReceipt ([ordered]@{
 })
 [pscustomobject]@{
     schema=$schema
-    status='UCIE_W22_ORIGINAL_SCHEDULES_RESTORED__HTTP_HEALTHY_PID_AND_C40_HOLD'
+    status=$(if($RecoveredAttempt){'UCIE_W24_ORIGINAL_SCHEDULES_RESTORED__HTTP_HEALTHY_PID_AND_C40_HOLD'}else{'UCIE_W22_ORIGINAL_SCHEDULES_RESTORED__HTTP_HEALTHY_PID_AND_C40_HOLD'})
     restoration=$restored
     old_local_http_healthy=$true
     listener_task_pid_identity_verified=$false
