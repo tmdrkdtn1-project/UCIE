@@ -89,6 +89,8 @@ class W25OwnerReadOnlyPrejournalContracts(unittest.TestCase):
         self.assertLess(indexes[0],
                         source.index("& $w19 -Apply -OwnerApproval $w19Approval"))
         self.assertIn("UCIE_W25_W21_SANITIZED_CHILD_FAILURE_V01", source)
+        self.assertEqual(source.count("UCIE_W25_W21_SANITIZED_CHILD_FAILURE_V01"), 1)
+        self.assertEqual(source.count("# Rollback runs only after exact owner approval"), 1)
         self.assertIn("UCIE_W25_NONCANONICAL_CHILD_EXCEPTION", source)
         self.assertIn("if($raw -cmatch '^UCIE_[A-Z0-9_]{5,100}$')", source)
         self.assertIn("if($kind -notmatch '^[A-Za-z][A-Za-z0-9]{0,60}$')", source)
