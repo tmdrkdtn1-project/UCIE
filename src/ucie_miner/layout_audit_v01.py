@@ -314,6 +314,24 @@ def inspect_original_ucie_git_from_stage(
 # Exact-path metadata crosswalk. Paths stay in memory; never echo original
 # filenames, original contents or owner credentials to the JSON report.
 PATH_CROSSWALK_SCHEMA = "UCIE_ORIGINAL_STAGE_PATH_OVERLAP_READONLY_V01"
+CROSSWALK_FAILURE_SCHEMA = "UCIE_ORIGINAL_STAGE_PATH_OVERLAP_DIAGNOSTIC_V01"
+
+
+class LayoutAuditPhaseError(LayoutAuditError):
+    """Only a fixed, non-sensitive phase enum may leave the owner workstation."""
+
+    def __init__(self, phase: str):
+        super().__init__("bounded original Git comparison held")
+        self.phase = phase
+
+
+def _phase(phase: str, fn, *args):
+    """Sanitize the failure location without leaking Git paths/stderr."""
+    try:
+        return fn(*args)
+    except (LayoutAuditError, OSError, UnicodeError, ValueError) as exc:
+        raise LayoutAuditPhaseError(phase) from exc
+
 MAX_CROSSWALK_BYTES = 4_000_000
 MAX_CROSSWALK_PATHS = 20_000
 REVIEW_AREAS = frozenset(("docs", "scripts", "src", "tests", ".github"))
@@ -408,16 +426,19 @@ def _stage_original_path_crosswalk(staged_root: Path,
     Read Git INDEX and STATUS metadata only; no Python import from original,
     no file-content comparison, no SHA claim, no copy/move/delete/archiving.
     """
-    stage = _checked_root(staged_root)
-    original = _checked_root(original_root)
+    stage = _phase("STAGED_ROOT", _checked_root, staged_root)
+    original = _phase("ORIGINAL_ROOT", _checked_root, original_root)
     if stage == original or _indirect(stage.parent) or _indirect(original.parent):
-        raise LayoutAuditError("original and staged Git roots not independent")
-    staged_paths = _parse_tracked_git_paths(
-        _git_metadata_bytes(stage, "ls-files", "--cached", "-z"))
-    changes = _parse_original_status_paths(
-        _git_metadata_bytes(
-            original, "status", "--porcelain=v1", "-z",
-            "--untracked-files=all"))
+        raise LayoutAuditPhaseError("INDEPENDENT_ROOTS")
+    stage_data = _phase(
+        "STAGED_TRACKED_QUERY", _git_metadata_bytes,
+        stage, "ls-files", "--cached", "-z")
+    staged_paths = _phase("STAGED_TRACKED_PARSE", _parse_tracked_git_paths, stage_data)
+    original_data = _phase(
+        "ORIGINAL_STATUS_QUERY", _git_metadata_bytes,
+        original, "status", "--porcelain=v1", "-z",
+        "--untracked-files=all")
+    changes = _phase("ORIGINAL_STATUS_PARSE", _parse_original_status_paths, original_data)
     groups: dict[str, Counter[str]] = {}
     protected_bridge = protected_other = unknown_root = 0
     untracked_total = tracked_changed_total = 0
@@ -492,16 +513,23 @@ def compare_original_ucie_git_to_stage(code_root: Path, original_root: Path,
     _require_staged_observer(code_root, platform=platform)
     if str(original_root).casefold() != r"d:\ucie":
         raise LayoutAuditError("original UCIE checkout identity mismatch")
-    stage = _checked_root(code_root)
-    if _git_metadata_bytes(stage, "symbolic-ref", "--short", "HEAD").strip() != b"main":
-        raise LayoutAuditError("not staged main Git branch")
-    if (_git_metadata_bytes(stage, "remote", "get-url", "origin").strip()
-            != b"https://github.com/tmdrkdtn1-project/UCIE.git"):
-        raise LayoutAuditError("not first-party UCIE Git remote")
-    if _git_metadata_bytes(
-            stage, "status", "--porcelain=v1", "-z",
-            "--untracked-files=all"):
-        raise LayoutAuditError("staged UCIE repository is not clean")
+    stage = _phase("STAGED_ROOT", _checked_root, code_root)
+    branch = _phase(
+        "STAGED_BRANCH_QUERY", _git_metadata_bytes,
+        stage, "symbolic-ref", "--short", "HEAD")
+    if branch.strip() != b"main":
+        raise LayoutAuditPhaseError("STAGED_BRANCH_NOT_MAIN")
+    remote = _phase(
+        "STAGED_REMOTE_QUERY", _git_metadata_bytes,
+        stage, "remote", "get-url", "origin")
+    if remote.strip() != b"https://github.com/tmdrkdtn1-project/UCIE.git":
+        raise LayoutAuditPhaseError("STAGED_REMOTE_MISMATCH")
+    state = _phase(
+        "STAGED_STATUS_QUERY", _git_metadata_bytes,
+        stage, "status", "--porcelain=v1", "-z",
+        "--untracked-files=all")
+    if state:
+        raise LayoutAuditPhaseError("STAGED_NOT_CLEAN")
     return _stage_original_path_crosswalk(stage, original_root)
 
 
@@ -538,9 +566,21 @@ def main() -> int:
                 repo, Path(r"D:\UCIE"), platform=os.name)
         else:
             out = inspect_ucie_layout(repo, fast_git=args.fast_git)
+    except LayoutAuditPhaseError as exc:
+        print(json.dumps({
+            "schema": CROSSWALK_FAILURE_SCHEMA,
+            "status": "UCIE_LAYOUT_PREVIEW_FAIL_CLOSED",
+            "failure_phase": exc.phase,
+            "original_paths_or_contents_printed": False,
+            "operating_db_writes": 0, "migration_executed": False,
+            "git_index_or_history_modified": False,
+            "task_or_tunnel_modified": False,
+        }, sort_keys=True))
+        return 2
     except (LayoutAuditError, OSError, UnicodeError, ValueError):
         print(json.dumps({"schema": SCHEMA,
                           "status": "UCIE_LAYOUT_PREVIEW_FAIL_CLOSED",
+                          "failure_phase": "PRECHECK_OR_UNCLASSIFIED",
                           "operating_db_writes": 0,
                           "migration_executed": False}, sort_keys=True))
         return 2

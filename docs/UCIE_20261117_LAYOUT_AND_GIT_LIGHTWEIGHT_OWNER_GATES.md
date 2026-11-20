@@ -143,3 +143,31 @@ This command is a nonmutating owner classification step; any subsequent
 SHA-256 content comparison would require separate UCIE-only source rights,
 reference/retention review and bounded consent. Do NOT import or publish
 private source, secrets, tokens, owner bridge state or original file paths.
+
+
+## 2026-11-20 owner exact-stage crosswalk first-run hold (diagnosis, no mutation)
+
+After owner successfully fast-forwarded staged main to
+af0f00fc238f439a1685e9a0012f054218e24e5b, executing the new
+--compare-original-git operation returned only
+UCIE_LAYOUT_PREVIEW_FAIL_CLOSED. It did not output by-area results;
+it is NOT a completed overlap comparison, not a data loss signal, and
+does not grant cleanup/cutover. The earlier --observe-original-git run
+did complete with original 20 tracked-modified and 1566 untracked.
+
+The original crosswalk implementation incorrectly collapsed all
+validation/metadata/query failures into one generic JSON without
+the safe failing stage. The next patch reports only fixed classifications
+(STAGED_ROOT, STAGED_BRANCH_QUERY, STAGED_BRANCH_NOT_MAIN,
+STAGED_REMOTE_QUERY, STAGED_REMOTE_MISMATCH, STAGED_STATUS_QUERY,
+STAGED_NOT_CLEAN, ORIGINAL_ROOT, INDEPENDENT_ROOTS,
+STAGED_TRACKED_QUERY, STAGED_TRACKED_PARSE, ORIGINAL_STATUS_QUERY,
+ORIGINAL_STATUS_PARSE, PRECHECK_OR_UNCLASSIFIED). It NEVER prints
+original paths, Git stderr or file bytes. The specific root cause
+remains NOT OBSERVED until a fixed-classification receipt is available.
+Synthetic unit tests do not substitute for actual owner-host Git behavior.
+
+No original source, protected bridge state, runtime SQLite, task, C40
+or external project was read outside the bounded Git status operation,
+edited, removed, moved or restarted by this owner attempt. Do NOT try
+git clean/reset, force staging or global ignore rules to mask the hold.
