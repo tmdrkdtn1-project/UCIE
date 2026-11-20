@@ -79,6 +79,23 @@ equivalent preexisting trustworthy process-creation record would require
 a different independently approved gate. Never enable missing logs merely
 to make this check pass.
 
+## W37 read-only diagnostic correction (2026-11-20)
+
+Owner Windows W36 actual result on clean merged main `005c2d424b74599222ed4c2c060bfb9240ff8057` was: `UCIE_W36_CONTRACT_ONLY_NO_HOST_ACCESS` then `UCIE_W36_TASK129_LOG_UNAVAILABLE_OR_EMPTY_HOLD` from the `Get-WinEvent -FilterXml` catch. **It does not establish that events were absent.** The former catch swallowed no-match, access denied, missing/disabled channel, invalid XPath and other errors. No real Task 129 correlation is proven.
+
+W37 updates ONLY the same existing W36 UCIE read-only probe. It reads one TaskScheduler/Operational **channel's metadata** (name and `IsEnabled`), not the records of unrelated tasks. If the channel is disabled, returns `UCIE_W37_TASK129_CHANNEL_DISABLED_HOLD` without enabling it. If metadata cannot be read, returns `UCIE_W37_TASK129_CHANNEL_METADATA_UNAVAILABLE_HOLD`. If enabled, it uses the same pre-existing narrow server-side UCIE TaskName/Path/ID 129/time `FilterXml` to query events and classifies failures using only the PowerShell error ID and numeric HRESULT. It never returns raw error text, event XML, SIDs, PIDs or unrelated task records. Known classifications include:
+
+- `UCIE_W37_TASK129_NO_MATCH_HOLD`: the narrow query returned no matching events (not a service failure)
+- `UCIE_W37_TASK129_ACCESS_DENIED_HOLD`: Windows access denied
+- `UCIE_W37_TASK129_QUERY_INVALID_HOLD`: Windows reported invalid query/parameter
+- `UCIE_W37_TASK129_CHANNEL_UNAVAILABLE_HOLD`: channel query unavailable
+- `UCIE_W37_TASK129_QUERY_UNCLASSIFIED_HOLD`: any other failure remains HOLD
+- `UCIE_W37_TASK129_XML_FILTER_CONSTRUCTION_HOLD`: first-party query builder failed
+
+Every W37 hold receipt explicitly reports `listener_pid_launched_by_task_scheduler_verified=false`, `c40_mcp_round_trip_verified=false`, `full_cutover_authorized=false`, and no scheduler/log/SQLite/process/journal modification. An actual W37 receipt is distinct from synthetic GitHub CI and must be run by the same owner only after an exact merge SHA is synced. Neither query failure classification nor missing history justifies enabling task history, restarting the old service, scanning other tasks, or declaring cutover ready. This classification is a **terminal historical-evidence boundary** when no trusted event survives; do not keep retrying it with broader reads.
+
+Official reference: Microsoft PowerShell 5.1 `Get-WinEvent` `-ListLog` and `-FilterXml` documentation https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.diagnostics/get-winevent?view=powershell-5.1 ; Windows Event Log query error 15001 `ERROR_EVT_INVALID_QUERY`: https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--12000-15999- .
+
 ## Acceptance
 Only after final PR head Windows/Ubuntu × Python 3.13/3.15 CI 4/4 PASS
 may the W36 source merge. Synthetic testing does not grant an actual
