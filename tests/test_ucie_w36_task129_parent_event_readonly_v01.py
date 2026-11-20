@@ -105,10 +105,10 @@ if(-not (Exact $xml $launch $created 42420)){
 if(Exact $xml $launch $created 42421){
     throw 'UCIE_W36_WRONG_PARENT_PID_ACCEPTED'
 }
-if(Exact $xml $launch $created.AddSeconds(70) 42420){
+if(Exact $xml $launch ($created.AddSeconds(70)) 42420){
     throw 'UCIE_W36_OLD_EVENT_ACCEPTED'
 }
-if(Exact $xml $launch.AddSeconds(8) $created 42420){
+if(Exact $xml ($launch.AddSeconds(8)) $created 42420){
     throw 'UCIE_W36_FUTURE_EVENT_ACCEPTED'
 }
 Write-Output 'UCIE_W36_EXACT_EVENT_AND_TEMPORAL_NEGATIVES_PASS'
