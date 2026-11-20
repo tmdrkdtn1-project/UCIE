@@ -123,9 +123,9 @@ class W35VenvBaseImageReadOnlyNativeTests(unittest.TestCase):
             target = {"base": base_image, "different": foreign_image,
                       "direct": launcher}[image]
             test_script = (PS_TEMPLATE.replace("__SOURCE__", ps_quote(SOURCE))
+                           .replace("__TAIL__", tail)
                            .replace("__LAUNCHER__", ps_quote(launcher))
-                           .replace("__IMAGE__", ps_quote(target))
-                           .replace("__TAIL__", tail))
+                           .replace("__IMAGE__", ps_quote(target)))
             if owner != "same":
                 test_script += "\n"  # owner switch set by tail in the target run
             with tempfile.TemporaryDirectory(prefix="ucie_w35_runner_") as runner:
@@ -230,7 +230,7 @@ Write-Output 'UCIE_W35_DIRECT_IMAGE_NO_CONFIG_PASS'
 """, config="absent", image="direct")
         self.assertIn("UCIE_W35_DIRECT_IMAGE_NO_CONFIG_PASS", out)
 
-    def test_source_holds_provenance_and_privacy():
+    def test_source_holds_provenance_and_privacy(self):
         source = SOURCE.read_text(encoding="utf-8")
         self.assertIn("GetVenvRedirectorBasePythonw $expected.Exe", source)
         self.assertIn("UCIE_W35_VENV_BASE_PYTHONW_CLI_OWNER_CONFIG_CONSISTENT__TASK_LAUNCH_LINK_HOLD", source)
