@@ -140,9 +140,12 @@ foreach($case in $bad){
         if($_.Exception.Message -notmatch '^UCIE_W39_(CLIENT_EXE_IDENTITY_MISMATCH|CLIENT_CREATION_DATE)_HOLD$'){throw}
     }
 }
-foreach($case in @(@(),@($one,$one))){
+foreach($case in @(
+    [pscustomobject]@{ Rows=@() },
+    [pscustomobject]@{ Rows=@($one,$one) }
+)){
     try {
-        [void](AssertW39OneExactClient $case $expectedExe)
+        [void](AssertW39OneExactClient $case.Rows $expectedExe)
         throw 'UCIE_W39_ZERO_OR_DUPLICATE_CLIENT_ACCEPTED'
     } catch {
         if($_.Exception.Message -cne 'UCIE_W39_EXACT_CLIENT_COUNT_NOT_ONE_HOLD'){throw}
