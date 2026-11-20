@@ -67,7 +67,7 @@ def _git_status(root: Path, *, fast: bool) -> dict:
     cmd = ["git", "--no-optional-locks", "-c", "core.fsmonitor=false",
            "-c", "core.untrackedCache=false", "-C", str(root), "status",
            "--porcelain=v1", "-z",
-           "--untracked-files=no" if fast else "--untracked-files=normal"]
+           "--untracked-files=no" if fast else "--untracked-files=all"]
     try:
         p = subprocess.run(cmd, check=False, stdout=subprocess.PIPE,
                            stderr=subprocess.PIPE, timeout=25, env=env)
@@ -90,7 +90,12 @@ def _git_status(root: Path, *, fast: bool) -> dict:
         path = raw[3:].decode("utf-8", "surrogateescape")
         if path.startswith(("/", "\\")) or ".." in path.replace("\\", "/").split("/"):
             raise LayoutAuditError("path escaped UCIE checkout")
-        group = path.replace("\\", "/").split("/")[0]
+        clean_path = path.replace("\\", "/")
+        # Never disclose root-level untracked filenames in review receipts.
+        # Normal Git status collapses untracked folders; ALL gives an exact
+        # per-file count needed before owner classification / backup.
+        group = (clean_path.split("/", 1)[0] if "/" in clean_path
+                 else "_ROOT_LEVEL_REVIEW_REQUIRED_")
         groups[group] += 1
         if code == "??":
             untracked += 1
@@ -255,12 +260,65 @@ def inspect_ucie_layout(root: Path, *, fast_git: bool = False) -> dict:
     }
 
 
+def _require_staged_observer(source: Path, *, platform: str) -> None:
+    """Only exact first-party staged D:\UCIE_PROJECT\UCIE code can view old Git.
+
+    This never grants permission to change tasks, copy/delete source, or to
+    inspect UCIE_DATA, UCIE_PREVIEW, the D: drive, or unrelated projects.
+    """
+    if platform != "nt" or str(source).casefold() != TARGET_CODE.casefold():
+        raise LayoutAuditError("exact staged UCIE Windows observer required")
+
+
+def _original_git_report(source: Path, original: Path) -> dict:
+    """Read metadata only, never import modules from the dirty original root.
+
+    Kept as a pure UCIE-scoped helper for synthetic CI using TWO disposable
+    Git repos. The actual CLI hard-pins both Windows roots before calling.
+    """
+    staged = _checked_root(source)
+    legacy = _checked_root(original)
+    if staged == legacy or _indirect(staged.parent) or _indirect(legacy.parent):
+        raise LayoutAuditError("stage/original root identity or ancestry invalid")
+    original_git = _git_status(legacy, fast=False)
+    return {
+        "schema": "UCIE_ORIGINAL_GIT_EXACT_INVENTORY_READONLY_V01",
+        "status": "ORIGINAL_GIT_DIRTY_CLASSIFICATION_REQUIRED__NO_CLEANUP",
+        "observer_code_root": str(staged),
+        "original_operating_root": str(legacy),
+        "git": original_git,
+        "untracked_individual_files_enumerated": True,
+        "original_source_code_imported_or_executed": False,
+        "original_files_read_for_content": False,
+        "operating_database_opened": False,
+        "other_drive_roots_or_projects_scanned": False,
+        "git_index_or_history_modified": False,
+        "original_owner_files_moved_or_deleted": False,
+        "task_or_tunnel_modified": False,
+        "archive_backup_performed": False,
+        "cleanup_approval_granted": False,
+        "full_cutover_authorized": False,
+    }
+
+
+def inspect_original_ucie_git_from_stage(
+    code_root: Path, original_root: Path, *, platform: str
+) -> dict:
+    """Fail closed: source must be fixed staged UCIE, target fixed old UCIE."""
+    _require_staged_observer(code_root, platform=platform)
+    if str(original_root).casefold() != r"d:\ucie":
+        raise LayoutAuditError("unapproved original UCIE Git root")
+    return _original_git_report(code_root, original_root)
+
+
 def main() -> int:
     import argparse
     parser = argparse.ArgumentParser(
         description="UCIE-only read-only workspace/Git/cache inventory")
     parser.add_argument("--fast-git", action="store_true",
                         help="Skip untracked scan; NEVER certifies clean working tree")
+    parser.add_argument("--observe-original-git", action="store_true",
+                        help="From approved staged root ONLY: read original UCIE Git metadata; no original code executed")
     args = parser.parse_args()
     # The source-controlled entrypoint itself determines the checkout, not an
     # arbitrary caller path. On Windows the only authorized live root is D:\UCIE;
@@ -272,7 +330,13 @@ def main() -> int:
                           "status": "UCIE_LAYOUT_ROOT_NOT_APPROVED_FAIL_CLOSED"}))
         return 2
     try:
-        out = inspect_ucie_layout(repo, fast_git=args.fast_git)
+        if args.observe_original_git:
+            if args.fast_git:
+                raise LayoutAuditError("full exact untracked census required")
+            out = inspect_original_ucie_git_from_stage(
+                repo, Path(r"D:\UCIE"), platform=os.name)
+        else:
+            out = inspect_ucie_layout(repo, fast_git=args.fast_git)
     except (LayoutAuditError, OSError, UnicodeError, ValueError):
         print(json.dumps({"schema": SCHEMA,
                           "status": "UCIE_LAYOUT_PREVIEW_FAIL_CLOSED",
