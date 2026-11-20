@@ -55,3 +55,44 @@ Git history must not be rewritten or blindly shallow-cloned: W09/W10 independent
 Code/dev checks are distinct from owner-host migration. No folder under D:\UCIE_PROJECT was created, no operating file moved, no data or cache deleted, no runtime speedup or disk recovery measured, no owner task/MCP rebind, no PublicMiner GET, no P11 job6 rearm, no auto promotion and no customer V1 release.
 
 STATUS=UCIE_LAYOUT_READONLY_PREVIEW_ONLY__OWNER_PATH_CUTOVER_NO_GO__PUBLIC_P11_HOLD__RELEASE_NO_GO
+
+
+## 2026-11-20: exact dirty-file inventory from the already staged UCIE source
+
+The approved UCIE-only read-only admin bridge returned actual original
+D:\UCIE Git status with **230 path records: 20 tracked modifications and
+210 untracked entries**. These are status metadata observations, not byte
+duplicates, not a completed backup, and not permission to discard files.
+Existing operational D:\UCIE, its SQLite, C40 and four UCIE tasks remain in
+place. The existing clean D:\UCIE_PROJECT\UCIE source was already fast-forwarded
+through W39 without overwriting original dirty source.
+
+Prior layout_audit_v01 _git_status mistakenly used Git
+--untracked-files=normal, which folds a directory with numerous new files
+into a single ?? dir/ record. It could silently undercount the 210 files
+that require individual review. This now uses --untracked-files=all in the
+full mode, while --fast-git explicitly skips untracked entries and never
+certifies cleanliness.
+
+The same first-party module also adds --observe-original-git, callable
+**only from exact D:\UCIE_PROJECT\UCIE on Windows**. It reads the original
+D:\UCIE Git status metadata without importing or executing original dirty
+Python/source scripts. The report contains only counts grouped by UCIE
+subdirectory; root-level filenames are masked as
+_ROOT_LEVEL_REVIEW_REQUIRED_. It does not display or export original file
+contents (Git status may examine working-tree bytes to detect changes),
+archive any file, run the miner, touch Task Scheduler/C40, open SQLite,
+reset/clean/prune Git or perform a live cutover. Any indirect source root,
+missing original .git, incorrect source location or fast+original mode is
+denied. The test uses two disposable synthetic UCIE Git repos.
+
+After the reviewed PR is tested and the staged source is synchronised, the
+owner can run this **READ ONLY** command using the exact approved staged
+Python 3.15 interpreter:
+
+    D:\UCIE_PROJECT\UCIE\.venv\Scripts\python.exe -I -B D:\UCIE_PROJECT\UCIE\src\ucie_miner\layout_audit_v01.py --observe-original-git
+
+The action is an inventory only. The owner must still classify each of the
+20 modified and 210 untracked original items, preserve historical proofs,
+verify source/ACL/backups and separately approve any reversible archive.
+No deletion, automatic relocation, or false disk-speed claims follow from it.
