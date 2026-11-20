@@ -97,6 +97,26 @@ if($actualSid -cne $expectedSid){
     $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
     return '-NoProfile -NoExit -EncodedCommand '+$encoded
 }
+# Extractable for disposable CI: mock Start-Process and assert exact RunAs
+# invocation without ever opening a UAC prompt on the test runner.
+function InvokeReadOnlyUacHandoff([string]$powershellPath,[string]$callerSid) {
+    $arguments=NewReadOnlyUacArguments $callerSid
+    try {
+        [void](Start-Process -FilePath $powershellPath -ArgumentList $arguments `
+            -Verb RunAs -ErrorAction Stop -PassThru)
+    } catch {
+        throw 'UCIE_W32_OWNER_UAC_CANCELLED_OR_LAUNCH_FAILED__NO_HOST_CHECK'
+    }
+    return [pscustomobject]@{
+        schema=$schema
+        status='UCIE_W32_ELEVATED_READONLY_WINDOW_STARTED__RESULT_PENDING'
+        host_service_examined_in_parent=$false
+        task_scheduler_or_c40_modified=$false
+        operating_sqlite_opened=$false
+        journal_written=$false
+        full_cutover_authorized=$false
+    }
+}
 if($env:OS -ne 'Windows_NT' -or -not [Environment]::UserInteractive){
     throw 'UCIE_W31_INTERACTIVE_WINDOWS_OWNER_REQUIRED'
 }
@@ -119,23 +139,8 @@ if(-not $admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
     if(-not [IO.File]::Exists($windowsPowerShell)){
         throw 'UCIE_W32_SYSTEM_POWERSHELL_NOT_FOUND'
     }
-    $arguments=NewReadOnlyUacArguments $identity.User.Value
-    try {
-        [void](Start-Process -FilePath $windowsPowerShell -ArgumentList $arguments `
-            -Verb RunAs -ErrorAction Stop -PassThru)
-    } catch {
-        throw 'UCIE_W32_OWNER_UAC_CANCELLED_OR_LAUNCH_FAILED__NO_HOST_CHECK'
-    }
-    [pscustomobject]@{
-        schema=$schema
-        status='UCIE_W32_ELEVATED_READONLY_WINDOW_STARTED__RESULT_PENDING'
-        uac_approved_for_readonly=$true
-        host_service_examined_in_parent=$false
-        task_scheduler_or_c40_modified=$false
-        operating_sqlite_opened=$false
-        journal_written=$false
-        full_cutover_authorized=$false
-    } | ConvertTo-Json -Compress
+    InvokeReadOnlyUacHandoff $windowsPowerShell $identity.User.Value |
+        ConvertTo-Json -Compress
     return
 }
 $script:ownerSid=$identity.User.Value
