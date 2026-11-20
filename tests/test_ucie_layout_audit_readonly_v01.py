@@ -453,5 +453,53 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
                 platform="nt")
 
 
+    def test_25_crosswalk_git_stage_failure_reports_fixed_sanitized_phase(self):
+        stage = Path(self.tmp.name) / "Staged" / "UCIE"
+        stage.mkdir(parents=True)
+        subprocess.run(["git", "-C", str(stage), "init", "-q"],
+                       check=True, capture_output=True)
+        with patch.object(layout, "_git_metadata_bytes", side_effect=
+                          layout.LayoutAuditError("PRIVATE path is never exported")):
+            with self.assertRaises(layout.LayoutAuditPhaseError) as caught:
+                layout._stage_original_path_crosswalk(stage, self.root)
+        self.assertEqual(caught.exception.phase, "STAGED_TRACKED_QUERY")
+        self.assertNotIn("PRIVATE", str(caught.exception))
+        self._assert_state_unchanged()
+
+    def test_26_original_host_malformed_status_has_no_raw_path_in_phase(self):
+        stage = Path(self.tmp.name) / "Staged" / "UCIE"
+        stage.mkdir(parents=True)
+        subprocess.run(["git", "-C", str(stage), "init", "-q"],
+                       check=True, capture_output=True)
+        emitted = [
+            b"docs/readme.md\0",
+            b"?? ../SECRET_private_path_not_to_be_returned\0",
+        ]
+        with patch.object(layout, "_git_metadata_bytes", side_effect=emitted):
+            with self.assertRaises(layout.LayoutAuditPhaseError) as caught:
+                layout._stage_original_path_crosswalk(stage, self.root)
+        self.assertEqual(caught.exception.phase, "ORIGINAL_STATUS_PARSE")
+        self.assertNotIn("SECRET", str(caught.exception))
+        self._assert_state_unchanged()
+
+    def test_27_owner_fail_closed_phase_never_claims_cleanup_or_success(self):
+        from unittest.mock import patch as mock_patch
+        stage = Path(self.tmp.name) / "Staged" / "UCIE"
+        stage.mkdir(parents=True)
+        subprocess.run(["git", "-C", str(stage), "init", "-q"],
+                       check=True, capture_output=True)
+        with mock_patch.object(layout, "_git_metadata_bytes",
+                               side_effect=layout.LayoutAuditError("foreign details")):
+            with self.assertRaises(layout.LayoutAuditPhaseError) as caught:
+                layout._stage_original_path_crosswalk(stage, self.root)
+        self.assertIn(caught.exception.phase, (
+            "STAGED_ROOT", "STAGED_TRACKED_QUERY",
+        ))
+        self.assertTrue(issubclass(layout.LayoutAuditPhaseError, layout.LayoutAuditError))
+        self.assertEqual(layout.CROSSWALK_FAILURE_SCHEMA,
+                         "UCIE_ORIGINAL_STAGE_PATH_OVERLAP_DIAGNOSTIC_V01")
+        self._assert_state_unchanged()
+
+
 if __name__ == "__main__":
     unittest.main()
