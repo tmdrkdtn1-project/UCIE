@@ -134,8 +134,7 @@ if(-not $admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
     if([string]::IsNullOrWhiteSpace($systemRoot)){
         throw 'UCIE_W32_SYSTEM_WINDOWS_PATH_UNAVAILABLE'
     }
-    $windowsPowerShell=[IO.Path]::Combine(
-        $systemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe')
+    $windowsPowerShell=Join-Path -Path $systemRoot -ChildPath 'System32\WindowsPowerShell\v1.0\powershell.exe'
     if(-not [IO.File]::Exists($windowsPowerShell)){
         throw 'UCIE_W32_SYSTEM_POWERSHELL_NOT_FOUND'
     }
