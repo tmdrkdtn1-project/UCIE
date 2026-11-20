@@ -289,7 +289,7 @@ def _original_git_report(source: Path, original: Path) -> dict:
         "git": original_git,
         "untracked_individual_files_enumerated": True,
         "original_source_code_imported_or_executed": False,
-        "original_files_read_for_content": False,
+        "original_file_contents_exposed_in_report": False,
         "operating_database_opened": False,
         "other_drive_roots_or_projects_scanned": False,
         "git_index_or_history_modified": False,
