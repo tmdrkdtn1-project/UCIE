@@ -338,5 +338,120 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
             layout._original_git_report(self.root, other)
 
 
+    def test_22_synthetic_original_and_stage_path_overlap_is_not_byte_equality(self):
+        # Two disposable first-party-only Git repos, no owner host access.
+        stage = Path(self.tmp.name) / "UCIE_PROJECT" / "UCIE"
+        stage.mkdir(parents=True)
+        subprocess.run(["git", "-C", str(stage), "init", "-q"],
+                       check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(["git", "-C", str(stage), "config", "user.email",
+                        "ucie-path-overlap@invalid.example"], check=True)
+        subprocess.run(["git", "-C", str(stage), "config", "user.name",
+                        "Synthetic UCIE Path Audit"], check=True)
+        (stage / "docs").mkdir()
+        (stage / "scripts").mkdir()
+        (stage / "docs" / "same.md").write_text("STAGED CONTENT", encoding="utf-8")
+        (stage / "scripts" / "live.ps1").write_text("STAGED", encoding="utf-8")
+        (stage / "scripts" / "same.ps1").write_text("STAGED", encoding="utf-8")
+        subprocess.run(["git", "-C", str(stage), "add", "--", "."], check=True)
+        subprocess.run(["git", "-C", str(stage), "commit", "-qm",
+                        "Synthetic stage commit"], check=True)
+
+        # Original has the SAME names but DIFFERENT content, plus old-only
+        # files; no claim of duplicate bytes may be made from name overlap.
+        (self.root / "docs").mkdir()
+        (self.root / "docs" / "same.md").write_text(
+            "DIFFERENT ORIGINAL CONTENT", encoding="utf-8")
+        (self.root / "docs" / "original_only.md").write_text(
+            "OWNER UCIE historical evidence", encoding="utf-8")
+        (self.root / "scripts" / "same.ps1").write_text(
+            "DIFFERENT OWNER CODE", encoding="utf-8")
+        (self.root / "scripts" / "live.ps1").write_text(
+            "EXISTING ORIGINAL TRACKED MODIFICATION", encoding="utf-8")
+        (self.root / "tests" / "only_original.py").write_text(
+            "UCIE-only test", encoding="utf-8")
+        (self.root / "RootUnknownArtifact").write_text("opaque", encoding="utf-8")
+        # A legacy original ignore rule can differ from the clean canonical
+        # staged ignore policy; count bridge state only, never inspect it.
+        (self.root / ".gitignore").write_text(
+            "/runtime/\n/.venv/\n__pycache__/\n", encoding="utf-8")
+
+        from unittest.mock import patch
+        with patch.object(Path, "read_bytes", side_effect=AssertionError(
+                "original files must not be read by Python")), patch.object(
+                    Path, "read_text", side_effect=AssertionError(
+                        "original files must not be read by Python")):
+            result = layout._stage_original_path_crosswalk(stage, self.root)
+        self.assertEqual(
+            result["schema"], "UCIE_ORIGINAL_STAGE_PATH_OVERLAP_READONLY_V01")
+        self.assertEqual(result["original_untracked_records"], 6)
+        self.assertEqual(result["original_tracked_modified_records"], 2)
+        self.assertEqual(result["original_status_total"], 8)
+        self.assertEqual(result["protected_bridge_records_not_compared"], 1)
+        self.assertEqual(result["unclassified_root_or_other_records"], 1)
+        self.assertEqual(result["review_area_records_compared"], 6)
+        self.assertEqual(result["by_review_area"]["docs"], {
+            "original_untracked": 2, "original_tracked_changed": 0,
+            "same_relative_path_in_stage_tracked": 1,
+            "not_tracked_in_stage": 1,
+        })
+        self.assertEqual(result["by_review_area"]["scripts"], {
+            "original_untracked": 1, "original_tracked_changed": 1,
+            "same_relative_path_in_stage_tracked": 2,
+            "not_tracked_in_stage": 0,
+        })
+        self.assertEqual(result["by_review_area"]["tests"], {
+            "original_untracked": 1, "original_tracked_changed": 0,
+            "same_relative_path_in_stage_tracked": 0,
+            "not_tracked_in_stage": 1,
+        })
+        self.assertIsNone(result["byte_duplicate_count_verified"])
+        for field in (
+            "path_overlap_proves_identical_file_bytes",
+            "file_content_hashes_read", "raw_file_paths_or_contents_returned",
+            "operating_database_opened", "files_moved_or_deleted",
+            "git_index_or_history_modified", "task_or_tunnel_modified",
+            "cleanup_approved", "full_cutover_authorized",
+        ):
+            self.assertIs(result[field], False, field)
+        self._assert_state_unchanged()
+
+    def test_23_git_crosswalk_rejects_path_escape_duplicates_and_rename(self):
+        for raw in (
+            b"../outside", b"/outside", b"C:/foreign", b"docs//unsafe.md",
+            b"docs/../outside", b"docs/./unsafe", b"docs\\..\\outside",
+        ):
+            with self.subTest(raw=raw), self.assertRaises(layout.LayoutAuditError):
+                layout._safe_repo_relative(raw)
+        for raw in (
+            b"?? docs/ok.md",  # Missing NUL terminator.
+            b"R  scripts/new.ps1\0scripts/old.ps1\0",
+            b"!! docs/ignored.md\0",
+            b"?? docs/X.md\0?? docs/x.md\0",  # Case collision.
+            b"?? ../escape\0",
+        ):
+            with self.subTest(status=raw), self.assertRaises(
+                    layout.LayoutAuditError):
+                layout._parse_original_status_paths(raw)
+        with self.assertRaises(layout.LayoutAuditError):
+            layout._parse_tracked_git_paths(
+                b"scripts/X.py\0scripts/x.py\0")
+        self.assertEqual(layout._parse_original_status_paths(b""), [])
+
+    def test_24_real_owner_crosswalk_is_denied_outside_exact_staged_windows(self):
+        with self.assertRaises(layout.LayoutAuditError):
+            layout.compare_original_ucie_git_to_stage(
+                self.root, self.root, platform="posix")
+        with self.assertRaises(layout.LayoutAuditError):
+            layout.compare_original_ucie_git_to_stage(
+                self.root, self.root, platform="nt")
+        # The source root may be correct syntactically, but target is always
+        # the *exact* original UCIE checkout, not an arbitrary project.
+        with self.assertRaises(layout.LayoutAuditError):
+            layout.compare_original_ucie_git_to_stage(
+                Path(r"D:\UCIE_PROJECT\UCIE"), Path(r"D:\FOREIGN\UCIE"),
+                platform="nt")
+
+
 if __name__ == "__main__":
     unittest.main()
