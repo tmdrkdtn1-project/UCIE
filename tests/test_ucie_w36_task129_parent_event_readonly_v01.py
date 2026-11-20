@@ -52,6 +52,14 @@ $boundedFn=@($ast.FindAll({{param($node)
      $node.Name -ceq 'NewBoundedUcIeTask129FilterXml')}},$true))
 if($boundedFn.Count -ne 1){{throw 'UCIE_W36_FILTERXML_BUILDER_NOT_UNIQUE'}}
 . ([scriptblock]::Create($boundedFn[0].Extent.Text))
+foreach($name in @('GetUcIeW37Task129QueryFailureStatus',
+                   'WriteUcIeW37Task129HoldReceipt')){{
+    $f=@($ast.FindAll({{param($node)
+        ($node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+         $node.Name -ceq $name)}},$true))
+    if($f.Count -ne 1){{throw 'UCIE_W37_CLASSIFIER_NOT_UNIQUE'}}
+    . ([scriptblock]::Create($f[0].Extent.Text))
+}}
 $xml=@'
 <Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
  <System><Provider Name="Microsoft-Windows-TaskScheduler"/>
@@ -161,9 +169,55 @@ Write-Output 'UCIE_W36_TASK_ONLY_FILTER_XML_PASS'
 """)
         self.assertIn("UCIE_W36_TASK_ONLY_FILTER_XML_PASS", out)
 
+    def test_w37_no_event_vs_access_vs_invalid_query_are_not_conflated(self):
+        out = self.native(r"""
+$cases=@(
+    @('NoMatchingEventsFound,Microsoft.PowerShell.Commands.GetWinEventCommand',0,
+      'UCIE_W37_TASK129_NO_MATCH_HOLD'),
+    @('GetWinEventFail',-2147024891,
+      'UCIE_W37_TASK129_ACCESS_DENIED_HOLD'),
+    @('GetWinEventFail',-2147024809,
+      'UCIE_W37_TASK129_QUERY_INVALID_HOLD'),
+    @('GetWinEventFail',-2147009895,
+      'UCIE_W37_TASK129_QUERY_INVALID_HOLD'),
+    @('GetWinEventFail',0,
+      'UCIE_W37_TASK129_QUERY_UNCLASSIFIED_HOLD')
+)
+foreach($case in $cases){
+    $actual=GetUcIeW37Task129QueryFailureStatus ([string]$case[0]) ([long]$case[1])
+    if($actual -cne $case[2]){
+        throw 'UCIE_W37_FAIL_CLOSED_CLASSIFICATION_REGRESSION'
+    }
+}
+Write-Output 'UCIE_W37_SYNTHETIC_ERROR_CLASSIFICATION_PASS'
+""")
+        self.assertIn("UCIE_W37_SYNTHETIC_ERROR_CLASSIFICATION_PASS", out)
+
+    def test_w37_hold_receipt_rejects_claim_of_launch_or_host_mutation(self):
+        out = self.native(r"""
+$receipt=(WriteUcIeW37Task129HoldReceipt 'UCIE_W37_TASK129_CHANNEL_DISABLED_HOLD' $false | ConvertFrom-Json)
+if($receipt.schema -cne 'UCIE_W37_TASK129_FAILURE_CLASSIFICATION_READONLY_V01' -or
+   $receipt.channel_enabled -ne $false -or
+   $receipt.ucIe_task_event129_verified -ne $false -or
+   $receipt.listener_pid_launched_by_task_scheduler_verified -ne $false -or
+   $receipt.event_log_modified -ne $false -or
+   $receipt.task_scheduler_modified -ne $false -or
+   $receipt.sqlite_content_opened -ne $false -or
+   $receipt.full_cutover_authorized -ne $false){
+    throw 'UCIE_W37_FALSE_HOLD_RECEIPT_CLAIMS'
+}
+Write-Output 'UCIE_W37_READONLY_HOLD_RECEIPT_PASS'
+""")
+        self.assertIn("UCIE_W37_READONLY_HOLD_RECEIPT_PASS", out)
+
     def test_source_is_bounded_readonly_and_does_not_claim_launch(self):
         s = self.source
         self.assertIn("Get-WinEvent -FilterXml $onlyUcIeEvents", s)
+        self.assertIn("Get-WinEvent -ListLog 'Microsoft-Windows-TaskScheduler/Operational'", s)
+        self.assertIn("UCIE_W37_TASK129_NO_MATCH_HOLD", s)
+        self.assertIn("UCIE_W37_TASK129_QUERY_INVALID_HOLD", s)
+        self.assertIn("UCIE_W37_TASK129_CHANNEL_DISABLED_HOLD", s)
+        self.assertIn("UCIE_W37_TASK129_CHANNEL_METADATA_UNAVAILABLE_HOLD", s)
         self.assertIn("NewBoundedUcIeTask129FilterXml", s)
         self.assertNotIn("Get-WinEvent -FilterHashtable", s)
         self.assertIn("-MaxEvents 128 -ErrorAction Stop", s)

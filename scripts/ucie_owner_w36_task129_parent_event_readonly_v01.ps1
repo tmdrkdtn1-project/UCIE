@@ -169,6 +169,44 @@ if($parentProcessId -le 0 -or $created.Year -lt 2020 -or
    $created -gt (Get-Date).AddMinutes(1)){
     throw 'UCIE_W36_INVALID_LISTENER_CREATION_OR_PARENT_HOLD'
 }
+# W37: no event or broken XML filter is not necessarily a service failure.
+# Classify ONLY a status/FullyQualifiedErrorId/HResult, never exception text,
+# stack, event XML, Task names beyond the fixed UCIE selector, or host paths.
+function GetUcIeW37Task129QueryFailureStatus(
+    [string]$errorId,[long]$hResult
+) {
+    if($errorId.StartsWith('NoMatchingEventsFound',
+                           [StringComparison]::OrdinalIgnoreCase)){
+        return 'UCIE_W37_TASK129_NO_MATCH_HOLD'
+    }
+    $nativeCode=$hResult -band 65535
+    if($nativeCode -eq 5){
+        return 'UCIE_W37_TASK129_ACCESS_DENIED_HOLD'
+    }
+    if($nativeCode -in @(87,15001)){
+        return 'UCIE_W37_TASK129_QUERY_INVALID_HOLD'
+    }
+    if($nativeCode -in @(15000,15007)){
+        return 'UCIE_W37_TASK129_CHANNEL_UNAVAILABLE_HOLD'
+    }
+    return 'UCIE_W37_TASK129_QUERY_UNCLASSIFIED_HOLD'
+}
+function WriteUcIeW37Task129HoldReceipt([string]$status,[object]$channelEnabled) {
+    [pscustomobject]@{
+        schema='UCIE_W37_TASK129_FAILURE_CLASSIFICATION_READONLY_V01'
+        status=$status
+        channel_enabled=$channelEnabled
+        ucIe_task_event129_verified=$false
+        listener_pid_launched_by_task_scheduler_verified=$false
+        c40_mcp_round_trip_verified=$false
+        event_log_modified=$false
+        task_scheduler_modified=$false
+        sqlite_content_opened=$false
+        process_killed_or_started=$false
+        journal_written=$false
+        full_cutover_authorized=$false
+    } | ConvertTo-Json -Compress
+}
 # Server-side filter: only OUR exact UCIE task and task action. Do not
 # retrieve other tenants' or unrelated Windows task event data.
 # Include the four-minute creation window in the event log XPath itself.
@@ -187,10 +225,36 @@ function NewBoundedUcIeTask129FilterXml([datetime]$listenerCreated) {
 "@
     return [xml]$query
 }
+# Metadata only: no events or unrelated task contents are enumerated.
+$w37ChannelEnabled=$null
+try {
+    $channelMeta=@(Get-WinEvent -ListLog 'Microsoft-Windows-TaskScheduler/Operational' -ErrorAction Stop)
+    if($channelMeta.Count -ne 1 -or
+       [string]$channelMeta[0].LogName -cne 'Microsoft-Windows-TaskScheduler/Operational'){
+        throw 'UCIE_W37_EXACT_CHANNEL_METADATA_HOLD'
+    }
+    $w37ChannelEnabled=[bool]$channelMeta[0].IsEnabled
+} catch {
+    WriteUcIeW37Task129HoldReceipt 'UCIE_W37_TASK129_CHANNEL_METADATA_UNAVAILABLE_HOLD' $null
+    return
+}
+if(-not $w37ChannelEnabled){
+    WriteUcIeW37Task129HoldReceipt 'UCIE_W37_TASK129_CHANNEL_DISABLED_HOLD' $false
+    return
+}
 try {
     $onlyUcIeEvents=NewBoundedUcIeTask129FilterXml $created
+} catch {
+    WriteUcIeW37Task129HoldReceipt 'UCIE_W37_TASK129_XML_FILTER_CONSTRUCTION_HOLD' $true
+    return
+}
+try {
     $records=@(Get-WinEvent -FilterXml $onlyUcIeEvents -MaxEvents 128 -ErrorAction Stop)
-} catch {throw 'UCIE_W36_TASK129_LOG_UNAVAILABLE_OR_EMPTY_HOLD'}
+} catch {
+    $status=GetUcIeW37Task129QueryFailureStatus ([string]$_.FullyQualifiedErrorId) ([long]$_.Exception.HResult)
+    WriteUcIeW37Task129HoldReceipt $status $true
+    return
+}
 $foundCount=0
 foreach($rec in $records){
     if([int]$rec.Id -ne 129){throw 'UCIE_W36_UNEXPECTED_EVENT_ID_HOLD'}
