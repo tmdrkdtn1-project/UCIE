@@ -169,12 +169,27 @@ if($parentProcessId -le 0 -or $created.Year -lt 2020 -or
    $created -gt (Get-Date).AddMinutes(1)){
     throw 'UCIE_W36_INVALID_LISTENER_CREATION_OR_PARENT_HOLD'
 }
-# Do not enable event history. No log writes; only ID 129 and a four-minute window.
+# Server-side filter: only OUR exact UCIE task and task action. Do not
+# retrieve other tenants' or unrelated Windows task event data.
+# Include the four-minute creation window in the event log XPath itself.
+function NewBoundedUcIeTask129FilterXml([datetime]$listenerCreated) {
+    $startUtc=$listenerCreated.AddMinutes(-2).ToUniversalTime().ToString(
+        'yyyy-MM-ddTHH:mm:ss.fffZ',[Globalization.CultureInfo]::InvariantCulture)
+    $endUtc=$listenerCreated.AddMinutes(2).ToUniversalTime().ToString(
+        'yyyy-MM-ddTHH:mm:ss.fffZ',[Globalization.CultureInfo]::InvariantCulture)
+    $channel='Microsoft-Windows-TaskScheduler/Operational'
+    $query=@"
+<QueryList>
+ <Query Id="0" Path="$channel">
+  <Select Path="$channel">*[System[(EventID=129) and TimeCreated[@SystemTime &gt;= '$startUtc' and @SystemTime &lt;= '$endUtc']] and EventData[Data[@Name='TaskName']='\UCIE-LocalV1-Web' and Data[@Name='Path']='D:\UCIE\.venv\Scripts\pythonw.exe']]</Select>
+ </Query>
+</QueryList>
+"@
+    return [xml]$query
+}
 try {
-    $records=@(Get-WinEvent -FilterHashtable @{
-        LogName='Microsoft-Windows-TaskScheduler/Operational';Id=129
-        StartTime=$created.AddMinutes(-2);EndTime=$created.AddMinutes(2)
-    } -MaxEvents 128 -ErrorAction Stop)
+    $onlyUcIeEvents=NewBoundedUcIeTask129FilterXml $created
+    $records=@(Get-WinEvent -FilterXml $onlyUcIeEvents -MaxEvents 128 -ErrorAction Stop)
 } catch {throw 'UCIE_W36_TASK129_LOG_UNAVAILABLE_OR_EMPTY_HOLD'}
 $foundCount=0
 foreach($rec in $records){
