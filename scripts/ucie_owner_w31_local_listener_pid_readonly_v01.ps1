@@ -188,6 +188,260 @@ function AssertExactOriginalCommandLine(
     }
     return $true
 }
+# W35: Official CPython Windows venv redirectors start base pythonw.exe
+# from pyvenv.cfg, retaining the original virtual-environment argv[0].
+# Only read the exact old-venv configuration. No Python execution or write.
+function GetVenvRedirectorBasePythonw([string]$venvLauncherPath) {
+    if([string]::IsNullOrWhiteSpace($venvLauncherPath) -or
+       [IO.Path]::GetFileName($venvLauncherPath) -cne 'pythonw.exe'){
+        throw 'UCIE_W35_EXACT_PYTHONW_LAUNCHER_REQUIRED_HOLD'
+    }
+    $scripts=[IO.Path]::GetDirectoryName($venvLauncherPath)
+    if([IO.Path]::GetFileName($scripts) -cne 'Scripts'){
+        throw 'UCIE_W35_EXACT_VENV_SCRIPTS_REQUIRED_HOLD'
+    }
+    $venv=[IO.Path]::GetDirectoryName($scripts)
+    $config=Join-Path -Path $venv -ChildPath 'pyvenv.cfg'
+    foreach($target in @(
+        [pscustomobject]@{Path=$venv;Directory=$true},
+        [pscustomobject]@{Path=$scripts;Directory=$true},
+        [pscustomobject]@{Path=$venvLauncherPath;Directory=$false},
+        [pscustomobject]@{Path=$config;Directory=$false}
+    )){
+        try {
+            $node=Get-Item -LiteralPath $target.Path -Force -ErrorAction Stop
+        } catch {throw 'UCIE_W35_VENV_REDIRECTOR_FILE_UNAVAILABLE_HOLD'}
+        if([bool]$node.PSIsContainer -ne [bool]$target.Directory -or
+           ($node.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){
+            throw 'UCIE_W35_VENV_REDIRECTOR_REPARSE_OR_TYPE_HOLD'
+        }
+    }
+    $configFile=Get-Item -LiteralPath $config -Force -ErrorAction Stop
+    if($configFile.Length -le 0 -or $configFile.Length -gt 8192){
+        throw 'UCIE_W35_VENV_CONFIG_SIZE_HOLD'
+    }
+    try {
+        $lines=[IO.File]::ReadAllLines($config)
+    } catch {throw 'UCIE_W35_VENV_CONFIG_READ_HOLD'}
+    $homes=[Collections.Generic.List[string]]::new()
+    foreach($line in $lines){
+        if($line -cmatch '^[ \t]*home[ \t]*=[ \t]*(.*?)[ \t]*
+# not all host processes. Do NOT imply that matching process command line
+# proves the Task Scheduler engine was the actual process launcher.
+function AssertOwnerLocalListenerPidIdentity {
+    $listeners=@(Get-NetTCPConnection -LocalPort 18767 -State Listen -ErrorAction Stop)
+    if($listeners.Count -ne 1){
+        throw 'UCIE_W31_ONE_LISTENER_REQUIRED_HOLD'
+    }
+    $listener=$listeners[0]
+    if([string]$listener.LocalAddress -cne '127.0.0.1' -or
+       [int]$listener.LocalPort -ne 18767){
+        throw 'UCIE_W31_EXACT_LOOPBACK_BINDING_REQUIRED_HOLD'
+    }
+    $listenerProcessId=[int]$listener.OwningProcess
+    if($listenerProcessId -le 0){
+        throw 'UCIE_W31_LISTENER_PROCESS_ID_MISSING_HOLD'
+    }
+    $process=@(Get-CimInstance -ClassName Win32_Process -Filter (
+        'ProcessId = {0}' -f $listenerProcessId
+    ) -ErrorAction Stop)
+    if($process.Count -ne 1 -or
+       [int]$process[0].ProcessId -ne $listenerProcessId){
+        throw 'UCIE_W31_LISTENER_PID_PROCESS_LOOKUP_HOLD'
+    }
+    $item=$process[0]
+    $expected=$specs[2]
+    $sid=Invoke-CimMethod -InputObject $item -MethodName GetOwnerSid -ErrorAction Stop
+    if($null -eq $sid -or [int]$sid.ReturnValue -ne 0 -or
+       [string]$sid.Sid -cne $script:ownerSid){
+        throw 'UCIE_W31_LISTENER_PROCESS_OWNER_SID_HOLD'
+    }
+    [void](AssertExactOriginalCommandLine (
+        [string]$item.CommandLine
+    ) $expected.Exe $expected.Arguments)
+    $directImage=[string]::Equals([string]$item.ExecutablePath,$expected.Exe,
+                                 [StringComparison]::OrdinalIgnoreCase)
+    $redirectedImage=$false
+    if(-not $directImage){
+        # Only after the original task argv and same-owner PID have matched.
+        $baseImage=GetVenvRedirectorBasePythonw $expected.Exe
+        if(-not [string]::Equals([string]$item.ExecutablePath,$baseImage,
+                               [StringComparison]::OrdinalIgnoreCase)){
+            throw 'UCIE_W35_LISTENER_BASE_PYTHONW_IMAGE_MISMATCH_HOLD'
+        }
+        $redirectedImage=$true
+    }
+    # The listener may have exited/rebound while CIM owner and argv were
+    # inspected. Requery ONLY the same UCIE port; a changed PID is a HOLD.
+    $confirmed=@(Get-NetTCPConnection -LocalPort 18767 -State Listen -ErrorAction Stop)
+    if($confirmed.Count -ne 1 -or
+       [string]$confirmed[0].LocalAddress -cne '127.0.0.1' -or
+       [int]$confirmed[0].LocalPort -ne 18767 -or
+       [int]$confirmed[0].OwningProcess -ne $listenerProcessId){
+        throw 'UCIE_W31_LISTENER_PID_CHANGED_DURING_READONLY_HOLD'
+    }
+    return [pscustomobject]@{
+        direct_original_task_binary=$directImage
+        venv_base_pythonw_redirector_consistent=$redirectedImage
+    }
+}
+# Host source, task and historical provenance checks happen only AFTER
+# the explicit -CheckLocal owner approval and UAC checks above.
+if(-not [string]::Equals([IO.Path]::GetFullPath($PSCommandPath),
+                        [IO.Path]::GetFullPath($self),
+                        [StringComparison]::OrdinalIgnoreCase)){
+    throw 'UCIE_W31_CANONICAL_FIRST_PARTY_ENTRYPOINT_REQUIRED'
+}
+foreach($path in @($old,$root,$archive)){
+    $node=Get-Item -LiteralPath $path -Force -ErrorAction Stop
+    if(-not $node.PSIsContainer -or
+       ($node.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){
+        throw 'UCIE_W31_DIRECT_OWNER_ROOT_REQUIRED'
+    }
+}
+foreach($path in @($self,$w29Source)){
+    $node=Get-Item -LiteralPath $path -Force -ErrorAction Stop
+    if($node.PSIsContainer -or
+       ($node.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){
+        throw 'UCIE_W31_DIRECT_FIRST_PARTY_SCRIPT_REQUIRED'
+    }
+}
+$acl=Get-Acl -LiteralPath $archive -ErrorAction Stop
+if(-not $acl.AreAccessRulesProtected -or
+   $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $script:ownerSid){
+    throw 'UCIE_W31_PROTECTED_ARCHIVE_SAME_OWNER_REQUIRED'
+}
+$oldLocks=$env:GIT_OPTIONAL_LOCKS
+$env:GIT_OPTIONAL_LOCKS='0'
+try {
+    $remote=(& git -C $root remote get-url origin 2>$null | Out-String).Trim()
+    if($LASTEXITCODE -ne 0 -or
+       $remote -cne 'https://github.com/tmdrkdtn1-project/UCIE.git'){
+        throw 'UCIE_W31_FIRST_PARTY_REMOTE_HOLD'
+    }
+    & git -C $root merge-base --is-ancestor $w30Ancestor HEAD 2>$null | Out-Null
+    if($LASTEXITCODE -ne 0){throw 'UCIE_W31_W30_GIT_ANCESTOR_MISSING_HOLD'}
+    $blob=(& git -C $root rev-parse 'HEAD:scripts/ucie_owner_w29_oldroot_rehearsal_restore_v01.ps1' 2>$null | Out-String).Trim()
+    if($LASTEXITCODE -ne 0 -or $blob -cne $w29Blob){
+        throw 'UCIE_W31_W29_GIT_BLOB_DRIFT_HOLD'
+    }
+    $dirty=(& git -C $root status --porcelain --untracked-files=all 2>$null | Out-String).Trim()
+    if($LASTEXITCODE -ne 0 -or $dirty){
+        throw 'UCIE_W31_OWNER_NEWROOT_DIRTY_HOLD'
+    }
+} finally {
+    $env:GIT_OPTIONAL_LOCKS=$oldLocks
+}
+# Never dot-source W29: import only the reviewed pure/READ-ONLY helpers.
+$tokens=$null;$errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile(
+    $w29Source,[ref]$tokens,[ref]$errors)
+if(@($errors).Count -ne 0){throw 'UCIE_W31_W29_AST_PARSE_HOLD'}
+foreach($functionName in @(
+    'ShaText','Direct','Absent','ReadReceipt','OwnerTask','CheckOld',
+    'C40Hash','PortState','HealthyOld','AssertRecoveredHistory',
+    'AssertNoStagedData'
+)) {
+    $found=@($ast.FindAll({
+        param($node)
+        ($node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+         $node.Name -ceq $functionName)
+    },$true))
+    if($found.Count -ne 1){throw 'UCIE_W31_W29_AST_FUNCTION_NOT_UNIQUE_HOLD'}
+    . ([scriptblock]::Create($found[0].Extent.Text))
+}
+# W29 Direct verifies parent path components on D: as well, not only
+# the leaf roots and script files checked above.
+foreach($path in @($old,$root,$archive)){Direct $path $true}
+foreach($path in @($self,$w29Source)){Direct $path $false}
+Import-Module ScheduledTasks -ErrorAction Stop
+$c40Baseline=C40Hash
+AssertRecoveredHistory $c40Baseline
+AssertNoStagedData
+# W29/W30 one-shot intents MUST be absent in the currently healthy oldroot.
+foreach($record in @(
+    'UCIE_W29_OWNER_OLDROOT_REHEARSAL_INTENT_V01.json',
+    'UCIE_W29_OWNER_OLDROOT_RECOVERY_INTENT_V01.json',
+    'UCIE_W29_OWNER_OLDROOT_RESTORED_V01.json',
+    'UCIE_W30_OWNER_SECONDARY_RECOVERY_INTENT_V01.json',
+    'UCIE_W30_OWNER_SECONDARY_RETRY_INTENT_V01.json',
+    'UCIE_W30_OWNER_SECONDARY_RESTORED_V01.json'
+)){Absent (Join-Path $archive $record)}
+foreach($i in 0..2){
+    $task=CheckOld $i
+    $state=[string]$task.State
+    if($i -lt 2 -and $state -notin @('Ready','Running')){
+        throw 'UCIE_W31_ORIGINAL_WRITER_STATE_HOLD'
+    }
+    if($i -eq 2 -and $state -cne 'Running'){
+        throw 'UCIE_W31_ORIGINAL_LOCAL_TASK_NOT_RUNNING'
+    }
+}
+if(-not (HealthyOld)){throw 'UCIE_W31_ORIGINAL_LOCAL_HTTP_HEALTH_HOLD'}
+$listenerIdentity=AssertOwnerLocalListenerPidIdentity
+if((C40Hash) -cne $c40Baseline){
+    throw 'UCIE_W31_C40_ACTION_CHANGED_DURING_READONLY'
+}
+[pscustomobject]@{
+    schema=$schema
+    status=$(if($listenerIdentity.venv_base_pythonw_redirector_consistent){
+        'UCIE_W35_VENV_BASE_PYTHONW_CLI_OWNER_CONFIG_CONSISTENT__TASK_LAUNCH_LINK_HOLD'
+    } else {
+        'UCIE_W31_EXACT_LOOPBACK_PID_BINARY_CLI_OWNER_VERIFIED__TASK_LAUNCH_LINK_HOLD'
+    })
+    original_tasks_owner_action_and_state_verified=$true
+    historical_owner_receipts_preserved_and_validated=$true
+    old_local_http_healthy=$true
+    listener_process_owner_sid_verified=$true
+    listener_binary_matches_original_task=[bool]$listenerIdentity.direct_original_task_binary
+    listener_venv_base_pythonw_config_consistent=[bool]$listenerIdentity.venv_base_pythonw_redirector_consistent
+    listener_command_line_matches_original_task=$true
+    listener_is_exactly_one_loopback=$true
+    listener_pid_launched_by_task_scheduler_verified=$false
+    listener_task_pid_identity_verified=$false
+    c40_action_unchanged=$true
+    c40_mcp_round_trip_verified=$false
+    sqlite_content_opened=$false
+    task_scheduler_or_c40_modified=$false
+    process_killed_or_started=$false
+    journal_written=$false
+    full_cutover_authorized=$false
+} | ConvertTo-Json -Compress
+){
+            $homes.Add($Matches[1])
+        }
+    }
+    if($homes.Count -ne 1 -or [string]::IsNullOrWhiteSpace($homes[0])){
+        throw 'UCIE_W35_VENV_HOME_NOT_UNIQUE_HOLD'
+    }
+    $home=$homes[0]
+    if(-not [IO.Path]::IsPathRooted($home) -or
+       ($env:OS -eq 'Windows_NT' -and $home -cnotmatch '^[A-Za-z]:\\') -or
+       $home -match '(^|[\\/])\.\.?([\\/]|$)'){
+        throw 'UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD'
+    }
+    try {
+        $normalizedHome=[IO.Path]::GetFullPath($home)
+    } catch {throw 'UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD'}
+    if(-not [string]::Equals($home,$normalizedHome,
+                           [StringComparison]::OrdinalIgnoreCase)){
+        throw 'UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD'
+    }
+    $baseImage=Join-Path -Path $normalizedHome -ChildPath 'pythonw.exe'
+    foreach($target in @(
+        [pscustomobject]@{Path=$normalizedHome;Directory=$true},
+        [pscustomobject]@{Path=$baseImage;Directory=$false}
+    )){
+        try {
+            $node=Get-Item -LiteralPath $target.Path -Force -ErrorAction Stop
+        } catch {throw 'UCIE_W35_VENV_BASE_BINARY_UNAVAILABLE_HOLD'}
+        if([bool]$node.PSIsContainer -ne [bool]$target.Directory -or
+           ($node.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){
+            throw 'UCIE_W35_VENV_BASE_BINARY_REPARSE_OR_TYPE_HOLD'
+        }
+    }
+    return $baseImage
+}
 # Pure host-read-only probe: query EXACTLY ONE TCP port and ONLY its PID,
 # not all host processes. Do NOT imply that matching process command line
 # proves the Task Scheduler engine was the actual process launcher.
