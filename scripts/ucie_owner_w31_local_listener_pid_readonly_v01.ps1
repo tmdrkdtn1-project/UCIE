@@ -232,16 +232,16 @@ function GetVenvRedirectorBasePythonw([string]$venvLauncherPath) {
     if($homes.Count -ne 1 -or [string]::IsNullOrWhiteSpace($homes[0])){
         throw 'UCIE_W35_VENV_HOME_NOT_UNIQUE_HOLD'
     }
-    $home=$homes[0]
-    if(-not [IO.Path]::IsPathRooted($home) -or
-       ($env:OS -eq 'Windows_NT' -and $home -cnotmatch '^[A-Za-z]:\\') -or
-       $home -match '(^|[\\/])\.\.?([\\/]|$)'){
+    $venvHome=$homes[0]
+    if(-not [IO.Path]::IsPathRooted($venvHome) -or
+       ($env:OS -eq 'Windows_NT' -and $venvHome -cnotmatch '^[A-Za-z]:\\') -or
+       $venvHome -match '(^|[\\/])\.\.?([\\/]|$)'){
         throw 'UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD'
     }
     try {
-        $normalizedHome=[IO.Path]::GetFullPath($home)
+        $normalizedHome=[IO.Path]::GetFullPath($venvHome)
     } catch {throw 'UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD'}
-    if(-not [string]::Equals($home,$normalizedHome,
+    if(-not [string]::Equals($venvHome,$normalizedHome,
                            [StringComparison]::OrdinalIgnoreCase)){
         throw 'UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD'
     }
