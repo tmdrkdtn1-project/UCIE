@@ -303,7 +303,17 @@ function AssertOwnerLocalListenerPidIdentity {
     if(-not $directImage){
         # Only after the original task argv and same-owner PID have matched.
         $baseImage=GetVenvRedirectorBasePythonw $expected.Exe
-        if(-not [string]::Equals([string]$item.ExecutablePath,$baseImage,
+        $observedImage=[string]$item.ExecutablePath
+        if(-not [IO.Path]::IsPathRooted($observedImage) -or
+           ($env:OS -eq 'Windows_NT' -and
+            $observedImage -cnotmatch '^[A-Za-z]:\\')){
+            throw 'UCIE_W35_LISTENER_IMAGE_PATH_INVALID_HOLD'
+        }
+        try {
+            $observedCanonical=[IO.Path]::GetFullPath($observedImage)
+            $baseCanonical=[IO.Path]::GetFullPath($baseImage)
+        } catch {throw 'UCIE_W35_LISTENER_IMAGE_PATH_INVALID_HOLD'}
+        if(-not [string]::Equals($observedCanonical,$baseCanonical,
                                [StringComparison]::OrdinalIgnoreCase)){
             throw 'UCIE_W35_LISTENER_BASE_PYTHONW_IMAGE_MISMATCH_HOLD'
         }
