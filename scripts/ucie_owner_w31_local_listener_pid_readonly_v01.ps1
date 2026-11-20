@@ -117,6 +117,21 @@ function InvokeReadOnlyUacHandoff([string]$powershellPath,[string]$callerSid) {
         full_cutover_authorized=$false
     }
 }
+# W33: Environment.SystemDirectory is obtained from Windows itself.
+# The Machine 'SystemRoot' environment variable is not guaranteed to exist;
+# process environment variables and PATH must never choose the UAC binary.
+function GetTrustedWindowsPowerShellPath {
+    $systemDirectory=[Environment]::SystemDirectory
+    if([string]::IsNullOrWhiteSpace($systemDirectory) -or
+       -not [IO.Path]::IsPathRooted($systemDirectory)){
+        throw 'UCIE_W33_OS_SYSTEM_DIRECTORY_UNAVAILABLE'
+    }
+    $windowsPowerShell=Join-Path -Path $systemDirectory -ChildPath 'WindowsPowerShell\v1.0\powershell.exe'
+    if(-not [IO.File]::Exists($windowsPowerShell)){
+        throw 'UCIE_W32_SYSTEM_POWERSHELL_NOT_FOUND'
+    }
+    return $windowsPowerShell
+}
 if($env:OS -ne 'Windows_NT' -or -not [Environment]::UserInteractive){
     throw 'UCIE_W31_INTERACTIVE_WINDOWS_OWNER_REQUIRED'
 }
@@ -130,14 +145,7 @@ if(-not $admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
                             [StringComparison]::OrdinalIgnoreCase)){
         throw 'UCIE_W32_CANONICAL_SELF_FOR_UAC_REQUIRED'
     }
-    $systemRoot=[Environment]::GetEnvironmentVariable('SystemRoot','Machine')
-    if([string]::IsNullOrWhiteSpace($systemRoot)){
-        throw 'UCIE_W32_SYSTEM_WINDOWS_PATH_UNAVAILABLE'
-    }
-    $windowsPowerShell=Join-Path -Path $systemRoot -ChildPath 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    if(-not [IO.File]::Exists($windowsPowerShell)){
-        throw 'UCIE_W32_SYSTEM_POWERSHELL_NOT_FOUND'
-    }
+    $windowsPowerShell=GetTrustedWindowsPowerShellPath
     InvokeReadOnlyUacHandoff $windowsPowerShell $identity.User.Value |
         ConvertTo-Json -Compress
     return
