@@ -311,6 +311,200 @@ def inspect_original_ucie_git_from_stage(
     return _original_git_report(code_root, original_root)
 
 
+# Exact-path metadata crosswalk. Paths stay in memory; never echo original
+# filenames, original contents or owner credentials to the JSON report.
+PATH_CROSSWALK_SCHEMA = "UCIE_ORIGINAL_STAGE_PATH_OVERLAP_READONLY_V01"
+MAX_CROSSWALK_BYTES = 4_000_000
+MAX_CROSSWALK_PATHS = 20_000
+REVIEW_AREAS = frozenset(("docs", "scripts", "src", "tests", ".github"))
+PROTECTED_AREAS = frozenset((
+    ".ucie_bridge_state", ".git", ".venv", "runtime", "private",
+    "backups", "secrets", "credentials", "internal", "project_data",
+    "raw", "raw_data", "raw_quarantine", "datasets", "downloaded",
+))
+
+
+def _git_metadata_bytes(root: Path, *args: str) -> bytes:
+    """One bounded, nonmutating Git metadata query; never invoke a shell."""
+    env = {key: value for key, value in os.environ.items()
+           if not key.upper().startswith("GIT_")}
+    env.update({
+        "GIT_OPTIONAL_LOCKS": "0", "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_NO_REPLACE_OBJECTS": "1", "GIT_TERMINAL_PROMPT": "0",
+        "GIT_EXTERNAL_DIFF": "0", "GIT_ATTR_NOSYSTEM": "1",
+    })
+    cmd = [
+        "git", "--no-optional-locks", "-c", "core.fsmonitor=false",
+        "-c", "core.untrackedCache=false", "-C", str(root), *args,
+    ]
+    try:
+        proc = subprocess.run(cmd, check=False, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, env=env, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise LayoutAuditError("UCIE-only bounded Git metadata unavailable") from exc
+    if proc.returncode or len(proc.stdout) > MAX_CROSSWALK_BYTES:
+        raise LayoutAuditError("UCIE-only metadata query failed closed")
+    return proc.stdout
+
+
+def _safe_repo_relative(value: bytes) -> str:
+    """Normalize Git NUL-delimited paths only; no filesystem access."""
+    if not value or b"\0" in value:
+        raise LayoutAuditError("invalid Git path metadata")
+    path = value.decode("utf-8", "surrogateescape").replace("\\", "/")
+    parts = path.split("/")
+    if (path.startswith("/") or len(parts) > 32
+            or any(part in ("", ".", "..") for part in parts)
+            or ":" in parts[0]):
+        raise LayoutAuditError("Git path outside UCIE-only relative scope")
+    return path.casefold()
+
+
+def _parse_tracked_git_paths(raw: bytes) -> set[str]:
+    if raw and raw[-1:] != b"\0":
+        raise LayoutAuditError("incomplete staged Git tracked-file listing")
+    fields = raw[:-1].split(b"\0") if raw else []
+    if len(fields) > MAX_CROSSWALK_PATHS:
+        raise LayoutAuditError("unbounded staged Git file index")
+    names = [_safe_repo_relative(name) for name in fields]
+    if len(names) != len(set(names)):
+        raise LayoutAuditError("case-colliding first-party staged paths")
+    return set(names)
+
+
+def _parse_original_status_paths(raw: bytes) -> list[tuple[str, str]]:
+    if raw and raw[-1:] != b"\0":
+        raise LayoutAuditError("incomplete original UCIE Git status metadata")
+    fields = raw[:-1].split(b"\0") if raw else []
+    if len(fields) > MAX_CROSSWALK_PATHS:
+        raise LayoutAuditError("unbounded original UCIE status paths")
+    rows = []
+    seen = set()
+    for record in fields:
+        if len(record) < 4 or record[2:3] != b" ":
+            raise LayoutAuditError("malformed original Git status record")
+        status = record[:2]
+        if status == b"!!" or b"R" in status or b"C" in status:
+            raise LayoutAuditError("unexpected Git rename/copy/ignore state")
+        if status != b"??" and status not in (
+            b" M", b"M ", b"MM", b" A", b"A ", b"AM",
+            b" D", b"D ", b"MD", b"AD", b" T", b"T ",
+            b"TM", b"MT", b"UU", b"AA", b"DD",
+        ):
+            raise LayoutAuditError("unknown original Git status code")
+        name = _safe_repo_relative(record[3:])
+        if name in seen:
+            raise LayoutAuditError("duplicate or case-clashing Git path")
+        seen.add(name)
+        rows.append(("untracked" if status == b"??"
+                     else "tracked_changed", name))
+    return rows
+
+
+def _stage_original_path_crosswalk(staged_root: Path,
+                                    original_root: Path) -> dict:
+    """Synthetic roots in CI; real wrapper pins exact Windows UCIE roots.
+
+    Read Git INDEX and STATUS metadata only; no Python import from original,
+    no file-content comparison, no SHA claim, no copy/move/delete/archiving.
+    """
+    stage = _checked_root(staged_root)
+    original = _checked_root(original_root)
+    if stage == original or _indirect(stage.parent) or _indirect(original.parent):
+        raise LayoutAuditError("original and staged Git roots not independent")
+    staged_paths = _parse_tracked_git_paths(
+        _git_metadata_bytes(stage, "ls-files", "--cached", "-z"))
+    changes = _parse_original_status_paths(
+        _git_metadata_bytes(
+            original, "status", "--porcelain=v1", "-z",
+            "--untracked-files=all"))
+    groups: dict[str, Counter[str]] = {}
+    protected_bridge = protected_other = unknown_root = 0
+    untracked_total = tracked_changed_total = 0
+    for kind, name in changes:
+        if kind == "untracked":
+            untracked_total += 1
+        else:
+            tracked_changed_total += 1
+        area = name.split("/", 1)[0]
+        if area == ".ucie_bridge_state":
+            protected_bridge += 1
+            continue
+        if area in PROTECTED_AREAS:
+            protected_other += 1
+            continue
+        if area not in REVIEW_AREAS or (
+                area == ".github" and not name.startswith(".github/workflows/")):
+            unknown_root += 1
+            continue
+        row = groups.setdefault(area, Counter())
+        row["original_untracked" if kind == "untracked"
+            else "original_tracked_changed"] += 1
+        match = ("same_relative_path_in_stage_tracked"
+                 if name in staged_paths else "not_tracked_in_stage")
+        row[match] += 1
+
+    by_area = {
+        name: {
+            "original_untracked": row["original_untracked"],
+            "original_tracked_changed": row["original_tracked_changed"],
+            "same_relative_path_in_stage_tracked":
+                row["same_relative_path_in_stage_tracked"],
+            "not_tracked_in_stage": row["not_tracked_in_stage"],
+        }
+        for name, row in sorted(groups.items())
+    }
+    compared = sum(
+        row["same_relative_path_in_stage_tracked"]
+        + row["not_tracked_in_stage"]
+        for row in by_area.values()
+    )
+    if compared + protected_bridge + protected_other + unknown_root != len(changes):
+        raise LayoutAuditError("UCIE-only crosswalk completeness mismatch")
+    return {
+        "schema": PATH_CROSSWALK_SCHEMA,
+        "status": "PATH_OVERLAP_CLASSIFIED__NO_CONTENT_DUPLICATES_CERTIFIED",
+        "staged_repo_tracked_path_count": len(staged_paths),
+        "original_untracked_records": untracked_total,
+        "original_tracked_modified_records": tracked_changed_total,
+        "original_status_total": len(changes),
+        "protected_bridge_records_not_compared": protected_bridge,
+        "other_protected_records_not_compared": protected_other,
+        "unclassified_root_or_other_records": unknown_root,
+        "review_area_records_compared": compared,
+        "by_review_area": by_area,
+        "path_overlap_proves_identical_file_bytes": False,
+        "byte_duplicate_count_verified": None,
+        "file_content_hashes_read": False,
+        "raw_file_paths_or_contents_returned": False,
+        "operating_database_opened": False,
+        "files_moved_or_deleted": False,
+        "git_index_or_history_modified": False,
+        "task_or_tunnel_modified": False,
+        "cleanup_approved": False,
+        "full_cutover_authorized": False,
+    }
+
+
+def compare_original_ucie_git_to_stage(code_root: Path, original_root: Path,
+                                       *, platform: str) -> dict:
+    """Exact owner Windows mode; approved staged main must be clean."""
+    _require_staged_observer(code_root, platform=platform)
+    if str(original_root).casefold() != r"d:\ucie":
+        raise LayoutAuditError("original UCIE checkout identity mismatch")
+    stage = _checked_root(code_root)
+    if _git_metadata_bytes(stage, "symbolic-ref", "--short", "HEAD").strip() != b"main":
+        raise LayoutAuditError("not staged main Git branch")
+    if (_git_metadata_bytes(stage, "remote", "get-url", "origin").strip()
+            != b"https://github.com/tmdrkdtn1-project/UCIE.git"):
+        raise LayoutAuditError("not first-party UCIE Git remote")
+    if _git_metadata_bytes(
+            stage, "status", "--porcelain=v1", "-z",
+            "--untracked-files=all"):
+        raise LayoutAuditError("staged UCIE repository is not clean")
+    return _stage_original_path_crosswalk(stage, original_root)
+
+
 def main() -> int:
     import argparse
     parser = argparse.ArgumentParser(
@@ -319,6 +513,8 @@ def main() -> int:
                         help="Skip untracked scan; NEVER certifies clean working tree")
     parser.add_argument("--observe-original-git", action="store_true",
                         help="From approved staged root ONLY: read original UCIE Git metadata; no original code executed")
+    parser.add_argument("--compare-original-git", action="store_true",
+                        help="Staged-only read-only path-overlap counts; no original file contents or cleanup")
     args = parser.parse_args()
     # The source-controlled entrypoint itself determines the checkout, not an
     # arbitrary caller path. On Windows the only authorized live root is D:\UCIE;
@@ -330,7 +526,12 @@ def main() -> int:
                           "status": "UCIE_LAYOUT_ROOT_NOT_APPROVED_FAIL_CLOSED"}))
         return 2
     try:
-        if args.observe_original_git:
+        if args.compare_original_git:
+            if args.fast_git or args.observe_original_git:
+                raise LayoutAuditError("conflicting UCIE Git inventory modes")
+            out = compare_original_ucie_git_to_stage(
+                repo, Path(r"D:\UCIE"), platform=os.name)
+        elif args.observe_original_git:
             if args.fast_git:
                 raise LayoutAuditError("full exact untracked census required")
             out = inspect_original_ucie_git_from_stage(
