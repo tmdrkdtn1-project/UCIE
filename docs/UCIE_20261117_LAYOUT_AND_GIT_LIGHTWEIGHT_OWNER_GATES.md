@@ -79,7 +79,8 @@ The same first-party module also adds --observe-original-git, callable
 D:\UCIE Git status metadata without importing or executing original dirty
 Python/source scripts. The report contains only counts grouped by UCIE
 subdirectory; root-level filenames are masked as
-_ROOT_LEVEL_REVIEW_REQUIRED_. It does not read original file contents,
+_ROOT_LEVEL_REVIEW_REQUIRED_. It does not display or export original file
+contents (Git status may examine working-tree bytes to detect changes),
 archive any file, run the miner, touch Task Scheduler/C40, open SQLite,
 reset/clean/prune Git or perform a live cutover. Any indirect source root,
 missing original .git, incorrect source location or fast+original mode is
