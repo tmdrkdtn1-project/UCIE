@@ -43,7 +43,7 @@ $ErrorActionPreference='Stop'
 $tok=$null;$err=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile('{source}',[ref]$tok,[ref]$err)
 if(@($err).Count -gt 0){{throw 'UCIE_W32_PRODUCTION_PS_PARSE_HOLD'}}
-foreach($fn in @('NewReadOnlyUacArguments','InvokeReadOnlyUacHandoff')){{
+foreach($fn in @('NewReadOnlyUacArguments','InvokeReadOnlyUacHandoff','GetTrustedWindowsPowerShellPath')){{
   $found=@($ast.FindAll({{param($node)
       ($node -is [Management.Automation.Language.FunctionDefinitionAst] -and
        $node.Name -ceq $fn)}},$true))
@@ -187,14 +187,37 @@ Write-Output 'UCIE_W32_UAC_CANCEL_NO_FALLBACK_PASS'
 """)
         self.assertIn("UCIE_W32_UAC_CANCEL_NO_FALLBACK_PASS", out)
 
+    def test_windows_os_system_directory_ignores_forged_process_systemroot(self):
+        if os.name != "nt":
+            self.skipTest("requires native Windows")
+        out = self.native(r"""
+$expected=Join-Path -Path ([Environment]::SystemDirectory) -ChildPath 'WindowsPowerShell\v1.0\powershell.exe'
+$original=$env:SystemRoot
+try {
+    $env:SystemRoot='Q:\UCIE_W33_UNTRUSTED_WINDOWS_ROOT'
+    $actual=GetTrustedWindowsPowerShellPath
+    if(-not [string]::Equals($expected,$actual,[StringComparison]::OrdinalIgnoreCase)){
+        throw 'UCIE_W33_ENVIRONMENT_REDIRECTED_TRUSTED_PATH'
+    }
+    if(-not [IO.File]::Exists($actual)){throw 'UCIE_W33_TRUSTED_BINARY_MISSING'}
+    if($script:spawnCount -ne 0){throw 'UCIE_W33_UNEXPECTED_UAC_LAUNCH'}
+} finally {
+    $env:SystemRoot=$original
+}
+Write-Output 'UCIE_W33_NATIVE_OS_DIRECTORY_PASS'
+""")
+        self.assertIn("UCIE_W33_NATIVE_OS_DIRECTORY_PASS", out)
+
     def test_first_party_source_does_not_bypass_safety_gate(self):
         s = self.source
         self.assertIn("NewReadOnlyUacArguments", s)
         self.assertIn("InvokeReadOnlyUacHandoff", s)
         self.assertIn("Start-Process -FilePath $powershellPath -ArgumentList $arguments", s)
         self.assertIn("-Verb RunAs -ErrorAction Stop -PassThru", s)
-        self.assertIn("'SystemRoot','Machine'", s)
-        self.assertIn("Join-Path -Path $systemRoot -ChildPath 'System32", s)
+        self.assertIn("[Environment]::SystemDirectory", s)
+        self.assertIn("Join-Path -Path $systemDirectory -ChildPath 'WindowsPowerShell", s)
+        self.assertIn("GetTrustedWindowsPowerShellPath", s)
+        self.assertNotIn("GetEnvironmentVariable('SystemRoot','Machine')", s)
         self.assertIn("UAC_ACCOUNT_CHANGED__READONLY_HOLD", s)
         self.assertIn("ELEVATED_READONLY_WINDOW_STARTED__RESULT_PENDING", s)
         self.assertIn("UCIE_W31_EXPLICIT_OWNER_READONLY_APPROVAL_REQUIRED", s)
