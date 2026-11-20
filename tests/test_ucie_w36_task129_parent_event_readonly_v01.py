@@ -67,7 +67,7 @@ $xml=@'
 $launch=[datetime]'2026-11-20T05:00:00Z'
 $created=[datetime]'2026-11-20T05:00:03Z'
 function Exact([string]$value,[datetime]$at,[datetime]$child,[int]$parent){{
-    return TestExactTask129ParentEvent $value $at $child $parent '\UCIE-LocalV1-Web' 'D:\UCIE\.venv\Scripts\pythonw.exe'
+    return (TestExactTask129ParentEvent $value $at $child $parent '\UCIE-LocalV1-Web' 'D:\UCIE\.venv\Scripts\pythonw.exe')
 }}
 """
 
