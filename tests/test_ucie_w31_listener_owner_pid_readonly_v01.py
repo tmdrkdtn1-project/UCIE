@@ -68,6 +68,11 @@ $script:cimReturn=0
 $script:log=[System.Collections.Generic.List[string]]::new()
 $script:tcpQueries=0
 $script:forceRebindOnSecond=$false
+# Synthetic W31 baseline must not look up real host venv files.
+# W35 exercises the REAL resolver in separate temp-fixture native tests.
+function GetVenvRedirectorBasePythonw([string]$ignored) {{
+    throw 'UCIE_W31_LISTENER_EXE_PATH_MISMATCH_HOLD'
+}}
 function Get-NetTCPConnection{{
     [CmdletBinding()]
     param([int]$LocalPort,[string]$State)
@@ -188,7 +193,7 @@ $script:tcp=@([pscustomobject]@{LocalAddress='127.0.0.1';LocalPort=18767;OwningP
 MustHold 'UCIE_W31_LISTENER_PROCESS_ID_MISSING_HOLD'
 $script:tcp=$baseline
 $script:cim=@();MustHold 'UCIE_W31_LISTENER_PID_PROCESS_LOOKUP_HOLD'
-$script:cim=@([pscustomobject]@{ProcessId=42420;ExecutablePath='D:\OTHER\pythonw.exe';CommandLine='NOPE'})
+$script:cim=@([pscustomobject]@{ProcessId=42420;ExecutablePath='D:\OTHER\pythonw.exe';CommandLine='"D:\UCIE\.venv\Scripts\pythonw.exe" '+$specs[2].Arguments})
 MustHold 'UCIE_W31_LISTENER_EXE_PATH_MISMATCH_HOLD'
 $script:cim=@([pscustomobject]@{ProcessId=42420;ExecutablePath=$specs[2].Exe;CommandLine='"D:\UCIE\.venv\Scripts\pythonw.exe" '+$specs[2].Arguments})
 $script:cimOwner='S-1-5-21-FOREIGN';MustHold 'UCIE_W31_LISTENER_PROCESS_OWNER_SID_HOLD'
@@ -221,6 +226,9 @@ Write-Output 'UCIE_W31_LISTENER_PID_REBIND_RACE_REJECTED_PASS'
         self.assertIn("-MethodName GetOwnerSid", source)
         self.assertIn("listener_pid_launched_by_task_scheduler_verified=$false", source)
         self.assertIn("listener_task_pid_identity_verified=$false", source)
+        self.assertIn("GetVenvRedirectorBasePythonw", source)
+        self.assertIn("listener_venv_base_pythonw_config_consistent=", source)
+        self.assertIn("UCIE_W35_LISTENER_BASE_PYTHONW_IMAGE_MISMATCH_HOLD", source)
         self.assertIn("c40_mcp_round_trip_verified=$false", source)
         self.assertIn("UCIE_W31_EXACT_LOOPBACK_PID_BINARY_CLI_OWNER_VERIFIED__TASK_LAUNCH_LINK_HOLD", source)
         self.assertIn("OWNER_NEWROOT_DIRTY_HOLD", source)
