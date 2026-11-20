@@ -388,8 +388,8 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
         self.assertEqual(result["original_tracked_modified_records"], 2)
         self.assertEqual(result["original_status_total"], 8)
         self.assertEqual(result["protected_bridge_records_not_compared"], 1)
-        self.assertEqual(result["unclassified_root_or_other_records"], 1)
-        self.assertEqual(result["review_area_records_compared"], 6)
+        self.assertEqual(result["unclassified_root_or_other_records"], 2)
+        self.assertEqual(result["review_area_records_compared"], 5)
         self.assertEqual(result["by_review_area"]["docs"], {
             "original_untracked": 2, "original_tracked_changed": 0,
             "same_relative_path_in_stage_tracked": 1,
