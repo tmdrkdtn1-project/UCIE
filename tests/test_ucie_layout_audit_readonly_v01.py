@@ -319,7 +319,7 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
         self.assertTrue(record["untracked_individual_files_enumerated"])
         for protected in (
             "original_source_code_imported_or_executed",
-            "original_files_read_for_content", "operating_database_opened",
+            "original_file_contents_exposed_in_report", "operating_database_opened",
             "other_drive_roots_or_projects_scanned", "git_index_or_history_modified",
             "original_owner_files_moved_or_deleted", "task_or_tunnel_modified",
             "archive_backup_performed", "cleanup_approval_granted",
