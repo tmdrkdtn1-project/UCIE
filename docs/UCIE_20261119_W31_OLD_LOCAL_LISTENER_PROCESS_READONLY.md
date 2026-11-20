@@ -48,6 +48,8 @@ Sync the clean isolated D:\UCIE_PROJECT\UCIE checkout by fast-forward to the exa
     & $probe -ContractOnly
     & $probe -CheckLocal -OwnerApproval 'AUTHORIZE_UCIE_W31_READONLY_OLD_LOCAL_LISTENER_PID_INSPECTION'
 
+W32 usability correction: when the owner runs the explicitly approved W31 -CheckLocal mode in a normal, non-elevated Windows PowerShell, W31 now requests Windows UAC elevation using the fixed system Windows PowerShell executable and an encoded literal read-only child command. The child verifies that its Windows SID matches the original non-admin caller SID before accessing the UCIE host. The original shell reports UCIE_W32_ELEVATED_READONLY_WINDOW_STARTED__RESULT_PENDING and does NOT report a host PASS. The elevated PowerShell window remains visible (-NoExit) and prints the actual W31 pass/HOLD receipt. If UAC is denied/cancelled or invokes a different Windows account, W31 fails CLOSED without skipping any owner/archive or C40 checks. This convenience does not automate Git fetch/merge and must be run only after source is clean, verified and fast-forward synced.
+
 These are strictly read-only W31 checks. A HOLD is reason for review, NEVER to kill the unknown 18767 PID, change C40/tunnel, clear protected journals, or retry already-used W21/W24. Do not run W29 -RehearseOld or W30 -RecoverPartial/-ResumePartial on the current healthy owner PC.
 
 ## Future gates (all remain HOLD)
