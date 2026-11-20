@@ -255,5 +255,88 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
         self.assertFalse(r["cache"]["cache_removed_or_quarantined"])
 
 
+    def test_18_full_git_status_counts_each_untracked_file_not_just_parent(self):
+        # This reproduces the owner 210-untracked census failure: Git's
+        # default --untracked-files=normal collapses nested paths to folders.
+        d = self.root / "docs" / "historical"
+        d.mkdir(parents=True)
+        for number in range(11):
+            (d / f"ucie_review_{number:02d}.md").write_text(
+                f"UCIE-only synthetic historical metadata {number}", encoding="utf-8"
+            )
+        (self.root / "source-review.todo").write_text("UCIE synthetic root item")
+        r = layout.inspect_ucie_layout(self.root)
+        self.assertEqual(r["git"]["untracked_records"], 12)
+        self.assertEqual(r["git"]["counts_by_ucie_subdir"]["docs"], 11)
+        self.assertEqual(
+            r["git"]["counts_by_ucie_subdir"]["_ROOT_LEVEL_REVIEW_REQUIRED_"], 1)
+        self.assertNotIn("source-review.todo",
+                         str(r["git"]["counts_by_ucie_subdir"]))
+        with patch.object(layout.subprocess, "run",
+                          wraps=subprocess.run) as subprocess_call:
+            layout.inspect_ucie_layout(self.root)
+        self.assertEqual(subprocess_call.call_count, 1)
+        cmd = subprocess_call.call_args.args[0]
+        self.assertIn("--untracked-files=all", cmd)
+        self.assertNotIn("--untracked-files=normal", cmd)
+        self._assert_state_unchanged()
+
+    def test_19_staged_observer_requires_exact_windows_source_root(self):
+        src = Path(r"D:\UCIE_PROJECT\UCIE")
+        layout._require_staged_observer(src, platform="nt")
+        for root, platform in (
+            (Path(r"D:\UCIE"), "nt"),
+            (Path(r"D:\UCIE_PROJECT\UCIE"), "posix"),
+            (Path(r"D:\UCIE_PROJECT\other"), "nt"),
+            (Path(r"E:\UCIE_PROJECT\UCIE"), "nt"),
+        ):
+            with self.subTest(root=str(root), platform=platform):
+                with self.assertRaises(layout.LayoutAuditError):
+                    layout._require_staged_observer(root, platform=platform)
+        with self.assertRaises(layout.LayoutAuditError):
+            layout.inspect_original_ucie_git_from_stage(
+                self.root, self.root, platform="posix")
+
+    def test_20_original_dirty_census_from_independent_synthetic_staged_repo(self):
+        # The actual CLI hardcodes the two owner Windows paths. Exercise the
+        # same metadata-only internal engine on TWO disposable UCIE roots.
+        stage = Path(self.tmp.name) / "UCIE_PROJECT" / "UCIE"
+        stage.mkdir(parents=True)
+        subprocess.run(["git", "-C", str(stage), "init", "-q"],
+                       check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        historical = self.root / "docs" / "review"
+        historical.mkdir(parents=True)
+        for index in range(5):
+            (historical / f"important_{index}.md").write_text(
+                "UCIE synthetic review draft", encoding="utf-8")
+        with patch.object(layout.subprocess, "run", wraps=subprocess.run) as observe:
+            record = layout._original_git_report(stage, self.root)
+        self.assertEqual(observe.call_count, 1)
+        self.assertEqual(record["schema"],
+                         "UCIE_ORIGINAL_GIT_EXACT_INVENTORY_READONLY_V01")
+        self.assertEqual(record["git"]["untracked_records"], 5)
+        self.assertEqual(record["git"]["counts_by_ucie_subdir"]["docs"], 5)
+        self.assertTrue(record["untracked_individual_files_enumerated"])
+        for protected in (
+            "original_source_code_imported_or_executed",
+            "original_files_read_for_content", "operating_database_opened",
+            "other_drive_roots_or_projects_scanned", "git_index_or_history_modified",
+            "original_owner_files_moved_or_deleted", "task_or_tunnel_modified",
+            "archive_backup_performed", "cleanup_approval_granted",
+            "full_cutover_authorized",
+        ):
+            self.assertIs(record[protected], False, protected)
+        self.assertEqual(self._git("rev-parse", "HEAD").strip(), self.original)
+        self._assert_state_unchanged()
+
+    def test_21_never_confuse_staged_source_with_dirty_original(self):
+        with self.assertRaises(layout.LayoutAuditError):
+            layout._original_git_report(self.root, self.root)
+        other = Path(self.tmp.name) / "OTHER"
+        other.mkdir()
+        with self.assertRaises(layout.LayoutAuditError):
+            layout._original_git_report(self.root, other)
+
+
 if __name__ == "__main__":
     unittest.main()
