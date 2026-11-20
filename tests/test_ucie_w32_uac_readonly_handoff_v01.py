@@ -194,6 +194,7 @@ Write-Output 'UCIE_W32_UAC_CANCEL_NO_FALLBACK_PASS'
         self.assertIn("Start-Process -FilePath $powershellPath -ArgumentList $arguments", s)
         self.assertIn("-Verb RunAs -ErrorAction Stop -PassThru", s)
         self.assertIn("'SystemRoot','Machine'", s)
+        self.assertIn("Join-Path -Path $systemRoot -ChildPath 'System32", s)
         self.assertIn("UAC_ACCOUNT_CHANGED__READONLY_HOLD", s)
         self.assertIn("ELEVATED_READONLY_WINDOW_STARTED__RESULT_PENDING", s)
         self.assertIn("UCIE_W31_EXPLICIT_OWNER_READONLY_APPROVAL_REQUIRED", s)
