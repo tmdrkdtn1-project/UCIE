@@ -188,6 +188,81 @@ function AssertExactOriginalCommandLine(
     }
     return $true
 }
+# W35: Official CPython Windows venv redirectors start base pythonw.exe
+# from pyvenv.cfg, retaining the original virtual-environment argv[0].
+# Only read the exact old-venv configuration. No Python execution or write.
+function GetVenvRedirectorBasePythonw([string]$venvLauncherPath) {
+    if([string]::IsNullOrWhiteSpace($venvLauncherPath) -or
+       [IO.Path]::GetFileName($venvLauncherPath) -cne 'pythonw.exe'){
+        throw 'UCIE_W35_EXACT_PYTHONW_LAUNCHER_REQUIRED_HOLD'
+    }
+    $scripts=[IO.Path]::GetDirectoryName($venvLauncherPath)
+    if([IO.Path]::GetFileName($scripts) -cne 'Scripts'){
+        throw 'UCIE_W35_EXACT_VENV_SCRIPTS_REQUIRED_HOLD'
+    }
+    $venv=[IO.Path]::GetDirectoryName($scripts)
+    $config=Join-Path -Path $venv -ChildPath 'pyvenv.cfg'
+    foreach($target in @(
+        [pscustomobject]@{Path=$venv;Directory=$true},
+        [pscustomobject]@{Path=$scripts;Directory=$true},
+        [pscustomobject]@{Path=$venvLauncherPath;Directory=$false},
+        [pscustomobject]@{Path=$config;Directory=$false}
+    )){
+        try {
+            $node=Get-Item -LiteralPath $target.Path -Force -ErrorAction Stop
+        } catch {throw 'UCIE_W35_VENV_REDIRECTOR_FILE_UNAVAILABLE_HOLD'}
+        if([bool]$node.PSIsContainer -ne [bool]$target.Directory -or
+           ($node.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){
+            throw 'UCIE_W35_VENV_REDIRECTOR_REPARSE_OR_TYPE_HOLD'
+        }
+    }
+    $configFile=Get-Item -LiteralPath $config -Force -ErrorAction Stop
+    if($configFile.Length -le 0 -or $configFile.Length -gt 8192){
+        throw 'UCIE_W35_VENV_CONFIG_SIZE_HOLD'
+    }
+    try {
+        $lines=[IO.File]::ReadAllLines($config)
+    } catch {throw 'UCIE_W35_VENV_CONFIG_READ_HOLD'}
+    $homes=[Collections.Generic.List[string]]::new()
+    foreach($line in $lines){
+        if($line -cmatch '^[ \t]*home[ \t]*=[ \t]*(.*?)[ \t]*$'){
+            $homes.Add($Matches[1])
+        }
+    }
+    if($homes.Count -ne 1 -or [string]::IsNullOrWhiteSpace($homes[0])){
+        throw 'UCIE_W35_VENV_HOME_NOT_UNIQUE_HOLD'
+    }
+    $venvHome=$homes[0]
+    if(-not [IO.Path]::IsPathRooted($venvHome) -or
+       ($env:OS -eq 'Windows_NT' -and $venvHome -cnotmatch '^[A-Za-z]:\\') -or
+       $venvHome -match '(^|[\\/])\.\.?([\\/]|$)'){
+        throw 'UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD'
+    }
+    try {
+        $normalizedHome=[IO.Path]::GetFullPath($venvHome)
+    } catch {throw 'UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD'}
+    # GetFullPath canonicalizes an already absolute, local, traversal-free
+    # Windows home; text equality against its input is not a trust boundary.
+    # The actual PID image must still match the OS-normalized base executable.
+    if($env:OS -eq 'Windows_NT' -and
+       $normalizedHome -cnotmatch '^[A-Za-z]:\\'){
+        throw 'UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD'
+    }
+    $baseImage=Join-Path -Path $normalizedHome -ChildPath 'pythonw.exe'
+    foreach($target in @(
+        [pscustomobject]@{Path=$normalizedHome;Directory=$true},
+        [pscustomobject]@{Path=$baseImage;Directory=$false}
+    )){
+        try {
+            $node=Get-Item -LiteralPath $target.Path -Force -ErrorAction Stop
+        } catch {throw 'UCIE_W35_VENV_BASE_BINARY_UNAVAILABLE_HOLD'}
+        if([bool]$node.PSIsContainer -ne [bool]$target.Directory -or
+           ($node.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){
+            throw 'UCIE_W35_VENV_BASE_BINARY_REPARSE_OR_TYPE_HOLD'
+        }
+    }
+    return $baseImage
+}
 # Pure host-read-only probe: query EXACTLY ONE TCP port and ONLY its PID,
 # not all host processes. Do NOT imply that matching process command line
 # proves the Task Scheduler engine was the actual process launcher.
@@ -214,10 +289,6 @@ function AssertOwnerLocalListenerPidIdentity {
     }
     $item=$process[0]
     $expected=$specs[2]
-    if(-not [string]::Equals([string]$item.ExecutablePath,$expected.Exe,
-                           [StringComparison]::OrdinalIgnoreCase)){
-        throw 'UCIE_W31_LISTENER_EXE_PATH_MISMATCH_HOLD'
-    }
     $sid=Invoke-CimMethod -InputObject $item -MethodName GetOwnerSid -ErrorAction Stop
     if($null -eq $sid -or [int]$sid.ReturnValue -ne 0 -or
        [string]$sid.Sid -cne $script:ownerSid){
@@ -226,6 +297,28 @@ function AssertOwnerLocalListenerPidIdentity {
     [void](AssertExactOriginalCommandLine (
         [string]$item.CommandLine
     ) $expected.Exe $expected.Arguments)
+    $directImage=[string]::Equals([string]$item.ExecutablePath,$expected.Exe,
+                                 [StringComparison]::OrdinalIgnoreCase)
+    $redirectedImage=$false
+    if(-not $directImage){
+        # Only after the original task argv and same-owner PID have matched.
+        $baseImage=GetVenvRedirectorBasePythonw $expected.Exe
+        $observedImage=[string]$item.ExecutablePath
+        if(-not [IO.Path]::IsPathRooted($observedImage) -or
+           ($env:OS -eq 'Windows_NT' -and
+            $observedImage -cnotmatch '^[A-Za-z]:\\')){
+            throw 'UCIE_W35_LISTENER_IMAGE_PATH_INVALID_HOLD'
+        }
+        try {
+            $observedCanonical=[IO.Path]::GetFullPath($observedImage)
+            $baseCanonical=[IO.Path]::GetFullPath($baseImage)
+        } catch {throw 'UCIE_W35_LISTENER_IMAGE_PATH_INVALID_HOLD'}
+        if(-not [string]::Equals($observedCanonical,$baseCanonical,
+                               [StringComparison]::OrdinalIgnoreCase)){
+            throw 'UCIE_W35_LISTENER_BASE_PYTHONW_IMAGE_MISMATCH_HOLD'
+        }
+        $redirectedImage=$true
+    }
     # The listener may have exited/rebound while CIM owner and argv were
     # inspected. Requery ONLY the same UCIE port; a changed PID is a HOLD.
     $confirmed=@(Get-NetTCPConnection -LocalPort 18767 -State Listen -ErrorAction Stop)
@@ -235,7 +328,10 @@ function AssertOwnerLocalListenerPidIdentity {
        [int]$confirmed[0].OwningProcess -ne $listenerProcessId){
         throw 'UCIE_W31_LISTENER_PID_CHANGED_DURING_READONLY_HOLD'
     }
-    return $true
+    return [pscustomobject]@{
+        direct_original_task_binary=$directImage
+        venv_base_pythonw_redirector_consistent=$redirectedImage
+    }
 }
 # Host source, task and historical provenance checks happen only AFTER
 # the explicit -CheckLocal owner approval and UAC checks above.
@@ -330,18 +426,23 @@ foreach($i in 0..2){
     }
 }
 if(-not (HealthyOld)){throw 'UCIE_W31_ORIGINAL_LOCAL_HTTP_HEALTH_HOLD'}
-[void](AssertOwnerLocalListenerPidIdentity)
+$listenerIdentity=AssertOwnerLocalListenerPidIdentity
 if((C40Hash) -cne $c40Baseline){
     throw 'UCIE_W31_C40_ACTION_CHANGED_DURING_READONLY'
 }
 [pscustomobject]@{
     schema=$schema
-    status='UCIE_W31_EXACT_LOOPBACK_PID_BINARY_CLI_OWNER_VERIFIED__TASK_LAUNCH_LINK_HOLD'
+    status=$(if($listenerIdentity.venv_base_pythonw_redirector_consistent){
+        'UCIE_W35_VENV_BASE_PYTHONW_CLI_OWNER_CONFIG_CONSISTENT__TASK_LAUNCH_LINK_HOLD'
+    } else {
+        'UCIE_W31_EXACT_LOOPBACK_PID_BINARY_CLI_OWNER_VERIFIED__TASK_LAUNCH_LINK_HOLD'
+    })
     original_tasks_owner_action_and_state_verified=$true
     historical_owner_receipts_preserved_and_validated=$true
     old_local_http_healthy=$true
     listener_process_owner_sid_verified=$true
-    listener_binary_matches_original_task=$true
+    listener_binary_matches_original_task=[bool]$listenerIdentity.direct_original_task_binary
+    listener_venv_base_pythonw_config_consistent=[bool]$listenerIdentity.venv_base_pythonw_redirector_consistent
     listener_command_line_matches_original_task=$true
     listener_is_exactly_one_loopback=$true
     listener_pid_launched_by_task_scheduler_verified=$false
