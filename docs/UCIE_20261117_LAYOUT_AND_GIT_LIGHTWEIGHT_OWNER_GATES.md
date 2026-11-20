@@ -96,3 +96,50 @@ The action is an inventory only. The owner must still classify each of the
 20 modified and 210 untracked original items, preserve historical proofs,
 verify source/ACL/backups and separately approve any reversible archive.
 No deletion, automatic relocation, or false disk-speed claims follow from it.
+
+
+## 2026-11-20: owner-confirmed file types; exact old-vs-stage PATH crosswalk
+
+The owner ran the original-first Git inventory (PR #337) and the bounded
+extension-only local classification. Source-derived observed snapshot:
+- 20 original tracked modifications (HOLD)
+- 1,566 original untracked files, 874 of which belong to the protected
+  .ucie_bridge_state (K0/HOLD)
+- Remaining 692 untracked file path records: 504 .py, 59 .ps1,
+  118 .md, 5 .bak, 3 .json, 2 .yml and 1 unclassified root-level item.
+- No duplicate bytes/unused source/unused QA tests, retention clearance,
+  source backup, disk savings or authorized deletion were established.
+
+This source change extends the ALREADY EXISTING first-party layout audit
+rather than introducing another process, new task or tunnel dependency:
+
+    D:\UCIE_PROJECT\UCIE\.venv\Scripts\python.exe -I -B D:\UCIE_PROJECT\UCIE\src\ucie_miner\layout_audit_v01.py --compare-original-git
+
+Source code execution remains pinned to clean first-party staged
+D:\UCIE_PROJECT\UCIE on Windows. The audit verifies branch=main,
+exact origin, and clean staged Git metadata; original root D:\UCIE is
+also fixed. It compares staged Git tracked **relative paths** with original
+Git status path records (Git NUL format and --untracked-files=all). It does
+NOT import code from the original dirty checkout, read original file contents
+in Python, output ANY original filenames, open SQLite, modify Git index,
+move/delete/archive anything, reconfigure task/tunnel or traverse other
+projects. Git status may inspect operating-tree bytes internally; these
+contents are never returned by the audit.
+
+The JSON separates for each approved area docs/scripts/src/tests/.github:
+- original untracked vs tracked-modified records
+- same relative pathname in staged tracked Git vs not tracked in stage
+
+Bridge state is only counted, with NO file names exposed and no stage
+comparison. Other sensitive/unknown roots are similarly held separately;
+neither path collisions nor unmatched paths are declared duplicates or
+disposable. A same-relative-path result is **NOT a byte match** and a
+Git-tracked change is NOT permission to overwrite the operating copy.
+Explicit results: byte_duplicate_count_verified=null,
+path_overlap_proves_identical_file_bytes=false,
+cleanup_approved=false, full_cutover_authorized=false.
+
+This command is a nonmutating owner classification step; any subsequent
+SHA-256 content comparison would require separate UCIE-only source rights,
+reference/retention review and bounded consent. Do NOT import or publish
+private source, secrets, tokens, owner bridge state or original file paths.
