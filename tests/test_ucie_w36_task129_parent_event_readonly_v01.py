@@ -47,6 +47,11 @@ $matched=@($ast.FindAll({{param($node)
      $node.Name -ceq 'TestExactTask129ParentEvent')}},$true))
 if($matched.Count -ne 1){{throw 'UCIE_W36_EXACT_FUNCTION_UNIQUE_HOLD'}}
 . ([scriptblock]::Create($matched[0].Extent.Text))
+$boundedFn=@($ast.FindAll({{param($node)
+    ($node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+     $node.Name -ceq 'NewBoundedUcIeTask129FilterXml')}},$true))
+if($boundedFn.Count -ne 1){{throw 'UCIE_W36_FILTERXML_BUILDER_NOT_UNIQUE'}}
+. ([scriptblock]::Create($boundedFn[0].Extent.Text))
 $xml=@'
 <Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
  <System><Provider Name="Microsoft-Windows-TaskScheduler"/>
@@ -137,10 +142,30 @@ Write-Output 'UCIE_W36_PROVIDER_SCHEMA_PID_NEGATIVES_PASS'
 """)
         self.assertIn("UCIE_W36_PROVIDER_SCHEMA_PID_NEGATIVES_PASS", out)
 
+    def test_server_side_filter_scopes_to_ucie_task_only(self):
+        out = self.native(r"""
+$q=NewBoundedUcIeTask129FilterXml $created
+$node=$q.SelectSingleNode('/QueryList/Query/Select')
+if($null -eq $node){throw 'UCIE_W36_FILTERXML_NO_SELECT'}
+$xpath=$node.InnerText
+if(-not $xpath.Contains('EventID=129') -or
+   -not $xpath.Contains("Data[@Name='TaskName']='\UCIE-LocalV1-Web'") -or
+   -not $xpath.Contains("Data[@Name='Path']='D:\UCIE\.venv\Scripts\pythonw.exe'") -or
+   -not $xpath.Contains('@SystemTime >=') -or
+   -not $xpath.Contains('@SystemTime <=') -or
+   -not $xpath.Contains('04:58:03') -or
+   -not $xpath.Contains('05:02:03')){
+    throw 'UCIE_W36_UNBOUNDED_OR_UNSCOPED_EVENT_QUERY'
+}
+Write-Output 'UCIE_W36_TASK_ONLY_FILTER_XML_PASS'
+""")
+        self.assertIn("UCIE_W36_TASK_ONLY_FILTER_XML_PASS", out)
+
     def test_source_is_bounded_readonly_and_does_not_claim_launch(self):
         s = self.source
-        self.assertIn("Get-WinEvent -FilterHashtable", s)
-        self.assertIn("Id=129", s)
+        self.assertIn("Get-WinEvent -FilterXml $onlyUcIeEvents", s)
+        self.assertIn("NewBoundedUcIeTask129FilterXml", s)
+        self.assertNotIn("Get-WinEvent -FilterHashtable", s)
         self.assertIn("-MaxEvents 128 -ErrorAction Stop", s)
         self.assertIn("Get-NetTCPConnection -LocalPort 18767 -State Listen", s)
         self.assertIn("Get-CimInstance -ClassName Win32_Process -Filter", s)
