@@ -112,6 +112,9 @@ class W35VenvBaseImageReadOnlyNativeTests(unittest.TestCase):
                                encoding="utf-8")
             elif config == "relative":
                 cfg.write_text("home = relative_path", encoding="utf-8")
+            elif config == "traversal":
+                cfg.write_text("home = " + str(base / ".." / "base_python"),
+                               encoding="utf-8")
             elif config == "oversized":
                 cfg.write_text("home = " + str(base) + "\n" + ("x" * 8192),
                                encoding="utf-8")
@@ -168,6 +171,7 @@ Write-Output 'UCIE_W35_WRONG_BASE_IMAGE_HOLD_PASS'
             ("absent", "UCIE_W35_VENV_REDIRECTOR_FILE_UNAVAILABLE_HOLD"),
             ("duplicate", "UCIE_W35_VENV_HOME_NOT_UNIQUE_HOLD"),
             ("relative", "UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD"),
+            ("traversal", "UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD"),
             ("oversized", "UCIE_W35_VENV_CONFIG_SIZE_HOLD"),
         ):
             with self.subTest(config=config):
