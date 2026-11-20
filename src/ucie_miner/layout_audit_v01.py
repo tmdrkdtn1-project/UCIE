@@ -261,7 +261,7 @@ def inspect_ucie_layout(root: Path, *, fast_git: bool = False) -> dict:
 
 
 def _require_staged_observer(source: Path, *, platform: str) -> None:
-    """Only exact first-party staged D:\UCIE_PROJECT\UCIE code can view old Git.
+    r"""Only exact first-party staged D:\UCIE_PROJECT\UCIE code can view old Git.
 
     This never grants permission to change tasks, copy/delete source, or to
     inspect UCIE_DATA, UCIE_PREVIEW, the D: drive, or unrelated projects.
