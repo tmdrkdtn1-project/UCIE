@@ -75,13 +75,68 @@ if(-not [string]::Equals(
         [StringComparison]::Ordinal)){
     throw 'UCIE_W31_EXPLICIT_OWNER_READONLY_APPROVAL_REQUIRED'
 }
+# W32: user-friendly, owner-approved READ-ONLY UAC handoff. The launcher
+# never reads or writes owner private data or starts/stops original tasks.
+# Only the elevated child may run the existing W31 read-only source gates.
+function NewReadOnlyUacArguments([string]$expectedOwnerSid) {
+    if($expectedOwnerSid -cnotmatch '^S-1(?:-[0-9]+){2,15}$'){
+        throw 'UCIE_W32_INVALID_OR_UNTRUSTED_OWNER_SID'
+    }
+    # Literal first-party path and fixed owner approval: never interpolate
+    # user-controlled executable paths or arbitrary command strings.
+    $command=@'
+$ErrorActionPreference='Stop'
+$expectedSid='__UCIE_OWNER_SID__'
+$actualSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+if($actualSid -cne $expectedSid){
+    throw 'UCIE_W32_UAC_ACCOUNT_CHANGED__READONLY_HOLD'
+}
+& 'D:\UCIE_PROJECT\UCIE\scripts\ucie_owner_w31_local_listener_pid_readonly_v01.ps1' -CheckLocal -OwnerApproval 'AUTHORIZE_UCIE_W31_READONLY_OLD_LOCAL_LISTENER_PID_INSPECTION'
+'@
+    $command=$command.Replace('__UCIE_OWNER_SID__',$expectedOwnerSid)
+    $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    return '-NoProfile -NoExit -EncodedCommand '+$encoded
+}
 if($env:OS -ne 'Windows_NT' -or -not [Environment]::UserInteractive){
     throw 'UCIE_W31_INTERACTIVE_WINDOWS_OWNER_REQUIRED'
 }
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 $admin=[Security.Principal.WindowsPrincipal]::new($identity)
 if(-not $admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
-    throw 'UCIE_W31_ELEVATED_SAME_OWNER_REQUIRED'
+    # No trust in the caller's working directory, PATH-resolved powershell,
+    # or the ability of a different Windows account to satisfy UAC.
+    if(-not [string]::Equals([IO.Path]::GetFullPath($PSCommandPath),
+                            [IO.Path]::GetFullPath($self),
+                            [StringComparison]::OrdinalIgnoreCase)){
+        throw 'UCIE_W32_CANONICAL_SELF_FOR_UAC_REQUIRED'
+    }
+    $systemRoot=[Environment]::GetEnvironmentVariable('SystemRoot','Machine')
+    if([string]::IsNullOrWhiteSpace($systemRoot)){
+        throw 'UCIE_W32_SYSTEM_WINDOWS_PATH_UNAVAILABLE'
+    }
+    $windowsPowerShell=[IO.Path]::Combine(
+        $systemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe')
+    if(-not [IO.File]::Exists($windowsPowerShell)){
+        throw 'UCIE_W32_SYSTEM_POWERSHELL_NOT_FOUND'
+    }
+    $arguments=NewReadOnlyUacArguments $identity.User.Value
+    try {
+        [void](Start-Process -FilePath $windowsPowerShell -ArgumentList $arguments `
+            -Verb RunAs -ErrorAction Stop -PassThru)
+    } catch {
+        throw 'UCIE_W32_OWNER_UAC_CANCELLED_OR_LAUNCH_FAILED__NO_HOST_CHECK'
+    }
+    [pscustomobject]@{
+        schema=$schema
+        status='UCIE_W32_ELEVATED_READONLY_WINDOW_STARTED__RESULT_PENDING'
+        uac_approved_for_readonly=$true
+        host_service_examined_in_parent=$false
+        task_scheduler_or_c40_modified=$false
+        operating_sqlite_opened=$false
+        journal_written=$false
+        full_cutover_authorized=$false
+    } | ConvertTo-Json -Compress
+    return
 }
 $script:ownerSid=$identity.User.Value
 
