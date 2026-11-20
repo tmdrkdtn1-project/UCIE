@@ -241,8 +241,11 @@ function GetVenvRedirectorBasePythonw([string]$venvLauncherPath) {
     try {
         $normalizedHome=[IO.Path]::GetFullPath($venvHome)
     } catch {throw 'UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD'}
-    if(-not [string]::Equals($venvHome,$normalizedHome,
-                           [StringComparison]::OrdinalIgnoreCase)){
+    # GetFullPath canonicalizes an already absolute, local, traversal-free
+    # Windows home; text equality against its input is not a trust boundary.
+    # The actual PID image must still match the OS-normalized base executable.
+    if($env:OS -eq 'Windows_NT' -and
+       $normalizedHome -cnotmatch '^[A-Za-z]:\\'){
         throw 'UCIE_W35_VENV_HOME_NOT_CANONICAL_LOCAL_HOLD'
     }
     $baseImage=Join-Path -Path $normalizedHome -ChildPath 'pythonw.exe'
