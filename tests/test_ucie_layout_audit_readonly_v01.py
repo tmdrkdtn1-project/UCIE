@@ -677,5 +677,149 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
         self._assert_state_unchanged()
 
 
+    def test_34_owner_local_content_review_compares_scoped_code_only(self):
+        # Two disposable UCIE Git repos. No original source import,
+        # owner host access, network, or file operations beyond test fixtures.
+        stage = Path(self.tmp.name) / "UCIE_PROJECT" / "UCIE"
+        stage.mkdir(parents=True)
+        def sg(*argv):
+            return subprocess.run(
+                ["git", "-C", str(stage), *argv], check=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=20).stdout
+        sg("init", "-q")
+        sg("config", "user.name", "UCIE Synthetic Local Code Review")
+        sg("config", "user.email", "ucie-local-content@invalid.example")
+        sg("config", "core.autocrlf", "false")
+        for folder in ("src/ucie_miner", "scripts", "tests"):
+            (stage / folder).mkdir(parents=True, exist_ok=True)
+        fixtures = {
+            "src/ucie_miner/exact.py": b"def exact():\n    return 7\n",
+            "src/ucie_miner/candidate_stage.py": b"def candidate():\n    return 99\n",
+            "src/ucie_miner/ast_stage.py": b"import math\nVALUE = 5\n",
+            "scripts/same.ps1": b"Write-Output 5\n",
+            "scripts/live.ps1": b"STAGED VERSION\n",
+        }
+        for path, body in fixtures.items():
+            (stage / path).write_bytes(body)
+        sg("add", "--", ".")
+        sg("commit", "-qm", "UCIE disposable stage")
+
+        (self.root / "src" / "ucie_miner" / "exact.py").write_bytes(
+            fixtures["src/ucie_miner/exact.py"])
+        (self.root / "src" / "ucie_miner" / "candidate_original.py").write_bytes(
+            fixtures["src/ucie_miner/candidate_stage.py"])
+        (self.root / "src" / "ucie_miner" / "ast_original.py").write_bytes(
+            b"import math  # formatting-only comment\nVALUE=5\n")
+        (self.root / "scripts" / "same.ps1").write_bytes(b"Write-Output 5\r\n")
+        (self.root / "scripts" / "live.ps1").write_bytes(b"OWNER MODIFIED\n")
+        (self.root / "tests" / "test_secret_legacy.py").write_bytes(
+            b"def test_secret_legacy():\n    assert False\n")
+        (self.root / "docs").mkdir()
+        (self.root / "docs" / "confidential_history.md").write_bytes(
+            b"NEVER READ OWNER DOCUMENT CONTENT")
+        (self.root / "src" / "ucie_miner" / "recovery.bak").write_bytes(
+            b"DO NOT READ BACKUP")
+
+        original_doc_digest = sha256(
+            (self.root / "docs" / "confidential_history.md").read_bytes()).hexdigest()
+        with patch.object(
+                layout, "_read_owner_ucie_code_bounded",
+                wraps=layout._read_owner_ucie_code_bounded) as observed:
+            report = layout._stage_original_path_crosswalk(
+                stage, self.root, classify_unmatched=True,
+                review_local_code=True)
+        review = report["owner_local_code_content_review"]
+        self.assertEqual(review["schema"], layout.LOCAL_CODE_REVIEW_SCHEMA)
+        self.assertTrue(review["content_comparison_local_only"])
+        self.assertFalse(review["code_imported_or_executed"])
+        self.assertEqual(review["by_review_area"]["src"][
+            "same_path_exact_bytes"], 1)
+        self.assertEqual(review["by_review_area"]["src"][
+            "original_only_exact_bytes_elsewhere_candidate"], 1)
+        self.assertEqual(review["by_review_area"]["src"][
+            "original_only_python_ast_candidate"], 1)
+        self.assertEqual(review["by_review_area"]["scripts"][
+            "same_path_eol_only"], 1)
+        self.assertEqual(review["by_review_area"]["scripts"][
+            "same_path_content_changed"], 1)
+        self.assertEqual(review["by_review_area"]["tests"][
+            "original_only_no_static_candidate_observed"], 1)
+        self.assertEqual(review["code_status_records_reviewed_or_held"], 6)
+        self.assertEqual(report["byte_duplicate_count_verified"], None)
+        self.assertTrue(report["file_content_hashes_read"])
+        self.assertFalse(report["files_moved_or_deleted"])
+        self.assertFalse(report["full_cutover_authorized"])
+        self.assertEqual(report["unmatched_path_metadata_review"][
+            "all_unmatched_records_disposition"], "K0_HOLD_FOR_SOURCE_REVIEW")
+        touched = [call.args[1] for call in observed.call_args_list]
+        self.assertFalse(any(
+            x.startswith((".ucie_bridge_state/", "docs/", "runtime/")) or
+            x.endswith(".bak") for x in touched))
+        import json
+        receipt = json.dumps(report, sort_keys=True)
+        for secret in ("test_secret_legacy", "confidential_history",
+                       "candidate_original", "OWNER MODIFIED",
+                       original_doc_digest):
+            self.assertNotIn(secret, receipt)
+        self.assertEqual(sha256(
+            (self.root / "docs" / "confidential_history.md").read_bytes()
+        ).hexdigest(), original_doc_digest)
+        self._assert_state_unchanged()
+
+    def test_35_owner_code_scope_rejects_indirection_private_and_backups(self):
+        for item in (
+            ".ucie_bridge_state/health.json", "runtime/owner.py",
+            "docs/review.md", "src/private/secret.py",
+            "src/ucie_miner/secrets/token.py",
+            "scripts/recovery.bak", "tests/test_hidden.ps1",
+            "src/ucie_miner/../escape.py",
+            "scripts/../secrets/private.ps1",
+            "src/ucie_miner/foo.txt",
+        ):
+            with self.subTest(item=item):
+                self.assertIsNone(layout._ucie_code_scope(item))
+                self.assertIsNone(layout._read_owner_ucie_code_bounded(
+                    self.root, item))
+        self.assertEqual(layout._ucie_code_scope(
+            "src/ucie_miner/real.py"), "src")
+        self.assertEqual(layout._ucie_code_scope(
+            "scripts/setup.ps1"), "scripts")
+        self.assertEqual(layout._ucie_code_scope(
+            "tests/test_regression.py"), "tests")
+        self.assertGreaterEqual(layout.MAX_LOCAL_CODE_RECORDS, 877 + 1586)
+        self._assert_state_unchanged()
+
+    def test_36_owner_content_review_oversized_and_zero_trust_hold(self):
+        target = self.root / "src" / "ucie_miner" / "oversized.py"
+        target.write_bytes(b"A" * (layout.MAX_LOCAL_CODE_FILE_BYTES + 1))
+        name = "src/ucie_miner/oversized.py"
+        self.assertIsNone(layout._read_owner_ucie_code_bounded(
+            self.root, name))
+        record = layout._compare_owner_code_content_locally(
+            self.root, self.root, set(), [("untracked", name)])
+        row = record["by_review_area"]["src"]
+        self.assertEqual(row["code_status_records"], 1)
+        self.assertEqual(row["original_file_unreadable_or_unsafe"], 1)
+        self.assertEqual(row["original_only_no_static_candidate_observed"], 0)
+        self.assertFalse(record["same_bytes_proves_functional_equivalence"])
+        self.assertEqual(record["all_original_paths_remain"], "K0_HOLD_FOR_REVIEW")
+        with self.assertRaises(layout.LayoutAuditError):
+            layout._compare_owner_code_content_locally(
+                self.root, self.root,
+                set(f"scripts/fake_{i}.py" for i in range(
+                    layout.MAX_LOCAL_CODE_RECORDS + 1)), [])
+        self._assert_state_unchanged()
+
+    def test_37_owner_code_review_boolean_and_platform_gates(self):
+        with self.assertRaises(layout.LayoutAuditError):
+            layout._stage_original_path_crosswalk(
+                self.root, self.root, review_local_code=1)
+        with self.assertRaises(layout.LayoutAuditError):
+            layout.compare_original_ucie_git_to_stage(
+                self.root, self.root, platform="posix",
+                review_local_code=True)
+        self._assert_state_unchanged()
+
 if __name__ == "__main__":
     unittest.main()

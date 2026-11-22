@@ -8,6 +8,9 @@ Owner must separately review absolute-path services before moving live roots.
 from __future__ import annotations
 
 from collections import Counter
+import ast
+from hashlib import sha256
+import stat
 import json
 import os
 from pathlib import Path
@@ -523,16 +526,241 @@ def _classify_missing_git_paths(
     }
 
 
+# Owner-local content comparison is NOT a migration, import, or publication gate.
+# Only already enumerated first-party Python / PowerShell code under fixed
+# UCIE source/test/script folders may be read. No backups, docs, bridge/runtime,
+# credentials, unknown folders, or other project paths may be opened.
+LOCAL_CODE_REVIEW_SCHEMA = "UCIE_OWNER_LOCAL_CODE_CONTENT_REVIEW_V01"
+LOCAL_CODE_SUFFIXES = frozenset((".py", ".ps1", ".psm1"))
+LOCAL_CODE_FORBIDDEN_SEGMENTS = frozenset((
+    "private", "secrets", "credentials", "runtime", "backups",
+    ".ucie_bridge_state", ".git", ".venv", "downloaded",
+    "datasets", "raw", "raw_data", "raw_quarantine", "project_data",
+))
+MAX_LOCAL_CODE_FILE_BYTES = 524_288
+MAX_LOCAL_CODE_TOTAL_BYTES = 128_000_000
+MAX_LOCAL_CODE_RECORDS = 5000
+MAX_LOCAL_AST_BYTES = 120_000
+
+
+def _ucie_code_scope(name: str) -> str | None:
+    """Return a fixed category, never a user-controlled output label."""
+    if not isinstance(name, str):
+        return None
+    parts = name.casefold().split("/")
+    if (len(parts) < 2 or len(parts) > 32
+            or any(not p or p in (".", "..")
+                   or p in LOCAL_CODE_FORBIDDEN_SEGMENTS for p in parts)):
+        return None
+    suffix = "." + parts[-1].rsplit(".", 1)[-1] if "." in parts[-1] else ""
+    if suffix not in LOCAL_CODE_SUFFIXES:
+        return None
+    if parts[0] == "src":
+        return ("src" if len(parts) >= 3 and
+                parts[1] in ("ucie_miner", "ucie_public") else None)
+    if parts[0] == "scripts":
+        return "scripts"
+    if parts[0] == "tests" and suffix == ".py":
+        return "tests"
+    return None
+
+
+def _read_owner_ucie_code_bounded(root: Path, name: str) -> bytes | None:
+    """Read a single direct regular UCIE code file without executing it.
+
+    The file path is derived exclusively from parsed Git metadata; the
+    caller checks the checkout roots. Reject indirect parents/files,
+    nonregular, multiply linked, missing, or oversized files. Re-check
+    inode/dev/size after the read; report only counts, never bytes/hashes.
+    This is a local owner-controlled dry-run, not adversarial host attestation.
+    """
+    if _ucie_code_scope(name) is None:
+        return None
+    path = root
+    try:
+        for part in name.split("/"):
+            path = path / part
+            if _indirect(path):
+                return None
+        before = path.lstat()
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_size > MAX_LOCAL_CODE_FILE_BYTES):
+            return None
+        flags = (os.O_RDONLY | getattr(os, "O_BINARY", 0)
+                 | getattr(os, "O_NOFOLLOW", 0))
+        fd = os.open(path, flags)
+        with os.fdopen(fd, "rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if (opened.st_dev, opened.st_ino, opened.st_size) != (
+                    before.st_dev, before.st_ino, before.st_size):
+                return None
+            data = stream.read(MAX_LOCAL_CODE_FILE_BYTES + 1)
+            after_open = os.fstat(stream.fileno())
+        after = path.lstat()
+        if (_indirect(path) or not stat.S_ISREG(after.st_mode)
+                or after.st_nlink != 1 or len(data) > MAX_LOCAL_CODE_FILE_BYTES
+                or len(data) != before.st_size
+                or (after.st_dev, after.st_ino, after.st_size)
+                   != (before.st_dev, before.st_ino, before.st_size)
+                or (after_open.st_dev, after_open.st_ino, after_open.st_size)
+                   != (before.st_dev, before.st_ino, before.st_size)):
+            return None
+        return data
+    except (OSError, ValueError):
+        return None
+
+
+def _code_ast_digest(data: bytes, name: str) -> bytes | None:
+    """Static Python syntax fingerprint; NEVER import or run the code."""
+    if (not name.endswith(".py") or len(data) > MAX_LOCAL_AST_BYTES):
+        return None
+    try:
+        tree = ast.parse(data.decode("utf-8-sig"), filename="<UCIE-local>")
+        return sha256(ast.dump(tree, include_attributes=False).encode("utf-8")).digest()
+    except (SyntaxError, UnicodeError, ValueError, RecursionError, MemoryError):
+        return None
+
+
+def _compare_owner_code_content_locally(
+    stage: Path, original: Path, stage_paths: set[str],
+    changes: list[tuple[str, str]]
+) -> dict:
+    """Scope-bounded first-party local-only content evidence, never GO.
+
+    The caller already pins and validates both UCIE checkouts and obtains
+    Git path/status metadata. Same-path byte equality is stronger than a
+    path match but does NOT prove absence of missing dependencies.
+    Identical bytes at DIFFERENT paths and equal Python AST are candidates
+    for human reference-graph review, never auto-equivalent functionality.
+    """
+    if len(stage_paths) + len(changes) > MAX_LOCAL_CODE_RECORDS:
+        raise LayoutAuditError("UCIE code-review metadata exceeds safe bound")
+
+    stage_bytes: dict[str, bytes] = {}
+    stage_exact: set[bytes] = set()
+    stage_eol: set[bytes] = set()
+    stage_ast: set[bytes] = set()
+    stage_skipped = bytes_read = originals_read = 0
+
+    for name in sorted(stage_paths):
+        if _ucie_code_scope(name) is None:
+            continue
+        data = _read_owner_ucie_code_bounded(stage, name)
+        if data is None:
+            stage_skipped += 1
+            continue
+        bytes_read += len(data)
+        if bytes_read > MAX_LOCAL_CODE_TOTAL_BYTES:
+            raise LayoutAuditError("UCIE source-read budget exceeded")
+        stage_bytes[name] = data
+        stage_exact.add(sha256(data).digest())
+        stage_eol.add(sha256(data.replace(b"\r\n", b"\n")).digest())
+        digest = _code_ast_digest(data, name)
+        if digest is not None:
+            stage_ast.add(digest)
+
+    by_area: dict[str, Counter[str]] = {}
+    for kind, name in changes:
+        area = _ucie_code_scope(name)
+        if area is None:
+            continue
+        row = by_area.setdefault(area, Counter())
+        row["code_status_records"] += 1
+        row["original_untracked" if kind == "untracked"
+            else "original_tracked_changed"] += 1
+        same_path = name in stage_paths
+        row["same_relative_path" if same_path else "original_only_path"] += 1
+        content = _read_owner_ucie_code_bounded(original, name)
+        if content is None:
+            row["original_file_unreadable_or_unsafe"] += 1
+            continue
+        originals_read += 1
+        bytes_read += len(content)
+        if bytes_read > MAX_LOCAL_CODE_TOTAL_BYTES:
+            raise LayoutAuditError("UCIE source-read budget exceeded")
+
+        if same_path:
+            candidate = stage_bytes.get(name)
+            if candidate is None:
+                row["same_path_stage_file_unreadable"] += 1
+            elif content == candidate:
+                row["same_path_exact_bytes"] += 1
+            elif content.replace(b"\r\n", b"\n") == candidate.replace(b"\r\n", b"\n"):
+                row["same_path_eol_only"] += 1
+            else:
+                row["same_path_content_changed"] += 1
+            continue
+
+        if sha256(content).digest() in stage_exact:
+            row["original_only_exact_bytes_elsewhere_candidate"] += 1
+        elif sha256(content.replace(b"\r\n", b"\n")).digest() in stage_eol:
+            row["original_only_eol_normalized_candidate"] += 1
+        elif ((digest := _code_ast_digest(content, name)) is not None
+              and digest in stage_ast):
+            row["original_only_python_ast_candidate"] += 1
+        else:
+            row["original_only_no_static_candidate_observed"] += 1
+
+    allowed_keys = (
+        "code_status_records", "original_untracked",
+        "original_tracked_changed", "same_relative_path",
+        "original_only_path", "original_file_unreadable_or_unsafe",
+        "same_path_stage_file_unreadable", "same_path_exact_bytes",
+        "same_path_eol_only", "same_path_content_changed",
+        "original_only_exact_bytes_elsewhere_candidate",
+        "original_only_eol_normalized_candidate",
+        "original_only_python_ast_candidate",
+        "original_only_no_static_candidate_observed",
+    )
+    out = {}
+    for area, row in sorted(by_area.items()):
+        same_classified = sum(row[k] for k in (
+            "same_path_stage_file_unreadable", "same_path_exact_bytes",
+            "same_path_eol_only", "same_path_content_changed"))
+        missing_classified = sum(row[k] for k in (
+            "original_only_exact_bytes_elsewhere_candidate",
+            "original_only_eol_normalized_candidate",
+            "original_only_python_ast_candidate",
+            "original_only_no_static_candidate_observed"))
+        if (same_classified + missing_classified
+                + row["original_file_unreadable_or_unsafe"]
+                != row["code_status_records"]):
+            raise LayoutAuditError("UCIE owner code-review completeness mismatch")
+        out[area] = {key: row[key] for key in allowed_keys}
+
+    return {
+        "schema": LOCAL_CODE_REVIEW_SCHEMA,
+        "status": "OWNER_LOCAL_CODE_CONTENT_REVIEW_ONLY__FUNCTIONAL_EQUIVALENCE_UNVERIFIED",
+        "by_review_area": out,
+        "code_status_records_reviewed_or_held": sum(
+            row["code_status_records"] for row in out.values()),
+        "stage_code_files_indexed": len(stage_bytes),
+        "stage_code_files_skipped_unsafe_or_unreadable": stage_skipped,
+        "original_code_files_read_locally": originals_read,
+        "all_original_paths_remain": "K0_HOLD_FOR_REVIEW",
+        "content_comparison_local_only": True,
+        "no_raw_paths_source_bytes_or_digests_returned": True,
+        "same_bytes_proves_functional_equivalence": False,
+        "ast_candidate_proves_functional_equivalence": False,
+        "code_imported_or_executed": False,
+        "network_requests_or_reports_written": False,
+        "operating_db_task_tunnel_modified": False,
+        "files_imported_moved_or_deleted": False,
+        "cleanup_or_live_cutover_authorized": False,
+    }
+
+
 def _stage_original_path_crosswalk(staged_root: Path,
                                     original_root: Path, *,
-                                    classify_unmatched: bool = False) -> dict:
+                                    classify_unmatched: bool = False,
+                                    review_local_code: bool = False) -> dict:
     """Synthetic roots in CI; real wrapper pins exact Windows UCIE roots.
 
     Read Git INDEX and STATUS metadata only; no Python import from original,
     no file-content comparison, no SHA claim, no copy/move/delete/archiving.
     """
-    if type(classify_unmatched) is not bool:
-        raise LayoutAuditError("UCIE metadata triage flag must be boolean")
+    if type(classify_unmatched) is not bool or type(review_local_code) is not bool:
+        raise LayoutAuditError("UCIE content review flags must be boolean")
     stage = _phase("STAGED_ROOT", _checked_root, staged_root)
     original = _phase("ORIGINAL_ROOT", _checked_root, original_root)
     if stage == original or _indirect(stage.parent) or _indirect(original.parent):
@@ -621,6 +849,21 @@ def _stage_original_path_crosswalk(staged_root: Path,
     }
     if missing_review is not None:
         result["unmatched_path_metadata_review"] = missing_review
+    if review_local_code:
+        code_review = _phase(
+            "OWNER_LOCAL_CODE_CONTENT_REVIEW", _compare_owner_code_content_locally,
+            stage, original, staged_paths, changes)
+        result["owner_local_code_content_review"] = code_review
+        result["file_content_hashes_read"] = bool(
+            code_review["stage_code_files_indexed"]
+            or code_review["original_code_files_read_locally"])
+        # A changing original tree makes the local content evidence stale.
+        original_recheck = _phase(
+            "ORIGINAL_STATUS_RECHECK", _git_metadata_bytes,
+            original, "status", "--porcelain=v1", "-z",
+            "--untracked-files=all")
+        if original_recheck != original_data:
+            raise LayoutAuditPhaseError("ORIGINAL_CHANGED_DURING_REVIEW")
     return result
 
 
@@ -653,7 +896,8 @@ def _verified_crlf_only_staged_worktree(stage: Path, state: bytes) -> bool:
 
 def compare_original_ucie_git_to_stage(code_root: Path, original_root: Path,
                                        *, platform: str,
-                                       classify_unmatched: bool = False) -> dict:
+                                       classify_unmatched: bool = False,
+                                       review_local_code: bool = False) -> dict:
     """Exact owner Windows mode; approved staged main must be clean."""
     _require_staged_observer(code_root, platform=platform)
     if str(original_root).casefold() != r"d:\ucie":
@@ -675,9 +919,21 @@ def compare_original_ucie_git_to_stage(code_root: Path, original_root: Path,
         "--untracked-files=all")
     if state and not _verified_crlf_only_staged_worktree(stage, state):
         raise LayoutAuditPhaseError("STAGED_NOT_CLEAN")
-    if type(classify_unmatched) is not bool:
-        raise LayoutAuditError("UCIE metadata triage flag must be boolean")
-    if classify_unmatched:
+    if type(classify_unmatched) is not bool or type(review_local_code) is not bool:
+        raise LayoutAuditError("UCIE source review flags must be boolean")
+    if review_local_code:
+        report = _stage_original_path_crosswalk(
+            stage, original_root, classify_unmatched=True,
+            review_local_code=True)
+        stage_recheck = _phase(
+            "STAGED_STATUS_RECHECK", _git_metadata_bytes,
+            stage, "status", "--porcelain=v1", "-z",
+            "--untracked-files=all")
+        if stage_recheck != state or (
+                stage_recheck and
+                not _verified_crlf_only_staged_worktree(stage, stage_recheck)):
+            raise LayoutAuditPhaseError("STAGED_CHANGED_DURING_REVIEW")
+    elif classify_unmatched:
         report = _stage_original_path_crosswalk(
             stage, original_root, classify_unmatched=True)
     else:
@@ -700,6 +956,8 @@ def main() -> int:
                         help="Staged-only read-only path-overlap counts; no original file contents or cleanup")
     parser.add_argument("--classify-unmatched", action="store_true",
                         help="With --compare-original-git only: bucket unmatched original Git path metadata without names/content")
+    parser.add_argument("--review-local-code", action="store_true",
+                        help="With --compare-original-git only: bounded UCIE Python/PowerShell content read locally; JSON counts only")
     args = parser.parse_args()
     # The source-controlled entrypoint itself determines the checkout, not an
     # arbitrary caller path. On Windows the only authorized live root is D:\UCIE;
@@ -716,9 +974,10 @@ def main() -> int:
                 raise LayoutAuditError("conflicting UCIE Git inventory modes")
             out = compare_original_ucie_git_to_stage(
                 repo, Path(r"D:\UCIE"), platform=os.name,
-                classify_unmatched=args.classify_unmatched)
-        elif args.classify_unmatched:
-            raise LayoutAuditError("UCIE missing-path triage requires crosswalk")
+                classify_unmatched=args.classify_unmatched,
+                review_local_code=args.review_local_code)
+        elif args.classify_unmatched or args.review_local_code:
+            raise LayoutAuditError("UCIE content review requires crosswalk")
         elif args.observe_original_git:
             if args.fast_git:
                 raise LayoutAuditError("full exact untracked census required")

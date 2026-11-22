@@ -228,3 +228,43 @@ granted. This section and the code are first-party development only;
 owner Windows count distribution remains UNVERIFIED until the actual
 host executes the command. No need to move operating `D:\UCIE`,
 task/C40/SQLite or backups.
+
+## 2026-11-22: owner-local code content review (source-only candidate)
+
+Following exact Windows owner metadata triage on staged main 86c96dc,
+231 unmatched path records were all untracked; 176 are Python/PowerShell
+code or tests (src 20 .py, scripts 7 .py + 20 .ps1, tests 129 .py),
+50 docs/JSON and 5 .bak remain held. Same-basename candidates inside
+each review area: 0. This is NOT proof of source functional absence.
+
+A separately opt-in content review is added to the EXISTING first-party
+layout audit. Source must execute locally from the exact Windows
+D:\UCIE_PROJECT\UCIE staged checkout, on main and origin, passing the
+clean-or-strict-CRLF-only Git guard. It reads only direct regular
+UCIE-owned Python/PowerShell code under src/ucie_miner, src/ucie_public,
+scripts and tests. No imports or execution of original code; no
+source files are uploaded, copied, written, printed or published.
+The result exposes only fixed category counts, never filenames, file
+contents, AST text, SHA-256 digests, or protected paths.
+
+    D:\UCIE_PROJECT\UCIE\.venv\Scripts\python.exe -I -B D:\UCIE_PROJECT\UCIE\src\ucie_miner\layout_audit_v01.py --compare-original-git --review-local-code
+
+Local-only comparison distinguishes same-relative-path exact-byte
+identity, CRLF-only differences, genuine content differences and
+unreadable/unsafe files. For original-only code paths it compares
+in-memory exact-byte, normalized-EOL, and static Python AST fingerprints
+to the approved stage-tracked code index. These are REFERENCES TO
+REVIEW, not proof that renamed files can replace an original module.
+Excludes docs/JSON, all .bak, secrets, Git metadata, runtime, bridge,
+SQLite, venv, unapproved source folders, symlinks/junctions, hard links,
+oversized files and foreign roots. Skipped files are counted as held.
+Per-file read is capped at 512KiB and total data at 128MB; source
+identity and Git status are rechecked after review. All originals remain
+K0/HOLD and no cleanup, automatic import, production rule promotion,
+runtime task/tunnel changes, customer release or cutover is approved.
+
+An actual owner-machine content-review receipt is NOT yet observed.
+A code review count or equal AST never proves functional equivalence.
+Runtime regression, import graph and approved historical evidence
+still require separate verification. Public GitHub stores this audit
+mechanism and synthetic tests only, no original source bytes or hashes.
