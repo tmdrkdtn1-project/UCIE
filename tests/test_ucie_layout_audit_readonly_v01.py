@@ -1060,6 +1060,9 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
             [("untracked", name) for name in fixtures])
         lookup = report["original_only_no_static_match_import_review"]
         self.assertEqual(lookup["code_paths_without_content_match_reviewed"], 6)
+        # The shared package root exists in stage; only the untracked
+        # owner_only.py module is an original-only module candidate.
+        self.assertEqual(lookup["owner_original_only_source_module_path_candidates"], 1)
         self.assertIn("ucie_miner.owner_only",
                       layout._stage_tracked_ucie_python_modules({
                           "src/ucie_miner/owner_only.py"}))
