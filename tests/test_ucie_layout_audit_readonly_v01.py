@@ -530,7 +530,8 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
             report = layout.compare_original_ucie_git_to_stage(
                 self.root, Path(r"D:\UCIE"), platform="nt")
         self.assertTrue(report["stage_crlf_only_difference_verified"])
-        crosswalk.assert_called_once_with(self.root, Path(r"D:\UCIE"))
+        crosswalk.assert_called_once_with(
+            self.root.resolve(strict=True), Path(r"D:\UCIE"))
         self._assert_state_unchanged()
 
     def test_29_stage_content_index_and_untracked_changes_stay_blocked(self):
