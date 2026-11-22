@@ -641,6 +641,9 @@ def _stage_tracked_ucie_python_modules(paths: set[str]) -> set[str]:
         stem = name[4:-3].replace("/", ".")
         if stem.endswith(".__init__"):
             stem = stem[:-len(".__init__")]
+        if stem in ("ucie_miner", "ucie_public"):
+            modules.add(stem)
+            continue
         if not stem.startswith(("ucie_miner.", "ucie_public.")):
             continue
         modules.add(stem)
