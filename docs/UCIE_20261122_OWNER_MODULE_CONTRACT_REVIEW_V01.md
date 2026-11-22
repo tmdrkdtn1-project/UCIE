@@ -31,7 +31,7 @@ With the explicit flag, one no-overwrite report is saved to:
 
 `D:\UCIE_PROJECT\UCIE_OWNER_REVIEW\UCIE_OWNER_MODULE_REVIEW_<stage_sha_12>.json`
 
-The report contains **private original module names, UCIE-relative original source/test references, public callable/class declarations, and staged name/argument-shape candidate paths**. The report contains no original code body, secrets, or raw byte hashes. The owner must **not paste or upload it to GitHub or this chat**. The aggregate CLI JSON contains *no* original module names, file paths, symbol names or source content. The file is created in an owner-local UCIE review directory only after the explicit opt-in, never under the operating checkout or staged Git repository. Existing output is never overwritten.
+The report contains **private original module names, UCIE-relative original source/test references, public callable/class declarations, and staged name/argument-shape candidate paths**. The report contains no original code body or raw byte hashes. **Identifiers and relative paths in the packet are private project data** and may be sensitive; handle as confidential UCIE owner-local evidence. The owner must **not paste or upload it to GitHub or this chat**. The aggregate CLI JSON contains *no* original module names, file paths, symbol names or source content. The file is created in an owner-local UCIE review directory only after the explicit opt-in, never under the operating checkout or staged Git repository. Existing output is never overwritten.
 
 ## Safe interpretations and decision gates
 
