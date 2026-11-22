@@ -871,10 +871,12 @@ def _compare_owner_code_content_locally(
     firstparty_stage_modules = _stage_tracked_ucie_python_modules(stage_paths)
     # Git-status-only original source module path leads. No new original
     # bytes are read and no protected/untracked non-src files are examined.
-    firstparty_owner_only_modules = _stage_tracked_ucie_python_modules({
-        name for _, name in changes
-        if name not in stage_paths and _ucie_code_scope(name) == "src"
-    })
+    firstparty_owner_only_modules = (
+        _stage_tracked_ucie_python_modules({
+            name for _, name in changes
+            if name not in stage_paths and _ucie_code_scope(name) == "src"
+        }) - firstparty_stage_modules
+    )
     missing_reference_rows: dict[str, Counter[str]] = {}
 
     for name in sorted(stage_paths):
