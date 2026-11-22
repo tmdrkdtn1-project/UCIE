@@ -1103,5 +1103,69 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
                 {"ucie_miner"}, {"ucie_miner.owner_only"})
         self._assert_state_unchanged()
 
+
+    def test_46_distinct_original_modules_are_deduped_across_importing_files(self):
+        stage = Path(self.tmp.name) / "UCIE_STAGE_UNIQUE"
+        (stage / "src" / "ucie_miner").mkdir(parents=True)
+        (stage / "src" / "ucie_miner" / "ready.py").write_bytes(b"VALUE=1\n")
+        fixtures = {
+            "src/ucie_miner/old_alpha.py": b"VALUE = 4\n",
+            "src/ucie_miner/old_beta.py": b"VALUE = 5\n",
+            "src/ucie_miner/unreferenced.py": b"VALUE = 6\n",
+            "tests/test_alpha_one.py": b"import ucie_miner.old_alpha\n",
+            "tests/test_alpha_two.py": b"import ucie_miner.old_alpha\n",
+            "scripts/old_beta.py": b"from ucie_miner.old_beta import VALUE\n",
+            "tests/test_symbol_alpha.py": b"from ucie_miner import old_alpha\n",
+            "tests/test_symbol_beta.py": b"from ucie_miner import old_beta\n",
+        }
+        for name, data in fixtures.items():
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        result = layout._compare_owner_code_content_locally(
+            stage, self.root,
+            {"src/ucie_miner/ready.py"},
+            [("untracked", name) for name in fixtures])
+        report = result["original_only_no_static_match_import_review"]
+        self.assertEqual(report["code_paths_without_content_match_reviewed"], 8)
+        coverage = report["distinct_owner_module_coverage"]
+        self.assertEqual(coverage["original_only_src_module_path_candidates"], 3)
+        self.assertEqual(coverage["distinct_modules_named_by_explicit_imports"], 2)
+        self.assertEqual(coverage["distinct_modules_named_by_root_symbol_candidates"], 2)
+        self.assertEqual(coverage["distinct_modules_named_by_both"], 2)
+        self.assertEqual(coverage["distinct_modules_named_by_either_style"], 2)
+        self.assertEqual(
+            coverage["original_only_modules_without_observed_explicit_or_root_symbol_lead"], 1)
+        self.assertEqual(
+            coverage["by_importing_area"]["tests"][
+                "distinct_owner_modules_named_by_explicit_imports"], 1)
+        self.assertEqual(
+            coverage["by_importing_area"]["scripts"][
+                "distinct_owner_modules_named_by_explicit_imports"], 1)
+        self.assertFalse(coverage["source_module_names_paths_bytes_or_digests_returned"])
+        self.assertEqual(coverage["all_source_remains"],
+                         "K0_HOLD_FOR_DEPENDENCY_REVIEW")
+        import json
+        receipt = json.dumps(result, sort_keys=True)
+        for forbidden in ("old_alpha", "old_beta", "unreferenced",
+                          "test_alpha_one", "test_symbol_beta"):
+            self.assertNotIn(forbidden, receipt)
+        self._assert_state_unchanged()
+
+    def test_47_owner_module_union_is_bounded_and_rejects_out_of_scope(self):
+        owner = {"ucie_miner.alpha", "ucie_miner.beta"}
+        with self.assertRaises(layout.LayoutAuditError):
+            layout._summarize_owner_only_module_references(
+                owner, {"tests": {"direct": {"ucie_miner.not_in_owner"},
+                                  "root_symbol": set()}})
+        with self.assertRaises(layout.LayoutAuditError):
+            layout._summarize_owner_only_module_references(
+                owner, {"secrets": {"direct": set(), "root_symbol": set()}})
+        self.assertEqual(
+            layout._summarize_owner_only_module_references(
+                owner, {})["original_only_modules_without_observed_explicit_or_root_symbol_lead"],
+            2)
+        self._assert_state_unchanged()
+
 if __name__ == "__main__":
     unittest.main()
