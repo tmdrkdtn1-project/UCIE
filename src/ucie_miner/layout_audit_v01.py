@@ -419,13 +419,120 @@ def _parse_original_status_paths(raw: bytes) -> list[tuple[str, str]]:
     return rows
 
 
+# Fixed classification labels only; original filenames are never emitted.
+MISSING_REVIEW_SCHEMA = "UCIE_ORIGINAL_STAGE_MISSING_PATH_TRIAGE_V01"
+MISSING_REVIEW_ACTIONS = {
+    ".github": "WORKFLOW_INTEGRATION_REVIEW",
+    "docs": "DOCUMENT_PROVENANCE_AND_RETENTION_REVIEW",
+    "scripts": "SCRIPT_AND_ENTRYPOINT_DEPENDENCY_REVIEW",
+    "src": "SOURCE_FUNCTIONALITY_INTEGRATION_REVIEW",
+    "tests": "REGRESSION_COVERAGE_INTEGRATION_REVIEW",
+}
+MISSING_SUFFIX_BUCKETS = {
+    ".py": "python",
+    ".ps1": "powershell",
+    ".psm1": "powershell",
+    ".cmd": "command",
+    ".bat": "command",
+    ".md": "markdown",
+    ".rst": "documentation_other",
+    ".yml": "yaml",
+    ".yaml": "yaml",
+    ".json": "json",
+    ".bak": "backup_named",
+    ".txt": "text",
+}
+
+
+def _classify_missing_git_paths(
+    changes: list[tuple[str, str]], staged_paths: set[str]
+) -> dict:
+    """Read already-parsed Git path metadata only; always HOLD all source.
+
+    This cannot tell whether a filename, filename match elsewhere, or suffix
+    is a functional substitute, an exact byte duplicate, or safe to discard.
+    The original paths exist only in local memory during classification.
+    """
+    filenames_in_stage: dict[str, set[str]] = {
+        area: set() for area in REVIEW_AREAS
+    }
+    for name in staged_paths:
+        area = name.split("/", 1)[0]
+        if area in filenames_in_stage:
+            filenames_in_stage[area].add(name.rsplit("/", 1)[-1])
+
+    counters: dict[str, Counter[str]] = {}
+    suffixes: dict[str, Counter[str]] = {}
+    for kind, name in changes:
+        area = name.split("/", 1)[0]
+        if area not in REVIEW_AREAS:
+            continue
+        if area == ".github" and not name.startswith(".github/workflows/"):
+            continue
+        if name in staged_paths:
+            continue
+
+        row = counters.setdefault(area, Counter())
+        row["total"] += 1
+        if kind == "untracked":
+            row["original_untracked"] += 1
+        else:
+            row["original_tracked_changed"] += 1
+
+        basename = name.rsplit("/", 1)[-1]
+        if basename in filenames_in_stage[area]:
+            row["same_filename_elsewhere_in_stage"] += 1
+
+        dot = basename.rfind(".")
+        suffix = basename[dot:] if dot > 0 else ""
+        bucket = MISSING_SUFFIX_BUCKETS.get(suffix, "other_or_unknown")
+        suffixes.setdefault(area, Counter())[bucket] += 1
+
+    by_area = {}
+    for area, row in sorted(counters.items()):
+        buckets = dict(sorted(suffixes[area].items()))
+        if sum(buckets.values()) != row["total"]:
+            raise LayoutAuditError("UCIE missing-path type census mismatch")
+        by_area[area] = {
+            "original_paths_without_staged_relative_match": row["total"],
+            "original_untracked": row["original_untracked"],
+            "original_tracked_changed": row["original_tracked_changed"],
+            "same_filename_elsewhere_in_stage": row[
+                "same_filename_elsewhere_in_stage"],
+            "suffix_counts": buckets,
+            "required_owner_review": MISSING_REVIEW_ACTIONS[area],
+        }
+
+    total = sum(
+        row["original_paths_without_staged_relative_match"]
+        for row in by_area.values()
+    )
+    return {
+        "schema": MISSING_REVIEW_SCHEMA,
+        "status": "PATH_METADATA_TRIAGED__ALL_UNMATCHED_PATHS_HELD",
+        "source": "UCIE_GIT_PATH_METADATA_ONLY",
+        "unmatched_review_paths_total": total,
+        "by_review_area": by_area,
+        "same_filename_elsewhere_is_not_functional_equivalence": True,
+        "source_functionality_and_reference_graph_verified": False,
+        "source_bytes_or_sha256_compared": False,
+        "raw_original_paths_or_contents_returned": False,
+        "all_unmatched_records_disposition": "K0_HOLD_FOR_SOURCE_REVIEW",
+        "files_imported_moved_or_deleted": False,
+        "auto_cleanup_or_cutover_approved": False,
+    }
+
+
 def _stage_original_path_crosswalk(staged_root: Path,
-                                    original_root: Path) -> dict:
+                                    original_root: Path, *,
+                                    classify_unmatched: bool = False) -> dict:
     """Synthetic roots in CI; real wrapper pins exact Windows UCIE roots.
 
     Read Git INDEX and STATUS metadata only; no Python import from original,
     no file-content comparison, no SHA claim, no copy/move/delete/archiving.
     """
+    if type(classify_unmatched) is not bool:
+        raise LayoutAuditError("UCIE metadata triage flag must be boolean")
     stage = _phase("STAGED_ROOT", _checked_root, staged_root)
     original = _phase("ORIGINAL_ROOT", _checked_root, original_root)
     if stage == original or _indirect(stage.parent) or _indirect(original.parent):
@@ -482,7 +589,14 @@ def _stage_original_path_crosswalk(staged_root: Path,
     )
     if compared + protected_bridge + protected_other + unknown_root != len(changes):
         raise LayoutAuditError("UCIE-only crosswalk completeness mismatch")
-    return {
+    missing_review = None
+    if classify_unmatched:
+        missing_review = _classify_missing_git_paths(changes, staged_paths)
+        expected_missing = sum(
+            row["not_tracked_in_stage"] for row in by_area.values())
+        if missing_review["unmatched_review_paths_total"] != expected_missing:
+            raise LayoutAuditError("UCIE missing-path triage count mismatch")
+    result = {
         "schema": PATH_CROSSWALK_SCHEMA,
         "status": "PATH_OVERLAP_CLASSIFIED__NO_CONTENT_DUPLICATES_CERTIFIED",
         "staged_repo_tracked_path_count": len(staged_paths),
@@ -505,6 +619,9 @@ def _stage_original_path_crosswalk(staged_root: Path,
         "cleanup_approved": False,
         "full_cutover_authorized": False,
     }
+    if missing_review is not None:
+        result["unmatched_path_metadata_review"] = missing_review
+    return result
 
 
 def _verified_crlf_only_staged_worktree(stage: Path, state: bytes) -> bool:
@@ -535,7 +652,8 @@ def _verified_crlf_only_staged_worktree(stage: Path, state: bytes) -> bool:
 
 
 def compare_original_ucie_git_to_stage(code_root: Path, original_root: Path,
-                                       *, platform: str) -> dict:
+                                       *, platform: str,
+                                       classify_unmatched: bool = False) -> dict:
     """Exact owner Windows mode; approved staged main must be clean."""
     _require_staged_observer(code_root, platform=platform)
     if str(original_root).casefold() != r"d:\ucie":
@@ -557,7 +675,13 @@ def compare_original_ucie_git_to_stage(code_root: Path, original_root: Path,
         "--untracked-files=all")
     if state and not _verified_crlf_only_staged_worktree(stage, state):
         raise LayoutAuditPhaseError("STAGED_NOT_CLEAN")
-    report = _stage_original_path_crosswalk(stage, original_root)
+    if type(classify_unmatched) is not bool:
+        raise LayoutAuditError("UCIE metadata triage flag must be boolean")
+    if classify_unmatched:
+        report = _stage_original_path_crosswalk(
+            stage, original_root, classify_unmatched=True)
+    else:
+        report = _stage_original_path_crosswalk(stage, original_root)
     # A strict-config CRLF-only worktree difference is not an index/source
     # content change. Report the exception explicitly, never as byte equality.
     report["stage_crlf_only_difference_verified"] = bool(state)
@@ -574,6 +698,8 @@ def main() -> int:
                         help="From approved staged root ONLY: read original UCIE Git metadata; no original code executed")
     parser.add_argument("--compare-original-git", action="store_true",
                         help="Staged-only read-only path-overlap counts; no original file contents or cleanup")
+    parser.add_argument("--classify-unmatched", action="store_true",
+                        help="With --compare-original-git only: bucket unmatched original Git path metadata without names/content")
     args = parser.parse_args()
     # The source-controlled entrypoint itself determines the checkout, not an
     # arbitrary caller path. On Windows the only authorized live root is D:\UCIE;
@@ -589,7 +715,10 @@ def main() -> int:
             if args.fast_git or args.observe_original_git:
                 raise LayoutAuditError("conflicting UCIE Git inventory modes")
             out = compare_original_ucie_git_to_stage(
-                repo, Path(r"D:\UCIE"), platform=os.name)
+                repo, Path(r"D:\UCIE"), platform=os.name,
+                classify_unmatched=args.classify_unmatched)
+        elif args.classify_unmatched:
+            raise LayoutAuditError("UCIE missing-path triage requires crosswalk")
         elif args.observe_original_git:
             if args.fast_git:
                 raise LayoutAuditError("full exact untracked census required")

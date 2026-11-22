@@ -196,3 +196,35 @@ This is a source-only candidate fix pending independent Windows owner
 execution and tested CI; it does not change global/local Git configs,
 .gitattributes, source files on the owner Windows host, the original
 D:\\UCIE, SQLite, tasks, C40, bridge state or cutover authorization.
+
+## 2026-11-22: source-integration metadata triage, original contents remain held
+
+After owner-host `--compare-original-git` PASS on merged main `a17eae0d`,
+the observed crosswalk counted 711 review-area Git status records:
+480 same relative paths in stage, **231 without a matching tracked
+stage path**; 874 protected bridge records and 1 root-level unknown were
+not compared. The 231 are *path metadata*, NOT proven missing functionality,
+not byte-different files, not safe cleanup candidates.
+
+Opt-in follow-on from the **exact same approved staged Windows checkout**:
+
+    D:\UCIE_PROJECT\UCIE\.venv\Scripts\python.exe -I -B D:\UCIE_PROJECT\UCIE\src\ucie_miner\layout_audit_v01.py --compare-original-git --classify-unmatched
+
+This runs the same pinned-root, branch, remote, staging-clean-or-verified
+CRLF-only check as the existing crosswalk. It uses **only already obtained
+Git status and tracked-path metadata**; it does not access UCIE-only original
+file bytes or compute hashes. It categorizes unmatched paths by fixed
+area/extension labels, tracked-versus-untracked and whether the **same
+filename exists at a different tracked stage path**. It reports counts ONLY
+(no source filenames, private paths, original content or executable code),
+and still excludes 874 protected bridge-state records, unknown roots and
+unapproved .github subdirectories. Unknown extensions remain `other_or_unknown`.
+
+All 231 start `K0_HOLD_FOR_SOURCE_REVIEW` until source provenance,
+reference/dependency, retention and functional equivalence are independently
+established. Filename reuse elsewhere is *not* functional parity; no
+automatic promotion, import, overwrite, cleanup, migration or release is
+granted. This section and the code are first-party development only;
+owner Windows count distribution remains UNVERIFIED until the actual
+host executes the command. No need to move operating `D:\UCIE`,
+task/C40/SQLite or backups.
