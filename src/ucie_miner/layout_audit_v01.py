@@ -689,6 +689,17 @@ def _compare_owner_code_content_locally(
                 row["same_path_eol_only"] += 1
             else:
                 row["same_path_content_changed"] += 1
+                # AST is a static syntax fingerprint, not runtime equivalence.
+                # Any non-Python, oversized, unparsable, or invalid source
+                # remains AST-unavailable, not silently accepted.
+                prior_ast = _code_ast_digest(content, name)
+                stage_ast_digest = _code_ast_digest(candidate, name)
+                if prior_ast is None or stage_ast_digest is None:
+                    row["same_path_changed_ast_unavailable"] += 1
+                elif prior_ast == stage_ast_digest:
+                    row["same_path_changed_ast_identical"] += 1
+                else:
+                    row["same_path_changed_ast_different"] += 1
             continue
 
         if sha256(content).digest() in stage_exact:
@@ -707,6 +718,9 @@ def _compare_owner_code_content_locally(
         "original_only_path", "original_file_unreadable_or_unsafe",
         "same_path_stage_file_unreadable", "same_path_exact_bytes",
         "same_path_eol_only", "same_path_content_changed",
+        "same_path_changed_ast_identical",
+        "same_path_changed_ast_different",
+        "same_path_changed_ast_unavailable",
         "original_only_exact_bytes_elsewhere_candidate",
         "original_only_eol_normalized_candidate",
         "original_only_python_ast_candidate",
@@ -722,7 +736,12 @@ def _compare_owner_code_content_locally(
             "original_only_eol_normalized_candidate",
             "original_only_python_ast_candidate",
             "original_only_no_static_candidate_observed"))
-        if (same_classified + missing_classified
+        changed_ast_classified = sum(row[k] for k in (
+            "same_path_changed_ast_identical",
+            "same_path_changed_ast_different",
+            "same_path_changed_ast_unavailable"))
+        if (changed_ast_classified != row["same_path_content_changed"]
+                or same_classified + missing_classified
                 + row["original_file_unreadable_or_unsafe"]
                 != row["code_status_records"]):
             raise LayoutAuditError("UCIE owner code-review completeness mismatch")

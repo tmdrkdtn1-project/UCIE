@@ -268,3 +268,30 @@ A code review count or equal AST never proves functional equivalence.
 Runtime regression, import graph and approved historical evidence
 still require separate verification. Public GitHub stores this audit
 mechanism and synthetic tests only, no original source bytes or hashes.
+
+## 2026-11-22: owner content-review real receipt and next static syntax gate
+
+Owner observed staging HEAD `2d9c4192` and local-only code review:
+656 stage code files indexed; 582 original code status files read, zero
+unsafe/unreadable. The 406 same-relative-path code files classified as
+56 byte-exact, 318 CRLF/LF-only and 32 actual byte-content differences.
+The 176 original-only code/test paths yielded one EOL-normalized match
+elsewhere in the stage and 175 without a static byte/EOL/Python AST match.
+These are NOT 175 proven missing functions, and the existing 32 changed
+files are NOT automatically semantic behavior changes.
+
+The next additive review subdivides **only the 32 same-path, non-EOL
+content-changed records** into Python `same_path_changed_ast_identical`,
+Python `same_path_changed_ast_different` and
+`same_path_changed_ast_unavailable` (e.g., PowerShell, syntax-invalid
+or AST parse cap). Every record must be assigned to exactly one
+subcategory; other original/status counts are unchanged. AST equality
+means syntax-tree equality under this bounded Python parser, NOT
+equivalent imports, effects, packaging, runtime, API, or type comments.
+AST difference is a review lead, not proof of regression.
+
+Nothing is executed or uploaded from original source, no protected
+state or docs are opened, no original paths or raw digests leak to the
+report. All source remains K0/HOLD. An actual Windows execution of
+this additive subcategorization is required after CI and pinned
+fast-forward of clean stage, and is NOT yet observed.
