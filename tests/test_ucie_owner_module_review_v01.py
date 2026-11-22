@@ -5,6 +5,7 @@ from contextlib import redirect_stdout
 from hashlib import sha256
 from io import StringIO
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -188,7 +189,33 @@ class UCIEOwnerLocalContractPacketTests(unittest.TestCase):
                 {"schema": review.PRIVATE_SCHEMA}, layout)
         self._check_preservation()
 
-    def test_06_cli_errors_never_print_private_exception_detail(self):
+    def test_06_noncanonical_root_is_rejected_before_loading_sibling(self):
+        with patch.object(
+                review, "_load_trusted_audit",
+                side_effect=AssertionError("should not load sibling source")):
+            if os.name != "nt":
+                with self.assertRaises(ValueError):
+                    review.run_owner_review(write_private_report=True)
+        self._check_preservation()
+
+    def test_07_isolated_cli_fails_closed_without_owner_host(self):
+        if os.name == "nt":
+            self.skipTest("Actual owner Windows host must not be probed by CI")
+        import subprocess
+        import sys
+        result = subprocess.run(
+            [sys.executable, "-I", "-B", str(Path(review.__file__).resolve())],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=20, check=False, text=True)
+        self.assertEqual(result.returncode, 2)
+        data = json.loads(result.stdout)
+        self.assertEqual(
+            data["status"], "UCIE_OWNER_MODULE_REVIEW_FAIL_CLOSED")
+        self.assertNotIn("PRIVATE_BRIDGE", result.stdout)
+        self.assertNotIn("PRIVATE_DB", result.stdout)
+        self._check_preservation()
+
+    def test_08_cli_errors_never_print_private_exception_detail(self):
         sink = StringIO()
         with patch.object(review, "run_owner_review",
                           side_effect=ValueError(
