@@ -506,7 +506,15 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
         target = self.root / "src" / "ucie_miner" / "engine.py"
         original = target.read_bytes()
         self.assertIn(b"\n", original)
-        target.write_bytes(original.replace(b"\n", b"\r\n"))
+        # write_text() creates CRLF on Windows and LF on Linux.
+        # Flip exactly one CR-at-EOL representation, never create CRCRLF.
+        alternate_eol = (
+            original.replace(b"\r\n", b"\n")
+            if b"\r\n" in original
+            else original.replace(b"\n", b"\r\n")
+        )
+        self.assertNotEqual(original, alternate_eol)
+        target.write_bytes(alternate_eol)
         args = ("status", "--porcelain=v1", "-z", "--untracked-files=all")
         strict = layout._git_metadata_bytes(self.root, *args)
         self.assertTrue(strict.startswith(b" M "))
@@ -529,7 +537,13 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
         target = self.root / "src" / "ucie_miner" / "engine.py"
         original = target.read_bytes()
         args = ("status", "--porcelain=v1", "-z", "--untracked-files=all")
-        target.write_bytes(original.replace(b"\n", b"\r\n"))
+        alternate_eol = (
+            original.replace(b"\r\n", b"\n")
+            if b"\r\n" in original
+            else original.replace(b"\n", b"\r\n")
+        )
+        self.assertNotEqual(original, alternate_eol)
+        target.write_bytes(alternate_eol)
         self.assertTrue(layout._verified_crlf_only_staged_worktree(
             self.root, layout._git_metadata_bytes(self.root, *args)))
 
@@ -537,7 +551,7 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
         self.assertFalse(layout._verified_crlf_only_staged_worktree(
             self.root, layout._git_metadata_bytes(self.root, *args)))
 
-        target.write_bytes(original.replace(b"\n", b"\r\n"))
+        target.write_bytes(alternate_eol)
         extra = self.root / "docs" / "not-yet-tracked.md"
         extra.parent.mkdir(parents=True, exist_ok=True)
         extra.write_bytes(b"NOT A DISPOSABLE CACHE")
@@ -554,7 +568,11 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
     def test_30_stage_crlf_recheck_rejects_end_of_line_spaces(self):
         target = self.root / "src" / "ucie_miner" / "engine.py"
         original = target.read_bytes()
-        target.write_bytes(original.replace(b"\n", b"  \r\n"))
+        target.write_bytes(
+            original.replace(b"\r\n", b"  \r\n")
+            if b"\r\n" in original
+            else original.replace(b"\n", b"  \r\n")
+        )
         self.assertFalse(layout._verified_crlf_only_staged_worktree(
             self.root, layout._git_metadata_bytes(
                 self.root, "status", "--porcelain=v1", "-z",
