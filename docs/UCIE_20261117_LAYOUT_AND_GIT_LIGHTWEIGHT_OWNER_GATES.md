@@ -361,3 +361,36 @@ No source import/exec, original filename/path/hash/text export, protected
 bridge/SQLite/task/C40 access, migration, cleanup, rule promotion or cutover.
 All original and staged sources remain K0/HOLD; owner-machine crosswalk
 counts require an actual post-CI and pinned-FF execution to be accepted.
+
+## 2026-11-22: actual owner crosswalk, 14 of 14 importers match original-only src module path candidates
+
+Owner Windows staged-only fast-forward from cdef79e to 4ec057f
+and actual owner read-only import crosswalk returned:
+src: stage-unindexed 0, owner-only module target files 0,
+relative-import files 14, dynamic files 0;
+scripts: unindexed 1, original-only module target files 1, other 0,
+dynamic-import files 1;
+tests: unindexed 13, original-only module target files 13, other 0,
+ambiguous owner-only root-symbol candidate files 12, dynamic-import files 5.
+Thus all **14/14 referring files** with explicit first-party stage-unindexed
+module paths find at least one source module *name candidate* among owner-only
+original src Git status path inventory. This is NOT evidence that 14 distinct
+source modules are missing: multiple importing files may share a target.
+The 12 root-symbol flags, relative and dynamic flags are not mutually
+exclusive and do not prove runtime import resolution.
+
+The next static follow-on is a **distinct-owner-only-module reachability
+census** nested in the exact existing bounded local-only
+\`--compare-original-git --review-local-code\` receipt. It retains module
+names only in local in-memory sets, counts distinct original-only modules
+named by direct imports, distinct modules named by ambiguous root-symbol
+imports, intersection and union across all referring source/scripts/tests
+files, and owner-only source modules without any observed explicit/root-
+symbol lead. Per-area distinct counts may overlap; the global total
+deduplicates them. This analysis uses no new original file reads, returns
+fixed-key numeric aggregates only, executes/imports no original source,
+and leaves dynamic/relative imports unresolved. No external publication,
+source transfer, archive, cleanup, SQLite/task/C40/tunnel change or live
+cutover. Every original remains K0/HOLD. The count-only Windows receipt
+must be observed separately after CI and pinned stage fast-forward; CI
+alone is not owner-host acceptance.
