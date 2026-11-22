@@ -850,9 +850,13 @@ def _stage_original_path_crosswalk(staged_root: Path,
     if missing_review is not None:
         result["unmatched_path_metadata_review"] = missing_review
     if review_local_code:
-        result["owner_local_code_content_review"] = _phase(
+        code_review = _phase(
             "OWNER_LOCAL_CODE_CONTENT_REVIEW", _compare_owner_code_content_locally,
             stage, original, staged_paths, changes)
+        result["owner_local_code_content_review"] = code_review
+        result["file_content_hashes_read"] = bool(
+            code_review["stage_code_files_indexed"]
+            or code_review["original_code_files_read_locally"])
         # A changing original tree makes the local content evidence stale.
         original_recheck = _phase(
             "ORIGINAL_STATUS_RECHECK", _git_metadata_bytes,
