@@ -927,6 +927,12 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
             ps["bucket"], "powershell_static_reference_unverified")
         self.assertEqual(ps["indexed"], 0)
         self.assertEqual(ps["unindexed"], 0)
+        # Root __init__.py alone is a tracked package module, not missing.
+        self.assertEqual(
+            layout._stage_tracked_ucie_python_modules({
+                "src/ucie_miner/__init__.py",
+                "src/ucie_public/__init__.py"}),
+            {"ucie_miner", "ucie_public"})
         self._assert_state_unchanged()
 
     def test_41_local_reference_review_counts_only_unmatched_no_candidate(self):
