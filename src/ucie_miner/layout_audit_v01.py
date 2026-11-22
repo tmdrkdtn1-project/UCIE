@@ -653,7 +653,8 @@ def _stage_tracked_ucie_python_modules(paths: set[str]) -> set[str]:
 
 def _static_firstparty_module_targets(
     data: bytes, name: str, stage_modules: set[str],
-    original_only_modules: set[str] | None = None
+    original_only_modules: set[str] | None = None,
+    owner_module_sink: dict[str, set[str]] | None = None
 ) -> dict:
     """Classify import-index *leads* from a Python AST, never execute code.
 
@@ -736,10 +737,17 @@ def _static_firstparty_module_targets(
     # appear in the returned final public-facing receipt.
     if original_only_modules is not None:
         missing_stage_targets = targets - stage_modules
+        matched_direct = missing_stage_targets & original_only_modules
+        matched_root_symbol = root_symbol_candidates & original_only_modules
         output["unindexed_target_original_only_candidate_count"] = len(
-            missing_stage_targets & original_only_modules)
+            matched_direct)
         output["ambiguous_root_symbol_original_only_candidate"] = bool(
-            root_symbol_candidates & original_only_modules)
+            matched_root_symbol)
+        # Accumulate locally across referring files; names NEVER appear
+        # in the returned JSON or in any GitHub artifact.
+        if owner_module_sink is not None:
+            owner_module_sink["direct"].update(matched_direct)
+            owner_module_sink["root_symbol"].update(matched_root_symbol)
         output["ambiguous_relative_import"] = relative_seen
         output["ambiguous_dynamic_import"] = dynamic_seen
         output["ambiguous_root_symbol_import"] = root_symbol_seen
@@ -749,11 +757,13 @@ def _static_firstparty_module_targets(
 def _record_no_static_match_imports(
     by_area: dict[str, Counter[str]], area: str, name: str,
     content: bytes, stage_modules: set[str],
-    original_only_modules: set[str] | None = None
+    original_only_modules: set[str] | None = None,
+    owner_module_sink: dict[str, set[str]] | None = None
 ) -> None:
     """Update fixed counters only, keeping original modules and paths local."""
     result = _static_firstparty_module_targets(
-        content, name, stage_modules, original_only_modules)
+        content, name, stage_modules, original_only_modules,
+        owner_module_sink)
     row = by_area.setdefault(area, Counter())
     row["no_static_match_code_files"] += 1
     row[result["bucket"]] += 1
@@ -848,6 +858,61 @@ def _finalize_no_static_match_imports(
     }
 
 
+def _summarize_owner_only_module_references(
+    owner_only_modules: set[str],
+    area_module_sinks: dict[str, dict[str, set[str]]]
+) -> dict:
+    """Locally deduplicate owner module-name candidates, output numbers ONLY.
+
+    'Referenced' means appearing in the bounded static direct or root-symbol
+    syntactic lead index. It does not mean import resolution, test collection
+    or runtime equivalence; relative and dynamic imports remain unresolved.
+    """
+    areas = ("src", "scripts", "tests")
+    all_direct: set[str] = set()
+    all_root_symbol: set[str] = set()
+    by_area = {}
+    if any(area not in areas for area in area_module_sinks):
+        raise LayoutAuditError("UCIE module coverage area escaped scope")
+    for area in areas:
+        data = area_module_sinks.get(area, {})
+        if set(data) not in (set(), {"direct", "root_symbol"}):
+            raise LayoutAuditError("UCIE module coverage kind escaped scope")
+        direct = data.get("direct", set())
+        roots = data.get("root_symbol", set())
+        if not direct <= owner_only_modules or not roots <= owner_only_modules:
+            raise LayoutAuditError("UCIE module coverage source index mismatch")
+        all_direct.update(direct)
+        all_root_symbol.update(roots)
+        by_area[area] = {
+            "distinct_owner_modules_named_by_explicit_imports": len(direct),
+            "distinct_owner_modules_named_by_root_symbol_candidates": len(roots),
+            "distinct_owner_modules_named_by_both": len(direct & roots),
+        }
+    union = all_direct | all_root_symbol
+    not_observed = owner_only_modules - union
+    if len(union) + len(not_observed) != len(owner_only_modules):
+        raise LayoutAuditError("UCIE unique owner module partition mismatch")
+    return {
+        "schema": "UCIE_LOCAL_OWNER_ONLY_DISTINCT_MODULE_COVERAGE_V01",
+        "status": "STATIC_MODULE_NAME_LEADS_ONLY__ALL_ORIGINALS_HELD",
+        "original_only_src_module_path_candidates": len(owner_only_modules),
+        "distinct_modules_named_by_explicit_imports": len(all_direct),
+        "distinct_modules_named_by_root_symbol_candidates": len(all_root_symbol),
+        "distinct_modules_named_by_both": len(all_direct & all_root_symbol),
+        "distinct_modules_named_by_either_style": len(union),
+        "original_only_modules_without_observed_explicit_or_root_symbol_lead":
+            len(not_observed),
+        "by_importing_area": by_area,
+        "dynamic_and_relative_imports_not_resolved": True,
+        "no_reference_observed_is_not_proof_unused": True,
+        "same_module_name_is_not_proof_import_or_functional_equivalence": True,
+        "source_module_names_paths_bytes_or_digests_returned": False,
+        "code_imported_or_executed": False,
+        "all_source_remains": "K0_HOLD_FOR_DEPENDENCY_REVIEW",
+    }
+
+
 def _compare_owner_code_content_locally(
     stage: Path, original: Path, stage_paths: set[str],
     changes: list[tuple[str, str]]
@@ -878,6 +943,7 @@ def _compare_owner_code_content_locally(
         }) - firstparty_stage_modules
     )
     missing_reference_rows: dict[str, Counter[str]] = {}
+    unique_owner_module_targets: dict[str, dict[str, set[str]]] = {}
 
     for name in sorted(stage_paths):
         if _ucie_code_scope(name) is None:
@@ -948,9 +1014,12 @@ def _compare_owner_code_content_locally(
             row["original_only_python_ast_candidate"] += 1
         else:
             row["original_only_no_static_candidate_observed"] += 1
+            owner_sink = unique_owner_module_targets.setdefault(
+                area, {"direct": set(), "root_symbol": set()})
             _record_no_static_match_imports(
                 missing_reference_rows, area, name, content,
-                firstparty_stage_modules, firstparty_owner_only_modules)
+                firstparty_stage_modules, firstparty_owner_only_modules,
+                owner_sink)
 
     allowed_keys = (
         "code_status_records", "original_untracked",
@@ -990,6 +1059,9 @@ def _compare_owner_code_content_locally(
     firstparty_reference_report = _finalize_no_static_match_imports(
         missing_reference_rows, by_area, firstparty_stage_modules,
         firstparty_owner_only_modules)
+    firstparty_reference_report["distinct_owner_module_coverage"] = (
+        _summarize_owner_only_module_references(
+            firstparty_owner_only_modules, unique_owner_module_targets))
     return {
         "schema": LOCAL_CODE_REVIEW_SCHEMA,
         "status": "OWNER_LOCAL_CODE_CONTENT_REVIEW_ONLY__FUNCTIONAL_EQUIVALENCE_UNVERIFIED",
