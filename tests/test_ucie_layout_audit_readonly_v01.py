@@ -581,5 +581,101 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
         self._assert_state_unchanged()
 
 
+
+    def test_31_missing_path_triage_uses_only_fixed_labels_and_metadata(self):
+        stage = {
+            "src/new_area/old_module.py", "docs/current.md",
+            "scripts/launch.ps1", "tests/test_current.py",
+        }
+        raw = [
+            ("untracked", "src/ucie_miner/old_module.py"),
+            ("untracked", "src/ucie_miner/secret_name.xyz"),
+            ("tracked_changed", "scripts/old.ps1"),
+            ("untracked", "tests/test_secret_legacy.py"),
+            ("untracked", "docs/owner_history.md"),
+            ("untracked", ".github/workflows/private_named.yml"),
+            ("untracked", ".github/credentials/hidden.json"),
+            ("untracked", ".ucie_bridge_state/secret.token"),
+            ("untracked", "ROOT_SECRET"), 
+        ]
+        r = layout._classify_missing_git_paths(raw, stage)
+        self.assertEqual(r["schema"], layout.MISSING_REVIEW_SCHEMA)
+        self.assertEqual(r["unmatched_review_paths_total"], 6)
+        self.assertEqual(
+            r["by_review_area"]["src"]["original_paths_without_staged_relative_match"], 2)
+        self.assertEqual(
+            r["by_review_area"]["src"]["same_filename_elsewhere_in_stage"], 1)
+        self.assertEqual(
+            r["by_review_area"]["src"]["suffix_counts"],
+            {"other_or_unknown": 1, "python": 1})
+        self.assertEqual(
+            r["by_review_area"]["scripts"]["original_tracked_changed"], 1)
+        self.assertEqual(
+            r["by_review_area"][".github"]["suffix_counts"], {"yaml": 1})
+        self.assertFalse(r["source_bytes_or_sha256_compared"])
+        self.assertFalse(r["raw_original_paths_or_contents_returned"])
+        self.assertEqual(r["all_unmatched_records_disposition"],
+                         "K0_HOLD_FOR_SOURCE_REVIEW")
+        import json
+        serialized = json.dumps(r, sort_keys=True)
+        for forbidden in ("old_module", "secret", "ROOT_SECRET",
+                          ".ucie_bridge_state", "credentials/hidden"):
+            self.assertNotIn(forbidden, serialized)
+        self._assert_state_unchanged()
+
+    def test_32_missing_path_triage_real_git_never_imports_original_source(self):
+        stage = Path(self.tmp.name) / "UCIE_PROJECT" / "UCIE"
+        stage.mkdir(parents=True)
+        def stage_git(*args):
+            subprocess.run(
+                ["git", "-C", str(stage), *args],
+                check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=15)
+        stage_git("init", "-q")
+        stage_git("config", "user.email", "ucie-triage@invalid.example")
+        stage_git("config", "user.name", "Synthetic UCIE Triage")
+        (stage / "scripts").mkdir()
+        (stage / "scripts" / "live.ps1").write_text("STAGE ONLY", encoding="utf-8")
+        stage_git("add", "--", "scripts/live.ps1")
+        stage_git("commit", "-qm", "Synthetic triage index")
+        (self.root / "src" / "ucie_miner" / "uncopied.py").write_bytes(
+            b"UCIE FIRST PARTY SOURCE; DO NOT EXECUTE")
+        (self.root / "scripts" / "uncopied.ps1").write_bytes(
+            b"UCIE FIRST PARTY SCRIPT; DO NOT EXECUTE")
+        (self.root / "tests" / "test_uncopied.py").write_bytes(
+            b"UCIE FIRST PARTY TEST; DO NOT EXECUTE")
+        (self.root / "docs").mkdir()
+        (self.root / "docs" / "history.md").write_bytes(
+            b"UCIE HISTORICAL RECORD; DO NOT DISCARD")
+
+        with patch.object(Path, "read_bytes", side_effect=AssertionError(
+                "original source bytes must remain unread")), patch.object(
+                    Path, "read_text", side_effect=AssertionError(
+                        "original source text must remain unread")):
+            result = layout._stage_original_path_crosswalk(
+                stage, self.root, classify_unmatched=True)
+        review = result["unmatched_path_metadata_review"]
+        self.assertEqual(review["unmatched_review_paths_total"], 4)
+        self.assertEqual(result["review_area_records_compared"], 4)
+        self.assertEqual(
+            {key: value["original_paths_without_staged_relative_match"]
+             for key, value in review["by_review_area"].items()},
+            {"docs": 1, "scripts": 1, "src": 1, "tests": 1})
+        self.assertIsNone(result["byte_duplicate_count_verified"])
+        self.assertFalse(result["files_moved_or_deleted"])
+        self.assertFalse(result["full_cutover_authorized"])
+        self._assert_state_unchanged()
+
+    def test_33_missing_path_triage_validation_fails_closed(self):
+        with self.assertRaises(layout.LayoutAuditError):
+            layout._stage_original_path_crosswalk(
+                self.root, self.root, classify_unmatched=1)
+        with self.assertRaises(layout.LayoutAuditError):
+            layout.compare_original_ucie_git_to_stage(
+                self.root, self.root, platform="posix",
+                classify_unmatched=True)
+        self._assert_state_unchanged()
+
+
 if __name__ == "__main__":
     unittest.main()
