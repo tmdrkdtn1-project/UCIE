@@ -505,8 +505,8 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
     def test_28_strict_stage_crlf_only_is_verified_not_blindly_ignored(self):
         target = self.root / "src" / "ucie_miner" / "engine.py"
         original = target.read_bytes()
-        self.assertIn(b"\\n", original)
-        target.write_bytes(original.replace(b"\\n", b"\\r\\n"))
+        self.assertIn(b"\n", original)
+        target.write_bytes(original.replace(b"\n", b"\r\n"))
         args = ("status", "--porcelain=v1", "-z", "--untracked-files=all")
         strict = layout._git_metadata_bytes(self.root, *args)
         self.assertTrue(strict.startswith(b" M "))
@@ -520,24 +520,24 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
                 layout, "_stage_original_path_crosswalk",
                 return_value=result_stub.copy()) as crosswalk:
             report = layout.compare_original_ucie_git_to_stage(
-                self.root, Path(r"D:\\UCIE"), platform="nt")
+                self.root, Path(r"D:\UCIE"), platform="nt")
         self.assertTrue(report["stage_crlf_only_difference_verified"])
-        crosswalk.assert_called_once_with(self.root, Path(r"D:\\UCIE"))
+        crosswalk.assert_called_once_with(self.root, Path(r"D:\UCIE"))
         self._assert_state_unchanged()
 
     def test_29_stage_content_index_and_untracked_changes_stay_blocked(self):
         target = self.root / "src" / "ucie_miner" / "engine.py"
         original = target.read_bytes()
         args = ("status", "--porcelain=v1", "-z", "--untracked-files=all")
-        target.write_bytes(original.replace(b"\\n", b"\\r\\n"))
+        target.write_bytes(original.replace(b"\n", b"\r\n"))
         self.assertTrue(layout._verified_crlf_only_staged_worktree(
             self.root, layout._git_metadata_bytes(self.root, *args)))
 
-        target.write_bytes(b"def main():\\r\\n    return 'CHANGED'\\r\\n")
+        target.write_bytes(b"def main():\r\n    return 'CHANGED'\r\n")
         self.assertFalse(layout._verified_crlf_only_staged_worktree(
             self.root, layout._git_metadata_bytes(self.root, *args)))
 
-        target.write_bytes(original.replace(b"\\n", b"\\r\\n"))
+        target.write_bytes(original.replace(b"\n", b"\r\n"))
         extra = self.root / "docs" / "not-yet-tracked.md"
         extra.parent.mkdir(parents=True, exist_ok=True)
         extra.write_bytes(b"NOT A DISPOSABLE CACHE")
@@ -545,7 +545,7 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
             self.root, layout._git_metadata_bytes(self.root, *args)))
         extra.unlink()
 
-        target.write_bytes(b"def main():\\n    return 'INDEX MODIFIED'\\n")
+        target.write_bytes(b"def main():\n    return 'INDEX MODIFIED'\n")
         self._git("add", "--", "src/ucie_miner/engine.py")
         self.assertFalse(layout._verified_crlf_only_staged_worktree(
             self.root, layout._git_metadata_bytes(self.root, *args)))
@@ -554,7 +554,7 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
     def test_30_stage_crlf_recheck_rejects_end_of_line_spaces(self):
         target = self.root / "src" / "ucie_miner" / "engine.py"
         original = target.read_bytes()
-        target.write_bytes(original.replace(b"\\n", b"  \\r\\n"))
+        target.write_bytes(original.replace(b"\n", b"  \r\n"))
         self.assertFalse(layout._verified_crlf_only_staged_worktree(
             self.root, layout._git_metadata_bytes(
                 self.root, "status", "--porcelain=v1", "-z",
