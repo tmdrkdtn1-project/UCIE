@@ -171,3 +171,28 @@ No original source, protected bridge state, runtime SQLite, task, C40
 or external project was read outside the bounded Git status operation,
 edited, removed, moved or restarted by this owner attempt. Do NOT try
 git clean/reset, force staging or global ignore rules to mask the hold.
+
+## 2026-11-22: owner actual Windows Git-config-sensitive stage check
+
+Owner fast-forwarded the isolated stage to main 5d3ae904, then the crosswalk
+returned `failure_phase=STAGED_NOT_CLEAN` without reading operating Git
+paths or computing any overlap counts. An additional scoped local read-only
+diagnostic observed **normal Git status: 0 changed** versus **strict audit
+Git status: 3 tracked modifications, 0 untracked**. The specific owner
+Git setting and changed file contents were NOT exported or independently
+proved to be solely EOL changes.
+
+The source-side resolution adds a **strict CR-at-EOL-only evidence gate**.
+If strict Git reports only unstaged tracked ` M` records, perform an
+independent bounded `git diff --ignore-cr-at-eol --no-ext-diff
+--no-textconv --quiet --exit-code` under the SAME isolated Git settings.
+Only exit 0 with that narrow status shape may continue the crosswalk;
+any index/staged edit, untracked entry, actual changed line, changed
+trailing spaces, mode change, rename, deletion, query error or timeout
+fails closed as STAGED_NOT_CLEAN. The success report explicitly marks
+`stage_crlf_only_difference_verified`; it does NOT claim equal file bytes.
+
+This is a source-only candidate fix pending independent Windows owner
+execution and tested CI; it does not change global/local Git configs,
+.gitattributes, source files on the owner Windows host, the original
+D:\\UCIE, SQLite, tasks, C40, bridge state or cutover authorization.
