@@ -1,6 +1,7 @@
 """UCIE-only layout/cleanup inventory: disposable Git repo, no owner writes."""
 from __future__ import annotations
 
+from collections import Counter
 from hashlib import sha256
 import os
 from pathlib import Path
@@ -885,6 +886,125 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
         self.assertIsNone(layout._code_ast_digest(
             b"not valid python!",
             "src/ucie_miner/bounded.py"))
+        self._assert_state_unchanged()
+
+
+    def test_40_local_firstparty_reference_index_bounded_static_cases(self):
+        stage_mods = {
+            "ucie_miner", "ucie_miner.ready", "ucie_public",
+            "ucie_public.model", "ucie_miner.sub",
+        }
+        cases = (
+            (b"import ucie_miner.ready\n",
+             "python_with_indexed_stage_module_only", 1, 0, False),
+            (b"from ucie_miner.absent import service\n",
+             "python_with_unindexed_stage_module_target", 0, 1, False),
+            (b"from ucie_miner import CONSTANT\n",
+             "python_with_unresolved_reference_style", 0, 0, False),
+            (b"from . import sibling\n",
+             "python_with_unresolved_reference_style", 0, 0, False),
+            (b"import importlib\nimportlib.import_module('ucie_miner.absent')\n",
+             "python_with_unresolved_reference_style", 0, 0, False),
+            (b"import os\n",
+             "python_without_direct_ucie_module_target", 0, 0, False),
+            (b"def test_ucie():\n    assert True\n",
+             "python_without_direct_ucie_module_target", 0, 0, True),
+            (b"def ! INVALID\n", "python_ast_unavailable", 0, 0, False),
+        )
+        for source, bucket, indexed, unindexed, test_like in cases:
+            with self.subTest(bucket=bucket, source=source[:12]):
+                observed = layout._static_firstparty_module_targets(
+                    source, "tests/test_fixture.py", stage_mods)
+                self.assertEqual(observed, {
+                    "bucket": bucket,
+                    "indexed": indexed,
+                    "unindexed": unindexed,
+                    "test_like": test_like,
+                })
+        ps = layout._static_firstparty_module_targets(
+            b"Import-Module UCIE", "scripts/runner.ps1", stage_mods)
+        self.assertEqual(
+            ps["bucket"], "powershell_static_reference_unverified")
+        self.assertEqual(ps["indexed"], 0)
+        self.assertEqual(ps["unindexed"], 0)
+        # Root __init__.py alone is a tracked package module, not missing.
+        self.assertEqual(
+            layout._stage_tracked_ucie_python_modules({
+                "src/ucie_miner/__init__.py",
+                "src/ucie_public/__init__.py"}),
+            {"ucie_miner", "ucie_public"})
+        self._assert_state_unchanged()
+
+    def test_41_local_reference_review_counts_only_unmatched_no_candidate(self):
+        stage = Path(self.tmp.name) / "UCIE_STAGE_SOURCE_ONLY"
+        for name, data in (
+            ("src/ucie_miner/ready.py", b"VALUE=1\n"),
+            ("src/ucie_public/model.py", b"VALUE=2\n"),
+        ):
+            p = stage / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data)
+        fixtures = {
+            "src/ucie_miner/missing_a.py":
+                b"from ucie_miner.absent import missing\n",
+            "src/ucie_miner/has_existing.py":
+                b"import ucie_public.model\n",
+            "scripts/unresolved.py":
+                b"from ucie_miner import ATTRIBUTE_OR_MODULE\n",
+            "scripts/old_job.ps1":
+                b"Write-Output 'OLD REVIEW REQUIRED'\n",
+            "tests/test_legacy_one.py":
+                b"import ucie_miner.ready\n"
+                b"def test_legacy_one(): assert True\n",
+            "tests/test_legacy_two.py":
+                b"import os\n",
+        }
+        for name, data in fixtures.items():
+            p = self.root / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data)
+        changes = [("untracked", name) for name in fixtures]
+        report = layout._compare_owner_code_content_locally(
+            stage, self.root,
+            {"src/ucie_miner/ready.py", "src/ucie_public/model.py"},
+            changes)
+        ref = report["original_only_no_static_match_import_review"]
+        self.assertEqual(ref["schema"], layout.LOCAL_REFERENCE_SCHEMA)
+        self.assertEqual(ref["code_paths_without_content_match_reviewed"], 6)
+        self.assertEqual(ref["stage_firstparty_module_index_count"], 4)
+        src = ref["by_review_area"]["src"]
+        self.assertEqual(src["python_with_unindexed_stage_module_target"], 1)
+        self.assertEqual(src["python_with_indexed_stage_module_only"], 1)
+        scripts = ref["by_review_area"]["scripts"]
+        self.assertEqual(scripts["python_with_unresolved_reference_style"], 1)
+        self.assertEqual(scripts["powershell_static_reference_unverified"], 1)
+        test = ref["by_review_area"]["tests"]
+        self.assertEqual(test["python_with_indexed_stage_module_only"], 1)
+        self.assertEqual(test["python_without_direct_ucie_module_target"], 1)
+        self.assertEqual(test["test_like_static_nodes_observed"], 1)
+        self.assertEqual(test["test_like_static_nodes_not_observed"], 1)
+        self.assertEqual(ref["by_review_area"]["src"][
+            "unindexed_stage_ucie_module_targets"], 1)
+        self.assertFalse(ref["original_code_uploaded_or_copied"])
+        self.assertFalse(ref["original_code_executed_or_imported"])
+        self.assertEqual(ref["all_original_only_files_remain"],
+                         "K0_HOLD_FOR_DEPENDENCY_REVIEW")
+        import json
+        output = json.dumps(report, sort_keys=True)
+        for secret in ("missing_a", "has_existing", "test_legacy_one",
+                       "ATTRIBUTE_OR_MODULE", "OLD REVIEW REQUIRED",
+                       "ucie_miner.absent", "ucie_public.model"):
+            self.assertNotIn(secret, output)
+        self._assert_state_unchanged()
+
+    def test_42_local_ref_census_fails_closed_on_missing_coverage(self):
+        with self.assertRaises(layout.LayoutAuditError):
+            layout._finalize_no_static_match_imports(
+                {"tests": Counter({"no_static_match_code_files": 1,
+                                   "python_ast_unavailable": 1})},
+                {"tests": Counter({
+                    "original_only_no_static_candidate_observed": 2})},
+                {"ucie_miner"})
         self._assert_state_unchanged()
 
 if __name__ == "__main__":

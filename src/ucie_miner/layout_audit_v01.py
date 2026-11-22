@@ -621,6 +621,173 @@ def _code_ast_digest(data: bytes, name: str) -> bytes | None:
         return None
 
 
+LOCAL_REFERENCE_SCHEMA = "UCIE_OWNER_LOCAL_FIRSTPARTY_IMPORT_INDEX_V01"
+LOCAL_REFERENCE_BUCKETS = (
+    "python_with_unindexed_stage_module_target",
+    "python_with_unresolved_reference_style",
+    "python_with_indexed_stage_module_only",
+    "python_without_direct_ucie_module_target",
+    "python_ast_unavailable",
+    "powershell_static_reference_unverified",
+)
+
+
+def _stage_tracked_ucie_python_modules(paths: set[str]) -> set[str]:
+    """Index only tracked first-party UCIE src modules, not external imports."""
+    modules = set()
+    for name in paths:
+        if _ucie_code_scope(name) != "src" or not name.endswith(".py"):
+            continue
+        stem = name[4:-3].replace("/", ".")
+        if stem.endswith(".__init__"):
+            stem = stem[:-len(".__init__")]
+        if stem in ("ucie_miner", "ucie_public"):
+            modules.add(stem)
+            continue
+        if not stem.startswith(("ucie_miner.", "ucie_public.")):
+            continue
+        modules.add(stem)
+        modules.add(stem.split(".", 1)[0])
+    return modules
+
+
+def _static_firstparty_module_targets(
+    data: bytes, name: str, stage_modules: set[str]
+) -> dict:
+    """Classify import-index *leads* from a Python AST, never execute code.
+
+    from ucie_miner import SYMBOL is ambiguous: unless SYMBOL is itself
+    indexed as a stage submodule, do NOT report an absent module.
+    Relative and dynamic imports are unresolved, not silently ignored.
+    Only bounded aggregate counters may be returned to the caller.
+    """
+    if not name.endswith(".py"):
+        return {"bucket": "powershell_static_reference_unverified",
+                "indexed": 0, "unindexed": 0, "test_like": False}
+    if len(data) > MAX_LOCAL_AST_BYTES:
+        return {"bucket": "python_ast_unavailable",
+                "indexed": 0, "unindexed": 0, "test_like": False}
+    try:
+        tree = ast.parse(data.decode("utf-8-sig"), filename="<UCIE-local>")
+    except (SyntaxError, UnicodeError, ValueError, RecursionError, MemoryError):
+        return {"bucket": "python_ast_unavailable",
+                "indexed": 0, "unindexed": 0, "test_like": False}
+    targets = set()
+    unresolved = False
+    test_like = False
+    roots = frozenset(("ucie_miner", "ucie_public"))
+    for node in ast.walk(tree):
+        if name.startswith("tests/") and isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name.startswith(("test_", "Test")):
+                test_like = True
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                target = alias.name.casefold()
+                if target.split(".", 1)[0] in roots:
+                    targets.add(target)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                unresolved = True
+                continue
+            root_module = (node.module or "").casefold()
+            if root_module.split(".", 1)[0] not in roots:
+                continue
+            if root_module in roots:
+                for alias in node.names:
+                    candidate = root_module + "." + alias.name.casefold()
+                    if alias.name != "*" and candidate in stage_modules:
+                        targets.add(candidate)
+                    else:
+                        unresolved = True
+            else:
+                targets.add(root_module)
+        elif isinstance(node, ast.Call):
+            fun = node.func
+            if (isinstance(fun, ast.Name) and fun.id in (
+                    "__import__", "import_module")) or (
+                    isinstance(fun, ast.Attribute)
+                    and fun.attr == "import_module"):
+                unresolved = True
+    indexed = len(targets & stage_modules)
+    unindexed = len(targets - stage_modules)
+    if unindexed:
+        bucket = "python_with_unindexed_stage_module_target"
+    elif unresolved:
+        bucket = "python_with_unresolved_reference_style"
+    elif indexed:
+        bucket = "python_with_indexed_stage_module_only"
+    else:
+        bucket = "python_without_direct_ucie_module_target"
+    return {"bucket": bucket, "indexed": indexed,
+            "unindexed": unindexed, "test_like": test_like}
+
+
+def _record_no_static_match_imports(
+    by_area: dict[str, Counter[str]], area: str, name: str,
+    content: bytes, stage_modules: set[str]
+) -> None:
+    """Update fixed counters only, keeping original modules and paths local."""
+    result = _static_firstparty_module_targets(content, name, stage_modules)
+    row = by_area.setdefault(area, Counter())
+    row["no_static_match_code_files"] += 1
+    row[result["bucket"]] += 1
+    row["indexed_stage_ucie_module_targets"] += result["indexed"]
+    row["unindexed_stage_ucie_module_targets"] += result["unindexed"]
+    if area == "tests" and result["bucket"] != "python_ast_unavailable":
+        row["test_like_static_nodes_observed" if result["test_like"]
+            else "test_like_static_nodes_not_observed"] += 1
+
+
+def _finalize_no_static_match_imports(
+    by_area: dict[str, Counter[str]],
+    expected_by_area: dict[str, Counter[str]],
+    stage_modules: set[str]
+) -> dict:
+    """Enforce count completeness and emit no user-supplied keys/values."""
+    allowed = (
+        "no_static_match_code_files", *LOCAL_REFERENCE_BUCKETS,
+        "indexed_stage_ucie_module_targets",
+        "unindexed_stage_ucie_module_targets",
+        "test_like_static_nodes_observed",
+        "test_like_static_nodes_not_observed",
+    )
+    result = {}
+    for area, expected in sorted(expected_by_area.items()):
+        row = by_area.get(area, Counter())
+        if (sum(row[x] for x in LOCAL_REFERENCE_BUCKETS)
+                != row["no_static_match_code_files"]
+                or row["no_static_match_code_files"]
+                != expected["original_only_no_static_candidate_observed"]):
+            raise LayoutAuditError("UCIE first-party reference census mismatch")
+        if area == "tests" and (
+                row["test_like_static_nodes_observed"] +
+                row["test_like_static_nodes_not_observed"] +
+                row["python_ast_unavailable"] !=
+                row["no_static_match_code_files"]):
+            raise LayoutAuditError("UCIE test-pattern census mismatch")
+        result[area] = {key: row[key] for key in allowed}
+    return {
+        "schema": LOCAL_REFERENCE_SCHEMA,
+        "status": "LOCAL_STATIC_REFERENCE_LEADS__ALL_ORIGINAL_FILES_HELD",
+        "source": "EXACT_SCOPED_UCIE_OWNER_LOCAL_PYTHON_AST_ONLY",
+        "stage_firstparty_module_index_count": len(stage_modules),
+        "code_paths_without_content_match_reviewed": sum(
+            r["no_static_match_code_files"] for r in result.values()),
+        "by_review_area": result,
+        "unindexed_target_is_not_proven_broken_import": True,
+        "no_import_target_is_not_proven_unused": True,
+        "dynamic_relative_and_symbol_imports_not_resolved": True,
+        "python_test_like_nodes_do_not_prove_test_execution": True,
+        "powershell_reference_graph_verified": False,
+        "original_code_executed_or_imported": False,
+        "owner_source_paths_bytes_or_digests_emitted": False,
+        "original_code_uploaded_or_copied": False,
+        "cleanup_migration_or_cutover_authorized": False,
+        "all_original_only_files_remain": "K0_HOLD_FOR_DEPENDENCY_REVIEW",
+    }
+
+
 def _compare_owner_code_content_locally(
     stage: Path, original: Path, stage_paths: set[str],
     changes: list[tuple[str, str]]
@@ -641,6 +808,8 @@ def _compare_owner_code_content_locally(
     stage_eol: set[bytes] = set()
     stage_ast: set[bytes] = set()
     stage_skipped = bytes_read = originals_read = 0
+    firstparty_stage_modules = _stage_tracked_ucie_python_modules(stage_paths)
+    missing_reference_rows: dict[str, Counter[str]] = {}
 
     for name in sorted(stage_paths):
         if _ucie_code_scope(name) is None:
@@ -711,6 +880,9 @@ def _compare_owner_code_content_locally(
             row["original_only_python_ast_candidate"] += 1
         else:
             row["original_only_no_static_candidate_observed"] += 1
+            _record_no_static_match_imports(
+                missing_reference_rows, area, name, content,
+                firstparty_stage_modules)
 
     allowed_keys = (
         "code_status_records", "original_untracked",
@@ -747,9 +919,12 @@ def _compare_owner_code_content_locally(
             raise LayoutAuditError("UCIE owner code-review completeness mismatch")
         out[area] = {key: row[key] for key in allowed_keys}
 
+    firstparty_reference_report = _finalize_no_static_match_imports(
+        missing_reference_rows, by_area, firstparty_stage_modules)
     return {
         "schema": LOCAL_CODE_REVIEW_SCHEMA,
         "status": "OWNER_LOCAL_CODE_CONTENT_REVIEW_ONLY__FUNCTIONAL_EQUIVALENCE_UNVERIFIED",
+        "original_only_no_static_match_import_review": firstparty_reference_report,
         "by_review_area": out,
         "code_status_records_reviewed_or_held": sum(
             row["code_status_records"] for row in out.values()),

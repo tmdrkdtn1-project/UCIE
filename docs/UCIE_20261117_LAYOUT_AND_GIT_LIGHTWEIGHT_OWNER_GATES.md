@@ -295,3 +295,39 @@ state or docs are opened, no original paths or raw digests leak to the
 report. All source remains K0/HOLD. An actual Windows execution of
 this additive subcategorization is required after CI and pinned
 fast-forward of clean stage, and is NOT yet observed.
+
+## 2026-11-22: owner actual Python AST delta receipt and first-party import-reference gate
+
+Owner staged-only fast-forward to `118252e5` and actual Windows code-review
+reported 32 same-path non-EOL changed source/test files:
+`src` 15 = 3 AST-equal + 11 AST-different + 1 unavailable;
+`scripts` 6 = 0 equal + 3 different + 3 unavailable;
+`tests` 11 = 1 equal + 10 different + 0 unavailable.
+Overall 32 = **4 AST equal + 24 AST different + 4 AST unavailable**.
+AST parity is only a static syntax fingerprint and cannot prove behavior.
+
+The next bounded additive **first-party import index** reads only code that
+the approved local-only scanner ALREADY read under `--compare-original-git`
+`--review-local-code`; it applies ONLY to original-only code files that had
+no byte/EOL/AST candidate anywhere in tracked-stage code (175 observed
+previously). Source Python is parsed statically with the same 120KiB AST
+limit, never imported or executed. Indexed module targets are built solely
+from staged-tracked `src/ucie_miner/**` and `src/ucie_public/**` paths.
+Aggregate counts separate indexed direct UCIE module import targets,
+targets not present in that exact staged module *index*, ambiguous
+`from ucie_miner import SYMBOL`, relative/dynamic imports, no observed
+UCIE imports and AST-unavailable files. `tests` also counts files with
+syntactically test-like nodes, which is NOT proof that pytest/unittest
+collected, ran or passed those tests. PowerShell stays explicitly
+unparsed/held; its import/call graph is NOT verified.
+
+Crucially, `unindexed` does not prove a broken import or missing feature:
+external import hooks, dynamic loading, moved/refactored APIs, namespace
+packages and re-exports require further source/behavioral evidence.
+`no direct UCIE import` does not prove an unused test. All counters are
+fixed categories without original file names, strings, bytes or hashes;
+there is no code transfer, runtime change, cleanup, source publication,
+dependency install, test execution of owner code, or cutover.
+The code still rechecks exact Windows roots and pre/post Git status.
+All 175 original-only no-static-match records remain K0/HOLD.
+Actual owner-machine reference counts are NOT known until separately run.
