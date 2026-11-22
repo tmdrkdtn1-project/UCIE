@@ -337,11 +337,12 @@ def _write_on_owner_host(root: Path, sha: str, packet: dict, layout) -> str:
 
 def run_owner_review(*, write_private_report: bool = False) -> dict:
     """Exact Windows staged-root only; no original import, no network."""
-    layout = _load_trusted_audit()
+    # Reject foreign/unsupported roots BEFORE importing any sibling source.
     stage = Path(__file__).resolve().parents[2]
     original = Path(r"D:\UCIE")
-    if (os.name != "nt" or str(stage).casefold() != layout.TARGET_CODE.casefold()):
+    if (os.name != "nt" or str(stage).casefold() != r"d:\ucie_project\ucie"):
         raise ValueError("UCIE owner reviewer requires exact Windows stage")
+    layout = _load_trusted_audit()
     preflight = layout.compare_original_ucie_git_to_stage(
         stage, original, platform=os.name, review_local_code=True)
     if preflight["owner_local_code_content_review"]["status"] != (
