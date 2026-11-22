@@ -1090,6 +1090,7 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
         bad = Counter({
             "no_static_match_code_files": 2,
             "python_with_unindexed_stage_module_target": 2,
+            "test_like_static_nodes_not_observed": 2,
             "unindexed_files_with_owner_original_only_src_candidate": 1,
         })
         with self.assertRaises(layout.LayoutAuditError):
