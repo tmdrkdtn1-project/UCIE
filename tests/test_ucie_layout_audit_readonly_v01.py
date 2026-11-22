@@ -747,6 +747,7 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
             "original_only_no_static_candidate_observed"], 1)
         self.assertEqual(review["code_status_records_reviewed_or_held"], 6)
         self.assertEqual(report["byte_duplicate_count_verified"], None)
+        self.assertTrue(report["file_content_hashes_read"])
         self.assertFalse(report["files_moved_or_deleted"])
         self.assertFalse(report["full_cutover_authorized"])
         self.assertEqual(report["unmatched_path_metadata_review"][
