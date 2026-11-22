@@ -821,5 +821,71 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
                 review_local_code=True)
         self._assert_state_unchanged()
 
+
+    def test_38_same_path_changed_static_ast_buckets_are_complete(self):
+        stage = Path(self.tmp.name) / "STAGED_SOURCE" / "UCIE"
+        stage.mkdir(parents=True)
+        originals = {
+            "src/ucie_miner/comment_only.py":
+                b"def answer():\n    return 1  # preserved meaning\n",
+            "src/ucie_miner/changed_logic.py":
+                b"def answer():\n    return 2\n",
+            "src/ucie_miner/invalid_python.py":
+                b"def : INVALID\n",
+            "scripts/changed.ps1": b"Write-Output 2\n",
+        }
+        staged = {
+            "src/ucie_miner/comment_only.py":
+                b"def answer():\n    return 1\n",
+            "src/ucie_miner/changed_logic.py":
+                b"def answer():\n    return 1\n",
+            "src/ucie_miner/invalid_python.py":
+                b"def answer():\n    return 1\n",
+            "scripts/changed.ps1": b"Write-Output 1\n",
+        }
+        for name, data in staged.items():
+            p = stage / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data)
+        for name, data in originals.items():
+            p = self.root / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data)
+        rows = [("untracked", p) for p in staged]
+        result = layout._compare_owner_code_content_locally(
+            stage, self.root, set(staged), rows)
+        src = result["by_review_area"]["src"]
+        self.assertEqual(src["same_path_content_changed"], 3)
+        self.assertEqual(src["same_path_changed_ast_identical"], 1)
+        self.assertEqual(src["same_path_changed_ast_different"], 1)
+        self.assertEqual(src["same_path_changed_ast_unavailable"], 1)
+        scripts = result["by_review_area"]["scripts"]
+        self.assertEqual(scripts["same_path_content_changed"], 1)
+        self.assertEqual(scripts["same_path_changed_ast_identical"], 0)
+        self.assertEqual(scripts["same_path_changed_ast_different"], 0)
+        self.assertEqual(scripts["same_path_changed_ast_unavailable"], 1)
+        self.assertEqual(result["code_status_records_reviewed_or_held"], 4)
+        self.assertFalse(result["ast_candidate_proves_functional_equivalence"])
+        self.assertEqual(result["all_original_paths_remain"],
+                         "K0_HOLD_FOR_REVIEW")
+        import json
+        output = json.dumps(result, sort_keys=True)
+        for forbidden in ("comment_only.py", "invalid_python.py",
+                          "Write-Output", "answer()"):
+            self.assertNotIn(forbidden, output)
+        self._assert_state_unchanged()
+
+    def test_39_same_path_ast_fail_closed_for_oversize_and_invalid(self):
+        self.assertIsNone(layout._code_ast_digest(
+            b"def f():\n    return 1\n",
+            "scripts/file.ps1"))
+        self.assertIsNone(layout._code_ast_digest(
+            b"x" * (layout.MAX_LOCAL_AST_BYTES + 1),
+            "src/ucie_miner/bounded.py"))
+        self.assertIsNone(layout._code_ast_digest(
+            b"not valid python!",
+            "src/ucie_miner/bounded.py"))
+        self._assert_state_unchanged()
+
 if __name__ == "__main__":
     unittest.main()
