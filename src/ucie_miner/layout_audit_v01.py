@@ -507,6 +507,33 @@ def _stage_original_path_crosswalk(staged_root: Path,
     }
 
 
+def _verified_crlf_only_staged_worktree(stage: Path, state: bytes) -> bool:
+    """Prove strict-Git dirty rows are ONLY CR-at-EOL worktree differences.
+
+    On some owner Windows systems, disabling system Git config removes the
+    core.autocrlf conversion used to materialize a clean checkout. The stage
+    may then appear modified even though no source content has changed.
+    Do not blindly trust regular Git or suppress all dirty rows: prohibit
+    untracked, index-staged, renamed, deleted, added, and type-change rows;
+    then require a bounded strict-config Git diff that ignores ONLY a CR at
+    the end of each line (not spaces, file modes or other content changes).
+    No stage or original file bytes or paths are returned in the report.
+    """
+    if not state or len(state) > MAX_CROSSWALK_BYTES or not state.endswith(b"\0"):
+        return False
+    records = state[:-1].split(b"\0")
+    if len(records) > MAX_CROSSWALK_PATHS or any(
+            len(row) < 4 or row[:3] != b" M " for row in records):
+        return False
+    try:
+        _git_metadata_bytes(
+            stage, "diff", "--no-ext-diff", "--no-textconv",
+            "--ignore-cr-at-eol", "--quiet", "--exit-code", "--")
+    except LayoutAuditError:
+        return False
+    return True
+
+
 def compare_original_ucie_git_to_stage(code_root: Path, original_root: Path,
                                        *, platform: str) -> dict:
     """Exact owner Windows mode; approved staged main must be clean."""
@@ -528,9 +555,13 @@ def compare_original_ucie_git_to_stage(code_root: Path, original_root: Path,
         "STAGED_STATUS_QUERY", _git_metadata_bytes,
         stage, "status", "--porcelain=v1", "-z",
         "--untracked-files=all")
-    if state:
+    if state and not _verified_crlf_only_staged_worktree(stage, state):
         raise LayoutAuditPhaseError("STAGED_NOT_CLEAN")
-    return _stage_original_path_crosswalk(stage, original_root)
+    report = _stage_original_path_crosswalk(stage, original_root)
+    # A strict-config CRLF-only worktree difference is not an index/source
+    # content change. Report the exception explicitly, never as byte equality.
+    report["stage_crlf_only_difference_verified"] = bool(state)
+    return report
 
 
 def main() -> int:
