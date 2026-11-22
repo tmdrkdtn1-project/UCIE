@@ -331,3 +331,33 @@ dependency install, test execution of owner code, or cutover.
 The code still rechecks exact Windows roots and pre/post Git status.
 All 175 original-only no-static-match records remain K0/HOLD.
 Actual owner-machine reference counts are NOT known until separately run.
+
+## 2026-11-22: owner's no-static-match import census and source-only dependency crosswalk
+
+Actual Windows owner locally ran main cdef79e with the previous read-only
+review after a stage-only FF and returned 175 original-only code/test paths:
+34 files with indexed first-party module references, 14 with explicit
+module path not indexed in stage (scripts 1, tests 13), 31 with ambiguous
+relative/dynamic/root-symbol imports, 76 without direct first-party module
+imports, 20 PowerShell held, 0 AST unavailable. All 129 original-only test
+files have test-like AST nodes but were not executed.
+
+The new incremental crosswalk, **within the same opt-in local code scan**,
+matches explicit module targets not indexed in stage to source-module paths
+observed among the 20 original-only src Python Git-status records, and
+separately identifies ambiguous root-symbol candidates with same names as
+original-only source modules. For direct unindexed files it partitions
+"matches original-only source module path candidate" versus "no such observed
+original-only module candidate", requiring both to add to the prior unindexed
+file count. It also exposes numeric relative/dynamic/root-symbol ambiguity
+counts (flags may overlap, and are not an exhaustive import interpreter).
+No extra source bytes are read beyond the already approved local scan; only
+original Git-status path metadata and syntactic import strings are compared
+locally. Nothing is returned except fixed enum keys and aggregate counts.
+
+A path candidate is NOT proof that the import resolves, that code is safe
+to execute, or that the original module is the correct integration target.
+No source import/exec, original filename/path/hash/text export, protected
+bridge/SQLite/task/C40 access, migration, cleanup, rule promotion or cutover.
+All original and staged sources remain K0/HOLD; owner-machine crosswalk
+counts require an actual post-CI and pinned-FF execution to be accepted.

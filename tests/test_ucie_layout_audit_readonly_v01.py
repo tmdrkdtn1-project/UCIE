@@ -1007,5 +1007,101 @@ class UCIELightweightLayoutReadOnlyTests(unittest.TestCase):
                 {"ucie_miner"})
         self._assert_state_unchanged()
 
+
+    def test_43_unindexed_stage_module_target_crosswalks_owner_only_src(self):
+        stage_modules = {"ucie_miner", "ucie_miner.ready"}
+        owner_only = {"ucie_miner.absent", "ucie_miner.original_extra"}
+        cases = (
+            ("import ucie_miner.absent\n", True, False),
+            ("from ucie_miner.absent import widget\n", True, False),
+            ("import ucie_miner.unobserved\n", False, False),
+            ("from ucie_miner import original_extra\n", False, True),
+            ("from ucie_miner import SYMBOL\n", False, False),
+        )
+        for statement, matched_target, matched_symbol in cases:
+            with self.subTest(statement=statement):
+                report = layout._static_firstparty_module_targets(
+                    statement.encode("utf-8"),
+                    "tests/test_owner.py", stage_modules, owner_only)
+                self.assertEqual(
+                    report["unindexed_target_original_only_candidate_count"] > 0,
+                    matched_target)
+                self.assertEqual(
+                    report["ambiguous_root_symbol_original_only_candidate"],
+                    matched_symbol)
+        self._assert_state_unchanged()
+
+    def test_44_original_only_reference_crosswalk_privacy_and_completeness(self):
+        stage = Path(self.tmp.name) / "UCIE_STAGE_CANDIDATE"
+        source = stage / "src" / "ucie_miner" / "ready.py"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(b"VALUE = 1\n")
+        fixtures = {
+            "src/ucie_miner/owner_only.py":
+                b"VALUE = 2\n",
+            "tests/test_owner_target.py":
+                b"import ucie_miner.owner_only\n",
+            "tests/test_unknown_target.py":
+                b"import ucie_miner.no_such_module\n",
+            "tests/test_ambiguous_owner.py":
+                b"from ucie_miner import owner_only\n",
+            "tests/test_relative.py":
+                b"from . import helper\n",
+            "tests/test_dynamic.py":
+                b"import importlib\n"
+                b"importlib.import_module('ucie_miner.anywhere')\n",
+        }
+        for name, content in fixtures.items():
+            p = self.root / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(content)
+        report = layout._compare_owner_code_content_locally(
+            stage, self.root, {"src/ucie_miner/ready.py"},
+            [("untracked", name) for name in fixtures])
+        lookup = report["original_only_no_static_match_import_review"]
+        self.assertEqual(lookup["code_paths_without_content_match_reviewed"], 6)
+        # The shared package root exists in stage; only the untracked
+        # owner_only.py module is an original-only module candidate.
+        self.assertEqual(lookup["owner_original_only_source_module_path_candidates"], 1)
+        self.assertIn("ucie_miner.owner_only",
+                      layout._stage_tracked_ucie_python_modules({
+                          "src/ucie_miner/owner_only.py"}))
+        test = lookup["by_review_area"]["tests"]
+        self.assertEqual(
+            test["unindexed_files_with_owner_original_only_src_candidate"], 1)
+        self.assertEqual(
+            test["unindexed_files_without_observed_owner_only_src_candidate"], 1)
+        self.assertEqual(
+            test["unindexed_targets_matching_owner_original_only_src"], 1)
+        self.assertEqual(
+            test["ambiguous_files_with_owner_only_root_symbol_candidate"], 1)
+        self.assertEqual(test["ambiguous_files_with_relative_import"], 1)
+        self.assertEqual(test["ambiguous_files_with_dynamic_import"], 1)
+        self.assertEqual(test["ambiguous_files_with_root_symbol_import"], 1)
+        self.assertTrue(lookup["owner_only_candidate_is_not_verified_import_resolution"])
+        self.assertEqual(lookup["all_original_only_files_remain"],
+                         "K0_HOLD_FOR_DEPENDENCY_REVIEW")
+        import json
+        output = json.dumps(report, sort_keys=True)
+        for forbidden in ("owner_only.py", "test_owner_target.py",
+                          "no_such_module", "ucie_miner.owner_only",
+                          "test_ambiguous_owner"):
+            self.assertNotIn(forbidden, output)
+        self._assert_state_unchanged()
+
+    def test_45_owner_only_module_partition_rejects_incomplete_counts(self):
+        bad = Counter({
+            "no_static_match_code_files": 2,
+            "python_with_unindexed_stage_module_target": 2,
+            "test_like_static_nodes_not_observed": 2,
+            "unindexed_files_with_owner_original_only_src_candidate": 1,
+        })
+        with self.assertRaises(layout.LayoutAuditError):
+            layout._finalize_no_static_match_imports(
+                {"tests": bad},
+                {"tests": Counter({"original_only_no_static_candidate_observed": 2})},
+                {"ucie_miner"}, {"ucie_miner.owner_only"})
+        self._assert_state_unchanged()
+
 if __name__ == "__main__":
     unittest.main()

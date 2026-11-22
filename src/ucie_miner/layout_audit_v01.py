@@ -652,7 +652,8 @@ def _stage_tracked_ucie_python_modules(paths: set[str]) -> set[str]:
 
 
 def _static_firstparty_module_targets(
-    data: bytes, name: str, stage_modules: set[str]
+    data: bytes, name: str, stage_modules: set[str],
+    original_only_modules: set[str] | None = None
 ) -> dict:
     """Classify import-index *leads* from a Python AST, never execute code.
 
@@ -675,6 +676,10 @@ def _static_firstparty_module_targets(
     targets = set()
     unresolved = False
     test_like = False
+    root_symbol_candidates = set()
+    relative_seen = False
+    dynamic_seen = False
+    root_symbol_seen = False
     roots = frozenset(("ucie_miner", "ucie_public"))
     for node in ast.walk(tree):
         if name.startswith("tests/") and isinstance(
@@ -689,6 +694,7 @@ def _static_firstparty_module_targets(
         elif isinstance(node, ast.ImportFrom):
             if node.level:
                 unresolved = True
+                relative_seen = True
                 continue
             root_module = (node.module or "").casefold()
             if root_module.split(".", 1)[0] not in roots:
@@ -700,6 +706,9 @@ def _static_firstparty_module_targets(
                         targets.add(candidate)
                     else:
                         unresolved = True
+                        root_symbol_seen = True
+                        if alias.name != "*":
+                            root_symbol_candidates.add(candidate)
             else:
                 targets.add(root_module)
         elif isinstance(node, ast.Call):
@@ -709,6 +718,7 @@ def _static_firstparty_module_targets(
                     isinstance(fun, ast.Attribute)
                     and fun.attr == "import_module"):
                 unresolved = True
+                dynamic_seen = True
     indexed = len(targets & stage_modules)
     unindexed = len(targets - stage_modules)
     if unindexed:
@@ -719,21 +729,54 @@ def _static_firstparty_module_targets(
         bucket = "python_with_indexed_stage_module_only"
     else:
         bucket = "python_without_direct_ucie_module_target"
-    return {"bucket": bucket, "indexed": indexed,
-            "unindexed": unindexed, "test_like": test_like}
+    output = {"bucket": bucket, "indexed": indexed,
+              "unindexed": unindexed, "test_like": test_like}
+    # Only the owner-local opt-in passes this extra Git-status module index.
+    # No owner names, individual paths, imported symbols or raw digests
+    # appear in the returned final public-facing receipt.
+    if original_only_modules is not None:
+        missing_stage_targets = targets - stage_modules
+        output["unindexed_target_original_only_candidate_count"] = len(
+            missing_stage_targets & original_only_modules)
+        output["ambiguous_root_symbol_original_only_candidate"] = bool(
+            root_symbol_candidates & original_only_modules)
+        output["ambiguous_relative_import"] = relative_seen
+        output["ambiguous_dynamic_import"] = dynamic_seen
+        output["ambiguous_root_symbol_import"] = root_symbol_seen
+    return output
 
 
 def _record_no_static_match_imports(
     by_area: dict[str, Counter[str]], area: str, name: str,
-    content: bytes, stage_modules: set[str]
+    content: bytes, stage_modules: set[str],
+    original_only_modules: set[str] | None = None
 ) -> None:
     """Update fixed counters only, keeping original modules and paths local."""
-    result = _static_firstparty_module_targets(content, name, stage_modules)
+    result = _static_firstparty_module_targets(
+        content, name, stage_modules, original_only_modules)
     row = by_area.setdefault(area, Counter())
     row["no_static_match_code_files"] += 1
     row[result["bucket"]] += 1
     row["indexed_stage_ucie_module_targets"] += result["indexed"]
     row["unindexed_stage_ucie_module_targets"] += result["unindexed"]
+    if original_only_modules is not None:
+        if result["bucket"] == "python_with_unindexed_stage_module_target":
+            if result["unindexed_target_original_only_candidate_count"] > 0:
+                row["unindexed_files_with_owner_original_only_src_candidate"] += 1
+            else:
+                row["unindexed_files_without_observed_owner_only_src_candidate"] += 1
+            row["unindexed_targets_matching_owner_original_only_src"] += (
+                result["unindexed_target_original_only_candidate_count"])
+        elif result["bucket"] == "python_with_unresolved_reference_style":
+            if result["ambiguous_root_symbol_original_only_candidate"]:
+                row["ambiguous_files_with_owner_only_root_symbol_candidate"] += 1
+            for k, output_key in (
+                ("ambiguous_relative_import", "ambiguous_files_with_relative_import"),
+                ("ambiguous_dynamic_import", "ambiguous_files_with_dynamic_import"),
+                ("ambiguous_root_symbol_import", "ambiguous_files_with_root_symbol_import"),
+            ):
+                if result[k]:
+                    row[output_key] += 1
     if area == "tests" and result["bucket"] != "python_ast_unavailable":
         row["test_like_static_nodes_observed" if result["test_like"]
             else "test_like_static_nodes_not_observed"] += 1
@@ -742,7 +785,8 @@ def _record_no_static_match_imports(
 def _finalize_no_static_match_imports(
     by_area: dict[str, Counter[str]],
     expected_by_area: dict[str, Counter[str]],
-    stage_modules: set[str]
+    stage_modules: set[str],
+    original_only_modules: set[str] | None = None
 ) -> dict:
     """Enforce count completeness and emit no user-supplied keys/values."""
     allowed = (
@@ -751,6 +795,13 @@ def _finalize_no_static_match_imports(
         "unindexed_stage_ucie_module_targets",
         "test_like_static_nodes_observed",
         "test_like_static_nodes_not_observed",
+        "unindexed_files_with_owner_original_only_src_candidate",
+        "unindexed_files_without_observed_owner_only_src_candidate",
+        "unindexed_targets_matching_owner_original_only_src",
+        "ambiguous_files_with_owner_only_root_symbol_candidate",
+        "ambiguous_files_with_relative_import",
+        "ambiguous_files_with_dynamic_import",
+        "ambiguous_files_with_root_symbol_import",
     )
     result = {}
     for area, expected in sorted(expected_by_area.items()):
@@ -766,12 +817,21 @@ def _finalize_no_static_match_imports(
                 row["python_ast_unavailable"] !=
                 row["no_static_match_code_files"]):
             raise LayoutAuditError("UCIE test-pattern census mismatch")
+        if original_only_modules is not None and (
+                row["unindexed_files_with_owner_original_only_src_candidate"] +
+                row["unindexed_files_without_observed_owner_only_src_candidate"]
+                != row["python_with_unindexed_stage_module_target"]):
+            raise LayoutAuditError("UCIE owner-only module census mismatch")
         result[area] = {key: row[key] for key in allowed}
     return {
         "schema": LOCAL_REFERENCE_SCHEMA,
         "status": "LOCAL_STATIC_REFERENCE_LEADS__ALL_ORIGINAL_FILES_HELD",
         "source": "EXACT_SCOPED_UCIE_OWNER_LOCAL_PYTHON_AST_ONLY",
         "stage_firstparty_module_index_count": len(stage_modules),
+        "owner_original_only_source_module_path_candidates": (
+            len(original_only_modules) if original_only_modules is not None
+            else None),
+        "owner_only_candidate_is_not_verified_import_resolution": True,
         "code_paths_without_content_match_reviewed": sum(
             r["no_static_match_code_files"] for r in result.values()),
         "by_review_area": result,
@@ -809,6 +869,14 @@ def _compare_owner_code_content_locally(
     stage_ast: set[bytes] = set()
     stage_skipped = bytes_read = originals_read = 0
     firstparty_stage_modules = _stage_tracked_ucie_python_modules(stage_paths)
+    # Git-status-only original source module path leads. No new original
+    # bytes are read and no protected/untracked non-src files are examined.
+    firstparty_owner_only_modules = (
+        _stage_tracked_ucie_python_modules({
+            name for _, name in changes
+            if name not in stage_paths and _ucie_code_scope(name) == "src"
+        }) - firstparty_stage_modules
+    )
     missing_reference_rows: dict[str, Counter[str]] = {}
 
     for name in sorted(stage_paths):
@@ -882,7 +950,7 @@ def _compare_owner_code_content_locally(
             row["original_only_no_static_candidate_observed"] += 1
             _record_no_static_match_imports(
                 missing_reference_rows, area, name, content,
-                firstparty_stage_modules)
+                firstparty_stage_modules, firstparty_owner_only_modules)
 
     allowed_keys = (
         "code_status_records", "original_untracked",
@@ -920,7 +988,8 @@ def _compare_owner_code_content_locally(
         out[area] = {key: row[key] for key in allowed_keys}
 
     firstparty_reference_report = _finalize_no_static_match_imports(
-        missing_reference_rows, by_area, firstparty_stage_modules)
+        missing_reference_rows, by_area, firstparty_stage_modules,
+        firstparty_owner_only_modules)
     return {
         "schema": LOCAL_CODE_REVIEW_SCHEMA,
         "status": "OWNER_LOCAL_CODE_CONTENT_REVIEW_ONLY__FUNCTIONAL_EQUIVALENCE_UNVERIFIED",
