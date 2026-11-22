@@ -1,6 +1,7 @@
 """UCIE-only layout/cleanup inventory: disposable Git repo, no owner writes."""
 from __future__ import annotations
 
+from collections import Counter
 from hashlib import sha256
 import os
 from pathlib import Path
