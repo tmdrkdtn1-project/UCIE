@@ -145,7 +145,21 @@ class UCIEOneSourceStageTests(unittest.TestCase):
                                 approval="APPROVE_UCIE_ONE_MODULE_01_TO_NEW_DEV_ROOT")
         self._unchanged()
 
-    def test_09_status_receipt_is_count_only_and_no_private_source(self):
+    def test_09_apply_requires_exact_module_specific_approval(self):
+        stage._require_exact_per_module_approval("preview", 1, "")
+        stage._require_exact_per_module_approval(
+            "apply", 1, "APPROVE_UCIE_ONE_MODULE_01_TO_NEW_DEV_ROOT")
+        with self.assertRaises(stage.StageOneError):
+            stage._require_exact_per_module_approval("apply", 1, "")
+        with self.assertRaises(stage.StageOneError):
+            stage._require_exact_per_module_approval(
+                "apply", 2, "APPROVE_UCIE_ONE_MODULE_01_TO_NEW_DEV_ROOT")
+        with self.assertRaises(stage.StageOneError):
+            stage._require_exact_per_module_approval("apply", 9, "")
+        self.assertFalse((self.dev / self.relp).exists())
+        self._unchanged()
+
+    def test_10_status_receipt_is_count_only_and_no_private_source(self):
         if os.name != "nt":
             with patch("sys.argv", [
                 str(_SCRIPT), "--expected-head", "a"*40, "--mode", "preview"
