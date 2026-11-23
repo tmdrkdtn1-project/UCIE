@@ -46,3 +46,34 @@ The report contains **private original module names, UCIE-relative original sour
 - CI must pass Windows/Ubuntu × Python 3.13/3.15 using disposable synthetic fixtures.
 - Actual owner-host results require a clean pinned stage-only fast-forward to the CI-verified merged SHA and local read-only invocation; GitHub CI is not an owner-machine acceptance.
 - Record local dry-run summary in UCIE issue #199. Do not attach the private packet. Preserve all K0 holds.
+
+
+## Actual one-source-module stage (no execution or Git publication)
+
+The next B0 step can **write exactly one original-only P1 Python module**
+to the NEW development Git worktree, and only with separate explicit owner
+approval for that exact module index. Implemented by
+`scripts/ucie_owner_stage_one_source_v01.py`. This is not enabled merely
+by an earlier `--write-private-report`.
+
+1. Preview one module (example P1 index 1) using `--mode preview --module-index 1`
+   and a pinned 40-hex `--expected-head`. This confirms the owner-private
+   packet, safe source-only scope, exact main/origin status, original
+   untracked module, new root absence and static Python syntax. No writes.
+2. Inspect that P1 card in the private owner packet locally; do not paste
+   the packet or original code into public GitHub or ChatGPT.
+3. If approving exactly module 1, use `--mode apply` and approval token
+   `APPROVE_UCIE_ONE_MODULE_01_TO_NEW_DEV_ROOT` with the exact head pin.
+   This creates ONE NEW untracked `src/ucie_*/...py` file exclusively under
+   `D:\UCIE_PROJECT\UCIE` only. No existing stage file is overwritten.
+   There is no Git add, commit, push, original import/exec, copied tests,
+   original directory change, SQLite/Task/C40/tunnel change or cutover.
+   Repeated apply fails when new stage is dirty; interrupted copies HOLD.
+4. The resulting file remains untested, locally untracked and K0/HOLD.
+   Review source licensing, secrets, imports, side effects, actual
+   behavioral expectations and linked original tests before separately
+   authorizing any test execution, Git stage, commit or public PR.
+
+`ONE_ORIGINAL_MODULE_STAGED_UNTRACKED__REVIEW_REQUIRED` means source
+worktree staging only, NOT verified functional integration or release.
+Operating and customer cutover remain NO_GO.
