@@ -57,6 +57,18 @@ def _module_path_name(layout, relative: str) -> str:
     return stem
 
 
+def _require_exact_per_module_approval(mode: str, index: int,
+                                        approval: str) -> None:
+    """Allow preview by default; explicit one-module approval for any write."""
+    if (type(mode) is not str or mode not in ("preview", "apply")
+            or type(index) is not int or not 1 <= index <= 8
+            or type(approval) is not str):
+        raise StageOneError("UCIE staging operation outside one-module scope")
+    if mode == "apply" and approval != (
+            APPROVAL_PREFIX + f"{index:02d}" + "_TO_NEW_DEV_ROOT"):
+        raise StageOneError("UCIE selected module owner approval missing")
+
+
 def _read_priority_packet(path: Path, layout) -> list[dict]:
     """Use only the owner-created private packet, never GitHub or connectors."""
     if (not path.is_file() or layout._indirect(path) or
@@ -77,7 +89,7 @@ def _read_priority_packet(path: Path, layout) -> list[dict]:
             packet.get("schema") != OWNER_PACKET_SCHEMA or
             packet.get("status") != "PRIVATE_LOCAL_REVIEW_ONLY__NO_MIGRATION" or
             packet.get("do_not_upload_or_paste") is not True or
-            packet.get("contains_owner_code_bodies") is True):
+            packet.get("contains_original_code_bodies") is not False):
         raise StageOneError("UCIE private packet identity mismatch")
     cards = packet.get("module_cards")
     if type(cards) is not list or len(cards) != 20:
@@ -183,9 +195,7 @@ def _checks(stage: Path, original: Path, layout,
 
 def stage_one(*, expected_head: str, module_index: int,
               mode: str = "preview", approval: str = "") -> dict:
-    if (type(mode) is not str or mode not in ("preview", "apply") or
-            type(approval) is not str):
-        raise StageOneError("UCIE source integration mode invalid")
+    _require_exact_per_module_approval(mode, module_index, approval)
     if os.name != "nt":
         raise StageOneError("UCIE one-module source stage requires Windows")
     stage, original = Path(NEW_ROOT), Path(OLD_ROOT)
@@ -212,10 +222,6 @@ def stage_one(*, expected_head: str, module_index: int,
     if mode == "preview":
         result["status"] = "ONE_MODULE_STAGE_PREVIEW__NO_WRITES"
         return result
-
-    token = APPROVAL_PREFIX + f"{module_index:02d}" + "_TO_NEW_DEV_ROOT"
-    if approval != token:
-        raise StageOneError("UCIE exact per-module source staging approval missing")
 
     before_original = layout._git_metadata_bytes(
         original, "status", "--porcelain=v1", "-z", "--untracked-files=all")
