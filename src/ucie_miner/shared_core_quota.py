@@ -43,7 +43,7 @@ def _approved(url: str) -> bool:
         return True
     return re.fullmatch(
         r"https://api\.github\.com/repos/python/cpython/pulls/"
-        r"[1-9][0-9]{0,8}/files\?per_page=30", url,
+        r"[1-9][0-9]{0,8}(?:/files\?per_page=30)?", url,
     ) is not None
 
 
