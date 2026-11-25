@@ -41,40 +41,85 @@ def _api_url(source: str, endpoint: str) -> str:
     return "https://api.github.com/repos/" + source + "/" + endpoint
 
 
-def fetch_public_json(url: str) -> object:
+def fetch_public_json(
+    url: str, *, core_quota=None, reviewed_first_get: bool = False
+) -> object:
+    """Exact approved GitHub GET, optionally guarded by durable CORE quota.
+
+    The normal legacy caller is unchanged. Only a separate owner-approved
+    BASE pilot supplies core_quota; reserve happens BEFORE the actual opener.
+    A crash after reservation remains sticky INFLIGHT, not a free retry.
+    """
     if not isinstance(url, str) or not any(re.fullmatch(
             r"https://api\.github\.com/repos/" + re.escape(source) +
             r"/(?:pulls\?state=closed&sort=updated&direction=desc&per_page=20|"
             r"pulls/[1-9][0-9]*/files\?per_page=30|pulls/[1-9][0-9]*)", url)
             for source in PUBLIC_SOURCES):
         raise MiningError("request outside approved exact public API routes")
-    request = urllib.request.Request(
-        url,
-        headers={"Accept": "application/vnd.github+json",
-                 "X-GitHub-Api-Version": "2022-11-28",
-                 "User-Agent": "UCIE-PUBLIC-READ-ONLY/0.2"},
-        method="GET",
-    )
-    # No project token or Authorization header; do not redirect to another host.
-    opener = urllib.request.build_opener(NoRedirect)
+    if type(reviewed_first_get) is not bool:
+        raise MiningError("invalid owner CORE bootstrap flag")
+    lease = None
+    if core_quota is not None:
+        from .shared_core_quota import SharedCoreQuota, CoreQuotaHold
+        if not isinstance(core_quota, SharedCoreQuota):
+            raise MiningError("invalid CORE budget authority")
+        try:
+            lease = core_quota.reserve(
+                url, reviewed_bootstrap=reviewed_first_get)
+        except CoreQuotaHold as exc:
+            raise MiningError("CORE quota denied new public GET") from exc
+    elif reviewed_first_get:
+        raise MiningError("owner bootstrap requires shared CORE quota")
+    status_for_ledger = None
+    headers_for_ledger = None
     try:
-        with opener.open(request, timeout=12) as response:
-            if response.status != 200:
-                raise MiningError("public API returned non-200")
-            if "application/json" not in response.headers.get("Content-Type", ""):
-                raise MiningError("unexpected API content type")
-            data = response.read(MAX_BODY + 1)
-            if len(data) > MAX_BODY:
-                raise MiningError("API response exceeded hard size limit")
-    except urllib.error.HTTPError as exc:
-        raise MiningError("upstream HTTP error " + str(exc.code)) from exc
-    except urllib.error.URLError as exc:
-        raise MiningError("upstream communication error") from exc
-    try:
-        return json.loads(data.decode("utf-8"))
-    except (ValueError, UnicodeError) as exc:
-        raise MiningError("invalid API JSON") from exc
-
+        request = urllib.request.Request(
+            url,
+            headers={"Accept": "application/vnd.github+json",
+                     "X-GitHub-Api-Version": "2022-11-28",
+                     "User-Agent": "UCIE-PUBLIC-READ-ONLY/0.2"},
+            method="GET",
+        )
+        # No project token or Authorization header; never redirect.
+        opener = urllib.request.build_opener(NoRedirect)
+        try:
+            with opener.open(request, timeout=12) as response:
+                if response.status != 200:
+                    raise MiningError("public API returned non-200")
+                if "application/json" not in response.headers.get(
+                        "Content-Type", ""):
+                    raise MiningError("unexpected API content type")
+                data = response.read(MAX_BODY + 1)
+                if len(data) > MAX_BODY:
+                    raise MiningError("API response exceeded hard size limit")
+                if lease is not None:
+                    from .shared_core_quota import FIELDS
+                    headers_for_ledger = {
+                        k: response.headers.get(k) for k in FIELDS
+                    }
+        except urllib.error.HTTPError as exc:
+            status_for_ledger = int(exc.code) if type(exc.code) is int else None
+            raise MiningError("upstream HTTP error " + str(exc.code)) from exc
+        except urllib.error.URLError as exc:
+            raise MiningError("upstream communication error") from exc
+        try:
+            value = json.loads(data.decode("utf-8"))
+        except (ValueError, UnicodeError) as exc:
+            raise MiningError("invalid API JSON") from exc
+        # Only a valid complete JSON response can establish a new quota state.
+        status_for_ledger = 200
+        return value
+    finally:
+        if lease is not None:
+            try:
+                core_quota.complete(
+                    lease, status_code=status_for_ledger,
+                    headers=headers_for_ledger if status_for_ledger == 200
+                    else None,
+                )
+            except CoreQuotaHold as exc:
+                # A failure to finalize leaves INFLIGHT, never a free GET.
+                raise MiningError("CORE quota finalize unsafe; owner review") from exc
 
 def _db(repo_root: Path) -> sqlite3.Connection:
     """Only local UCIE runtime data; never an external path or user-project database."""
