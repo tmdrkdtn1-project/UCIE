@@ -149,15 +149,24 @@ class SharedCoreRealFetcherTests(TestCase):
 
     def test_05_bad_core_headers_fail_closed_after_one_real_opener(self):
         self._bootstrap()
-        value, attempts = self._fetch_with(
-            FILES_URL, [FakeResponse({"Content-Type": "application/json"})])
-        self.assertEqual((value, attempts), ([], 1))
+        opener = CountingOpener(
+            [FakeResponse({"Content-Type": "application/json"})])
+        with patch.object(urllib.request, "build_opener", return_value=opener):
+            with self.assertRaises(MiningError):
+                fetch_public_json(FILES_URL, core_quota=self.quota)
+        self.assertEqual(opener.calls, 1)
         self.assertEqual(self.quota.inspect()["phase"], "HOLD")
         with self.assertRaises(CoreQuotaHold):
             self.quota.reserve(FILES_URL)
 
     def test_06_low_primary_remaining_stops_next_get(self):
-        self._bootstrap(remaining=8)
+        opener = CountingOpener([FakeResponse(
+            trusted_headers(self.epoch, remaining=8))])
+        with patch.object(urllib.request, "build_opener", return_value=opener):
+            with self.assertRaises(MiningError):
+                fetch_public_json(BASE_URL, core_quota=self.quota,
+                                  reviewed_first_get=True)
+        self.assertEqual(opener.calls, 1)
         self.assertEqual(self.quota.inspect()["phase"], "HOLD")
         with self.assertRaises(CoreQuotaHold):
             self.quota.reserve(FILES_URL)
