@@ -7,7 +7,7 @@ publish knowledge, or register its own scheduler.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import errno
 import json
 import os
@@ -152,8 +152,12 @@ def run_cycle(
     collect: Callable[..., dict] = mine_once,
     write_report: Callable[[Path], Path] = report,
     enforce_schedule: bool = False,
+    owner_base_core_hourly: bool = False,
 ) -> dict:
     """One bounded mining+report cycle. No background threads or external auth."""
+    if type(owner_base_core_hourly) is not bool or (
+            owner_base_core_hourly and not enforce_schedule):
+        raise ValueError("invalid BASE owner quota pilot mode")
     start = _utc()
     runtime = _runtime(repo_root)
     with _single_instance(runtime) as acquired:
@@ -194,6 +198,36 @@ def run_cycle(
                     payload, now=datetime.now(timezone.utc))
                 if rate_pause is not None:
                     return rate_pause
+                if owner_base_core_hourly and payload.get("status") == "COLLECTION_FAILED":
+                    return {
+                        "schema": "UCIE_MINER_CYCLE_V1",
+                        "status": "SKIPPED_PUBLIC_RATE_OWNER_REVIEW_NO_GET",
+                        "reason": "PREVIOUS_BASE_FAILURE_STICKY_HOLD",
+                        "public_gets_this_run": 0,
+                        "verification_pass": 0,
+                        "production_approved": False,
+                    }
+                if owner_base_core_hourly:
+                    current = datetime.now(timezone.utc)
+                    if (prior_started is None or prior_started.tzinfo is None
+                            or current < prior_started):
+                        return {
+                            "schema": "UCIE_MINER_CYCLE_V1",
+                            "status": "SKIPPED_PUBLIC_RATE_OWNER_REVIEW_NO_GET",
+                            "reason": "BASE_HOURLY_START_TIME_UNTRUSTED",
+                            "public_gets_this_run": 0,
+                            "verification_pass": 0,
+                            "production_approved": False,
+                        }
+                    wait = timedelta(minutes=60) - (current - prior_started)
+                    if wait > timedelta(0):
+                        return {
+                            "schema": "UCIE_MINER_CYCLE_V1",
+                            "status": "SKIPPED_NOT_DUE",
+                            "retry_after_seconds": int(wait.total_seconds()) + 1,
+                            "verification_pass": 0,
+                            "production_approved": False,
+                        }
             decision = next_cycle(
                 prior, now=datetime.now(timezone.utc),
                 consecutive_failures=failures, last_started=prior_started)
@@ -212,6 +246,9 @@ def run_cycle(
             "production_approved": False,
             "consecutive_failures": 0,
         }
+        if owner_base_core_hourly:
+            receipt["owner_base_shared_core_pilot"] = True
+            receipt["effective_interval_minutes"] = 60
         try:
             failure_phase = "BASE_COLLECTION"
             collect_clock_ns = perf_counter_ns()
@@ -230,6 +267,16 @@ def run_cycle(
                     or result.get("verification_pass") != 0
                     or result.get("production_approved") is not False):
                 raise ValueError("invalid source statistics")
+            if owner_base_core_hourly:
+                attempt_count = result.get("owner_pilot_gets_attempted")
+                core_phase = result.get("shared_core_quota_phase")
+                if (source_count != 1 or type(attempt_count) is not int
+                        or not 1 <= attempt_count <= 3
+                        or core_phase != "READY"
+                        or result.get("stage10") is not None):
+                    raise ValueError("invalid owner BASE shared quota receipt")
+                receipt["owner_pilot_gets_attempted"] = attempt_count
+                receipt["shared_core_quota_phase"] = core_phase
             if result["status"] == "COLLECTED_UNVERIFIED_PARTIAL_NO_GO":
                 from .core import PUBLIC_SOURCES
                 rejected_count = result.get("rejected_public_pr_count")
