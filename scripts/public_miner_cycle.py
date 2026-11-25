@@ -56,6 +56,8 @@ def _collect_owner_base_shared_core(
     before = quota.inspect()
     if reviewed_bootstrap_once and before["phase"] != "ABSENT":
         raise MiningError("first CORE bootstrap already consumed")
+    if before["phase"] == "ABSENT" and not reviewed_bootstrap_once:
+        raise MiningError("owner first CORE bootstrap required before miner DB")
     bootstrap = reviewed_bootstrap_once and before["phase"] == "ABSENT"
     attempts = 0
 
