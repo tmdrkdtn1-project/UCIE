@@ -15,7 +15,8 @@ if os.name == "nt":
     relocated = (__name__ == "__main__"
                  and sys.argv[1:] == ["--owner-relocated-runtime"])
     if __name__ == "__main__" and sys.argv[1:] not in (
-            [], ["--owner-relocated-runtime"]):
+            [], ["--owner-relocated-runtime"],
+            ["--owner-base-shared-core"]):
         print(json.dumps({"status": "FAIL_CLOSED",
                           "reason": "UCIE_UNKNOWN_LAUNCH_ARGUMENTS"}))
         raise SystemExit(2)
@@ -37,16 +38,51 @@ if os.name == "nt":
 sys.path.insert(0, str(ROOT / "src"))
 from ucie_miner.worker import run_cycle
 from ucie_miner.core import mine_once
+
+
+def _collect_owner_base_shared_core(root: Path) -> dict:
+    """The only new live-capable entry, requiring an EXPLICIT owner CLI flag.
+
+    Never stage Stage10/P11 on this pilot. BASE's existing parse and
+    provenance code uses the exact same fetch_public_json transport. No
+    extra quota probe, no retry, no more than three public requests.
+    """
+    from ucie_miner.core import fetch_public_json, MiningError
+    from ucie_miner.shared_core_quota import SharedCoreQuota
+
+    quota = SharedCoreQuota(root)
+    before = quota.inspect()
+    bootstrap = before["phase"] == "ABSENT"
+    attempts = 0
+
+    def budgeted_fetch(url: str):
+        nonlocal attempts
+        if attempts >= 3:
+            raise MiningError("BASE shared CORE three-request owner cap")
+        first = bootstrap and attempts == 0
+        attempts += 1
+        return fetch_public_json(
+            url, core_quota=quota, reviewed_first_get=first)
+
+    outcome = mine_once(
+        root, fetch=budgeted_fetch, sources=("python/cpython",),
+        max_new_per_source=1, crosscheck_origin=True, read_workers=1)
+    outcome["owner_pilot_gets_attempted"] = attempts
+    outcome["shared_core_quota_phase"] = quota.inspect()["phase"]
+    return outcome
 from ucie_miner.public_discovery import (
     classify_stage10_discovery_error, STAGE10_FAILURE_PHASES,
 )
 
 
 def main() -> int:
+    pilot = sys.argv[1:] == ["--owner-base-shared-core"]
     stage10 = None
 
     def collect(root):
         nonlocal stage10
+        if pilot:
+            return _collect_owner_base_shared_core(root)
         # The existing two-source miner remains first and authoritative.
         # Both collectors share run_cycle's existing OS-held single-instance lock.
         legacy = mine_once(root, crosscheck_origin=True)
@@ -95,7 +131,9 @@ def main() -> int:
         return legacy
 
     try:
-        result = run_cycle(ROOT, collect=collect, enforce_schedule=True)
+        result = run_cycle(
+            ROOT, collect=collect, enforce_schedule=True,
+            owner_base_core_hourly=pilot)
         if result.get("status") in (
                 "COLLECTED_UNVERIFIED", "COLLECTED_UNVERIFIED_PARTIAL_NO_GO") and stage10 is not None:
             result["stage10"] = stage10
