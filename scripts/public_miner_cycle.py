@@ -82,6 +82,9 @@ from ucie_miner.public_discovery import (
 
 
 def main() -> int:
+    # Keep the legacy AST-embedded main() test/entrypoint self-contained.
+    # Runtime authorization remains in the real module-level Windows guard.
+    import sys
     pilot = sys.argv[1:] in (
         ["--owner-base-shared-core"],
         ["--owner-base-shared-core-bootstrap-once"],
@@ -143,9 +146,14 @@ def main() -> int:
         return legacy
 
     try:
-        result = run_cycle(
-            ROOT, collect=collect, enforce_schedule=True,
-            owner_base_core_hourly=pilot)
+        # Preserve the original call contract when pilot is not enabled.
+        # Existing first-party wrappers may inject the legacy run_cycle API.
+        if pilot:
+            result = run_cycle(
+                ROOT, collect=collect, enforce_schedule=True,
+                owner_base_core_hourly=True)
+        else:
+            result = run_cycle(ROOT, collect=collect, enforce_schedule=True)
         if result.get("status") in (
                 "COLLECTED_UNVERIFIED", "COLLECTED_UNVERIFIED_PARTIAL_NO_GO") and stage10 is not None:
             result["stage10"] = stage10
