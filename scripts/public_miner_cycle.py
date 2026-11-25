@@ -16,7 +16,8 @@ if os.name == "nt":
                  and sys.argv[1:] == ["--owner-relocated-runtime"])
     if __name__ == "__main__" and sys.argv[1:] not in (
             [], ["--owner-relocated-runtime"],
-            ["--owner-base-shared-core"]):
+            ["--owner-base-shared-core"],
+            ["--owner-base-shared-core-bootstrap-once"]):
         print(json.dumps({"status": "FAIL_CLOSED",
                           "reason": "UCIE_UNKNOWN_LAUNCH_ARGUMENTS"}))
         raise SystemExit(2)
@@ -40,7 +41,8 @@ from ucie_miner.worker import run_cycle
 from ucie_miner.core import mine_once
 
 
-def _collect_owner_base_shared_core(root: Path) -> dict:
+def _collect_owner_base_shared_core(
+        root: Path, *, reviewed_bootstrap_once: bool = False) -> dict:
     """The only new live-capable entry, requiring an EXPLICIT owner CLI flag.
 
     Never stage Stage10/P11 on this pilot. BASE's existing parse and
@@ -52,7 +54,9 @@ def _collect_owner_base_shared_core(root: Path) -> dict:
 
     quota = SharedCoreQuota(root)
     before = quota.inspect()
-    bootstrap = before["phase"] == "ABSENT"
+    if reviewed_bootstrap_once and before["phase"] != "ABSENT":
+        raise MiningError("first CORE bootstrap already consumed")
+    bootstrap = reviewed_bootstrap_once and before["phase"] == "ABSENT"
     attempts = 0
 
     def budgeted_fetch(url: str):
@@ -76,13 +80,19 @@ from ucie_miner.public_discovery import (
 
 
 def main() -> int:
-    pilot = sys.argv[1:] == ["--owner-base-shared-core"]
+    pilot = sys.argv[1:] in (
+        ["--owner-base-shared-core"],
+        ["--owner-base-shared-core-bootstrap-once"],
+    )
+    reviewed_bootstrap_once = sys.argv[1:] == [
+        "--owner-base-shared-core-bootstrap-once"]
     stage10 = None
 
     def collect(root):
         nonlocal stage10
         if pilot:
-            return _collect_owner_base_shared_core(root)
+            return _collect_owner_base_shared_core(
+                root, reviewed_bootstrap_once=reviewed_bootstrap_once)
         # The existing two-source miner remains first and authoritative.
         # Both collectors share run_cycle's existing OS-held single-instance lock.
         legacy = mine_once(root, crosscheck_origin=True)
