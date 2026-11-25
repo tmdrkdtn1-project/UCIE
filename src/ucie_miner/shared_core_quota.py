@@ -158,15 +158,41 @@ class SharedCoreQuota:
             raise CoreQuotaHold("CORE_LEDGER_UNAVAILABLE_NO_GET") from exc
 
     def inspect(self) -> dict:
-        if not self._validated_path().is_file():
+        """Read-only status: no BEGIN IMMEDIATE, schema mutation or new DB."""
+        path = self._validated_path()
+        if not path.is_file():
             return {"schema": SCHEMA, "phase": "ABSENT",
                     "remaining_estimate": None, "reason": "NO_LEDGER",
                     "live_get_authorized": False}
-        with self._connect() as (_conn, row):
-            return {"schema": SCHEMA, "phase": row["phase"],
+        try:
+            conn = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True,
+                                   timeout=0.8)
+            try:
+                conn.row_factory = sqlite3.Row
+                cols = [
+                    entry[1] for entry in
+                    conn.execute("PRAGMA table_info(quota)")
+                ]
+                if cols != [
+                    "slot", "schema_id", "phase", "remaining",
+                    "reset_epoch", "observed_epoch", "token",
+                    "request_kind", "reason",
+                ]:
+                    raise CoreQuotaHold("CORE_LEDGER_SCHEMA_DRIFT")
+                row = conn.execute(
+                    "SELECT * FROM quota WHERE slot=1").fetchone()
+                if row is None or row["schema_id"] != SCHEMA:
+                    raise CoreQuotaHold("CORE_LEDGER_IDENTITY_DRIFT")
+                return {
+                    "schema": SCHEMA, "phase": row["phase"],
                     "remaining_estimate": row["remaining"],
                     "reason": row["reason"],
-                    "live_get_authorized": False}
+                    "live_get_authorized": False,
+                }
+            finally:
+                conn.close()
+        except sqlite3.Error as exc:
+            raise CoreQuotaHold("CORE_LEDGER_UNAVAILABLE_NO_GET") from exc
 
     def reserve(self, url: str, *, reviewed_bootstrap: bool = False) -> str:
         if not _approved(url):
