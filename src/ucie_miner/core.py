@@ -112,11 +112,16 @@ def fetch_public_json(
     finally:
         if lease is not None:
             try:
-                core_quota.complete(
+                final_quota = core_quota.complete(
                     lease, status_code=status_for_ledger,
                     headers=headers_for_ledger if status_for_ledger == 200
                     else None,
                 )
+                # A 200 JSON body with invalid/low CORE budget is still
+                # an unsafe admission: never let mine_once commit candidates.
+                if (status_for_ledger == 200
+                        and final_quota.get("phase") != "READY"):
+                    raise MiningError("CORE response quota unsafe; owner review")
             except CoreQuotaHold as exc:
                 # A failure to finalize leaves INFLIGHT, never a free GET.
                 raise MiningError("CORE quota finalize unsafe; owner review") from exc
