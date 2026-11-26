@@ -3,6 +3,21 @@
 
 **이 문서는 검토용 설계안이지 이미 구현된 제품/최종 소유자 승인/실제 배포를 뜻하지 않는다.** 현재 승인된 4대 동등 목표(오류 예방, 엔진·스킬·학습 로직, 가상도서관/SkillBook, UCIE 자체 개선)를 모두 보존한다. 고객 지정 비공개 상용 완전본만을 목표로 하는 기존 출시 정책은 변경하지 않는다.
 
+
+## 2026-11-26 고객 관점 재정의 — 최우선 사용자: 바이브 코딩 첫 이용자
+
+**사용자 의견을 반영해 이전의 개발자·유지보수 전문가 중심 UI 방향을 철회한다.** 최우선 고객은 Python·Git·MCP·SDK·버전을 몰라도 AI를 이용해 무언가 만들어 보려고 시작한 사람이다. 이 고객은 기술의 SHA와 호환성 증명보다 **'무엇을 눌러야 할지', '내가 막힌 곳에서 무엇을 확인해야 할지', '지금 못하는 것은 무엇인지'**를 먼저 알아야 한다. 전문 엔지니어·기술 감사자는 세부 자료를 여는 **2차 사용자**다.
+
+제품 제공 범위는 바꾸지 않는다: 현행 /local/ask는 12~360자 입력과 **네 가지 대표 문제의 제한된 분류**를 수행하며, 자유형 AI 상담/코드 자동 생성·수정이 아니다. /local/ask의 기존 제한적인 동일 출처 POST는 구현되어 있다. 이전 UX 초안의 모든 경로 GET-only 표현을 **정정**한다. 질문 입력과 개인 코드/비밀정보의 공용 축적 금지는 그대로. 첫 사용자 UX는 기존 local_first_use_plain_v01.py의 세 가지 안전한 진입점과 기존 질문/예제/가이드 링크를 우선 재사용한다.
+
+**초보자 기본 경로는 세 열의 전문 기술 검토 작업대가 아니라 1열·3단계:** '어떤 도움이 필요하세요?' → '비슷한 문제를 찾았어요/찾지 못했어요' → '지금 확인해 볼 일'. 출처/시험/라이선스는 '왜 이렇게 안내하나요?'로 접어두되 미검증과 무허가 내용은 상단에서 숨기지 않는다. 코드 자동 수정/자유 AI 대화가 가능하다고 암시하는 문구나 실행 버튼을 만들지 않는다.
+
+사용자에게 보여주는 용어·실제 문장과 상세 화면 구조는 다음 두 문서를 정본으로 한다.
+- docs/UCIE_V2_EVIDENCE_FIRST_UX_SCREEN_CONTRACT_20261126.md — **초보자 전용 1열 UX 계약으로 수정**
+- docs/UCIE_V2_BEGINNER_COPY_DICTIONARY_20261126.md — **UI 모든 핵심 메뉴/버튼/입력/결과/예외/주의문구의 쉬운 말 사전**
+
+기존 소유자 승인 Premium Dark V04, /local과 /local/evolution의 frozen source/route/nav는 **별도 프로토타입 → 실제 초보자 사용성 시험 → 소유자 승인** 전까지 변경하지 않는다. 쉬운 말 시안이 기존 제품 4축 중 하나를 누락시키면 실패다. 이번 PR은 문서만 수정하며 실제 GUI 개선·브라우저 QA·운영 설치 성공을 주장하지 않는다.
+
 ## 0. 검토에 사용한 현재 상태·고정 조건
 
 - 2026-11-25 확인 main f5fbaca6c94f50130941570090c2c555cf92d816: CORE REST 요청 레이트 예산을 실제 HTTP opener에 결속한 소스 병합, Windows/Ubuntu Python 3.13/3.15 CI 4/4 성공. **운영 호스트에 배포 또는 활성화됐다는 주장 아님**.
@@ -86,15 +101,18 @@ Truth claim and release permission are 2 orthogonal axes: independently tested d
 
 단위경제는 (신규 승인 가능한 asset 수, asset 생성 engine 시간, test/권리비, 버전 변경당 재시험 시간, 고객의 실제 재사용·지원 티켓 감소)로 계측한다. 숫자를 임의 GPU 시급으로 가공해 청구비로 보여주지 않는다.
 
-## 5. 고객 UX 목표와 V04 보존
+## 5. 고객 UX 목표와 V04 보존 — 초보자 우선으로 교체
 
-자세한 화면·접근성·사용자 여정·평가 조건: 같은 PR의 **docs/UCIE_V2_EVIDENCE_FIRST_UX_SCREEN_CONTRACT_20261126.md** 참조.
+**P0 고객은 비기술자/바이브 코딩 첫 사용자, P1 고객은 고급 기술 검토자**다. 기존 '검증 증거 3열 작업대'는 P0 기본 화면으로 **사용하지 않는다**. 기존 V04 홈과 개선 제안 페이지의 시각/기능은 동결 유지하고, 동일하게 승인된 Premium Dark 블랙·그라파이트/실버·라일락 스타일에서 **별도의 초보자 시작/문제 안내 opt-in 시안**을 비교한다.
 
-**기존 디자인 freeze**: Premium Dark V04, 블랙 그라파이트(#08090c 배경, #14161b 카드), 절제된 실버/라일락, 시스템 한국어 폰트, 둥근 satin 카드. 기존 홈(/local) 및 개선 제안(/local/evolution)의 소유자 동결 시각·내용, label 홈/문제 예방/개발 도구/라이브러리/개선 제안/이용 안내 그대로 보존. V03 따뜻한 종이 레이아웃이나 다른 신규 스타일/외부 컴포넌트를 섞지 않는다. **이 PR에서는 UCIE UI를 수정하지 않음**.
+- 사용자 첫 질문: '**지금 어떤 도움이 필요하세요?**' + '코드가 잘 안 돼요', '간단한 예제를 보고 싶어요', '차근차근 배우고 싶어요'. 현재 3개 시작 경로를 재사용.
+- 초기 설명: 실제 할 수 있는 것(현재 4종의 제한된 문제 분류, 미리 준비된 UCIE 예제, 공개 기술 설명)과 할 수 없는 것(자유형 AI 상담·앱 자동 제작·고객 코드 자동 수정)을 분리해 짧고 솔직하게 밝힌다.
+- 상황을 묻는 1열 UX: 대표 사례 선택 우선, 필요 시 12~360자 일반 증상 입력. **코드·로그·파일 경로·비밀정보 입력 금지**, 현재 POST는 동일 Host/Origin의 /local/ask에서만. 사용자가 프로그램 버전을 모르면 모른다고 답할 수 있지만 해당 환경 '적용 가능'을 주장하지 않는다.
+- 결과는 '비슷한 사례를 찾았어요' → '**실제 원인인지 아직 몰라요**' → '지금 확인해 볼 일' 순서. 고급 상세만 원본 SHA/버전/독립 QA/권리와 SkillBook machine contract 노출.
+- 모든 메뉴·버튼·설명에 **docs/UCIE_V2_BEGINNER_COPY_DICTIONARY_20261126.md**의 쉬운 말 사전을 적용하는 설계. 기술 이름·원본 정보는 삭제하지 않고 선택적 상세에 보존. 기술 상태·권리 상태 두 축은 섞지 않는다.
+- 실제 사용성 판정은 코딩 경험이 없는 5~8명(초기 시험 계획)과 보조 전문가 2~3명으로 현행 V04 대조 UX와 비교: 첫 행동 이해, 정상/미지원 상황 대응, 데이터 보안/자동 수정 오해 없음, 320–1440 너비, 200% 확대, 키보드 접근. 시안이나 CSS 자체 검토만으로 UX PASS 금지.
 
-차별화 UX: 4개 별개의 복잡한 메뉴가 아닌 하나의 '문제 해결 동선'으로 연결: 문제 입력 → 기술/버전 선택 → 결과 요약(사실/불확실성) → 실제 검증 범위 → SkillBook/안전한 레시피 → 공식 출처와 반례 → 변경 감시/재검증 필요. 각 단계의 권한과 미승인은 눈에 보이는 글자로 표현.
-
-설계 미리보기는 owner V04 기존 UI를 바꾸지 않는 별도 격리 연구용 페이지/정적 mock으로 먼저 검증한다. UX 성공 판정은 실제 Windows Edge 1440/1024/768/390/320, 200% zoom, keyboard only, 4 routes, detail nested pages, error/empty/stale/unknown, actual contrast/tester receipts에서만.
+시각 스타일/소유자 V04 frozen guard 그대로. 실제 코드/라우트 적용은 별도 owner scope/CI/브라우저 회귀 후에만 한다. UX의 목적은 '기술을 다 안다는 인상'이 아니라 **초보자가 안전하고 알기 쉬운 다음 단계를 찾는 경험**이다.
 
 ## 6. 현 단계에선 하지 않을 것
 
@@ -112,7 +130,7 @@ Truth claim and release permission are 2 orthogonal axes: independently tested d
 | --- | --- | --- | --- |
 | P0 소스/운영 기준 | 기존 owner-original vs clean staged source 기능별 통합, P10/P11/Local V04 회귀 및 source QA | 원본/개발본 증거 분리, 4축 기존 owner-accepted 동작 보존, 운영 권한 위반 0 | 제품 안정성 전제 |
 | P1 핵심 기술 실증 | MCP SDK prompts/get 또는 Python scandir의 정확한 official version 전후 positive+negative 시험 및 claim graph | 원본 pinned, 실제 설치 버전, UCIE authored recipe, independent QA 부족하면 HOLD | 구체적 차별화 증거 첫 사례 |
-| P2 UX 샌드박스 | 선택된 기존 4축 동선을 single workflow로 연결한 **별도 미적용 prototype**, 검색/비교/신뢰상태 UX | V04 시각/route/GET/CSP 원본 불변, 실브라우저 접근성 및 사용자 작업 평가 | 고객 사용성 실증 |
+| P2 초보자 UX 샌드박스 | 기존 3개 첫 방문 선택지와 네 가지 대표 문제를 1열·3단계로 연결한 **별도 미적용 prototype**, 쉬운 말 사전·단계별 진실상태 | V04 시각/원래 route 및 /local/ask 기존 제한 POST·Host/CSP 불변, 초보자 실브라우저/사용성 시험 | 고객 사용성 실증 |
 | P3 증분 지식 개정 | upstream change별 affected asset만 재검증, failure/retract/stale 기록 | 연결 없는 자산 대량 재처리 금지, 이전 vs 이후 재검증 비용/품질 입증 | 유지형 서비스 경쟁력 실증 |
 | P4 C0–C4 고객 검증 | 지정 고객용 서명/비공개 라이선스/정식 패키지, 설치·업데이트·롤백·보안·권리 | clean recipient에서 4축 실제 업무, 개별 승인/권리 확인 | 상용 출시 준비 |
 | P5 C5 | 소유자 승인 지정 고객 1곳 유료 파일럿 | 계약·고객 설치·독립 검증·롤백·실사용 기록 | 유료 수요 입증 후 확대 |
@@ -148,7 +166,7 @@ STATUS=FINAL_PROPOSAL_OWNER_REVIEW_REQUIRED
 OWNER_EXISTING_FIXED_RULES=UNCHANGED
 DEVELOPMENT_OWNER=UCIE통합개발방
 BUSINESS_OWNER=UCIE사업방
-NEXT_ACTION=기존 4축 흐름 중 MCP 003 하나로 오류 예방→스킬 실행 계약→SkillBook→버전 비교/변경 후 재시험·HOLD 상태를 독립 증거로 완주하는 동선 실증; 기존 V04와 분리된 UX 모형 검토
+NEXT_ACTION=기존 초보자 시작 3개 및 4종 질문 UI를 먼저 인수하고 실제 가능한 능력만 보여주는 1열·3단계 시안 비교; MCP 003은 선택적 기술 상세에서 4축 검증·개정 근거를 보여주는 전문 사용자 실증으로 분리
 ACCEPTANCE=code/CI/owner host/independent QA/rights/customer distribution separate receipts
 NO_GO=existing LocalV04 shell/owner original dirty changes/worker schedule/collector DB/C40/customer private code/other projects modifications
 SLACK_RECORD=게시 후 실제 링크만 추가 기록; 이 문서의 존재가 자동 Slack 게시를 의미하지 않음.
