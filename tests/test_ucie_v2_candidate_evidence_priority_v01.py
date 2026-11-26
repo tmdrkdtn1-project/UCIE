@@ -85,7 +85,9 @@ class CandidateEvidencePriorityTests(TestCase):
     def test_imbalanced_controls_hold(self):
         rows = [fixture(f"a{n}", "RISK", "RISK", "RISK") for n in range(8)]
         r = self.evaluate({self.ids[0]: rows})
-        self.assertEqual(r["ranked_candidates"][0]["verdict"],
+        inspected = next(x for x in r["ranked_candidates"]
+                         if x["candidate_id"] == self.ids[0])
+        self.assertEqual(inspected["verdict"],
                          "HOLD_INADEQUATE_SYNTHETIC_CONTROLS")
 
     def test_cross_candidate_case_reuse_denied(self):
