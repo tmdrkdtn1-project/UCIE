@@ -2,8 +2,14 @@ name: Stage 1 and 3 Offline Checks
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, ready_for_review]
   push:
     branches: [main]
+
+# Old PR HEAD attempts only; never cancel protected main validation.
+concurrency:
+  group: ucie-offline-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -11,10 +17,22 @@ permissions:
 
 jobs:
   offline:
+    # Normal Draft PR events allocate ZERO basic CI runners. Exact labeled
+    # checkpoint, Ready and non-Draft source revisions preserve all 4 OS/Py jobs.
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       (
+        (github.event.action == 'labeled' && github.event.label.name == 'ucie-full-ci') ||
+        (github.event.action == 'ready_for_review' && !github.event.pull_request.draft) ||
+        (!github.event.pull_request.draft &&
+         contains(fromJSON('["opened","reopened","synchronize"]'), github.event.action))
+       ))
     name: Offline test / ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      # All allocated jobs are the original final 4-platform suite.
       matrix:
         os: [ubuntu-latest, windows-latest]
         python-version: ['3.13', '3.15']
