@@ -273,6 +273,15 @@ class RealFirstUseJoinTests(unittest.TestCase):
             html,
         )
 
+    def test_first_user_primary_action_is_visible_with_technical_details_optional(self):
+        html = b2.render_preview()
+        self.assertIn('<details id="direct-start-actions"', html)
+        self.assertIn('data-synthetic-details="mcp-prompts"', html)
+        self.assertIn('안전한 확인 순서 보기', html)
+        self.assertIn('예제·공개 근거 자세히 보기', html)
+        self.assertIn('||flow==="solve"', html)
+        self.assertIn('UCIE-CAPSULE-MCP-PROMPTS-GET-20261126-01', html)
+
     def test_three_first_options_are_native_get_links_under_script_csp(self):
         html = b2.render_preview()
         self.assertIn('class="start-choice" data-flow="solve" href="/local/ask"', html)
