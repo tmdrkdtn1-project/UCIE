@@ -16,6 +16,8 @@ class Routing(unittest.TestCase):
         self.assertEqual(len(classify(["src/ucie_miner/new.py"], "PR_ITERATION")["matrix"]), 4)
     def test_new_unknown_is_full(self):
         self.assertTrue(classify(["new/unknown.xyz"], "PR_ITERATION")["unknown"])
+    def test_scripts_change_is_full(self):
+        self.assertEqual(len(classify(["scripts/new_development_task.py"], "PR_ITERATION")["matrix"]), 4)
     def test_workflow_is_full(self):
         self.assertEqual(len(classify([".github/workflows/ucie.yml"], "PR_ITERATION")["matrix"]), 4)
     def test_specialized_native_required(self):
