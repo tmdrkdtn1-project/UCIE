@@ -22,8 +22,8 @@ TEMPLATE = r'''<!doctype html><html lang="ko"><head>
 main{max-width:690px;margin:0 auto;padding:28px 18px 80px}
 h1{font-size:clamp(1.55rem,4vw,2.2rem);line-height:1.3}
 h2{font-size:1.4rem}.subtle{color:#b4c4d9}header{display:flex;justify-content:space-between;gap:15px}
-button{font:inherit;background:#203450;color:#f4f8ff;border:1px solid #6481a5;border-radius:14px;display:block;width:100%;text-align:left;min-height:48px;padding:13px 16px;margin:12px 0;cursor:pointer}
-button:hover{background:#2b4771}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #bedfff;outline-offset:3px}
+button,.start-choice{font:inherit;background:#203450;color:#f4f8ff;border:1px solid #6481a5;border-radius:14px;display:block;width:100%;text-align:left;min-height:48px;padding:13px 16px;margin:12px 0;cursor:pointer;text-decoration:none}
+button:hover,.start-choice:hover{background:#2b4771}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #bedfff;outline-offset:3px}
 a.review-action{display:block;background:#203450;border:1px solid #6481a5;border-radius:12px;padding:12px 14px;margin:10px 0}a.review-action[aria-disabled]{opacity:.6;pointer-events:none}.note{padding:14px;border:1px solid #647c9b;background:#1b2f4b;border-radius:12px}
 .stage[hidden],[hidden]{display:none!important}a{color:#b4d7ff;overflow-wrap:anywhere}
 details{border:1px solid #506481;border-radius:12px;padding:14px;margin-top:20px}
@@ -94,7 +94,10 @@ function finish(issue){
  document.querySelectorAll("[data-route-case]").forEach(x=>x.hidden=!allowed||flow!=="solve"||x.dataset.routeCase!==issue);
  show(3);
 }
-document.querySelectorAll("[data-flow]").forEach(b=>b.addEventListener("click",()=>pick(b.dataset.flow)));
+document.querySelectorAll("[data-flow]").forEach(b=>b.addEventListener("click",event=>{
+ event.preventDefault(); // JS wizard when permitted; native GET fallback under strict V04 CSP.
+ pick(b.dataset.flow);
+}));
 document.querySelectorAll("[data-issue]").forEach(b=>b.addEventListener("click",()=>finish(b.dataset.issue)));
 document.getElementById("continue").addEventListener("click",()=>finish(""));
 document.getElementById("back1").addEventListener("click",()=>show(1));
@@ -103,7 +106,7 @@ document.getElementById("restart").addEventListener("click",()=>show(1));
 // Static file previews must not navigate to an invented file:///local path.
 // Real local links work only when the reviewed existing owner app hosts them.
 if(window.location.protocol!=="http:"||window.location.hostname!=="127.0.0.1"){
- document.querySelectorAll("#existing-actions a[href],#direct-start-actions a[href]").forEach(x=>{
+ document.querySelectorAll("#existing-actions a[href],#direct-start-actions a[href],[data-flow][href]").forEach(x=>{
   x.removeAttribute("href");x.setAttribute("aria-disabled","true");
   x.setAttribute("title","기존 UCIE 로컬 서버에서만 열 수 있어요");
  });
@@ -112,12 +115,13 @@ show(1);
 });
 </script></head>
 <body><main><header><strong>UCIE</strong><small class="subtle">격리 개발 시안 · 운영 V04 아님</small></header>
-<p id="progress" class="stepper">1 / 3 단계</p>
+<p id="progress" class="stepper" aria-live="polite">1 / 3 단계</p>
 <section class="stage" id="stage1"><h1 tabindex="-1">지금 어떤 도움이 필요하세요?</h1>
 <p class="subtle">할 수 있는 일을 선택하세요. 새 앱 자동 제작이나 고객 코드 수리는 아직 하지 않아요.</p>
-<button type="button" data-flow="solve">코드가 잘 안 돼요</button>
-<button type="button" data-flow="try">간단한 예제를 보고 싶어요</button>
-<button type="button" data-flow="learn">차근차근 배우고 싶어요</button></section>
+<a class="start-choice" data-flow="solve" href="/local/ask">코드가 잘 안 돼요</a>
+<a class="start-choice" data-flow="try" href="/local/engine?purpose=SKILL_TEST_AUTOMATION">간단한 예제를 보고 싶어요</a>
+<a class="start-choice" data-flow="learn" href="/local/library?q=Git">차근차근 배우고 싶어요</a>
+<p class="subtle">이 화면에서 선택하면 3단계 안내가 시작됩니다. 스크립트가 차단된 로컬 서버에서는 기존 UCIE 기능으로 직접 이동합니다.</p></section>
 <section class="stage" id="stage2" hidden>
 <button id="back1" type="button" class="back">← 이전</button><h2 tabindex="-1">어떤 일이 있었나요?</h2>
 <p>다음 중 하나를 고르세요. 코드·로그·경로·비밀번호를 입력하지 않습니다.</p>
@@ -129,7 +133,7 @@ show(1);
 <button type="button" data-issue="unmatched">해당되는 문제가 없어요</button>
 </div><button type="button" id="continue" hidden>다음 확인 방법 보기</button></section>
 <section class="stage" id="stage3" hidden><button id="back2" type="button" class="back">← 이전</button>
-<h2 tabindex="-1">지금 확인해 볼 일</h2><h3 id="result-title"></h3><p id="result-body"></p>
+<h2 tabindex="-1">지금 확인해 볼 일</h2><h3 id="result-title" role="status" aria-live="polite"></h3><p id="result-body"></p>
 <p class="note">실제 PC와 코드는 검사하지 않았어요. 다른 버전의 사용 가능성은 확인하지 못했고, 고객 제공·배포 권리는 승인되지 않았어요.</p>
 <p class="subtle">이 화면은 격리 소스 시안입니다. 아래 링크는 기존 UCIE 로컬 서버에서 제공할 때만 실제 기능을 엽니다. 이 파일이 운영 서비스에 설치된 것은 아닙니다.</p>
 <details id="proof" hidden><summary>왜 이렇게 안내하나요?</summary>
