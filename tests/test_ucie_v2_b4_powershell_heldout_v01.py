@@ -199,6 +199,43 @@ class B4HeldoutPowerShellTests(TestCase):
             with self.assertRaises(held.HeldoutPowerShellError):
                 held.build_heldout_hypothesis()
 
+    def test_parent_triple_identity_rejects_forged_sha_and_skillbook(self):
+        from ucie_miner import ucie_v2_generalization_transfer_v01 as b4
+        original = b4.build_hypothesis()
+        for index in (0, 1):
+            for field in ("source_id", "skillbook_id", "document_sha256"):
+                with self.subTest(index=index, field=field):
+                    forged = deepcopy(original)
+                    forged["parents"][index][field] = "UNAPPROVED_SOURCE_DRIFT"
+                    with mock.patch.object(
+                        b4, "build_hypothesis", return_value=forged
+                    ):
+                        with self.assertRaises(held.HeldoutPowerShellError):
+                            held.build_heldout_hypothesis()
+
+    def test_duplicate_parent_cannot_satisfy_two_source_contract(self):
+        from ucie_miner import ucie_v2_generalization_transfer_v01 as b4
+        forged = deepcopy(b4.build_hypothesis())
+        forged["parents"][1] = deepcopy(forged["parents"][0])
+        with mock.patch.object(b4, "build_hypothesis", return_value=forged):
+            with self.assertRaises(held.HeldoutPowerShellError):
+                held.build_heldout_hypothesis()
+
+    def test_forged_parent_trial_sha_and_identity_rejected(self):
+        from ucie_miner import ucie_v2_generalization_transfer_v01 as b4
+        actual = b4.run_bounded_transfer
+        for field in ("hypothesis_id", "content_sha256"):
+            def forged(hypothesis):
+                result = actual(hypothesis)
+                result[field] = "0" * 64
+                return result
+            with self.subTest(field=field):
+                with mock.patch.object(
+                    b4, "run_bounded_transfer", side_effect=forged
+                ):
+                    with self.assertRaises(held.HeldoutPowerShellError):
+                        held.build_heldout_hypothesis()
+
     def test_no_outside_source_via_injected_parent_skillbook(self):
         from ucie_miner import ucie_v2_generalization_transfer_v01 as b4
         original = b4.build_hypothesis()
