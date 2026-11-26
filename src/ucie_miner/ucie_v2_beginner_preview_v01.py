@@ -30,9 +30,9 @@ summary{cursor:pointer;font-weight:700}.stepper{border-bottom:1px solid #3a4e66;
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
 <script type="application/json" id="ucie-b1-evidence">__UCIE_PINNED_B1__</script>
-<script defer>
+<script>
 "use strict";
-(()=>{
+document.addEventListener("DOMContentLoaded",()=>{
 const p=JSON.parse(document.getElementById("ucie-b1-evidence").textContent);
 const safe=()=>p&&p.schema==="UCIE_VERIFIED_TECH_CAPSULE_V01_REVIEW_ONLY"&&p.case_id==="mcp-prompts"&&
 p.capsule_id==="UCIE-CAPSULE-MCP-PROMPTS-GET-20261126-01"&&p.decision==="HOLD"&&
@@ -95,7 +95,7 @@ document.getElementById("back1").addEventListener("click",()=>show(1));
 document.getElementById("back2").addEventListener("click",()=>show(2));
 document.getElementById("restart").addEventListener("click",()=>show(1));
 show(1);
-})();
+});
 </script></head>
 <body><main><header><strong>UCIE</strong><small class="subtle">격리 개발 시안 · 운영 V04 아님</small></header>
 <p id="progress" class="stepper">1 / 3 단계</p>
