@@ -237,6 +237,122 @@ def render_evidence_details(case_id: str) -> str:
     )
 
 
+def build_fixed_revision_impact_study() -> dict:
+    """Real existing B3 dependency algorithm on three UCIE-authored cases.
+
+    Candidate digests are deliberately FAKE hypotheticals, not observed
+    upstream updates. Only bounded test *proposals*; no test scheduling.
+    """
+    from .ucie_v2_revision_impact_v01 import (
+        PINS, ASSETS, assess_revision_impacts, SCHEMA as B3_SCHEMA,
+        MCP_ASSET, MCP_SKILLBOOK, GIT_BOOK, PRINCIPLE,
+    )
+    cases = (
+        ("mcp-change-hypothesis", "repo:modelcontextprotocol/python-sdk", True),
+        ("git-change-hypothesis", "doc:git/git", True),
+        ("git-original-unchanged", "doc:git/git", False),
+    )
+    records = []
+    for scenario, sid, changed in cases:
+        pinned = PINS[sid]
+        hypothetical = ("a" if pinned[0] != "a" else "b") * len(pinned)
+        report = assess_revision_impacts(({
+            "source_id": sid, "previous_pin": pinned,
+            "candidate_pin": hypothetical if changed else pinned,
+        },))
+        if (report.get("schema") != B3_SCHEMA
+                or report.get("candidate_pin_independently_authenticated") is not False
+                or report.get("tests_executed") is not False
+                or report.get("independent_qa_verified") is not False
+                or report.get("automatic_scheduling") is not False
+                or report.get("customer_release_authorized") is not False
+                or report.get("network_requests") != 0
+                or report.get("operating_database_writes") != 0
+                or report.get("graph_scope") != "FIRST_FIVE_PINNED_ASSETS_ONLY"):
+            raise PreviewError("revision proposal cannot claim real upstream change")
+        impacted = report["affected_assets"]
+        expected = ([MCP_ASSET, MCP_SKILLBOOK] if scenario ==
+                    "mcp-change-hypothesis" else [GIT_BOOK, PRINCIPLE]
+                    if scenario == "git-change-hypothesis" else [])
+        tests = sorted({test for asset in expected for test in ASSETS[asset]["tests"]})
+        if (impacted != sorted(expected)
+                or report["proposed_test_files"] != tests
+                or not set(impacted).issubset(ASSETS)):
+            raise PreviewError("affected-only algorithm drift")
+        records.append({
+            "scenario": scenario,
+            "approved_source_id": sid,
+            "pinned_original_sha256": pinned,
+            "candidate_is_hypothetical_only": changed,
+            "changed_in_hypothesis": changed,
+            "affected_asset_ids": impacted,
+            "unaffected_asset_ids": report["unaffected_assets"],
+            "proposed_test_names_not_executed": tests,
+            "candidate_pin_independently_authenticated": False,
+            "actual_retest_executed": False,
+            "automatic_scheduling": False,
+        })
+    return {
+        "schema": "UCIE_V2_LOCAL_B3_FIXED_IMPACT_STUDY_V01",
+        "records": records,
+        "actual_public_changes_observed": False,
+        "source_network_requests": 0,
+        "operating_database_writes": 0,
+        "customer_release_authorized": False,
+    }
+
+
+def render_fixed_revision_impact_panel() -> str:
+    """Explain B3 affected-only review using validated first-party algorithm."""
+    study = build_fixed_revision_impact_study()
+    if (study["actual_public_changes_observed"] is not False
+            or study["source_network_requests"] != 0
+            or study["customer_release_authorized"] is not False
+            or study["operating_database_writes"] != 0
+            or len(study["records"]) != 3):
+        raise PreviewError("unreviewed source impact study")
+    title = {
+        "mcp-change-hypothesis": "MCP SDK 변경을 가정했을 때",
+        "git-change-hypothesis": "Git 문서 변경을 가정했을 때",
+        "git-original-unchanged": "Git 문서가 그대로일 때",
+    }
+    e = lambda s: escape(str(s), quote=True)
+    panels = []
+    for r in study["records"]:
+        if (r["scenario"] not in title
+                or r["candidate_pin_independently_authenticated"] is not False
+                or r["actual_retest_executed"] is not False
+                or r["automatic_scheduling"] is not False):
+            raise PreviewError("B3 proposal reviewed as executed")
+        def li(seq):
+            return "<ul>" + "".join("<li><code>" + e(x) +
+                                     "</code></li>" for x in seq) + "</ul>"
+        panels.append(
+            '<article class="impact-case">'
+            '<h3>' + title[r["scenario"]] + '</h3>'
+            '<p>기존 출처: <code>' + e(r["approved_source_id"]) + '</code></p>'
+            '<p>영향받는 기술 자산: ' + str(len(r["affected_asset_ids"])) + '개</p>'
+            + li(r["affected_asset_ids"]) +
+            '<p>재시험을 제안한 파일: ' +
+            str(len(r["proposed_test_names_not_executed"])) + '개</p>'
+            + li(r["proposed_test_names_not_executed"]) +
+            '<p>실제 공식 변경을 확인한 결과가 아니며 재시험을 실행하지 않았습니다.</p>'
+            '</article>'
+        )
+    return (
+        '<section class="impact-review" id="source-revision-study" '
+        'aria-labelledby="revision-title">'
+        '<h2 id="revision-title">공식 자료가 바뀌면 무엇을 다시 확인할까요?</h2>'
+        '<p><strong>가정 실험:</strong> UCIE가 승인된 두 기술 출처의 변경을 '
+        '가정하여 기존 의존성 그래프로 영향받는 자료와 시험을 추려 봅니다. '
+        '원본이 실제 바뀌었는지는 조회하지 않았습니다.</p>'
+        + "".join(panels) +
+        '<p>범위: UCIE에 연결된 5개 고정 자산만 해당 · '
+        '자동 시험/일정 등록 없음 · 고객 배포 미승인</p>'
+        '</section>'
+    )
+
+
 def render_all_cases_page() -> str:
     """One offline accessible page that compares all four fixed cases.
 
@@ -281,7 +397,8 @@ def render_all_cases_page() -> str:
         '<p>네 가지 고정된 사례입니다. 실제 PC 자동 진단이나'
         ' 자동 수정 기능이 아닙니다.</p>'
         '<nav aria-label="대표 문제 선택"><ul>' + navigation +
-        '</ul></nav></header><main>' + ''.join(panels) + '</main>'
+        '</ul></nav></header><main>' + ''.join(panels) +
+        render_fixed_revision_impact_panel() + '</main>'
         '<footer>검토용 실행 화면 · 독립 검증과 권리 검토 전 배포 금지 ·'
         ' 기존 V04 서비스 미변경</footer></body></html>'
     )
