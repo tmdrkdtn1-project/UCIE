@@ -169,4 +169,4 @@ BUSINESS_OWNER=UCIE사업방
 NEXT_ACTION=기존 초보자 시작 3개 및 4종 질문 UI를 먼저 인수하고 실제 가능한 능력만 보여주는 1열·3단계 시안 비교; MCP 003은 선택적 기술 상세에서 4축 검증·개정 근거를 보여주는 전문 사용자 실증으로 분리
 ACCEPTANCE=code/CI/owner host/independent QA/rights/customer distribution separate receipts
 NO_GO=existing LocalV04 shell/owner original dirty changes/worker schedule/collector DB/C40/customer private code/other projects modifications
-SLACK_RECORD=게시 후 실제 링크만 추가 기록; 이 문서의 존재가 자동 Slack 게시를 의미하지 않음.
+SLACK_RECORD=UCIE 설계 기록 https://kangsoolnc.slack.com/archives/C0CA4AW06BH/p1795655585269739 ; 초보자 기준 중요 수정 https://kangsoolnc.slack.com/archives/C0CA4AW06BH/p1795655912447919?thread_ts=1795655585.269739&cid=C0CA4AW06BH ; 작성시각 2026-11-26 10:18:32 KST ; 상태=SLACK_POST_CONFIRMED__HANDOFF_RECEIVER_ACK_NOT_OBSERVED. 새 작업방이 실제 인계 확인한 것은 아님.
