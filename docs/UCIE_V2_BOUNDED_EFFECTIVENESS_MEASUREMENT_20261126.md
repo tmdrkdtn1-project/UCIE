@@ -1,0 +1,11 @@
+# UCIE V2 synthetic prevention metrics and evidence-gated priority study
+
+PROJECT=UCIE; parent: PR #371 exact head 77d268bd53491791f05619a26fa06990bf5d6a89. Source-only review candidate.
+
+New `ucie_v2_effectiveness_evaluation_v01.py` evaluates bounded first-party paired rows with identical case IDs and exact fixture digest; no customer or upstream execution. Computes confusion matrix TP/FP/FN/TN for baseline and challenger, detection rate TP/(TP+FN), false-positive rate FP/(FP+TN), false-negative rate FN/(TP+FN), accuracy, paired improvement count, paired regression count, and denominator-backed paired regression/improvement rates. If a denominator is zero, value is NULL and the status is HOLD, never synthetic success. Regression is defined as baseline correct and challenger wrong for the SAME source-pinned case. No synthetic observation is declared human improvement.
+
+The queue is sourced from the existing Virtual Library feedback registry; source-change HOLD and independent QA remain separate gates. This first step measures deterministic synthetic changes and returns the existing prioritized review queue. It does NOT automatically alter production engine ranking or train. Source_sha256 is a caller-supplied pinned fixture hash (not authenticated by this function). It cannot prove original source authenticity, rights, production adoption or causal significance.
+
+13 focused first-party negative/metric tests protect exact counts, paired controls, denominator zero, duplicate IDs, source-pin mismatch, forbidden private fields, wrong history reuse and non-mutation. No new external libraries, network, Windows tasks, SQLite, UI routes or signed packs.
+
+Important parent PR #371 had 4/4 CI FAIL due to a global fixed module census guard `MAX_SOURCE_FILES=250` inside C1 `customer_runtime_closure_v01.py`. The new module itself had 13/13 passed in the Ubuntu 3.13 log, but C1 full source packaging test failed due to number of modules. Independently investigate a bounded increase with explicit C1 test and stage-byte checks; no fail-open removal of caps. Earlier PR #370 had one unrelated public miner W11 subprocess timeout test failure on Ubuntu Py3.15. Both failures remain visible and no merge is allowed until exact-head full CI succeeds.
