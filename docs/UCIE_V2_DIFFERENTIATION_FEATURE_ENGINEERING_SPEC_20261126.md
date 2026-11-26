@@ -35,7 +35,7 @@ DESIGN_PR=https://github.com/tmdrkdtn1-project/UCIE/pull/351
 - capsule_id, case_id, domain, plain_korean_title, problem_intent
 - provenance: approved_source_id, immutable_official_url, exact_release_or_commit, upstream_content_digest_if_verified, observation_at, source_kind (OFFICIAL_FACT/UCIE_INTERPRETATION)
 - applicability: supported_os, exact_python_or_sdk_version, preconditions, explicitly_excluded_versions, unknown_version_hold
-- uc ie-owned tests: recipe_id, tested_environment_id, first_party_test_sha256, positive/negative/control per-case receipts, actual_test_at, separately independent_qa_receipt if any
+- ucie_owned_tests: recipe_id, tested_environment_id, first_party_test_sha256, positive/negative/control per-case receipts, actual_test_at, separately independent_qa_receipt if any
 - human_help: simple_summary, safe_next_step, not_checked_plain_korean, skillbook_id, authored_recipe_id
 - rights: license_review_status, customer_export_permission, owner_approval, revoked_or_stale_reason
 - lineage: used_source_revision_ids, linked_skillbook_revision, dependency_ids, affected_by_changed_source; all values bounded, type-checked and provenance-linked.
