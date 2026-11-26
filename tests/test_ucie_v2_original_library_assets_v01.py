@@ -99,9 +99,9 @@ class OriginalLibraryAssetTests(TestCase):
         accepted_synthetic = a.run_bounded_transfer(actual)
         forged = deepcopy(actual)
         forged["license_redistribution_approved"] = True
-        with mock.patch.object(a, "build_hypothesis", return_value=forged), \\
-             mock.patch.object(a, "run_bounded_transfer",
-                               return_value=accepted_synthetic):
+        with (mock.patch.object(a, "build_hypothesis", return_value=forged),
+              mock.patch.object(a, "run_bounded_transfer",
+                                return_value=accepted_synthetic)):
             with self.assertRaises(a.LibraryAssetError):
                 a.assemble_original_library_assets(self.complete, ())
 
