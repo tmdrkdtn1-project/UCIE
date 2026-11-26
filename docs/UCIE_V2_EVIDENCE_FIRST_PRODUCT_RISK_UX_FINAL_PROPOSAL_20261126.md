@@ -1,7 +1,7 @@
 # UCIE V2 — Evidence-to-Action 통합 제품·리스크·UI/UX 최종 개선 설계 제안
-2026-11-26 KST | PROJECT=UCIE ONLY | STATUS=FINAL_PROPOSAL_OWNER_REVIEW_REQUIRED
+2026-11-26 KST | PROJECT=UCIE ONLY | STATUS=OWNER_DESIGN_BASELINE_LOCKED__IMPLEMENTATION_NOT_ACCEPTED__NOT_DEPLOYED
 
-**이 문서는 검토용 설계안이지 이미 구현된 제품/최종 소유자 승인/실제 배포를 뜻하지 않는다.** 현재 승인된 4대 동등 목표(오류 예방, 엔진·스킬·학습 로직, 가상도서관/SkillBook, UCIE 자체 개선)를 모두 보존한다. 고객 지정 비공개 상용 완전본만을 목표로 하는 기존 출시 정책은 변경하지 않는다.
+**소유자가 2026-11-26 이 대화에서 제품·UI/UX 설계안을 최종 설계 기준으로 확정했다. 이는 설계 기준 승인이지 구현·브라우저 인수·운영 변경·상용 배포 승인이 아니다.** 현재 승인된 4대 동등 목표(오류 예방, 엔진·스킬·학습 로직, 가상도서관/SkillBook, UCIE 자체 개선)를 모두 보존한다. 고객 지정 비공개 상용 완전본만을 목표로 하는 기존 출시 정책은 변경하지 않는다.
 
 
 ## 2026-11-26 고객 관점 재정의 — 최우선 사용자: 바이브 코딩 첫 이용자
@@ -162,8 +162,10 @@ P0/P1은 현재 승인된 UCIE-only 개발 범위만. P2의 UI 적용, P3의 새
 
 ## 9. 의사결정 및 인계
 
-STATUS=FINAL_PROPOSAL_OWNER_REVIEW_REQUIRED
+STATUS=OWNER_DESIGN_BASELINE_LOCKED__IMPLEMENTATION_NOT_ACCEPTED__NOT_DEPLOYED
 OWNER_EXISTING_FIXED_RULES=UNCHANGED
+DESIGN_LOCKED_REFERENCE=docs/UCIE_V2_OWNER_FINAL_DESIGN_DEV_HANDOFF_20261126.md
+DESIGN_APPROVAL_SCOPE=PRODUCT_ARCHITECTURE_AND_NOVICE_FIRST_UX_ONLY__NO_LIVE_MUTATION
 DEVELOPMENT_OWNER=UCIE통합개발방
 BUSINESS_OWNER=UCIE사업방
 NEXT_ACTION=기존 초보자 시작 3개 및 4종 질문 UI를 먼저 인수하고 실제 가능한 능력만 보여주는 1열·3단계 시안 비교; MCP 003은 선택적 기술 상세에서 4축 검증·개정 근거를 보여주는 전문 사용자 실증으로 분리
