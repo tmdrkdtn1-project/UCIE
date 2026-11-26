@@ -28,6 +28,12 @@ jobs:
         include: ${{ fromJSON((github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ucie-full-ci')) && '[{"os":"ubuntu-latest","python-version":"3.13"},{"os":"ubuntu-latest","python-version":"3.15"},{"os":"windows-latest","python-version":"3.13"},{"os":"windows-latest","python-version":"3.15"}]' || '[{"os":"ubuntu-latest","python-version":"3.15"}]') }}
     timeout-minutes: 15
     steps:
+      - name: HOLD final review unless the four-platform label is present
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false && !contains(github.event.pull_request.labels.*.name, 'ucie-full-ci') }}
+        shell: bash
+        run: |
+          echo 'HOLD: non-draft PR needs ucie-full-ci with four-platform tests on current HEAD'
+          exit 1
       - uses: actions/checkout@v7
         with:
           # W10 historical source SHA/commit ancestry checks require the immutable
