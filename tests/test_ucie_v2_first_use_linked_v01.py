@@ -269,10 +269,28 @@ class RealFirstUseJoinTests(unittest.TestCase):
         self.assertIn('href="/local/engine?purpose=SKILL_TEST_AUTOMATION"', html)
         self.assertIn('href="/local/library?q=Git"', html)
         self.assertIn(
-            'document.querySelectorAll("#existing-actions a[href],#direct-start-actions a[href]")',
+            'document.querySelectorAll("#existing-actions a[href],#direct-start-actions a[href],[data-flow][href]")',
             html,
         )
 
+    def test_first_user_primary_action_is_visible_with_technical_details_optional(self):
+        html = b2.render_preview()
+        self.assertIn('<details id="direct-start-actions"', html)
+        self.assertIn('data-synthetic-details="mcp-prompts"', html)
+        self.assertIn('안전한 확인 순서 보기', html)
+        self.assertIn('예제·공개 근거 자세히 보기', html)
+        self.assertIn('||flow==="solve"', html)
+        self.assertIn('UCIE-CAPSULE-MCP-PROMPTS-GET-20261126-01', html)
+
+    def test_three_first_options_are_native_get_links_under_script_csp(self):
+        html = b2.render_preview()
+        self.assertIn('class="start-choice" data-flow="solve" href="/local/ask"', html)
+        self.assertIn('class="start-choice" data-flow="try" href="/local/engine?purpose=SKILL_TEST_AUTOMATION"', html)
+        self.assertIn('class="start-choice" data-flow="learn" href="/local/library?q=Git"', html)
+        self.assertIn('event.preventDefault(); // JS wizard when permitted', html)
+        self.assertIn('role="status" aria-live="polite"', html)
+        self.assertNotIn('data-flow="solve">', html)
+        
     def test_static_file_links_are_disabled_until_owner_local_host(self):
         html = b2.render_preview()
         self.assertIn('window.location.protocol!=="http:"', html)

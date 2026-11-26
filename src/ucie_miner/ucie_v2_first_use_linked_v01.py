@@ -215,17 +215,27 @@ def build_existing_action_join(proof: dict) -> dict:
 
 
 def render_existing_action_sections(proof: dict) -> str:
-    """Render fixed URLs and UCIE-owned test results, never customer input."""
+    """Expose one primary safe action; keep technical/source actions optional.
+
+    Original code, routes, case/capsule checks and trial results are unchanged.
+    A native <details> disclosure is usable even if the frozen V04 CSP blocks
+    inline scripts. No dynamically injected markup, customer text or new POST.
+    """
     model = build_existing_action_join(proof)
     native_links = "".join(
         _link(model["flows"][key]["href"], model["flows"][key]["label"])
         for key in ("solve", "try", "learn")
     )
+    native_panel = (
+        '<details id="direct-start-actions" class="technical-details" '
+        'aria-label="기존 UCIE 기능 바로가기">'
+        '<summary>다른 UCIE 기능 바로가기</summary>'
+        '<p>선택 화면이 동작하지 않을 때 기존 기능으로 이동할 수 있습니다. '
+        'UCIE 소유자 로컬 서버가 필요합니다.</p>'
+        '<nav aria-label="기존 UCIE 기능 목록">'
+        + native_links + '</nav></details>'
+    )
     parts = [
-        '<nav id="direct-start-actions" aria-label="기존 UCIE 기능 바로가기">'
-        '<p>선택 화면을 사용할 수 없어도 기존 기능을 바로 열 수 있습니다.'
-        ' 다만 UCIE 소유자 로컬 서버에서 제공되는 경우에만 연결됩니다.</p>'
-        + native_links + '</nav>',
         '<div id="existing-actions" hidden aria-live="polite" '
         'data-ucie-join="review-only">',
         '<p id="route-scope" class="subtle">기존 UCIE 로컬 서버가 같은 주소에서'
@@ -234,17 +244,24 @@ def render_existing_action_sections(proof: dict) -> str:
     ]
     for key in ("solve", "try", "learn"):
         flow = model["flows"][key]
-        parts.append(
-            '<div data-route-flow="' + key + '" hidden>'
-            + _link(flow["href"], flow["label"]))
+        parts.append('<div data-route-flow="' + key + '" hidden>' +
+                     _link(flow["href"], flow["label"]))
         if key == "solve":
             parts.append(_link("/local/solve", "네 가지 대표 상황에서 고르기"))
         elif key == "try":
-            parts.append(_link(model["mcp_example_href"],
-                               "UCIE 자체 MCP 입력 오류 계약 예제"))
+            parts.append(
+                '<details class="technical-details">'
+                '<summary>다른 예제도 보기</summary>' +
+                _link(model["mcp_example_href"],
+                      "UCIE 자체 MCP 입력 오류 계약 예제") +
+                '</details>')
         else:
-            parts.append(_link(model["mcp_guide_href"],
-                               "MCP 기술 가이드 003 미승인 초안 읽기"))
+            parts.append(
+                '<details class="technical-details">'
+                '<summary>관련 안내 더 보기</summary>' +
+                _link(model["mcp_guide_href"],
+                      "MCP 기술 가이드 003 미승인 초안 읽기") +
+                '</details>')
         parts.append("</div>")
     for case_id in EXPECTED_CODES:
         row = model["cases"][case_id]
@@ -253,16 +270,21 @@ def render_existing_action_sections(proof: dict) -> str:
             '<h4>' + escape(row["label"]) + ' · 기존 UCIE 예제</h4>'
             '<p>합성 입력에 대해서만 실행된 결과입니다. '
             '사용하시는 PC나 개인 코드는 확인하지 않았습니다.</p>'
-            '<dl><dt>오류 예제</dt><dd>' +
-            escape(row["issue"]["observation"]) + ' ('
-            + escape(row["issue"]["status"]) +
-            ')</dd><dt>대조 예제</dt><dd>' +
-            escape(row["control"]["observation"]) + ' ('
-            + escape(row["control"]["status"]) +
-            ')</dd></dl><p>먼저 확인할 일: ' +
+            '<p><strong>먼저 확인할 일:</strong> ' +
             escape(row["safe_next"]) + '</p>'
         )
-        parts.append(_link(row["solve_href"], "기존 안내에서 확인 순서 보기"))
+        parts.append(_link(row["solve_href"], "안전한 확인 순서 보기"))
+        parts.append(
+            '<details class="technical-details" data-synthetic-details="' +
+            escape(case_id) + '">'
+            '<summary>예제·공개 근거 자세히 보기</summary>'
+            '<dl><dt>오류 예제</dt><dd>' +
+            escape(row["issue"]["observation"]) + ' (' +
+            escape(row["issue"]["status"]) +
+            ')</dd><dt>대조 예제</dt><dd>' +
+            escape(row["control"]["observation"]) + ' (' +
+            escape(row["control"]["status"]) + ')</dd></dl>'
+        )
         parts.append(_link(row["issue"]["href"], "UCIE 오류 합성 예제 실행"))
         parts.append(_link(row["control"]["href"], "UCIE 대조 합성 예제 실행"))
         parts.append(_link(row["library_href"], "관련 공개 기술 자료 보기"))
@@ -283,11 +305,12 @@ def render_existing_action_sections(proof: dict) -> str:
         else:
             parts.append('<p>이 항목의 B1 기술 확인 기록은 현재 연결되지 '
                          '않았습니다. MCP의 증거를 잘못 적용하지 않습니다.</p>')
-        parts.append("</section>")
+        parts.append("</details></section>")
     parts.append(
         '<div data-route-case="unmatched" hidden>'
         '<p>지원하는 대표 상황 외에는 원인이나 수정 성공을 추측하지 않습니다.</p>' +
         _link("/local/solve", "지원하는 네 가지 상황 보기") + '</div>'
         "</div>"
     )
+    parts.append(native_panel)  # Secondary fallback AFTER the case's safe action.
     return "".join(parts)
