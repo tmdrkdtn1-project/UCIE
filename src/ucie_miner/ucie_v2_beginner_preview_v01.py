@@ -11,6 +11,7 @@ import sys
 from .ucie_v2_capsule_v01 import (
     read_only_default, SCHEMA, CASE_ID, CAPSULE_ID,
 )
+from .ucie_v2_first_use_linked_v01 import render_existing_action_sections
 
 TEMPLATE = r'''<!doctype html><html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -23,7 +24,7 @@ h1{font-size:clamp(1.55rem,4vw,2.2rem);line-height:1.3}
 h2{font-size:1.4rem}.subtle{color:#b4c4d9}header{display:flex;justify-content:space-between;gap:15px}
 button{font:inherit;background:#203450;color:#f4f8ff;border:1px solid #6481a5;border-radius:14px;display:block;width:100%;text-align:left;min-height:48px;padding:13px 16px;margin:12px 0;cursor:pointer}
 button:hover{background:#2b4771}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #bedfff;outline-offset:3px}
-button.back{width:auto;padding:9px 15px}.note{padding:14px;border:1px solid #647c9b;background:#1b2f4b;border-radius:12px}
+a.review-action{display:block;background:#203450;border:1px solid #6481a5;border-radius:12px;padding:12px 14px;margin:10px 0}a.review-action[aria-disabled]{opacity:.6;pointer-events:none}.note{padding:14px;border:1px solid #647c9b;background:#1b2f4b;border-radius:12px}
 .stage[hidden],[hidden]{display:none!important}a{color:#b4d7ff;overflow-wrap:anywhere}
 details{border:1px solid #506481;border-radius:12px;padding:14px;margin-top:20px}
 summary{cursor:pointer;font-weight:700}.stepper{border-bottom:1px solid #3a4e66;padding-bottom:12px}
@@ -86,6 +87,11 @@ function finish(issue){
   title.textContent="쉬운 기술 설명을 볼 수 있어요";
   body.textContent="기존 라이브러리의 자료를 참고하되 환경과 버전은 별도 확인이 필요해요.";
  }
+ const links=document.getElementById("existing-actions");
+ const allowed=!(flow==="solve"&&issue==="mcp-prompts"&&!safe());
+ links.hidden=!allowed;
+ document.querySelectorAll("[data-route-flow]").forEach(x=>x.hidden=!allowed||x.dataset.routeFlow!==flow);
+ document.querySelectorAll("[data-route-case]").forEach(x=>x.hidden=!allowed||flow!=="solve"||x.dataset.routeCase!==issue);
  show(3);
 }
 document.querySelectorAll("[data-flow]").forEach(b=>b.addEventListener("click",()=>pick(b.dataset.flow)));
@@ -94,6 +100,14 @@ document.getElementById("continue").addEventListener("click",()=>finish(""));
 document.getElementById("back1").addEventListener("click",()=>show(1));
 document.getElementById("back2").addEventListener("click",()=>show(2));
 document.getElementById("restart").addEventListener("click",()=>show(1));
+// Static file previews must not navigate to an invented file:///local path.
+// Real local links work only when the reviewed existing owner app hosts them.
+if(window.location.protocol!=="http:"||window.location.hostname!=="127.0.0.1"){
+ document.querySelectorAll("#existing-actions a[href]").forEach(x=>{
+  x.removeAttribute("href");x.setAttribute("aria-disabled","true");
+  x.setAttribute("title","기존 UCIE 로컬 서버에서만 열 수 있어요");
+ });
+}
 show(1);
 });
 </script></head>
@@ -117,7 +131,8 @@ show(1);
 <section class="stage" id="stage3" hidden><button id="back2" type="button" class="back">← 이전</button>
 <h2 tabindex="-1">지금 확인해 볼 일</h2><h3 id="result-title"></h3><p id="result-body"></p>
 <p class="note">실제 PC와 코드는 검사하지 않았어요. 다른 버전의 사용 가능성은 확인하지 못했고, 고객 제공·배포 권리는 승인되지 않았어요.</p>
-<p class="subtle">기존 공식 안내 경로: /local/ask (이 분리 화면에서 실제 서비스로 연결되지 않음)</p>
+<p class="subtle">이 화면은 격리 소스 시안입니다. 아래 링크는 기존 UCIE 로컬 서버에서 제공할 때만 실제 기능을 엽니다. 이 파일이 운영 서비스에 설치된 것은 아닙니다.</p>
+__UCIE_LINKED_EXISTING_ROUTES__
 <details id="proof" hidden><summary>왜 이렇게 안내하나요?</summary>
 <p id="e-title"></p><p id="e-test"></p><p id="e-limit"></p><p id="e-qa"></p>
 <p id="e-book"></p><a id="e-link" target="_blank" rel="noopener noreferrer">공식 변경 기록 보기</a></details>
@@ -135,9 +150,12 @@ def render_preview() -> str:
     payload = (payload.replace("<", "\\u003c").replace(">", "\\u003e")
                .replace("&", "\\u0026").replace("\u2028", "\\u2028")
                .replace("\u2029", "\\u2029"))
-    if TEMPLATE.count("__UCIE_PINNED_B1__") != 1:
+    if (TEMPLATE.count("__UCIE_PINNED_B1__") != 1
+            or TEMPLATE.count("__UCIE_LINKED_EXISTING_ROUTES__") != 1):
         raise ValueError("preview template drift")
-    return TEMPLATE.replace("__UCIE_PINNED_B1__", payload)
+    links = render_existing_action_sections(proof)
+    return (TEMPLATE.replace("__UCIE_PINNED_B1__", payload)
+            .replace("__UCIE_LINKED_EXISTING_ROUTES__", links))
 
 
 def main() -> int:
