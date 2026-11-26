@@ -178,6 +178,7 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
         page = self.select_case()
         self.assertIn("비슷한 기술 사례", page.locator("#result-title").inner_text())
         self.assertTrue(page.locator("#proof").is_visible())
+        page.locator("#proof summary").click()
         self.assertIn("NOT_APPROVED", page.locator("#e-qa").inner_text())
         self.assertIn("NOT_VERIFIED", page.locator("#e-qa").inner_text())
         self.assertIn("UCIE-CAPSULE-MCP-PROMPTS",
@@ -186,7 +187,7 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
                       page.locator('[data-route-case="mcp-prompts"]').inner_text())
         self.assertIn("CONTRACT_MATCH",
                       page.locator('[data-route-case="mcp-prompts"]').inner_text())
-        self.assertTrue(page.locator('a[href="/local/guide/mcp-prompts"]').first.is_visible())
+        self.assertTrue(page.locator('[data-route-case="mcp-prompts"] a[href="/local/guide/mcp-prompts"]').is_visible())
         self.assertTrue(page.locator('a[href="/local/evolution?q=MCP"]').is_visible())
         self.assertEqual(self.page_errors, [])
         self.screenshot("g3-mcp-390.png")
