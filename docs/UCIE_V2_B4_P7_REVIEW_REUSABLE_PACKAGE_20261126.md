@@ -1,0 +1,9 @@
+# UCIE V2 B4/P7 original reusable asset candidate packaging — 2026-11-26
+
+This is an UCIE-only large-scope source feature stacked on Draft #376 exact source 789f4fda7eedf86b46b8d76c991e326e33977225. Owner-approved V1 ROADMAP P7 is a **portable, version-pinned, rights-approved** reusable asset. This milestone is a *review-only P7 preparatory contract*, not P7 delivery or V1/B6 acceptance.
+
+A single deterministic `build_original_review_packages` call re-computes the actually connected B4 iterative first-party review cycle and takes its original human SkillBook addendum, parent evidence pins, negative cross-source generalization constraint, exact MCP synthetic recipe fixtures, revised candidate SHA, test file allowlist, prior source HOLD, and explicit rights/status constraints. It produces up to two bounded version `0.1.0-review-only` packages with separate SHA IDs and machine test contracts; no arbitrary external code, execution hooks, file paths, customer data, APIs or automatic distribution. Signed original SkillBooks, live source ledger, operating SQLite, Task Scheduler, Local V04 and owner dirty files stay untouched.
+
+10 first-party regression cases: two packages, deterministic/replay, forged source/history, stale prior head, changed baseline, private payload injection, historical source HOLD, impossible release/approval flags, and input non-mutation.
+
+Limits: real-upstream SDK/official source authentication remain not independently verified by this module. Passing UCIE first-party synthetic three-control fixtures does not imply universal portability, actual software engine deployment, legal redistribution, buyer value or rights. Do NOT export to any customer. Approval, signature, clean host install, license review and real-user evidence are distinct future gates. Exact-head Windows/Ubuntu Python 3.13/3.15 CI required.
