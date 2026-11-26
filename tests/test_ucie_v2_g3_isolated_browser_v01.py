@@ -210,6 +210,14 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
         case = page.locator('[data-route-case="mcp-prompts"]')
         self.assertTrue(case.locator(
             'a[href="/local/solve?case=mcp-prompts"]').is_visible())
+        self.assertTrue(page.evaluate("""() => {
+            const safe = document.querySelector(
+                '[data-route-case="mcp-prompts"] a[href="/local/solve?case=mcp-prompts"]');
+            const other = document.querySelector('#direct-start-actions');
+            const proof = document.querySelector('#proof');
+            return Boolean((safe.compareDocumentPosition(other) & 4) &&
+                           (safe.compareDocumentPosition(proof) & 4));
+        }"""))
         details = case.locator('details[data-synthetic-details="mcp-prompts"]')
         self.assertTrue(details.is_visible())
         self.assertFalse(details.evaluate("(e) => e.open"))
