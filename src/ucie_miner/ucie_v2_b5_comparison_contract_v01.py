@@ -15,7 +15,7 @@ STUDY_ID = "UCIE-B5-MCP-PROMPTS-FIRST-ACTION-001"
 CASE_ID = "mcp-prompts"
 METHODS = ("OFFICIAL_DOCS_ONLY", "GENERAL_TOOL", "UCIE_V2_REVIEW_ONLY")
 COHORTS = ("FIRST_TIME_CODER", "TECHNICAL_REVIEWER")
-SYNTHTIC_ORIGIN = "UCIE_AUTHORED_SYNTHETIC_DRY_RUN_ONLY"
+SYNTHETIC_ORIGIN = "UCIE_AUTHORED_SYNTHETIC_DRY_RUN_ONLY"
 MAX_SYNTHETIC_RECORDS = 48
 TRIAL_FIELDS = frozenset({
     "study_id", "case_id", "anonymous_trial_token", "method", "cohort",
@@ -105,7 +105,7 @@ def summarize_synthetic_comparison(records: tuple[dict, ...]) -> dict:
                 or (token[0] == "F") != (cohort == "FIRST_TIME_CODER")
                 or type(ms) is not int or not 0 <= ms <= 120_000
                 or type(row["origin"]) is not str
-                or row["origin"] != SYNTHTIC_ORIGIN
+                or row["origin"] != SYNTHETIC_ORIGIN
                 or any(type(row[name]) is not bool for name in (
                     "correct_safe_action", "false_version_or_rights_claim",
                     "evidence_detail_found"))):

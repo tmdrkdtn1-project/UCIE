@@ -19,7 +19,7 @@ def row(*, token="F01", method="OFFICIAL_DOCS_ONLY",
         "correct_safe_action": safe,
         "false_version_or_rights_claim": false_claim,
         "evidence_detail_found": evidence,
-        "origin": b5.SYNTHTIC_ORIGIN,
+        "origin": b5.SYNTHETIC_ORIGIN,
     }
 
 

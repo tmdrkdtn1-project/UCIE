@@ -14,7 +14,7 @@ class V2B5InternalProbeTests(TestCase):
         self.assertEqual(row["false_positive_proof_claims"], 0)
         self.assertEqual(row["synthetic_wire_statuses"], (
             "CONTRACT_MATCH", "CONTRACT_VIOLATION", "CONTROL_ONLY"))
-        self.assertEqual(len(row["source_evidence_sha256"]), 64)
+        self.assertEqual(len(row["hypothesis_content_sha256"]), 64)
 
     def test_resource_probe_uses_actual_modules_not_mock(self):
         row = b5.run_internal_probe(repeats=2)

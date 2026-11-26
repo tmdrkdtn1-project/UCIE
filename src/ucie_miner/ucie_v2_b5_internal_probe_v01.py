@@ -83,7 +83,7 @@ def _check_once() -> dict:
         "case_id": capsule.case_id,
         "capsule_id": capsule.capsule_id,
         "hypothesis_id": hypothesis["hypothesis_id"],
-        "source_evidence_sha256": hypothesis["content_sha256"],
+        "hypothesis_content_sha256": hypothesis["content_sha256"],
         "source_retest_proposals": len(no_change["proposed_test_files"]),
         "synthetic_wire_statuses": tuple(transfer["positive_negative_control"]),
         "false_positive_proof_claims": 0,
@@ -117,7 +117,7 @@ def run_internal_probe(*, repeats: int = 4) -> dict:
             cpu_samples.append(cpu_elapsed)
             identities.add((values["case_id"], values["capsule_id"],
                             values["hypothesis_id"],
-                            values["source_evidence_sha256"]))
+                            values["hypothesis_content_sha256"]))
             if (values["source_retest_proposals"] != 0
                     or values["false_positive_proof_claims"] != 0
                     or values["synthetic_wire_statuses"] !=
@@ -137,7 +137,7 @@ def run_internal_probe(*, repeats: int = 4) -> dict:
         "case_id": case_id,
         "capsule_id": capsule_id,
         "hypothesis_id": hypothesis_id,
-        "source_evidence_sha256": source_sha,
+        "hypothesis_content_sha256": source_sha,
         "wall_ns_samples": wall_samples,
         "cpu_ns_samples": cpu_samples,
         "wall_ns_median": int(statistics.median(wall_samples)),
