@@ -40,6 +40,14 @@ jobs:
           command -v google-chrome || command -v chromium
           (google-chrome --version || chromium --version)
 
+      - name: Install Korean glyph coverage in disposable Ubuntu runner only
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+          fc-cache -f
+          fc-match -f '%{family}\n' 'sans-serif:lang=ko'
+          fc-list :lang=ko family | grep -E 'Noto Sans CJK|Noto Sans KR'
+
       - name: Install pinned local-browser controller only
         run: python -m pip install --disable-pip-version-check --no-cache-dir playwright==1.58.0
 
