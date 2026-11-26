@@ -1,0 +1,9 @@
+# UCIE V2 B1 + B2 + B4 Virtual Library product-journey integration
+
+Source-only UCIE Draft stacked on #377 exact parent ded3aa50c1d439ee6ff9c506cb99fb00417deff8. This corrects earlier review-only progress not directly visible to a user.
+
+The UCIE original existing `ucie_v2_capsule_v01.build_from_existing_ucie()` is the **same, real** B1 MCP `mcp-prompts` Capsule and SkillBook003 / pinned SDK commit/old isolated CI truth. `ucie_v2_original_reusable_review_package_v01.build_original_review_packages` composes up to two B4 *derived*, review-only human+machine assets. `build_review_journey` cross-checks exact transfer target capsule ID and pinned MCP upstream commit, but **does not claim these newer cross-source synthetic assets were tested in the same historical real SDK experiment**. This distinction is essential.
+
+The result binds one case_id, capsule_id, original SkillBook ID, fixed source commit, requested/unknown explicit version, separate reviewed synthesis package SHA, uncertain applicability and unchanged HOLD/rights gate. `render_isolated_journey` generates escaped 3-step single-column plain Korean content with optional proof details and exactly one safe next step. It creates NO route, GET/POST handler, file upload, login, client code introspection, model call or network access. Owner-frozen V04 remains untouched. The rendered markup is an isolated code prototype, not browser QA or owner UI adoption.
+
+11 tests cover exact join, 3-step flow, unknown/mismatch and historical version truth, wrong target, fake rights with recomputed digest, privacy, unchanged source, stale ledger, and forbidden endpoints. All details are from approved UCIE source/fixture contracts, not other projects. This is **B1/B2/B4 code linkage**, not completed B2 real Edge QA, independent SDK revalidation, rights or B6 full customer product release. Use exact-head original CI 4/4 and keep Draft until owner acceptance.
