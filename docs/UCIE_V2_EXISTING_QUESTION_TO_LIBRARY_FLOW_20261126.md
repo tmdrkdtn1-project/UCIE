@@ -1,0 +1,9 @@
+# UCIE V2 existing question intake -> verified capsule -> bounded library -> isolated beginner view
+
+This UCIE-only extension updates the EXISTING B1/B2/B4 isolated module, not frozen V04, operating /local/ask handler, SQLite, scheduler, runner config or authorized sources.
+
+`build_isolated_question_flow` now calls the existing `local_question_intake_v01.triage_question` on exactly the existing bounded same-origin /local/ask form byte contract. User text is never copied into the returned receipt, cache, file, prompt or output. If the fixed symptom is `mcp-prompts`, it joins `UCIE_VERIFIED_TECH_CAPSULE_V01_REVIEW_ONLY` for that exact case ID and target/capsule pin and two B4 review-only derived assets. The actual historic MCP first-party CI is distinguished from later synthetic cross-source proposals. Unknown version is HOLD, rights denied.
+
+For the other three supported cases (Python environment, PowerShell command, Git repository), `evaluate_case(case, "issue")` provides an existing UCIE fixed synthetic example and no invented exact-vetted MCP Capsule or SkillBook. Unsupported symptoms yield no source claim. Invalid sensitive inputs are denied by the ORIGINAL question gate without echoed input. `render_isolated_question_flow` creates escaped single-column three-step HTML, optional fixed evidence detail; no form, new route, external calls or automated repair.
+
+Tests use actual original question classifier with the four canonical publicly safe phrases, unsupported and secret negatives, forged rights/capsule, zero side-effects. Existing original local application/route stays untouched; this is **isolated integration**, not browser acceptance, owner production activation or B5 user study. One final exact-head CI 4-job checkpoint, preserving the original GitHub Actions cost guard.

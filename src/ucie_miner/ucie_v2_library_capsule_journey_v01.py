@@ -205,3 +205,157 @@ def render_isolated_journey(journey: dict) -> str:
         str(len(journey["related_review_packages"])) + '건 (배포 미승인)</p>'
         '</details></main>'
     )
+
+
+def build_isolated_question_flow(question_body: bytes, history: dict | None = None,
+                                 feedback: dict | None = None,
+                                 previous: dict | None = None,
+                                 before: dict | None = None,
+                                 after: dict | None = None, *,
+                                 fixture_sha256: str | None = None,
+                                 expected_revision_head_sha256: str | None = None) -> dict:
+    """Use the EXISTING bounded /local/ask classifier, never echo user text.
+
+    No host handler is changed. Only mcp-prompts has an evidenced B1 capsule;
+    the other three known cases use existing fixed UCIE synthetic controls.
+    Unknown cases never receive a fake capsule, SkillBook, or diagnosis.
+    """
+    from .local_question_intake_v01 import triage_question, SCHEMA as QUESTION_SCHEMA
+    from .local_b2_connected_workbench_v01 import (
+        evaluate_case, SCHEMA as WORKBENCH_SCHEMA, STATUS as WORKBENCH_STATUS,
+    )
+    from .local_error_actionable_workflow_v01 import CASE_IDS
+    receipt = triage_question(question_body)
+    if (type(receipt) is not dict
+            or receipt.get("schema") != QUESTION_SCHEMA
+            or receipt.get("status") !=
+                "BOUNDED_TEXT_CLASSIFICATION_NOT_AI_NOT_CUSTOMER_DIAGNOSIS"
+            or receipt.get("question_retained") is not False
+            or receipt.get("question_echoed") is not False
+            or receipt.get("external_ai_called") is not False
+            or receipt.get("independent_customer_fix_verified") is not False
+            or receipt.get("customer_distribution_authorized") is not False
+            or receipt.get("persistent_writes") != 0
+            or receipt.get("network_requests") != 0):
+        raise LibraryJourneyError("untrusted original question classification")
+    case = receipt.get("predefined_case_id")
+    if (case is not None and (type(case) is not str or case not in CASE_IDS)
+            or receipt.get("matched_known_issue") is not (case is not None)):
+        raise LibraryJourneyError("invalid known case identity")
+    linked = None
+    example = None
+    if case == CASE_ID:
+        if any(x is None for x in (
+            history, feedback, previous, before, after, fixture_sha256,
+            expected_revision_head_sha256,
+        )):
+            raise LibraryJourneyError("MCP capsule requires pinned library evidence")
+        linked = build_review_journey(
+            history, feedback, previous, before, after,
+            fixture_sha256=fixture_sha256,
+            expected_revision_head_sha256=expected_revision_head_sha256,
+        )
+        if (linked["case_id"] != case or linked["capsule_id"] != CAPSULE_ID
+                or linked["decision"] != "HOLD"):
+            raise LibraryJourneyError("untrusted MCP unknown-environment fallback")
+    elif case is not None:
+        example = evaluate_case(case, "issue")
+        if (example.get("case_id") != case
+                or example.get("schema") != WORKBENCH_SCHEMA
+                or example.get("status") != WORKBENCH_STATUS
+                or example.get("fixture_evaluated") is not True
+                or example.get("actual_user_environment_inspected") is not False
+                or example.get("independent_fix_validated") is not False
+                or example.get("rule_or_skillbook_promoted") is not False
+                or example.get("customer_distribution_authorized") is not False
+                or example.get("network_requests") != 0
+                or example.get("operating_database_writes") != 0):
+            raise LibraryJourneyError("untrusted other-case synthetic control")
+    result = {
+        "schema": "UCIE_V2_ISOLATED_QUESTION_TO_EVIDENCE_V01",
+        "matched_known_issue": case is not None,
+        "case_id": case,
+        "linked_capsule_id": CAPSULE_ID if linked is not None else None,
+        "linked_skillbook_id": SKILLBOOK_ID if linked is not None else None,
+        "mcp_evidence_journey": linked,
+        "other_case_fixed_synthetic": example,
+        "technical_evidence_state": (
+            "HISTORIC_FIRST_PARTY_MCP_CAPSULE_RELATED_LIBRARY_REVIEW"
+            if linked is not None else
+            "FIRST_PARTY_SYNTHETIC_EXAMPLE_ONLY" if example is not None else
+            "NO_SUPPORTED_CASE_NO_EVIDENCE"),
+        "real_customer_fix_verified": False,
+        "question_retained": False, "question_echoed": False,
+        "new_http_endpoint_created": False, "automatic_ai_called": False,
+        "rights_approved": False, "customer_export_authorized": False,
+        "network_requests": 0, "operating_database_writes": 0,
+    }
+    return {**result, "content_sha256": _sha(result)}
+
+
+def render_isolated_question_flow(flow: dict) -> str:
+    """Display only validated fixed evidence in the isolated single-column view."""
+    if (type(flow) is not dict
+            or flow.get("schema") != "UCIE_V2_ISOLATED_QUESTION_TO_EVIDENCE_V01"
+            or flow.get("content_sha256") != _sha({
+                k: v for k, v in flow.items() if k != "content_sha256"})
+            or any(flow.get(k) is not False for k in (
+                "real_customer_fix_verified", "question_retained",
+                "question_echoed", "new_http_endpoint_created",
+                "automatic_ai_called", "rights_approved",
+                "customer_export_authorized"))
+            or flow.get("network_requests") != 0
+            or flow.get("operating_database_writes") != 0):
+        raise LibraryJourneyError("unsafe question evidence result")
+    case, mcp, example = (flow.get("case_id"),
+                          flow.get("mcp_evidence_journey"),
+                          flow.get("other_case_fixed_synthetic"))
+    if (case is None and (mcp is not None or example is not None
+                          or flow.get("matched_known_issue") is not False)):
+        raise LibraryJourneyError("unknown case has invented evidence")
+    if case == CASE_ID:
+        if (type(mcp) is not dict or example is not None
+                or flow.get("linked_capsule_id") != CAPSULE_ID
+                or flow.get("linked_skillbook_id") != SKILLBOOK_ID
+                or flow.get("matched_known_issue") is not True):
+            raise LibraryJourneyError("MCP case/capsule mismatch")
+        return render_isolated_journey(mcp)
+    if case is None:
+        return ('<main data-ucie-v2-isolated-question="unsupported">'
+                '<h2>아직 이 문제에 맞는 안내가 없어요</h2>'
+                '<p>확인하지 않은 원인을 추측하지 않겠습니다.</p>'
+                '<p>개인 코드나 로그는 입력하지 마세요.</p></main>')
+    from .local_b2_connected_workbench_v01 import (
+        EXPECTED, SCHEMA as WORKBENCH_SCHEMA, STATUS as WORKBENCH_STATUS,
+    )
+    if (case not in EXPECTED or type(example) is not dict
+            or flow.get("linked_capsule_id") is not None
+            or flow.get("linked_skillbook_id") is not None
+            or flow.get("matched_known_issue") is not True
+            or example.get("schema") != WORKBENCH_SCHEMA
+            or example.get("status") != WORKBENCH_STATUS
+            or example.get("case_id") != case
+            or example.get("scenario") != "issue"
+            or example.get("result_code") != EXPECTED[case][0]
+            or example.get("fixture_origin") != "UCIE_AUTHORED_FIXED_SYNTHETIC"
+            or example.get("fixture_evaluated") is not True
+            or example.get("actual_user_environment_inspected") is not False
+            or example.get("customer_distribution_authorized") is not False
+            or example.get("rule_or_skillbook_promoted") is not False
+            or example.get("network_requests") != 0
+            or example.get("operating_database_writes") != 0):
+        raise LibraryJourneyError("unknown other-case synthetic evidence")
+    e = lambda value: escape(value, quote=True)
+    return (
+        '<main data-ucie-v2-isolated-question="fixed-example">'
+        '<section><h2>1. 어떤 도움이 필요하세요?</h2><p>' +
+        e(example["label"]) + '</p></section>'
+        '<section><h2>2. 비슷한 문제를 찾았어요</h2><p>' +
+        e(example["observed_synthetic_result"]) + '</p>'
+        '<p>실제 PC를 검사한 결과가 아니라 UCIE가 만든 예제입니다.</p></section>'
+        '<section><h2>3. 지금 확인할 일</h2><p>' +
+        e(example["limitation"]) + '</p></section>'
+        '<details><summary>왜 이렇게 안내하나요?</summary><p>' +
+        e(example["official_source_label"]) + '</p></details>'
+        '</main>'
+    )
