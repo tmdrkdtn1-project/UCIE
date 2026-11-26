@@ -60,8 +60,13 @@ def triage_w02_evidence(records: list[dict]) -> dict:
         references[key] = entry["evidence_sha256"]
         identity = entry["library_item_id"]
         if identity in indexed:
-            if indexed[identity]["purpose_code"] != entry["purpose_code"]:
-                raise IntakeGateError("inconsistent duplicate evidence identity")
+            previous_row = indexed[identity]
+            if (previous_row["version_scope_claim"] !=
+                    entry["version_scope_claim"]
+                    or previous_row["kind"] != entry["kind"]
+                    or previous_row["evidence_reference"] !=
+                       entry["evidence_reference"]):
+                raise IntakeGateError("same identity with conflicting metadata")
             continue
         indexed[identity] = {
             "library_item_id": identity,
