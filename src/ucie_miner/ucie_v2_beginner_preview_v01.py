@@ -136,11 +136,11 @@ show(1);
 <h2 tabindex="-1">지금 확인해 볼 일</h2><h3 id="result-title" role="status" aria-live="polite"></h3><p id="result-body"></p>
 <p class="note">실제 PC와 코드는 검사하지 않았어요. 다른 버전의 사용 가능성은 확인하지 못했고, 고객 제공·배포 권리는 승인되지 않았어요.</p>
 <p class="subtle">이 화면은 격리 소스 시안입니다. 아래 링크는 기존 UCIE 로컬 서버에서 제공할 때만 실제 기능을 엽니다. 이 파일이 운영 서비스에 설치된 것은 아닙니다.</p>
+__UCIE_LINKED_EXISTING_ROUTES__
 <details id="proof" hidden><summary>왜 이렇게 안내하나요?</summary>
 <p id="e-title"></p><p id="e-test"></p><p id="e-limit"></p><p id="e-qa"></p>
 <p id="e-book"></p><a id="e-link" target="_blank" rel="noopener noreferrer">공식 변경 기록 보기</a></details>
-<button id="restart" type="button">처음부터 다시 선택하기</button></section>
-__UCIE_LINKED_EXISTING_ROUTES__</main></body></html>'''
+<button id="restart" type="button">처음부터 다시 선택하기</button></section></main></body></html>'''
 
 
 def render_preview() -> str:
