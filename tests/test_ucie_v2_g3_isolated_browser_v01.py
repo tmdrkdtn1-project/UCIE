@@ -1,7 +1,8 @@
-"""G3: REAL isolated Chromium first-use acceptance on the actual UCIE V2 renderer.
+"""G3/G4: REAL isolated Chromium/Windows Edge acceptance of UCIE V2 renderer.
 
-Only with UCIE_G3_BROWSER_QA=1 and an explicitly installed first-party
-headless Chromium/Playwright runner. Without that opt-in these browser tests
+Only with UCIE_G3_BROWSER_QA=1 and an installed first-party browser:
+system Chromium for G3, Windows Microsoft Edge (channel=msedge) for G4.
+Without opt-in these browser tests
 SKIP (not PASS) in the ordinary four-OS/python offline matrix.
 
 A disposable loopback HTTP server delegates existing approved /local GET paths
@@ -30,7 +31,10 @@ LOCKED_PATH = "/__ucie_g3_preview_strict_csp"
 FORGED_PATH = "/__ucie_g3_preview_forged_rights"
 TEST_ONLY_ROUTES = frozenset((REVIEW_PATH, LOCKED_PATH, FORGED_PATH))
 WORKLOAD_SIZES = (320, 390, 768, 1024, 1440)
-MODE = "ISOLATED_HEADLESS_CHROMIUM_NOT_OWNER_EDGE"
+BROWSER_CHANNEL = os.environ.get("UCIE_G3_BROWSER_CHANNEL", "system-chromium")
+MODE = ("ISOLATED_WINDOWS_GITHUB_RUNNER_EDGE_NOT_OWNER_EDGE"
+        if BROWSER_CHANNEL == "msedge"
+        else "ISOLATED_HEADLESS_CHROMIUM_NOT_OWNER_EDGE")
 REQUIRES_EXPLICIT_OPT_IN = os.environ.get("UCIE_G3_BROWSER_QA") == "1"
 
 
@@ -86,19 +90,44 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
         cls.worker.start()
         cls.origin = "http://127.0.0.1:" + str(cls.server.server_port)
         cls.pw = sync_playwright().start()
-        binary = next((shutil.which(name) for name in
-                       ("google-chrome", "google-chrome-stable", "chromium",
-                        "chromium-browser") if shutil.which(name)), None)
-        if not binary:
-            raise RuntimeError("G3 requires installed Chromium/Chrome (NO MOCK)")
-        cls.browser = cls.pw.chromium.launch(
-            headless=True, executable_path=binary,
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
-        )
+        if BROWSER_CHANNEL == "msedge":
+            if os.name != "nt":
+                raise RuntimeError("G4 actual Edge browser QA needs Windows runner")
+            cls.browser = cls.pw.chromium.launch(
+                headless=True, channel="msedge",
+            )
+        elif BROWSER_CHANNEL == "system-chromium":
+            binary = next((shutil.which(name) for name in
+                           ("google-chrome", "google-chrome-stable", "chromium",
+                            "chromium-browser") if shutil.which(name)), None)
+            if not binary:
+                raise RuntimeError("G3 requires installed Chromium/Chrome (NO MOCK)")
+            cls.browser = cls.pw.chromium.launch(
+                headless=True, executable_path=binary,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
+        else:
+            raise RuntimeError("unreviewed G3/G4 browser channel")
+
+        verify_page = cls.browser.new_page()
+        try:
+            ua = verify_page.evaluate("navigator.userAgent")
+        finally:
+            verify_page.close()
+        if BROWSER_CHANNEL == "msedge" and "Edg/" not in ua:
+            raise RuntimeError("Edge channel missing Edg/ UA: not accepted")
+        if BROWSER_CHANNEL == "system-chromium" and "Edg/" in ua:
+            raise RuntimeError("unexpected Edge during G3 Chromium QA")
         cls.output = Path(os.environ.get("UCIE_G3_OUTPUT_DIR", cls.tmp.name))
         cls.output.mkdir(parents=True, exist_ok=True)
-        cls.receipt = {"schema":"UCIE_V2_G3_REAL_CHROMIUM_ACCEPTANCE_V01",
-                       "scope":MODE, "browser":cls.browser.version,
+        cls.receipt = {
+                       "schema": ("UCIE_V2_G4_REAL_WINDOWS_EDGE_ACCEPTANCE_V01"
+                                  if BROWSER_CHANNEL == "msedge"
+                                  else "UCIE_V2_G3_REAL_CHROMIUM_ACCEPTANCE_V01"),
+                       "scope": MODE, "browser": cls.browser.version,
+                       "browser_channel": BROWSER_CHANNEL,
+                       "browser_user_agent": ua,
+                       "edge_channel_confirmed": BROWSER_CHANNEL == "msedge",
                        "source": "UCIE_SOURCE_RENDER_PREVIEW_NO_MOCK",
                        "workload_sizes":list(WORKLOAD_SIZES),
                        "owner_edge_tested":False, "owner_v04_changed":False,
@@ -115,7 +144,9 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         try:
-            (cls.output / "g3-browser-receipt.json").write_text(
+            (cls.output / ("g4-edge-browser-receipt.json"
+                           if BROWSER_CHANNEL == "msedge"
+                           else "g3-browser-receipt.json")).write_text(
                 json.dumps(cls.receipt, ensure_ascii=False, indent=2,
                            sort_keys=True) + "\n", encoding="utf-8")
         finally:
@@ -162,6 +193,8 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
         return page
 
     def screenshot(self, filename):
+        if BROWSER_CHANNEL == "msedge":
+            filename = filename.replace("g3-", "g4-edge-", 1)
         self.page.screenshot(path=str(self.output / filename),
                              full_page=True, animations="disabled")
 
@@ -194,16 +227,63 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
         self.screenshot("g3-mcp-390.png")
 
     def test_16_korean_fonts_are_present_in_real_browser_runner(self):
-        matched = subprocess.check_output(
-            ["fc-match", "-f", "%{family}", "sans-serif:lang=ko"],
-            text=True, timeout=5,
-        ).strip()
-        self.assertRegex(matched, r"Noto Sans CJK|Noto Sans KR")
         page = self.open_preview()
-        self.assertIn("Noto Sans CJK KR",
-                      page.locator("html").evaluate(
-                          "(e) => getComputedStyle(e).fontFamily"))
+        css_family = page.locator("html").evaluate(
+            "(e) => getComputedStyle(e).fontFamily")
+        if BROWSER_CHANNEL == "msedge":
+            self.assertEqual(os.name, "nt")
+            win_fonts = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+            self.assertTrue(list(win_fonts.glob("malgun*.ttf")),
+                            "Missing installed Korean Malgun Gothic fonts")
+            self.assertIn("Malgun Gothic", css_family)
+        else:
+            matched = subprocess.check_output(
+                ["fc-match", "-f", "%{family}", "sans-serif:lang=ko"],
+                text=True, timeout=5,
+            ).strip()
+            self.assertRegex(matched, r"Noto Sans CJK|Noto Sans KR")
+            self.assertIn("Noto Sans CJK KR", css_family)
         self.assertIn("도움", page.locator("#stage1 h1").inner_text())
+
+    def test_19_safe_next_action_visible_within_first_mobile_viewport(self):
+        page = self.select_case()
+        action = page.locator(
+            '[data-route-case="mcp-prompts"] a[href="/local/solve?case=mcp-prompts"]')
+        self.assertTrue(action.is_visible())
+        rect = action.bounding_box()
+        self.assertIsNotNone(rect)
+        height = page.evaluate("window.innerHeight")
+        self.assertLess(rect["y"] + rect["height"], height,
+                        ("safe action below first 390px mobile viewport", rect, height))
+        self.assertTrue(page.evaluate("""() => {
+            const safe = document.querySelector(
+              '[data-route-case="mcp-prompts"] a[href="/local/solve?case=mcp-prompts"]');
+            const note = document.querySelector('#stage3 .note');
+            return (safe.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+        }"""))
+        self.screenshot("g3-mcp-first-action-390.png")
+
+    def test_20_programmatic_heading_focus_has_high_contrast_outline(self):
+        page = self.open_preview()
+        focus = page.locator("#stage1 h1")
+        self.assertTrue(focus.evaluate("(e) => document.activeElement === e"))
+        self.assertEqual(focus.evaluate(
+            "(e) => getComputedStyle(e).outlineStyle"), "solid")
+        self.assertEqual(focus.evaluate(
+            "(e) => getComputedStyle(e).outlineWidth"), "2px")
+
+    def test_18_browser_is_real_selected_edge_not_g3_chromium(self):
+        ua = self.page.evaluate("navigator.userAgent")
+        self.assertEqual(self.receipt["browser_channel"], BROWSER_CHANNEL)
+        if BROWSER_CHANNEL == "msedge":
+            self.assertIn("Edg/", ua)
+            self.assertTrue(self.receipt["edge_channel_confirmed"])
+            self.assertEqual(self.receipt["scope"],
+                             "ISOLATED_WINDOWS_GITHUB_RUNNER_EDGE_NOT_OWNER_EDGE")
+            self.assertFalse(self.receipt["owner_edge_tested"])
+        else:
+            self.assertNotIn("Edg/", ua)
+            self.assertFalse(self.receipt["edge_channel_confirmed"])
 
     def test_17_secondary_technical_actions_are_disclosed_not_auto_shown(self):
         page = self.select_case()

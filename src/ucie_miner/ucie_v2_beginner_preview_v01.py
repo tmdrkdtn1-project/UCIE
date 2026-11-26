@@ -24,6 +24,7 @@ h1{font-size:clamp(1.55rem,4vw,2.2rem);line-height:1.3}
 h2{font-size:1.4rem}.subtle{color:#b4c4d9}header{display:flex;justify-content:space-between;gap:15px}
 button,.start-choice{font:inherit;background:#203450;color:#f4f8ff;border:1px solid #6481a5;border-radius:14px;display:block;width:100%;text-align:left;min-height:48px;padding:13px 16px;margin:12px 0;cursor:pointer;text-decoration:none}
 button:hover,.start-choice:hover{background:#2b4771}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #bedfff;outline-offset:3px}
+.stage h1:focus,.stage h2:focus{outline:2px solid #bedfff;outline-offset:3px;border-radius:4px}
 a.review-action{display:block;background:#203450;border:1px solid #6481a5;border-radius:12px;padding:12px 14px;margin:10px 0}a.review-action[aria-disabled]{opacity:.6;pointer-events:none}.note{padding:14px;border:1px solid #647c9b;background:#1b2f4b;border-radius:12px}
 .stage[hidden],[hidden]{display:none!important}a{color:#b4d7ff;overflow-wrap:anywhere}
 details{border:1px solid #506481;border-radius:12px;padding:14px;margin-top:20px}
@@ -134,9 +135,9 @@ show(1);
 </div><button type="button" id="continue" hidden>다음 확인 방법 보기</button></section>
 <section class="stage" id="stage3" hidden><button id="back2" type="button" class="back">← 이전</button>
 <h2 tabindex="-1">지금 확인해 볼 일</h2><h3 id="result-title" role="status" aria-live="polite"></h3><p id="result-body"></p>
+__UCIE_LINKED_EXISTING_ROUTES__
 <p class="note">실제 PC와 코드는 검사하지 않았어요. 다른 버전의 사용 가능성은 확인하지 못했고, 고객 제공·배포 권리는 승인되지 않았어요.</p>
 <p class="subtle">이 화면은 격리 소스 시안입니다. 아래 링크는 기존 UCIE 로컬 서버에서 제공할 때만 실제 기능을 엽니다. 이 파일이 운영 서비스에 설치된 것은 아닙니다.</p>
-__UCIE_LINKED_EXISTING_ROUTES__
 <details id="proof" hidden><summary>왜 이렇게 안내하나요?</summary>
 <p id="e-title"></p><p id="e-test"></p><p id="e-limit"></p><p id="e-qa"></p>
 <p id="e-book"></p><a id="e-link" target="_blank" rel="noopener noreferrer">공식 변경 기록 보기</a></details>
