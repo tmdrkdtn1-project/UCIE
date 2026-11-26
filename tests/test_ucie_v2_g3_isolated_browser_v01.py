@@ -341,5 +341,5 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
         self.assertEqual(page.locator(":focus").get_attribute("data-flow"),
                          "solve")
         page.keyboard.press("Enter")
-        page.wait_for_url(lambda url: url.path == "/local/ask", timeout=5000)
+        page.wait_for_url(lambda url: url.endswith("/local/ask"), timeout=5000)
         self.assertTrue(page.url.endswith("/local/ask"))
