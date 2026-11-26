@@ -96,9 +96,12 @@ class OriginalLibraryAssetTests(TestCase):
 
     def test_false_rights_in_hypothesis_denied(self):
         actual = a.build_hypothesis()
+        accepted_synthetic = a.run_bounded_transfer(actual)
         forged = deepcopy(actual)
-        forged["rights_approved"] = True
-        with mock.patch.object(a, "build_hypothesis", return_value=forged):
+        forged["license_redistribution_approved"] = True
+        with mock.patch.object(a, "build_hypothesis", return_value=forged), \\
+             mock.patch.object(a, "run_bounded_transfer",
+                               return_value=accepted_synthetic):
             with self.assertRaises(a.LibraryAssetError):
                 a.assemble_original_library_assets(self.complete, ())
 

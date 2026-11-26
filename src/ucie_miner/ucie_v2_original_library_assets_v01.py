@@ -90,6 +90,9 @@ def assemble_original_library_assets(records: tuple[dict, ...],
             or trial.get("independent_qa_verified") is not False
             or trial.get("export_allowed") is not False
             or h.get("auto_promoted") is not False
+            or h.get("owner_approved") is not False
+            or h.get("license_redistribution_approved") is not False
+            or h.get("published") is not False
             or h.get("export_allowed") is not False
             or h.get("model_trained") is not False
             or h.get("source_facts_independently_verified") is not False
