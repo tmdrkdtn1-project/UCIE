@@ -69,6 +69,13 @@ class W02IntakeGateTests(TestCase):
         with self.assertRaises(gate.IntakeGateError):
             gate.triage_w02_evidence([x, y])
 
+    def test_same_identity_different_version_is_not_silent_duplicate(self):
+        x = _powershell()
+        y = deepcopy(x)
+        y["version_scope"] = "7.6.7"
+        with self.assertRaises(gate.IntakeGateError):
+            gate.triage_w02_evidence([x, y])
+
     def test_unapproved_repository_blocked(self):
         x = _powershell()
         x["source_id"] = "repo:unknown/secret"
