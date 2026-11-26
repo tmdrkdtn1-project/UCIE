@@ -80,7 +80,12 @@ def pinned_records() -> list[dict]:
 
 def _check_records(records: object) -> list[dict]:
     index = validate_knowledge_index(build_knowledge_index())
-    pins = index["concepts"][0]["source_pins"]
+    pins = dict(index["concepts"][0]["source_pins"])
+    # This fourth source is reviewed through the existing W01/W02/P9 gates.
+    # Its historical native negative is not a fixed/current release claim.
+    from .ucie_v2_b4_fourth_technology_bridge_v01 import reviewed_powershell_record
+    fourth = reviewed_powershell_record()
+    pins[fourth["source_id"]] = fourth["source_pin"]
     if type(records) is not list or not 2 <= len(records) <= MAX_RECORDS:
         raise MultiSourceError("bounded list of curated records required")
     unique = set()
@@ -97,14 +102,16 @@ def _check_records(records: object) -> list[dict]:
                 or type(record["source_pin"]) is not str
                 or not HEX_RE.fullmatch(record["source_pin"])
                 or record["source_pin"] != pins[sid]
-                or record["technology"] not in ("Python", "Git", "MCP")
+                or record["technology"] not in ("Python", "Git", "MCP", "PowerShell")
                 or (sid, record["technology"]) not in (
                     ("doc:python/cpython", "Python"),
                     ("doc:git/git", "Git"),
-                    ("repo:modelcontextprotocol/python-sdk", "MCP"))
+                    ("repo:modelcontextprotocol/python-sdk", "MCP"),
+                    ("repo:PowerShell/PowerShell", "PowerShell"))
                 or record["review_origin"] not in (
                     "UCIE_CURATED_EXISTING_SKILLBOOK",
-                    "UCIE_AUTHORED_HELDOUT_CONTRACT")):
+                    "UCIE_AUTHORED_HELDOUT_CONTRACT",
+                    "UCIE_P9_NATIVE_RELEASE_NEGATIVE_CONTROL")):
             raise MultiSourceError("unapproved source, pin or provenance")
         mechanisms = record["mechanisms"]
         negatives = record["counterexamples"]
@@ -120,7 +127,7 @@ def _check_records(records: object) -> list[dict]:
             raise MultiSourceError("unreviewed mechanism/counterexample")
         # Avoid inventing facts by accepting only subsets of known exact
         # UCIE-authored metadata, never free-form user or upstream text.
-        canonical = next((x for x in pinned_records()
+        canonical = next((x for x in pinned_records() + [fourth]
                           if x["record_id"] == rid), None)
         if canonical is None or record != canonical:
             raise MultiSourceError("record not in fixed curated corpus")
