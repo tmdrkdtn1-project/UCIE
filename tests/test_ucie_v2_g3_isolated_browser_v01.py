@@ -314,6 +314,7 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
         self.assertEqual(page.locator("#progress").inner_text(), "3 / 3 단계")
         self.assertIn("실제 PC와 코드는 검사하지 않았어요",
                       page.locator("#stage3").inner_text())
+        page.locator("#proof summary").click()
         self.assertIn("NOT_AUTHORIZED", page.locator("#e-qa").inner_text())
         self.ctx.set_offline(False)
 
@@ -340,4 +341,5 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
         self.assertEqual(page.locator(":focus").get_attribute("data-flow"),
                          "solve")
         page.keyboard.press("Enter")
+        page.wait_for_url(lambda url: url.path == "/local/ask", timeout=5000)
         self.assertTrue(page.url.endswith("/local/ask"))
