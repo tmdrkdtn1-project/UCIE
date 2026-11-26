@@ -181,6 +181,7 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
         page.locator("#proof summary").click()
         self.assertIn("NOT_APPROVED", page.locator("#e-qa").inner_text())
         self.assertIn("NOT_VERIFIED", page.locator("#e-qa").inner_text())
+        page.locator('[data-route-case="mcp-prompts"] summary').click()
         self.assertIn("UCIE-CAPSULE-MCP-PROMPTS",
                       page.locator('[data-route-case="mcp-prompts"]').inner_text())
         self.assertIn("CONTRACT_VIOLATION",
@@ -191,6 +192,36 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
         self.assertTrue(page.locator('a[href="/local/evolution?q=MCP"]').is_visible())
         self.assertEqual(self.page_errors, [])
         self.screenshot("g3-mcp-390.png")
+
+    def test_16_korean_fonts_are_present_in_real_browser_runner(self):
+        matched = subprocess.check_output(
+            ["fc-match", "-f", "%{family}", "sans-serif:lang=ko"],
+            text=True, timeout=5,
+        ).strip()
+        self.assertRegex(matched, r"Noto Sans CJK|Noto Sans KR")
+        page = self.open_preview()
+        self.assertIn("Noto Sans CJK KR",
+                      page.locator("html").evaluate(
+                          "(e) => getComputedStyle(e).fontFamily"))
+        self.assertIn("도움", page.locator("#stage1 h1").inner_text())
+
+    def test_17_secondary_technical_actions_are_disclosed_not_auto_shown(self):
+        page = self.select_case()
+        case = page.locator('[data-route-case="mcp-prompts"]')
+        self.assertTrue(case.locator(
+            'a[href="/local/solve?case=mcp-prompts"]').is_visible())
+        details = case.locator('details[data-synthetic-details="mcp-prompts"]')
+        self.assertTrue(details.is_visible())
+        self.assertFalse(details.evaluate("(e) => e.open"))
+        self.assertTrue(case.locator(
+            'a[href="/local/guide/mcp-prompts"]').is_hidden())
+        self.assertFalse(page.locator("#direct-start-actions").evaluate(
+            "(e) => e.open"))
+        self.screenshot("g3-mcp-basic-390.png")
+        details.locator("summary").click()
+        self.assertTrue(case.locator(
+            'a[href="/local/guide/mcp-prompts"]').is_visible())
+        self.screenshot("g3-mcp-details-390.png")
 
     def test_02_try_path_reaches_preexisting_first_party_engine(self):
         page = self.open_preview()
