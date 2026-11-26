@@ -96,7 +96,11 @@ class V2B5InternalProbeTests(TestCase):
         def forged(capsule, app):
             return {**original(capsule, app), "rights": "APPROVED"}
         with mock.patch.object(b1, "explain_for_beginner", side_effect=forged):
-            with self.assertRaises(b5.B5ProbeError):
+            # B2 itself blocks forged customer rights *before* the B5
+            # postcondition runs. Preserve that earlier fail-closed boundary.
+            with self.assertRaisesRegex(
+                ValueError, "B1 evidence drift blocks isolated preview"
+            ):
                 b5._check_once()
 
 
