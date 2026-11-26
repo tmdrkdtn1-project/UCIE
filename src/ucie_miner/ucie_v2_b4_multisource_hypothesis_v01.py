@@ -97,7 +97,12 @@ def _check_records(records: object) -> list[dict]:
             raise MultiSourceError("unknown record fields")
         rid = record["record_id"]
         sid = record["source_id"]
-        if (type(rid) is not str or not ID_RE.fullmatch(rid)
+        # Reject malformed types before set/dict membership or comparisons.
+        # An untrusted list/dict must produce MultiSourceError, not TypeError.
+        if (type(rid) is not str or type(sid) is not str
+                or type(record["technology"]) is not str
+                or type(record["review_origin"]) is not str
+                or not ID_RE.fullmatch(rid)
                 or rid in unique or sid not in pins
                 or type(record["source_pin"]) is not str
                 or not HEX_RE.fullmatch(record["source_pin"])
