@@ -67,5 +67,6 @@ if __name__ == "__main__":
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
             f.write("matrix=" + json.dumps({"include": r["matrix"]}, separators=(",", ":")) + "\n")
+            f.write("tier=" + r["tier"] + "\n")
             f.write("native_required=" + str(bool(r["native_required"])).lower() + "\n")
     print(json.dumps(r, ensure_ascii=False, sort_keys=True))
