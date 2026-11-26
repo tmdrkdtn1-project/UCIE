@@ -124,6 +124,11 @@ def evaluate_first_party_trials(cases: list[dict]) -> dict:
     for case in cases:
         if (type(case) is not dict or set(case) != set(next(iter(valid.values())))
                 or type(case.get("case_id")) is not str
+                or type(case.get("expected")) is not bool
+                or type(case.get("control")) is not str
+                or type(case.get("technology")) is not str
+                or type(case.get("target_version")) is not str
+                or type(case.get("observed_version")) is not str
                 or case["case_id"] not in valid or case != valid[case["case_id"]]
                 or case["case_id"] in seen):
             raise FalsificationError("unreviewed, duplicate, or altered fixture")
@@ -197,6 +202,11 @@ def build_falsification_revision_batch() -> dict:
     review_option = ("PROPOSE_REVISION_FOR_INDEPENDENT_REVIEW"
                      if improved else "HOLD_OR_REJECT_NO_SAFE_SYNTHETIC_GAIN")
     hypothesis = proposals[0]
+    affected_trials = sorted(
+        x["case_id"] for x in cases if not x["baseline_correct"]
+        or not x["challenger_correct"])
+    if not affected_trials:
+        raise FalsificationError("no falsification-triggering cases observed")
     candidate_core = {
         "hypothesis_id": hypothesis["hypothesis_id"],
         "source_review_sha256": review["content_sha256"],
@@ -207,6 +217,9 @@ def build_falsification_revision_batch() -> dict:
         "baseline_correct": before, "candidate_correct": after,
         "baseline_false_accepts": before_fp,
         "candidate_false_accepts": after_fp,
+        "affected_only_retest_case_ids": affected_trials,
+        "unaffected_controls_preserved": sorted(
+            x["case_id"] for x in cases if x["control"] == "UNCHANGED"),
         "preconditions": ["EXACT_VERSION_REQUIRED",
                           "POSITIVE_NEGATIVE_CONTROL_REQUIRED"],
         "negative_lessons": [
