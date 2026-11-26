@@ -106,13 +106,15 @@ def _validate_bundle(bundle: object) -> None:
             or bundle.get("operating_database_writes") != 0):
         raise ReviewHistoryError("review bundle hash or authority contract drift")
     sources = chapter.get("source_lineage")
-    if (type(sources) is not list or len(sources) != 2
+    counterexample = machine.get("counterexample")
+    if (type(counterexample) is not dict
+            or type(sources) is not list or len(sources) != 2
             or {p.get("source_id") for p in sources if type(p) is dict}
                 != {"doc:python/cpython", "doc:git/git"}
             or any(type(p) is not dict or
                    type(p.get("document_sha256")) is not str or
                    HEX64.fullmatch(p["document_sha256"]) is None for p in sources)
-            or machine.get("counterexample", {}).get("result") !=
+            or counterexample.get("result") !=
                 "REJECTED_BY_EXPLICIT_DIFFERING_OUTPUT_CONTRACTS"):
         raise ReviewHistoryError("source lineage or negative lesson missing")
 
@@ -211,8 +213,11 @@ def review_negative_lessons(history: dict) -> dict:
 
 
 def _designated_path(directory: str | Path) -> Path:
-    root = Path(directory).resolve(strict=True)
-    if not root.is_dir() or root.is_symlink() or root.name != "ucie_v2_review_store":
+    original = Path(directory)
+    if original.is_symlink():
+        raise ReviewHistoryError("symlinked review root denied")
+    root = original.resolve(strict=True)
+    if not root.is_dir() or root.name != "ucie_v2_review_store":
         raise ReviewHistoryError("dedicated review-only store directory required")
     marker = root / STORE_MARKER
     if marker.is_symlink() or not marker.is_file() or marker.read_text(
