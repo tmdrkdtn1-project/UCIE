@@ -17,7 +17,7 @@ TEMPLATE = r'''<!doctype html><html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>UCIE — 격리 초보자 확인 화면</title>
 <style>
-:root{color-scheme:dark;font-family:system-ui,"Malgun Gothic",sans-serif}
+:root{color-scheme:dark;font-family:"Noto Sans CJK KR","Noto Sans KR","Malgun Gothic",system-ui,sans-serif}
 *{box-sizing:border-box}body{background:#0d1523;color:#edf3fc;margin:0;line-height:1.65}
 main{max-width:690px;margin:0 auto;padding:28px 18px 80px}
 h1{font-size:clamp(1.55rem,4vw,2.2rem);line-height:1.3}
@@ -90,7 +90,7 @@ function finish(issue){
  const links=document.getElementById("existing-actions");
  const allowed=!(flow==="solve"&&issue==="mcp-prompts"&&!safe());
  links.hidden=!allowed;
- document.querySelectorAll("[data-route-flow]").forEach(x=>x.hidden=!allowed||x.dataset.routeFlow!==flow);
+ document.querySelectorAll("[data-route-flow]").forEach(x=>x.hidden=!allowed||x.dataset.routeFlow!==flow||flow==="solve");
  document.querySelectorAll("[data-route-case]").forEach(x=>x.hidden=!allowed||flow!=="solve"||x.dataset.routeCase!==issue);
  show(3);
 }
