@@ -87,7 +87,13 @@ class V2B5InternalProbeTests(TestCase):
         baseline = b3.assess_revision_impacts(())
         forged = {**baseline, "proposed_test_files": ["unrelated_test.py"]}
         with mock.patch.object(b3, "assess_revision_impacts", return_value=forged):
-            with self.assertRaises(b5.B5ProbeError):
+            # G1's source-joined B2 preview rejects false retest claims
+            # before B5 finishes its own verification. Earlier fail-closed
+            # is the expected stronger boundary, not a product failure.
+            from ucie_miner.ucie_v2_first_use_linked_v01 import FirstUseJoinError
+            with self.assertRaisesRegex(
+                FirstUseJoinError, "B3 review or automatic QA drift"
+            ):
                 b5._check_once()
 
     def test_b1_claimed_license_is_not_a_success(self):
