@@ -1,6 +1,6 @@
 """Offline regression for UCIE cost router; no GitHub calls or Actions triggering."""
 import unittest
-from ucie_actions_cost_router_v01 import classify
+from scripts.ucie_actions_cost_router_v01 import classify
 
 
 class RouterTests(unittest.TestCase):
