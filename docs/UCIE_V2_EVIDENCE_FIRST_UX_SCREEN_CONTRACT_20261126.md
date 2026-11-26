@@ -1,114 +1,194 @@
-# UCIE V2 Evidence-first UX Screen Contract — 2026-11-26
-
-STATUS=DESIGN_ONLY_NOT_IMPLEMENTED_NOT_VISUALLY_ACCEPTED
+# UCIE V2 — 바이브 코딩 첫 사용자 중심 UI·UX 상세 설계 (전면 개정)
+2026-11-26 KST | PROJECT=UCIE ONLY
+STATUS=NOVICE_FIRST_DESIGN_PROPOSAL__NOT_IMPLEMENTED__NO_VISUAL_ACCEPTANCE
 PARENT=docs/UCIE_V2_EVIDENCE_FIRST_PRODUCT_RISK_UX_FINAL_PROPOSAL_20261126.md
-PROJECT=UCIE ONLY
+COPY_SOURCE=docs/UCIE_V2_BEGINNER_COPY_DICTIONARY_20261126.md
 
-## 1. Product identity and frozen baseline
+## 0. 바뀐 우선 고객: 개발자 아니라 코딩을 한 번도 안 해본 AI 활용자
 
-The owner-fixed Premium Dark V04 visual direction remains unchanged. Actual V04 palette: canvas #08090c, surface #14161b, ink #f4f5f8, muted #a6abb7, line #2a2d37, restrained silver-lilac #b8c6f9, focus #b6c8ff; Korean system typography; satin rounded panels, no external assets or downloaded fonts. Never reintroduce the previously rejected gradient SaaS hero, orbit AI decorations, tiny technical paragraphs or decorative fake KPI dashboards.
+이번 설계의 P0 고객은 **용어·오류 코드·Python/SDK/MCP/버전 개념을 모르며, AI에게 말로 만들어 달라고 요청하는 첫 사용자**다. 처음 접하는 이용자는 '무엇을 만들고 싶다', '뭔가 안 된다', '어디를 눌러야 할지 모르겠다'는 자신의 말로 문제를 설명한다. 전문 개발자는 2차 사용자다. 세 열 기술 검토 작업대와 SHAs·버전/검증 레이블을 첫 화면에 두는 지난 제안은 이 기준에 **부적합**하므로 철회한다.
 
-Preserve existing navigation and routes: /local 홈; /local/error 문제 예방; /local/engine 개발 도구; /local/library 라이브러리; /local/evolution 개선 제안; /local/policy 이용 안내. Existing /local homepage and /local/evolution improvements are owner-frozen. This proposal does not change their bytes, approved functions or security rules. A separate isolated opt-in prototype and explicit acceptance must come before any replacement.
+유료 고객의 기대를 부풀리지 않도록 명확히 구분한다.
+- 사용자 기대: AI가 무엇이든 만들고 자동으로 오류를 고쳐 준다.
+- UCIE 현재 실제 기능: 기존 로컬 질문 경로는 네 종류의 일반 증상을 제한된 문장으로 1차 분류해 가능한 확인 방법과 공식 공개 문서 링크를 제시한다. 자유형 생성 AI·사용자 코드 분석·자동 수정·고객 파일 접근 기능 아님.
+- 사용자에게는 '지금 도와줄 수 있는 것'과 '아직 못하는 것'을 일상어로 짧고 정확하게 안내한다. 가능하지 않은 '새 앱 완성', 'AI 자동 고침', '내 코드 검사', '바로 적용' 버튼 금지.
+- 초보자 입력은 코드를 붙이는 행위가 아니라 **문제의 증상만 1~3문장**으로 표현한다. 파일 경로·오류 로그·비밀번호·API 키·개인정보를 입력하지 말도록 미리 안내. 실제 질문 처리에서 비밀 패턴 차단도 완벽하지 않으므로 UI 경고/기술 방어를 함께 둔다.
 
-## 2. Five questions UX must answer
+### 현재 기능을 버리지 않고 초보자 UX에 재배열
 
-1. What specific coding, compatibility or maintenance problem am I dealing with?
-2. Which language, OS, installed runtime or SDK version is it relevant to?
-3. What can be trusted: official upstream fact, UCIE inference, actual first-party test, independent test, owner approval, customer distribution permission?
-4. Which bounded technique, SkillBook chapter and test recipe could help, and where would they be inappropriate?
-5. When technology versions change, what is no longer proven and needs rechecking?
+2026-11-15 구현된 src/ucie_miner/local_first_use_plain_v01.py는 이미 세 가지 시작 선택지를 제공하고, /local/ask는 질문 12~360자, 제한된 네 가지 문제 패턴의 메모리 내 분류를 한다. 현행 POST 경로를 무시하거나 중복 생성하지 않는다. 중요한 사실: **/local/ask에만 기존 승인된 제한적 POST가 이미 존재**한다. 이전 설계의 'UCIE 로컬 화면은 전부 GET-only' 설명은 부정확하다. 기타 도서관/검색/기술 상세 GET 경로의 안전성은 보존하고, 새 POST/업로드/프로젝트 스캔/외부 API는 추가하지 않는다.
 
-The four UCIE pillars become one task path: search/problem → candidate & version → grounded explanation → test/negative example → safe reusable recipe and SkillBook → source and limitations → version-linked change review. The user may still enter each original pillar independently.
+## 1. 초보자용 UX 핵심 원칙 8개
 
-## 3. Desktop conceptual wireframe, 1440 px
+1. **먼저 목적을 물어보기:** 기술 분야·버전을 묻지 않는다. '지금 어떤 도움이 필요하세요?'와 세 가지 쉬운 선택지를 먼저 제시한다.
+2. **한 화면에 한 가지 결정:** 시작 → 상황 입력/대표 예제 선택 → 알아낸 것 → 지금 해볼 일. 초보 기본 화면은 **단일열·단일 주행동**. 과거 제안 25/47/28 3열 증거 패널은 전문가가 스스로 '자세히 보기'를 펼친 경우에만 고려.
+3. **보통 한국말:** '버전 호환성 검증'보다 '지금 쓰는 프로그램에서도 될까요?', '출처 증거'보다 '왜 이렇게 안내하나요?', 'SkillBook'보다 '따라 읽는 설명'. 기능명보다 행동을 이름 붙인다.
+4. **틀릴 수 있는 곳을 숨기지 않기:** '정확하게 해결했어요'가 아니라 '비슷한 사례를 찾았어요. 실제 원인인지 아직 몰라요.' 자동 확신 점수/가짜 완료 뱃지 금지.
+5. **모르는 것을 선택할 권리:** 'Python 버전이 뭐예요?' 질문은 뒤로 미루거나 '모르겠어요' 제공. 다만 모르는 버전에서는 '여기서 작동한다'고 안내하지 않는다.
+6. **누르기 전 결과를 말하기:** '예제 실행'은 UCIE가 준비한 가상 예제만 실행한다고 단서; '확인 방법 보기'는 자동 고침을 의미하지 않음.
+7. **길을 잃지 않기:** 현재 단계 표시 1/3·2/3·3/3; 뒤로, 다시 시작, 다른 선택지의 위치 일관. 입력은 저장하지 않는 설계이므로 뒤로 이동해도 원문 저장·복원이 보장된다고 약속하지 않음.
+8. **안심시키되 과장하지 않기:** 로컬에만 처리되는 현행 기능의 범위는 설명하되 모든 상황에 '완벽한 보안' 표현 금지. 시스템/프로젝트 파일 자동 조회를 하지 않는 점을 쉬운 말로 알려 준다.
 
-+--------------------------------------------------------------------------+
-| V04 sidebar | existing top bar / breadcrumb        search          help    |
-| Home        |-------------------------------------------------------------|
-| Prevention  | Which technology and version are you checking?              |
-| Tools       | [specific problem or technology__________] [version] [find] |
-| Library     |-------------------------------------------------------------|
-| Improvements| result list 25% | selected result 47% | evidence panel 28%  |
-| Guide       | tech / title   | one-line answer     | upstream source      |
-|             | version        | applicability       | exact commit/sha     |
-|             | actual status  | missing proof       | tests & negative     |
-|             | relevant book  | next safe action    | rights / stale date  |
-|             |-------------------------------------------------------------|
-|             | related SkillBook / impact of changes / revision status     |
-+--------------------------------------------------------------------------+
+## 2. 첫 화면의 실제 고객 카피 제안
 
-This is NOT a screenshot nor an implemented UI. Reuse V04 left navigation and top bar; construct the three-panel workbench only in a separately approved preview route. At 1024px show result/content with expandable lower evidence. Below 768px use a single-column sequence: search → result → evidence; on 390/320px never require page-wide horizontal scrolling. A long data table may scroll inside its own bounded container. No sticky panel may conceal keyboard focus.
+브랜드: UCIE (고정). 내부 메뉴 구조와 별개로 신규 온보딩 화면의 중심 문구는 다음을 사용한다.
 
-## 4. Above-the-fold content and progressive disclosure
+### 첫 방문
 
-Priority: problem search and tech/version selector → one-sentence verdict → version/preconditions → uncertainty and missing test → one main action → collapsible proof. Never lead with SHA, machine enum, licensing jargon or candidate count. The user selects the version explicitly; UCIE may not inspect unrelated projects to detect it. Unavailable version must show '해당 버전은 아직 확인되지 않았습니다', not an invented supported range.
+헤드라인: **지금 어떤 도움이 필요하세요?**
+한 줄 설명: '코딩을 처음 해도 괜찮아요. 지금 겪는 상황을 골라 보세요.'
+선택지 세 개만:
+- '코드가 잘 안 돼요' / '오류가 났거나 실행이 안 될 때, 확인할 방법을 찾아볼 수 있어요.' / 버튼 '문제 살펴보기' → 기존 /local/ask 또는 /local/solve
+- '간단한 예제를 보고 싶어요' / 'UCIE가 준비한 안전한 예제로 작동 모습을 볼 수 있어요.' / 버튼 '예제 체험하기' → 기존 지원된 엔진 예제 링크
+- '차근차근 배우고 싶어요' / '기술 설명과 실제로 살펴볼 수 있는 예제를 찾아볼 수 있어요.' / 버튼 '쉬운 설명 읽기' → 기존 /local/library
 
-Search result card/row:
-- Title in ordinary Korean phrasing; technical domain and *exact* version.
-- Two distinct truth axes: '기술 검증: 검토 전 / UCIE 시험 / 독립 검증' and '배포 가능 여부: 미승인 / 승인된 지정 고객 범위'.
-- One-line suitability and missing proof.
-- A link to SkillBook, bounded recipe and reproducible test only where such objects actually exist.
-- '근거 보기' exposes exact allowed upstream document URL, immutable commit or blob, source ownership/license, claim-vs-inference wording, test environment and digest.
-- Group many revisions of one upstream topic instead of falsely counting each revision as an independent verified capability.
+하단 짧은 기대 안내(도움말과 함께): '현재는 일부 대표적인 문제의 확인 방법과 미리 준비된 예제를 안내해요. 새 앱을 자동 제작하거나 내 코드를 대신 고치는 기능은 아직 없어요.'
 
-Basic view should show result, scope and next safe action. Expanded engineering view reveals complete test receipts, source hashes, supported and excluded environments, risk statements, positive/negative/control cases, revision lineage and input/output contract. This is progressive disclosure, not hiding a verification failure.
+**의도적으로 넣지 않는 CTA:** '앱 만들어줘', 'AI에게 물어보기', '내 코드 수정하기', '코드 붙여넣기', '원클릭 해결', '100% 안전'. 현행 미구현이므로 클릭 후 빈 화면을 보여서는 안 된다.
 
-## 5. Detailed workbench tabs
+### 안내 순서
 
-A. 판단 요약: what the technique is, when it helps, required preconditions, cases not supported, exactly which version was tested. Explicitly distinguish official source facts from first-party UCIE authored hypotheses.
+STEP 1: '어떤 일이 있었나요?' → 네 가지 대표 문제 예시를 사람이 이해할 수 있는 말로. 직접 입력도 가능하되 '증상만 설명해 주세요. 코드나 로그는 보내지 마세요.'를 입력 상단에 붙인다.
+STEP 2: '비슷한 상황을 찾아봤어요' → 검색/분류 결과를 단정하지 않고, 맞지 않으면 '아직 안내할 수 없는 문제예요'를 표시한다. 이 화면에서 사용자에게 기술 버전의 숫자 입력을 강요하지 않는다.
+STEP 3: '지금 확인해 볼 일' → 번호 두 개 안팎의 안전한 확인 방법, 관련 쉽고 짧은 설명, '왜 이런 안내가 나오나요?' 선택적 근거 설명. 확인 전 개인 파일 수정/실행 유도 금지.
 
-B. 시험 결과: first-party synthetic PASS is separate from actual upstream integration and independent outside QA. Show pass/fail/not-run, positive/negative/control counts, installed package/version and last timestamp. Do not summarize tests as 'safe' or score model hallucinations as certification. Running tests is a separately approved bounded local job; read-only GET must not execute tests or mutate local state.
+상단에 진행 표시는 '① 상황 선택 → ② 안내 확인 → ③ 다음 할 일'. 단계 번호는 진행상황 표시이며 실제 API 상태·검증 진척률을 뜻하지 않는다.
 
-C. 기술 자산: readable SkillBook chapters and distinct machine-readable contract (type, callable, input/output, failure, limits, dependencies, version). Show draft/unapproved correctly. No automatic export/publish/install of draft.
+## 3. 화면 구조 재설계
 
-D. 원본 근거: source owner, immutable SHA, source release, license state, visible contradiction, original primary proof vs UCIE authored interpretation. Provide full digest for copying in detailed view but no customer paths/files/IDs.
+### 첫 사용자/모바일: 1열 3단계가 기본
 
-E. 변경 영향: last tested date, upstream changes, affected recipes, next required re-test, deprecated or withdrawn cases. Future notices/subscriptions may appear only after a real approved delivery mechanism exists, never a decorative 'watching' switch.
+[UCIE]
+지금 어떤 도움이 필요하세요?
+[코드가 잘 안 돼요]
+[간단한 예제를 보고 싶어요]
+[차근차근 배우고 싶어요]
+'지금 가능한 도움과 아직 할 수 없는 일 보기'
 
-## 6. Three real user stories to validate
+선택하면:
+[앞으로] [1/3 어떤 일이 있었나요?]
+[대표 상황 네 개] / [직접 설명하기]
+[공개 사례 기준, 내 파일 자동 검사하지 않음]
+→
+[2/3 비슷한 사례를 찾았어요 / 아직 찾지 못했어요]
+[왜 그렇게 안내하나요?]
+→
+[3/3 지금 확인할 일]
+[관련 설명 읽기] [다시 시작]
 
-New developer: 'os.scandir를 어떻게 안전하게 사용하나요?' Search → view Python 3.15 context → resource lifecycle and bounded directory enumeration → warnings about TOCTOU, symlinks and no atomic snapshot guarantee → SkillBook 001 → optionally inspect UCIE-authored synthetic demonstration. No access to their actual directories.
+정확한 3개 시작 선택지 및 /local/ask와 /local/library 같은 실제 경로를 재사용한다. 다만 3단계 화면은 **미구현된 미래 UX 구성안**이며 기존 /local/ask 기능이 wizard로 구현되어 있다고 주장하지 않는다.
 
-Maintenance engineer: 'MCP prompts/get errors after an SDK upgrade'. Select pinned versions v2.3.0 and the verified merged revision → distinguish missing prompt, missing argument, server internal error → inspect 16 actual in-memory SDK cases and their limits (no transport or full version-wide guarantee) → SkillBook 003 draft, exact evidence and next manual verification. No false declaration of released fix version.
+### 기술 상세는 선택적 2차 정보
 
-Buyer/reviewer: 'Has this skill been independently tested and licensed for customer export?' Show four independent columns: technical applicability, first-party test, independent QA, distribution rights. No raw owner signing key or secret/customer identity in UI.
+입문 화면에서 '자세한 설명 보기'를 눌렀을 때만 '확인한 내용 / 확인하지 못한 내용 / 원본 자료 / 실행된 시험'을 펼친다. 데스크톱 1440px의 기술 정보 2~3열 구성은 **명시적 고급 상세 보기를 연 사람만** 사용. 기본 고객에게 SHA·Git commit·MCP prompts/get·JSON-RPC·SDK·CI/PR·실패 스택·인증 상태 enum·가상도서관 분류표를 노출하지 않는다.
 
-## 7. Trust-state language, not a single fake score
+기존 V04 sidebar/라우트 동결 상태는 그대로. 향후 별도 승인된 신 UI의 언어 후보만 비교:
+현행 홈→'홈', 문제 예방→'문제 해결', 개발 도구→'예제 체험', 라이브러리→'쉬운 설명', 개선 제안→'새로 달라진 점', 이용 안내→'도움말'. 이들은 **화면 시안 전용의 대체 레이블**이며 현행 V04 NAV/PAGE_NAMES를 수정하지 않았다. 용어를 바꾸면서 기능 범위가 오도되지 않는지 각각 라우트와 비교하고, 특히 '문제 해결'이 실제 코드를 고쳐준다는 의미로 오인되면 '문제 살펴보기'로 교체한다. '새로 달라진 점'이 실제 개인 프로젝트 변경 감지를 의미한다면 '공개 기술 변화 살펴보기'로 수정.
 
-| Machine condition | Customer Korean text | Permitted action |
-| --- | --- | --- |
-| UNVERIFIED_CANDIDATE_ONLY | 공개 기술 사례 · 검토 전 | 공식 근거 보기 |
-| UCIE-authored tests only | UCIE 자체 시험 완료 (시험된 범위) | 세부 시험 보기 |
-| actual upstream tests but no independent QA | 지정된 버전 실시험 확인 · 독립 검토 전 | 테스트 한계 확인 |
-| INDEPENDENTLY_VERIFIED with actual evidence | 독립 검증 기록 있음 (버전 표시) | 근거 보기 |
-| STALE or unknown runtime | 현재 버전 적용 여부 미확인 | 재검증 필요 |
-| RIGHTS_NOT_APPROVED | 재배포 권리 미승인 | 참고만 |
-| RETRACTED or DEPRECATED | 철회됨 / 오래된 기술 | 신규 적용 금지 |
-| CUSTOMER_LICENSED after C0-C5 | 지정 고객 사용권 승인 (범위 표시) | 범위 내 이용 |
+## 4. 초보자 첫 화면 금칙어 / 교체 기준
 
-A test pass is never a license; a source match is never an independent test; an owner-approved Local V1 shell is never a customer-exported SkillBook. Use textual explanation plus optional icon, not status color alone.
+전체 용어 사전 및 버튼/오류 카피는 docs/UCIE_V2_BEGINNER_COPY_DICTIONARY_20261126.md 참조.
 
-## 8. Accessibility and responsive design acceptance
+우선 교체:
+- '기술 검토 작업대' → '문제 살펴보기'
+- '적용 버전' → '어떤 프로그램에서 쓰나요? (모르면 건너뛰세요)'
+- '검증 증거' → '왜 이렇게 안내하나요?'
+- '스킬 실행 계약' → '이 예제가 하는 일과 주의할 점'
+- '가상도서관/SkillBook' → '쉬운 설명과 예제' (상세에서만 SkillBook 고유명)
+- '근거 기반 개선' → '새로 달라진 점' 또는 '바뀐 기술 살펴보기'
+- '인증/승인/Pass' → 'UCIE가 시험한 부분' + '아직 확인이 필요한 부분' + '다른 사람에게 제공할 수 있는지' **별도로**
+- '호환성' → '지금 쓰는 프로그램에서도 되나요?'
+- '오류 예방' → '문제가 생겼어요 / 문제를 미리 살펴보기' 문맥에 따라 나누기.
 
-- WCAG 2.2 AA target, normal text contrast >=4.5:1, non-text/status focus visibility, no keyboard trap, tab order follows reading order; lang=ko, main landmark, skip-to-content and visible aria-current navigation.
-- Usable touch targets, real labels and error feedback; avoid icon-only controls. Use 2px visible focus perimeter with adequate state contrast as an enhanced design target rather than incorrectly labelling every AAA rule as AA.
-- Validate 1440, 1024, 768, 390, 320 pixel widths; browser zoom 200%, Korean long titles without orphan fragments, long hashes without page overflow, reduced motion, text enlargement, screen reader basic route names.
-- No external JavaScript/fonts/assets, no GET-based side effects or new POST unless separate security+owner approval. Preserve Host/localhost pinning, CSP, no-store, escaped HTML, bounded inputs, exact route semantics.
-- Loading / no results / stale source / missing rights / blocked API / unsupported version require truthful explanatory copy and one next action. Never show an empty list as verification success.
+문구의 원칙: 짧은 문장, 존댓말, 직접적인 동사. 단순화 때문에 정확성·권리·실험 수준을 숨기지 않는다. 안내의 확신 표현은 근거 수준에 따라 바뀌도록 설계한다.
 
-Offline UI/UX Pro Max lookup was conducted for domain=ux queries 'dashboard navigation', 'status', 'data tables', 'contrast focus', 'responsive mobile table' and style design-system 'technical evidence developer knowledge dashboard'. Dataset suggestions are advisory, not applied; current UCIE V04 fixed palette and product decisions override external proposal colors.
+## 5. 실제 화면 상황별 필수 문구
 
-## 9. UX validation plan and acceptance states
+### 문제의 원인이 확인되지 않았을 때
+제목 '비슷한 사례를 찾았어요'
+본문 '작성하신 내용과 비슷한 공개 사례가 있어요. 하지만 실제 원인이 같은지는 아직 확인하지 못했어요.'
+버튼 '확인 방법 보기'
+기술 상세만 'UCIE 문장 분류에 일치, 고객 프로젝트 진단 아님'으로 공개.
 
-P0 STATIC_SPEC_ONLY (this document). No product source or CSS changed.
-P1 ISOLATED_PREVIEW: one opt-in static mock with UCIE-owned approved public/first-party data, without modifying any frozen V04 route.
-P2 SOURCE_TESTED: escaping/route/Host/CSP/no-store, statuses, empty/stale/long content, unsupported version and consent negative tests. Existing Local V04 regression must remain equal.
-P3 REAL_BROWSER_REVIEW: actual Edge screenshots and keyboard navigation on 1440/1024/768/390/320, zoom 200%, nested SkillBook/evidence views, no clipped status or focus.
-P4 SMALL_USER_TRIAL: proposed >=5 representative participants per iteration, covering junior/mid developer and reviewer. Compare same tasks against existing V04 baseline. Measure:
-- Correctly understood applicability and missing proof: target >=80%, baseline measured first.
-- False independent-test or commercial-approval interpretation: target 0 occurrences.
-- Successful task completion and time to trusted evidence; no hard latency claims until real measurements.
-- All critical tasks keyboard reachable, no page-wide horizontal overflow at named widths.
-P5 OWNER_UI_APPROVAL: independent owner signoff and exact-source CI, then separately approved deployment. Browser UI approval is NOT commercial release or security/rights approval.
+### 모르는 질문/지원하지 않는 분야일 때
+제목 '아직 이 문제에 맞는 안내가 없어요'
+본문 '지금은 몇 가지 대표 문제만 안내해 드리고 있어요. 아래에서 가까운 상황을 골라 보실 수 있어요.'
+버튼 '대표 문제에서 고르기' → /local/solve
+보조 '다른 말로 설명하기' → /local/ask
+허위 검색 성공/지어낸 수정법 없음.
 
-Current status: only P0 written; P1-P5 NOT_PERFORMED. No changes to existing V04, operator runtime, 3 old UCIE tasks, operating DB, C40/tunnel, other projects, customer code, auto promotion, owner release gates.
+### 민감한 입력·너무 긴 입력을 거부할 때
+제목 '문제 상황만 짧게 적어 주세요'
+본문 '코드, 파일 경로, 로그, 계정 정보는 넣지 마세요. 프로그램 이름과 화면에 나타난 현상만 적으면 돼요.'
+입력 길이의 제약을 구체적으로 보여줌 '12~360자', 1~3문장 권장. 원문을 로그나 화면에 다시 표시하지 않음. 개인정보 탐지가 완벽하다고 주장 금지.
+
+### 시험 데이터에만 성공했을 때
+제목 'UCIE 예제에서 이렇게 나왔어요'
+본문 'UCIE가 준비한 예제에서는 이 방법이 작동했어요. 사용 중인 코드에서도 똑같이 작동하는지는 별도로 확인해야 해요.'
+버튼 '예제에서 한 일 보기'
+개별 테스트 버전·제약은 기술 상세에 유지.
+
+### 오래된 자료·버전을 모를 때
+제목 '지금 사용 중인 환경에서도 되는지는 아직 몰라요'
+본문 '확인한 프로그램 버전이 달라서, 이 방법을 그대로 사용해도 되는지 추가 확인이 필요해요.'
+버튼 '확인된 조건 보기'
+현재 버전을 모르면 '모르겠어요' 가능, 그 상태로 무조건 '사용 가능' 표시 금지.
+
+### 출처는 확인됐지만 배포/사용권 승인이 없을 때
+제목 '설명은 볼 수 있지만, 배포는 아직 안 돼요'
+본문 '기술 설명과 예제는 참고할 수 있어요. 고객에게 제공하거나 설치하는 것은 별도 확인이 필요해요.'
+버튼 '제한 사항 보기'
+서비스 상용권한/개별 스킬 배포권은 다른 사실상태.
+
+### 오프라인·공개 원본/API 차단
+제목 '새 자료는 지금 확인할 수 없어요'
+본문 '이전에 확인한 공개 자료가 있다면 그것만 보여드려요. 최신 내용인지 확인되지 않은 경우에는 별도로 표시해요.'
+버튼 '이전에 확인한 자료 보기' (실제 캐시 데이터가 있을 때만)
+자동 재시도 무한 반복/가짜 최신 상태 금지.
+
+## 6. 개인 정보·실제 기능 경계
+
+- 질문 기능은 현행 /local/ask POST, same-origin Host/Origin, 12~360자, 고정 4종 분류만 제공. 범용 자연어 챗봇/모델 미구현. 지금은 입력을 메모리에서 처리하고 저장하거나 외부 AI에 전송하지 않는 것으로 구현되어 있으나, 전체 고객용 데이터 보안 감사 또는 실제 전송권한 인증은 별개.
+- 이 기존 제한된 POST를 '모든 UCIE 화면 GET-only'라고 잘못 설명하지 않는다. 다른 경로의 POST는 해당 계약대로 차단. 신규 질문 종류·파일 업로드·프로젝트 디렉터리 스캔·고객 데이터 기록·외부 LLM 호출·자동 코드 실행은 추가하지 않는다.
+- 버튼은 클릭하면 실제 실행되는 기능만 표현. 현행 안전한 합성 예제는 '내 코드 테스트'가 아니다. 사용자의 소스를 가져오라는 요청 금지.
+- 사용자 코드·개인정보를 공용 원장으로 승격하거나 타 프로젝트에 공유하지 않는다. 공식 공개 소스만 축적.
+- 기존 V04 Premium Dark 스타일, Local V1 로컬 인수 및 owner 제품 4대 목표, 지정 고객 전용 완전본 정책을 바꾸지 않는다.
+
+## 7. 사용자 교육의 기본 설계
+
+용어를 외우게 하지 않는다. 화면을 이해하는 데 필요한 딱 한 용어만 그 자리에서 설명:
+- 오류: '프로그램이 예상대로 작동하지 않을 때 나타나는 문제'
+- 예제: '실제로 무엇이 일어나는지 보려고 준비한 간단한 코드'
+- 버전: '사용 중인 프로그램의 번호'
+- 원본: '이 내용을 확인할 수 있는 공개 문서'
+- SkillBook: 상세에서만 '한 기술을 쉽게 설명하는 UCIE 안내서'
+
+성공한 사용자는 'UCIE가 알아서 다 해준다'가 아니라 '내가 지금 확인할 다음 단계와 모르는 부분을 안다'는 경험을 얻는다.
+
+## 8. 비기술자 실제 사용성 검증: 출시 전에 필수
+
+관찰 대상: Python/MCP/SHA를 설명하지 못하는 **진짜 코딩 처음 사용자**를 주요 평가자로 삼고, 개발자/기술 검토 담당자는 2차. IT 숙련자 5명을 초보자라고 부르지 않는다.
+
+1차 초보자 5~8명(계획 최소 표본; 대표성·통계적 검증을 뜻하지 않음) + 숙련자 2~3명으로 미지원/알려진 문제/예제/도서관 실제 4개 과제 진행. 현재 V04 대조군과 새 opt-in 초보자 시안 비교.
+- 시작 10초 이내 무엇을 눌러야 하는지 말할 수 있는지(평가 목표 >=80%, 실측 전 추정 금지)
+- 설명 없이 첫 화면에서 적절한 선택지 선택률, 직접 입력 성공률, 지원하지 않는 질문에서 실패/보류를 이해하는지.
+- 'UCIE가 내 코드와 PC를 자동 검사했다', '시험이 성공했으니 배포해도 된다', 'AI가 내 앱을 만들어 준다'와 같은 **중대한 과대 이해 0건 목표**.
+- 지원되는 4종 문제에서 문제 상황 → 다음 확인 행동 도달률, 잘못된 안내 없이 중단할 수 있는 비율.
+- 재시도·뒤로·다시 시작 기능/예제 안내의 실제 동작 확인.
+- 기술 증거/권리/적용 환경을 완전히 숨기지 않고 상세에서 찾을 수 있는지.
+- 320/390/768/1024/1440 px, 200% zoom, 한국어 긴 글, 키보드만, 화면 읽기, 포커스, 대비, 모바일 탭 영역, 빈 결과·차단·오프라인 시나리오와 실제 Edge 브라우저 캡처.
+- 테스트 완료 전 긍정적 'UX PASS' 금지. WCAG 2.2 AA 접근성은 실제 구현에 별도 감사.
+
+비교 기준: 최초 성공 수행 시간, 잘못 누른 비율, 기술 용어 의미 질문 빈도, 중대한 오해, 지시 없는 task completion. 초보자와 전문가 결과를 합쳐 쉬워졌다고 단정하지 않는다.
+
+## 9. 구현 작업 분리/회귀 규칙
+
+P0: **이번 변경은 문서 설계 수정일 뿐**. Local V04, /local/ask POST, /local/solve, 첫 방문 화면, CSS, 백엔드, DB, 스케줄러, C40, 외부 소스 경계 변경 0.
+P1: 현재 이미 구현된 src/ucie_miner/local_first_use_plain_v01.py와 local_question_intake_v01.py를 소스 고정으로 인수하고, 현행 라우트/문구/보안 제한을 UI 사전에 1:1 매핑.
+P2: 기존 V04와 분리된 UCIE-only static/isolated 초보자 프로토타입 제작. 기술 증거 열은 기본 숨김.
+P3: 소스 회귀 및 부정 시험: 질문 4종+지원불가/민감정보/원문 반사/버전 모름/잘못된 승인/실제 1단계 작동, 정확한 Host/Origin/CSP 및 read-only 경로, 기존 문구 경로의 실제 이용 가능.
+P4: 사용자 테스트 + 실제 Edge 시각/접근성 검증, 문구 재개정.
+P5: 소유자 화면 적용 승인 후 정확한 파일 SHA/백업과 운영 인수. 기존 소유자 원본의 수정·미추적 파일 보호, 무단 덮어쓰기/서비스 restart 금지.
+P6: 독립 제품·상용 배포 승인은 기존 고객용 C0–C5 별도 NO_GO 유지.
+
+OWNER_REVIEW=REQUIRED. ACCEPTANCE='초보자가 실제 기능을 과대평가하지 않고 설명 없이 다음 행동 도달' + 기존 V04 안전/권리 게이트 보존. 4축 제품 목표는 내부 정보 구조와 기술 상세에서 계속 완전하게 제공한다.
