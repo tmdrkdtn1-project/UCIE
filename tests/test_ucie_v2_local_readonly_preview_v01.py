@@ -144,3 +144,59 @@ class EvidenceComparisonPageTests(TestCase):
     def test_deterministic_whole_page(self):
         self.assertEqual(subject.render_all_cases_page(),
                          subject.render_all_cases_page())
+
+
+class B3LocalRevisionImpactReviewTests(TestCase):
+    def test_affected_only_real_ucie_graph_used(self):
+        result=subject.build_fixed_revision_impact_study()
+        rows=result["records"]
+        self.assertEqual([len(x["affected_asset_ids"]) for x in rows],[2,2,0])
+        self.assertEqual([len(x["proposed_test_names_not_executed"])
+                          for x in rows],[3,2,0])
+        self.assertFalse(result["actual_public_changes_observed"])
+
+    def test_unaffected_python_book_not_retested_for_mcp(self):
+        r=subject.build_fixed_revision_impact_study()["records"][0]
+        self.assertNotIn("UCIE-SKILLBOOK-PY-SCANDIR-001",r["affected_asset_ids"])
+        self.assertNotIn("test_ucie_skillbook_product_v01.py",
+                         r["proposed_test_names_not_executed"])
+
+    def test_git_change_propagates_to_curated_principle(self):
+        r=subject.build_fixed_revision_impact_study()["records"][1]
+        self.assertIn("UCIE-PRINCIPLE-PYTHON-GIT-BOUNDED-METADATA-001",
+                      r["affected_asset_ids"])
+        self.assertIn("test_ucie_skillbook_principle_composer_v01.py",
+                      r["proposed_test_names_not_executed"])
+
+    def test_same_git_pin_requires_no_tests(self):
+        r=subject.build_fixed_revision_impact_study()["records"][2]
+        self.assertEqual(r["affected_asset_ids"],[])
+        self.assertEqual(r["proposed_test_names_not_executed"],[])
+
+    def test_no_real_change_or_auto_retest_claim(self):
+        result=subject.build_fixed_revision_impact_study()
+        self.assertEqual(result["source_network_requests"],0)
+        self.assertEqual(result["operating_database_writes"],0)
+        for record in result["records"]:
+            self.assertFalse(record["actual_retest_executed"])
+            self.assertFalse(record["candidate_pin_independently_authenticated"])
+            self.assertFalse(record["automatic_scheduling"])
+
+    def test_panel_discloses_hypothetical_and_no_execution(self):
+        html=subject.render_fixed_revision_impact_panel()
+        self.assertIn("가정 실험",html)
+        self.assertIn("실제 공식 변경을 확인한 결과가 아니며",html)
+        self.assertEqual(html.count('class="impact-case"'),3)
+
+    def test_full_local_page_now_includes_working_b3_panel(self):
+        html=subject.render_all_cases_page()
+        self.assertIn('id="source-revision-study"',html)
+        self.assertEqual(html.count('class="case-panel"'),4)
+        self.assertNotIn("<script",html)
+        self.assertNotIn("<form",html)
+
+    def test_source_pin_drift_fails_closed(self):
+        from ucie_miner import ucie_v2_revision_impact_v01 as b3
+        with patch.dict(b3.PINS, {"doc:git/git": "b"*64}):
+            with self.assertRaises(b3.RevisionImpactError):
+                subject.build_fixed_revision_impact_study()
