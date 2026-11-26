@@ -144,6 +144,8 @@ def build_current_graph() -> dict:
         "autonomous_generalization_verified": False,
         "source_network_requests": 0,
         "operating_database_writes": 0,
+        "graph_scope": "FIRST_FIVE_PINNED_ASSETS_ONLY",
+        "global_asset_coverage_verified": False,
     }
 
 
@@ -205,7 +207,7 @@ def assess_revision_impacts(signals: tuple[dict, ...]) -> dict:
     return {
         "schema": SCHEMA,
         "status": ("REVIEW_ONLY_AFFECTED_RETEST_PROPOSAL"
-                   if impacted else "NO_RETEST_FOR_UNCHANGED_OR_UNLINKED_SOURCE"),
+                   if impacted else "NO_LINKED_RETEST_IN_BOUNDED_GRAPH"),
         "affected_assets": sorted(impacted),
         "unaffected_assets": sorted(set(ASSETS) - impacted),
         "candidate_changed_source_ids": sorted(changed),
@@ -222,4 +224,6 @@ def assess_revision_impacts(signals: tuple[dict, ...]) -> dict:
         "network_requests": 0,
         "operating_database_writes": 0,
         "graph_asset_count": len(graph["assets"]),
+        "graph_scope": graph["graph_scope"],
+        "global_asset_coverage_verified": False,
     }
