@@ -2,8 +2,14 @@ name: Stage 1 and 3 Offline Checks
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
   push:
     branches: [main]
+
+# Old PR HEAD attempts only; never cancel protected main validation.
+concurrency:
+  group: ucie-offline-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -15,9 +21,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      # One actual full-suite Ubuntu/Python 3.15 job during ordinary PR iteration.
+      # Final review: set label ucie-full-ci => previous four-platform gate.
+      # main always uses all four platforms. No checks are fabricated.
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ['3.13', '3.15']
+        include: ${{ fromJSON((github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ucie-full-ci')) && '[{"os":"ubuntu-latest","python-version":"3.13"},{"os":"ubuntu-latest","python-version":"3.15"},{"os":"windows-latest","python-version":"3.13"},{"os":"windows-latest","python-version":"3.15"}]' || '[{"os":"ubuntu-latest","python-version":"3.15"}]') }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
