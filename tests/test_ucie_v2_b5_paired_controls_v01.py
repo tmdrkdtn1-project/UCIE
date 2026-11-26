@@ -33,6 +33,8 @@ class PairedTests(TestCase):
     def test_empty_never_claims_complete_human(self):
         result = paired.assess_synthetic_pairs(())
         self.assertEqual(result["paired_synthetic_subjects"], 0)
+        self.assertEqual(result["status"], "SYNTHETIC_COMPARISON_EMPTY_HOLD")
+        self.assertIsNone(result["comparison"])
         self.assertFalse(result["human_evidence_valid"])
 
     def test_duplicate_subject_method_fails_closed(self):
