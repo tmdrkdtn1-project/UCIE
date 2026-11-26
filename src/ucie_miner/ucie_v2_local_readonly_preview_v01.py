@@ -353,6 +353,21 @@ def render_fixed_revision_impact_panel() -> str:
     )
 
 
+def _render_integrated_revision_lifecycle() -> str:
+    """One original B1->B3->B4 decision shown in the actual offline Local view.
+
+    Import inside the entrypoint: the lifecycle recomputes the original B4
+    evidence through this preview module; no new route or circular import at
+    module load.
+    """
+    from .ucie_v2_revision_lifecycle_workflow_v01 import (
+        build_revision_lifecycle, render_revision_lifecycle,
+        render_owner_acceptance_checklist,
+    )
+    return (render_revision_lifecycle(build_revision_lifecycle()) +
+            render_owner_acceptance_checklist())
+
+
 def render_all_cases_page() -> str:
     """One offline accessible page that compares all four fixed cases.
 
@@ -398,7 +413,8 @@ def render_all_cases_page() -> str:
         ' 자동 수정 기능이 아닙니다.</p>'
         '<nav aria-label="대표 문제 선택"><ul>' + navigation +
         '</ul></nav></header><main>' + ''.join(panels) +
-        render_fixed_revision_impact_panel() + '</main>'
+        render_fixed_revision_impact_panel() +
+        _render_integrated_revision_lifecycle() + '</main>'
         '<footer>검토용 실행 화면 · 독립 검증과 권리 검토 전 배포 금지 ·'
         ' 기존 V04 서비스 미변경</footer></body></html>'
     )
