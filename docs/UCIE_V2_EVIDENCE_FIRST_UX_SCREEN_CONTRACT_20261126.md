@@ -1,6 +1,6 @@
 # UCIE V2 — 바이브 코딩 첫 사용자 중심 UI·UX 상세 설계 (전면 개정)
 2026-11-26 KST | PROJECT=UCIE ONLY
-STATUS=NOVICE_FIRST_DESIGN_PROPOSAL__NOT_IMPLEMENTED__NO_VISUAL_ACCEPTANCE
+STATUS=OWNER_DESIGN_BASELINE_LOCKED__NOT_IMPLEMENTED__NO_VISUAL_ACCEPTANCE
 PARENT=docs/UCIE_V2_EVIDENCE_FIRST_PRODUCT_RISK_UX_FINAL_PROPOSAL_20261126.md
 COPY_SOURCE=docs/UCIE_V2_BEGINNER_COPY_DICTIONARY_20261126.md
 
@@ -201,4 +201,4 @@ P4: 사용자 테스트 + 실제 Edge 시각/접근성 검증, 문구 재개정.
 P5: 소유자 화면 적용 승인 후 정확한 파일 SHA/백업과 운영 인수. 기존 소유자 원본의 수정·미추적 파일 보호, 무단 덮어쓰기/서비스 restart 금지.
 P6: 독립 제품·상용 배포 승인은 기존 고객용 C0–C5 별도 NO_GO 유지.
 
-OWNER_REVIEW=REQUIRED. ACCEPTANCE='초보자가 실제 기능을 과대평가하지 않고 설명 없이 다음 행동 도달' + 기존 V04 안전/권리 게이트 보존. 4축 제품 목표는 내부 정보 구조와 기술 상세에서 계속 완전하게 제공한다.
+OWNER_REVIEW=DESIGN_BASELINE_APPROVED__LIVE_UI_OWNER_REVIEW_STILL_REQUIRED. ACCEPTANCE='초보자가 실제 기능을 과대평가하지 않고 설명 없이 다음 행동 도달' + 기존 V04 안전/권리 게이트 보존. 4축 제품 목표는 내부 정보 구조와 기술 상세에서 계속 완전하게 제공한다.
