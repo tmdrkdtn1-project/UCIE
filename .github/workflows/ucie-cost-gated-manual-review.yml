@@ -49,6 +49,7 @@ jobs:
     outputs:
       matrix: ${{ steps.gate.outputs.matrix }}
       native_required: ${{ steps.gate.outputs.native_required }}
+      tier: ${{ steps.gate.outputs.tier }}
     steps:
       - name: Read only exact pinned UCIE commit
         uses: actions/checkout@v7
@@ -108,12 +109,12 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$UCIE_EXPECTED"
       - name: Run full existing contract suite for final-risk changes
-        if: ${{ inputs.mode == 'MERGE_CANDIDATE' || matrix.os == 'windows-latest' || matrix.py == '3.13' }}
+        if: ${{ needs.classify.outputs.tier == 'FOUR_PLATFORM' }}
         env:
           PYTHONPATH: src
         run: python -B -m unittest discover -s tests -v
       - name: Run bounded classifier regression for low-risk review
-        if: ${{ inputs.mode == 'PR_ITERATION' && matrix.os == 'ubuntu-latest' && matrix.py == '3.15' }}
+        if: ${{ needs.classify.outputs.tier == 'FAST_NOT_MERGE' }}
         env:
           PYTHONPATH: src
         run: python -B -m unittest discover -s tests -p test_ucie_actions_exact_head_gate_v01.py -v
