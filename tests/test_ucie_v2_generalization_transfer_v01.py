@@ -99,6 +99,24 @@ class UCIEB4TransferTests(TestCase):
                 "ucie_miner.skillbook_scandir_recipe_v01.bounded_regular_file_names",
             )
 
+    def test_source_io_and_private_access_forgery_rejected(self):
+        mod = __import__("ucie_miner.skillbook_product_v01", fromlist=["build_skillbook"])
+        original = mod.build_skillbook()
+        for field, forged in (("network_requests", 1),
+                              ("operating_database_writes", 1),
+                              ("other_project_access", True),
+                              ("upstream_source_executed", True)):
+            with self.subTest(field=field):
+                altered = deepcopy(original)
+                altered[field] = forged
+                with self.assertRaises(b4.B4HypothesisError):
+                    b4._valid_book(
+                        altered, "doc:python/cpython",
+                        "9d78f43c4d521c1adfe339731628feadc834728ff09112c29e63ebc09406c45a",
+                        "UCIE-SKILLBOOK-PY-SCANDIR-001",
+                        "ucie_miner.skillbook_scandir_recipe_v01.bounded_regular_file_names",
+                    )
+
     def test_missing_fail_closed_control_rejected(self):
         mod = __import__(
             "ucie_miner.skillbook_git_porcelain_product_v01",
