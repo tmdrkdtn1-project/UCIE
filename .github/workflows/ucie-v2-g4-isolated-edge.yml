@@ -1,0 +1,67 @@
+name: UCIE V2 G4 isolated Windows Microsoft Edge first-use QA
+
+on:
+  pull_request:
+    branches:
+      - feature/ucie-v2-g3-isolated-browser-acceptance-20261126
+    paths:
+      - tests/test_ucie_v2_g3_isolated_browser_v01.py
+      - src/ucie_miner/ucie_v2_beginner_preview_v01.py
+      - src/ucie_miner/ucie_v2_first_use_linked_v01.py
+      - .github/workflows/ucie-v2-g4-isolated-edge.yml
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-windows-edge-first-use:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      UCIE_G3_BROWSER_QA: "1"
+      UCIE_G3_BROWSER_CHANNEL: msedge
+      UCIE_G3_OUTPUT_DIR: ./_ucie_g4_edge_browser
+      PYTHONPATH: src
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact reviewed PR source, not owner host
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Prepare pinned Python 3.15 for isolated test
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.15"
+
+      - name: Verify preinstalled real Microsoft Edge and Korean font
+        shell: pwsh
+        run: |
+          $paths = @(
+            'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+            'C:\Program Files\Microsoft\Edge\Application\msedge.exe'
+          )
+          $edge = $paths | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $edge) { throw 'G4 NO-GO: preinstalled Microsoft Edge not found on disposable Windows runner' }
+          Write-Output ("Installed Edge version: " + (Get-Item -LiteralPath $edge).VersionInfo.ProductVersion)
+          $fonts = Get-ChildItem 'C:\Windows\Fonts\malgun*.ttf' -ErrorAction SilentlyContinue
+          if (-not $fonts) { throw 'G4 NO-GO: installed Korean Malgun Gothic fonts unavailable' }
+          Write-Output 'Korean Malgun fonts present on isolated runner'
+
+      - name: Install same pinned Playwright controller as successful G3
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check --no-cache-dir playwright==1.58.0
+
+      - name: REAL Edge browser - keyboard, CSP, Korean, 5 widths, zoom, source HOLD
+        shell: pwsh
+        run: python -B -m unittest discover -s tests -p test_ucie_v2_g3_isolated_browser_v01.py -v
+
+      - name: Save UCIE-authored synthetic screenshots and source-bound evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ucie-g4-first-party-isolated-windows-edge-${{ github.run_id }}
+          path: ./_ucie_g4_edge_browser/
+          retention-days: 7
+          if-no-files-found: warn
