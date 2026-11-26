@@ -200,3 +200,36 @@ class B3LocalRevisionImpactReviewTests(TestCase):
         with patch.dict(b3.PINS, {"doc:git/git": "b"*64}):
             with self.assertRaises(b3.RevisionImpactError):
                 subject.build_fixed_revision_impact_study()
+
+
+class IntegratedLifecycleInExistingLocalPageTests(TestCase):
+    def test_four_case_owner_preview_now_contains_lifecycle_and_acceptance(self):
+        html=subject.render_all_cases_page()
+        self.assertEqual(html.count('class="case-panel"'),4)
+        self.assertIn('id="revision-lifecycle"',html)
+        self.assertIn('id="owner-acceptance"',html)
+        self.assertEqual(html.count('class="lifecycle-step"'),3)
+        self.assertIn("아직 미인수",html)
+
+    def test_still_one_offline_bounded_static_view(self):
+        html=subject.render_all_cases_page()
+        self.assertNotIn("<script",html)
+        self.assertNotIn("<form",html)
+        self.assertNotIn('<iframe',html)
+        self.assertNotIn('src="http',html)
+        self.assertEqual(html.count("<!doctype html>"),1)
+
+    def test_original_cli_all_includes_integrated_decisions(self):
+        output=StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(subject.main(["--case","all"]),0)
+        self.assertIn("기술이 바뀌면 예전 검증을 어떻게 다룰까요?",
+                      output.getvalue())
+        self.assertIn("가상도서관에서 검토 중인 개정 후보",
+                      output.getvalue())
+
+    def test_no_false_release_when_source_graph_drifted(self):
+        from ucie_miner import ucie_v2_revision_impact_v01 as b3
+        with patch.dict(b3.PINS, {"doc:git/git":"b"*64}):
+            with self.assertRaises(b3.RevisionImpactError):
+                subject.render_all_cases_page()
