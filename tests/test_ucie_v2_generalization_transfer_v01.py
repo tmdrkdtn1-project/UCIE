@@ -17,6 +17,40 @@ class UCIEB4TransferTests(TestCase):
         self.assertEqual(x["shared_candidate_facets"], sorted(b4.FACETS))
         self.assertEqual(len(x["content_sha256"]), 64)
 
+    def test_structured_extraction_preserves_different_privacy_contracts(self):
+        x = b4.build_hypothesis()
+        by_source = {p["source_id"]: p for p in x["parents"]}
+        self.assertEqual(by_source["doc:python/cpython"]["data_disclosure_boundary"],
+                         "FILE_NAMES_DISCLOSED_TO_AUTHORIZED_CALLER")
+        self.assertEqual(by_source["doc:git/git"]["data_disclosure_boundary"],
+                         "COUNTS_ONLY_NO_PATH_NAMES")
+        self.assertNotEqual(by_source["doc:python/cpython"]["observed_output_contract"],
+                            by_source["doc:git/git"]["observed_output_contract"])
+        self.assertEqual(x["nontransferable_privacy_claim"]["status"],
+                         "REJECTED_BY_EXPLICIT_DIFFERING_OUTPUT_CONTRACTS")
+
+    def test_false_universal_privacy_transfer_not_accepted(self):
+        x = b4.build_hypothesis()
+        self.assertIn("ALL_BOUNDED_METADATA_PROCESSES_HIDE_SOURCE_NAMES",
+                      x["nontransferable_privacy_claim"]["claim"])
+        trial = b4.run_bounded_transfer(x)
+        self.assertTrue(trial["overbroad_output_privacy_claim_rejected"])
+        self.assertNotEqual(trial["nontransferable_privacy_status"], "APPROVED")
+
+    def test_forged_python_output_privacy_contract_rejected(self):
+        mod = __import__("ucie_miner.skillbook_product_v01", fromlist=["build_skillbook"])
+        altered = deepcopy(mod.build_skillbook())
+        altered["machine_skill_contract"]["outputs"]["on_success"] = (
+            "BOUNDED_INTEGER_COUNTS_WITH_NO_PATH_BYTES"
+        )
+        with self.assertRaises(b4.B4HypothesisError):
+            b4._valid_book(
+                altered, "doc:python/cpython",
+                "9d78f43c4d521c1adfe339731628feadc834728ff09112c29e63ebc09406c45a",
+                "UCIE-SKILLBOOK-PY-SCANDIR-001",
+                "ucie_miner.skillbook_scandir_recipe_v01.bounded_regular_file_names",
+            )
+
     def test_real_third_ucie_mcp_synthetic_positive_negative_control(self):
         x = b4.run_bounded_transfer(b4.build_hypothesis())
         self.assertEqual(x["positive_negative_control"], [
