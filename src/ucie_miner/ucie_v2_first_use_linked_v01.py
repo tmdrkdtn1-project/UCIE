@@ -217,7 +217,15 @@ def build_existing_action_join(proof: dict) -> dict:
 def render_existing_action_sections(proof: dict) -> str:
     """Render fixed URLs and UCIE-owned test results, never customer input."""
     model = build_existing_action_join(proof)
+    native_links = "".join(
+        _link(model["flows"][key]["href"], model["flows"][key]["label"])
+        for key in ("solve", "try", "learn")
+    )
     parts = [
+        '<nav id="direct-start-actions" aria-label="기존 UCIE 기능 바로가기">'
+        '<p>선택 화면을 사용할 수 없어도 기존 기능을 바로 열 수 있습니다.'
+        ' 다만 UCIE 소유자 로컬 서버에서 제공되는 경우에만 연결됩니다.</p>'
+        + native_links + '</nav>',
         '<div id="existing-actions" hidden aria-live="polite" '
         'data-ucie-join="review-only">',
         '<p id="route-scope" class="subtle">기존 UCIE 로컬 서버가 같은 주소에서'

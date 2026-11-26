@@ -254,6 +254,22 @@ class RealFirstUseJoinTests(unittest.TestCase):
             with self.assertRaises(g1.FirstUseJoinError):
                 self.model()
 
+    def test_native_navigation_works_without_inline_javascript(self):
+        html = b2.render_preview()
+        self.assertIn('id="direct-start-actions"', html)
+        self.assertIn('aria-label="기존 UCIE 기능 바로가기"', html)
+        self.assertGreater(
+            html.index('id="direct-start-actions"'),
+            html.index('id="stage3"'),
+        )
+        self.assertIn('href="/local/ask"', html)
+        self.assertIn('href="/local/engine?purpose=SKILL_TEST_AUTOMATION"', html)
+        self.assertIn('href="/local/library?q=Git"', html)
+        self.assertIn(
+            'document.querySelectorAll("#existing-actions a[href],#direct-start-actions a[href]")',
+            html,
+        )
+
     def test_static_file_links_are_disabled_until_owner_local_host(self):
         html = b2.render_preview()
         self.assertIn('window.location.protocol!=="http:"', html)
