@@ -393,6 +393,14 @@ def _as_nested_case_fragment(html: str) -> str:
     raise PreviewError("unknown beginner view")
 
 
+def _render_heldout_library_research() -> str:
+    """Original three-technology bounded review, not autonomous discovery."""
+    from .ucie_v2_library_third_technology_transfer_v01 import (
+        build_heldout_transfer_review, render_heldout_transfer_review,
+    )
+    return render_heldout_transfer_review(build_heldout_transfer_review())
+
+
 def render_all_cases_page() -> str:
     """One offline accessible page that compares all four fixed cases.
 
@@ -440,7 +448,8 @@ def render_all_cases_page() -> str:
         '</ul></nav></header><main>' + ''.join(panels) +
         render_fixed_revision_impact_panel() +
         _render_integrated_revision_lifecycle() +
-        _render_b5_integrated_first_use() + '</main>'
+        _render_b5_integrated_first_use() +
+        _render_heldout_library_research() + '</main>'
         '<footer>검토용 실행 화면 · 독립 검증과 권리 검토 전 배포 금지 ·'
         ' 기존 V04 서비스 미변경</footer></body></html>'
     )

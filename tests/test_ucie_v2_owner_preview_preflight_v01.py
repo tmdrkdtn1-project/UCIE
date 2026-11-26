@@ -136,7 +136,7 @@ class OwnerB1B5PreflightTests(TestCase):
                     with redirect_stdout(out):
                         result=s.main(["--open"])
                 self.assertEqual(result,0)
-                opener.assert_called_once_with("C:/temp/ucie_fixed.html")
+                opener.assert_called_once_with(str(fixed_path))
         self.assertIn("NOT verified",out.getvalue())
 
     def test_non_windows_cannot_open(self):
@@ -155,3 +155,10 @@ class OwnerB1B5PreflightTests(TestCase):
                 report,_=s.build_owner_preflight()
         self.assertEqual(report["network_requests"],0)
         self.assertEqual(report["operating_database_writes"],0)
+
+class UCIEThirdTechnologyInLocalAcceptanceTests(TestCase):
+    def test_heldout_review_in_real_owner_b1_b5_page(self):
+        report,html=s.build_owner_preflight()
+        self.assertEqual(html.count('id="vlib-heldout-generalization"'),1)
+        self.assertIn("ALL_OUTPUTS_ANONYMIZED",html)
+        self.assertEqual(report["network_requests"],0)
