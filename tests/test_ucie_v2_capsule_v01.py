@@ -49,6 +49,18 @@ class V2CapsuleTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             c.build_from_existing_ucie().rights = "APPROVED"
 
+    def test_draft_status_forgery_rejected(self):
+        self.reject(lambda g, i, q: g.__setitem__("status", "APPROVED"))
+        self.reject(lambda g, i, q: g.__setitem__("auto_promoted", True))
+
+    def test_guide_network_or_db_write_forgery_rejected(self):
+        self.reject(lambda g, i, q: g.__setitem__("network_requests", 1))
+        self.reject(lambda g, i, q: g.__setitem__("operating_database_writes", 1))
+        self.reject(lambda g, i, q: g.__setitem__("other_project_access", True))
+
+    def test_synthetic_state_forgery_rejected(self):
+        self.reject(lambda g, i, q: i.__setitem__("status", "INDEPENDENTLY_VERIFIED"))
+
     def test_wrong_source_repo_rejected(self):
         self.reject(lambda g, i, q: g["source_evidence"].__setitem__(
             "official_repository", "unapproved/repo"))
