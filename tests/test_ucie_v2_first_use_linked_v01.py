@@ -200,13 +200,15 @@ class RealFirstUseJoinTests(unittest.TestCase):
             if case == "mcp-prompts" and scenario == "issue":
                 result["independent_fix_validated"] = True
             return result
+        proof = read_only_default()  # B1 already verified; now isolate G1's gate.
         with mock.patch.object(workbench, "evaluate_case", side_effect=forged):
             with self.assertRaises(g1.FirstUseJoinError):
-                self.model()
+                g1.build_existing_action_join(proof)
 
     def test_no_fake_machine_execution_or_approval(self):
         from ucie_miner import local_b2_connected_workbench_v01 as workbench
         actual = workbench.evaluate_case
+        proof = read_only_default()  # The forged candidate belongs to G1, not B1.
         for name, value in (("third_party_code_executed", True),
                             ("human_review_approved", True),
                             ("operating_database_writes", 1),
@@ -219,18 +221,19 @@ class RealFirstUseJoinTests(unittest.TestCase):
             with self.subTest(name=name):
                 with mock.patch.object(workbench, "evaluate_case", side_effect=forged):
                     with self.assertRaises(g1.FirstUseJoinError):
-                        self.model()
+                        g1.build_existing_action_join(proof)
 
     def test_unapproved_guide_source_rejected(self):
         from ucie_miner import mcp_prompts_guide_v01 as guide
         original = guide.build_readonly_guide
+        proof = read_only_default()  # Keep B1 receipt constant to test G1 guide join.
         def forge():
             result = original()
             result["source_evidence"]["pr_url"] = "https://unapproved.invalid"
             return result
         with mock.patch.object(guide, "build_readonly_guide", side_effect=forge):
             with self.assertRaises(g1.FirstUseJoinError):
-                self.model()
+                g1.build_existing_action_join(proof)
 
     def test_b3_unauthenticated_or_unrelated_retest_cannot_be_claimed_pass(self):
         from ucie_miner import ucie_v2_revision_impact_v01 as b3
