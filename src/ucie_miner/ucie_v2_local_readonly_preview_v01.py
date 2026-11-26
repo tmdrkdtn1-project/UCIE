@@ -376,6 +376,23 @@ def _render_b5_integrated_first_use() -> str:
     return render_b5_evaluation_panel(build_b5_readonly_evaluation())
 
 
+def _as_nested_case_fragment(html: str) -> str:
+    """Use a div, not an illegally nested main, for the existing B2 partial."""
+    known = (
+        '<main data-ucie-v2-isolated-journey="review-only">',
+        '<main data-ucie-v2-isolated-question="fixed-example">',
+    )
+    if (type(html) is not str or
+            sum(html.startswith(v) for v in known) != 1 or
+            html.count("<main") != 1 or html.count("</main>") != 1 or
+            not html.endswith("</main>")):
+        raise PreviewError("unexpected bounded beginner view")
+    for opening in known:
+        if html.startswith(opening):
+            return html.replace(opening, opening.replace("<main", "<div"), 1)[:-7] + "</div>"
+    raise PreviewError("unknown beginner view")
+
+
 def render_all_cases_page() -> str:
     """One offline accessible page that compares all four fixed cases.
 
@@ -396,7 +413,7 @@ def render_all_cases_page() -> str:
             '<section class="case-panel" id="case-' +
             escape(case, quote=True) + '">'
             '<h2>대표 상황: ' + escape(case, quote=True) + '</h2>'
-            + rendered["preview_html"]
+            + _as_nested_case_fragment(rendered["preview_html"])
             + render_evidence_details(case) + '</section>'
         )
     return (

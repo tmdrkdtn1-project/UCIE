@@ -19,6 +19,12 @@ class OwnerB1B5PreflightTests(TestCase):
         self.assertEqual(self.report["b5_comparison_arms"],3)
         self.assertEqual(self.report["official_links_count"],3)
 
+
+    def test_one_main_landmark_after_case_fragment_repair(self):
+        self.assertEqual(self.html.count("<main"),1)
+        self.assertEqual(self.html.count("</main>"),1)
+        self.assertIn('class="case-panel"',self.html)
+
     def test_human_and_release_states_remain_open(self):
         for key in ("owner_edge_browser_viewed_new_head",
                     "actual_keyboard_responsive_qa_pass",
@@ -122,10 +128,11 @@ class OwnerB1B5PreflightTests(TestCase):
 
     def test_windows_open_requires_explicit_flag(self):
         out=StringIO()
+        fixed_path=Path("C:/temp/ucie_fixed.html")
         with patch.object(s.os,"name","nt"):
             with patch.object(s.os,"startfile",create=True) as opener:
                 with patch.object(s,"save_fixed_temp_preview",
-                                  return_value=Path("C:/temp/ucie_fixed.html")):
+                                  return_value=fixed_path):
                     with redirect_stdout(out):
                         result=s.main(["--open"])
                 self.assertEqual(result,0)
