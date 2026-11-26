@@ -110,7 +110,7 @@ class UCIEB3RevisionImpactTests(TestCase):
     def test_research_only_source_rejected(self):
         with self.assertRaises(b3.RevisionImpactError):
             b3.assess_revision_impacts((
-                signal("research:open-web", previous=None),))
+                signal("research:GH Archive", previous=None),))
 
     def test_stale_old_source_pin_holds(self):
         with self.assertRaises(b3.RevisionImpactError):
