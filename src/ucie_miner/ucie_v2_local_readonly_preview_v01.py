@@ -134,10 +134,157 @@ def build_fixed_demo(case_id: str) -> dict:
         "persistent_writes": 0,
         "network_requests": 0,
     }
+    # For UI proof inspection, only the bounded validated review links.
+    linked_rows = (
+        flow["mcp_evidence_journey"]["related_review_packages"]
+        if case_id == "mcp-prompts" else []
+    )
+    if len(linked_rows) > 2:
+        raise PreviewError("too many review records")
     return {
         **receipt, "content_sha256": _hash(receipt),
         "preview_html": rendered,
+        "linked_review_rows": linked_rows,
     }
+
+
+def render_evidence_details(case_id: str) -> str:
+    """Display inspectable *existing* evidence, without inventing verdicts.
+
+    All values are produced by the pinned UCIE case assembly, never supplied
+    by a browser field, customer source, URL parameter, or untrusted text.
+    """
+    from .ucie_v2_capsule_v01 import build_from_existing_ucie
+    from .local_b2_connected_workbench_v01 import evaluate_case
+    if type(case_id) is not str or case_id not in EXAMPLES:
+        raise PreviewError("unsupported evidence case")
+    e = lambda value: escape(str(value), quote=True)
+    if case_id != "mcp-prompts":
+        issue = evaluate_case(case_id, "issue")
+        control = evaluate_case(case_id, "control")
+        if (issue["case_id"] != case_id or control["case_id"] != case_id
+                or issue["fixture_origin"] != "UCIE_AUTHORED_FIXED_SYNTHETIC"
+                or control["fixture_origin"] != "UCIE_AUTHORED_FIXED_SYNTHETIC"
+                or issue["actual_user_environment_inspected"] is not False
+                or control["actual_user_environment_inspected"] is not False
+                or issue["independent_fix_validated"] is not False
+                or control["independent_fix_validated"] is not False):
+            raise PreviewError("invalid first-party example proof")
+        return (
+            '<details class="proof" data-proof-kind="synthetic-only">'
+            '<summary>예제에서 실제로 비교한 결과</summary>'
+            '<p>문제 상황: ' + e(issue["observed_synthetic_result"]) + '</p>'
+            '<p>정상 통제 예제: ' + e(control["observed_synthetic_result"]) + '</p>'
+            '<p>시험의 한계: ' + e(issue["limitation"]) + '</p>'
+            '<p>상태: UCIE가 만든 고정 예제에서만 확인했습니다.'
+            ' 실제 사용자 PC나 제품 버전은 시험하지 않았습니다.</p>'
+            '</details>'
+        )
+    capsule = build_from_existing_ucie()
+    preview = build_fixed_demo("mcp-prompts")
+    if (capsule.case_id != case_id
+            or preview["flow_kind"] !=
+              "HISTORIC_FIRST_PARTY_MCP_CAPSULE_RELATED_LIBRARY_REVIEW"
+            or capsule.independent_qa != "NOT_VERIFIED"
+            or capsule.rights != "NOT_APPROVED"
+            or capsule.customer_release != "NOT_AUTHORIZED"):
+        raise PreviewError("MCP source or review boundary drift")
+    # Resolve actual B4 review only through the already-computed fixed case.
+    # The returned panel carries only the source-linked summarized rows.
+    rows = preview["linked_review_rows"]
+    if (type(rows) is not list or len(rows) != 2
+            or any(type(row) is not dict for row in rows)):
+        raise PreviewError("missing review evidence")
+    cards = []
+    for row in rows:
+        if (row.get("connected_via") !=
+              "MCP_TARGET_AND_PIN_ONLY_NOT_SAME_EXPERIMENT"
+                or row.get("rights_approved") is not False
+                or row.get("export_allowed") is not False
+                or row.get("independent_sdk_compatibility_proven") is not False):
+            raise PreviewError("unapproved review evidence")
+        cards.append(
+            '<article class="review-card">'
+            '<h3>개정 후보 (검토 중)</h3>'
+            '<p>자산 ID: ' + e(row["review_package_id"]) + '</p>'
+            '<p>후보 SHA: <code>' + e(row["package_sha256"]) + '</code></p>'
+            '<p>판정: ' + e(row["review_status"]) + '</p>'
+            '<p>다음 검토: ' + e(row["next_test_kind"]) + '</p>'
+            '<p>고객 사용·배포 불가, 실제 SDK 독립시험 미확인</p>'
+            '</article>'
+        )
+    return (
+        '<details class="proof" data-proof-kind="historic-sdk">'
+        '<summary>왜 이렇게 안내하나요? · 공식 근거와 시험 확인</summary>'
+        '<p>공식 공개 변경: <a href="' + e(capsule.official_source_url) +
+        '" rel="noopener noreferrer">MCP SDK 변경 기록</a></p>'
+        '<p>공식 기술 규격: <a href="' + e(capsule.official_spec_url) +
+        '" rel="noopener noreferrer">MCP 오류 처리 규격</a></p>'
+        '<p>기존 UCIE 시험: <a href="' + e(capsule.first_party_sdk_ci_url) +
+        '" rel="noopener noreferrer">과거 첫-party CI 확인</a></p>'
+        '<p>검토 대상 SDK 커밋: <code>' + e(capsule.fixed_commit) + '</code></p>'
+        '<p>SkillBook: ' + e(capsule.skillbook_id) + '</p>'
+        '<p>시험 범위: 기존 메모리 내 제한 조건의 역사적 관측입니다.'
+        ' 현재 SDK, 실제 고객 PC, 다른 전송 방식은 재검증하지 않았습니다.</p>'
+        '<p>독립 QA: 미확인 · 사용권: 미승인 · 고객 배포: 불가</p>'
+        '</details>'
+        '<section aria-label="가상도서관 개정 후보 비교" '
+        'data-review-comparison="review-only">'
+        '<h2>가상도서관에서 검토 중인 개정 후보</h2>'
+        '<p>아래 후보는 위 과거 SDK 시험과 같은 시험이 아닙니다.'
+        ' 원본 근거를 참조해 새로 만든 UCIE 합성시험 검토 자료입니다.</p>'
+        + ''.join(cards) + '</section>'
+    )
+
+
+def render_all_cases_page() -> str:
+    """One offline accessible page that compares all four fixed cases.
+
+    No search endpoint, dynamic input, client-side code, network request,
+    filesystem inspection or changes to the existing owner Local V04.
+    """
+    require_local_work("LOCAL_APP")
+    navigation = ''.join(
+        '<li><a href="#case-' + escape(case, quote=True) + '">' +
+        escape(case, quote=True) + '</a></li>' for case in EXAMPLE_IDS
+    )
+    panels = []
+    for case in EXAMPLE_IDS:
+        rendered = build_fixed_demo(case)
+        if rendered["customer_distribution_authorized"] is not False:
+            raise PreviewError("unexpected approval state")
+        panels.append(
+            '<section class="case-panel" id="case-' +
+            escape(case, quote=True) + '">'
+            '<h2>대표 상황: ' + escape(case, quote=True) + '</h2>'
+            + rendered["preview_html"]
+            + render_evidence_details(case) + '</section>'
+        )
+    return (
+        '<!doctype html><html lang="ko"><head>'
+        '<meta charset="utf-8"><meta name="viewport" '
+        'content="width=device-width,initial-scale=1">'
+        '<title>UCIE V2 — 근거 연결 비교 미리보기</title>'
+        '<style>body{font:16px/1.7 system-ui,sans-serif;'
+        'max-width:800px;margin:auto;padding:18px;color:#172a43;'
+        'background:#f8fafc}header,.case-panel,footer{background:#fff;'
+        'padding:18px;margin:14px 0;border-radius:12px}'
+        'section{padding:10px 0;border-bottom:1px solid #d8e1e8}'
+        'h1{font-size:1.5rem}h2{font-size:1.15rem}'
+        'h3{font-size:1rem}nav ul{display:flex;gap:12px;flex-wrap:wrap}'
+        'details{padding:12px;background:#f1f5f9;margin:12px 0}'
+        'p,code{overflow-wrap:anywhere}a:focus-visible,summary:focus-visible'
+        '{outline:3px solid #2563eb;outline-offset:3px}'
+        '@media(max-width:400px){body{padding:8px}'
+        '.case-panel,header,footer{padding:12px}}</style></head>'
+        '<body><header><h1>UCIE V2 — 알려진 문제와 기술 근거</h1>'
+        '<p>네 가지 고정된 사례입니다. 실제 PC 자동 진단이나'
+        ' 자동 수정 기능이 아닙니다.</p>'
+        '<nav aria-label="대표 문제 선택"><ul>' + navigation +
+        '</ul></nav></header><main>' + ''.join(panels) + '</main>'
+        '<footer>검토용 실행 화면 · 독립 검증과 권리 검토 전 배포 금지 ·'
+        ' 기존 V04 서비스 미변경</footer></body></html>'
+    )
 
 
 def render_fixed_demo_page(case_id: str) -> str:
@@ -172,12 +319,14 @@ def main(argv: list[str] | None = None) -> int:
     """CLI writes only generated HTML to stdout; no automatic file creation."""
     args = sys.argv[1:] if argv is None else argv
     if (type(args) is not list or len(args) != 2
-            or args[0] != "--case" or args[1] not in EXAMPLES):
+            or args[0] != "--case"
+            or args[1] not in (*EXAMPLE_IDS, "all")):
         print("UCIE_LOCAL_DEMO_USAGE: --case <predefined-safe-case-id>",
               file=sys.stderr)
         return 2
     try:
-        output = render_fixed_demo_page(args[1])
+        output = (render_all_cases_page() if args[1] == "all"
+                  else render_fixed_demo_page(args[1]))
     except (ValueError, KeyError, TypeError):
         print("UCIE_LOCAL_DEMO_HOLD: source evidence unavailable",
               file=sys.stderr)

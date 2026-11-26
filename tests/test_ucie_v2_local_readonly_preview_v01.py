@@ -82,3 +82,65 @@ class LocalReadOnlyPreviewTests(TestCase):
                           side_effect=AssertionError("file write")):
             html = subject.render_fixed_demo_page("python-env")
             self.assertIn("UCIE V2 첫 사용자 미리보기", html)
+
+
+class EvidenceComparisonPageTests(TestCase):
+    def test_all_page_runs_all_four_existing_cases(self):
+        html=subject.render_all_cases_page()
+        for case in subject.EXAMPLE_IDS:
+            self.assertIn('id="case-'+case+'"',html)
+            self.assertIn('href="#case-'+case+'"',html)
+        self.assertIn('data-review-comparison="review-only"',html)
+        self.assertIn("가상도서관에서 검토 중인 개정 후보",html)
+
+    def test_real_mcp_source_links_and_qa_status_exposed(self):
+        html=subject.render_evidence_details("mcp-prompts")
+        self.assertIn("modelcontextprotocol/python-sdk/pull/3696",html)
+        self.assertIn("actions/runs/42585148478",html)
+        self.assertIn("754254c08fe1c3eda18b69da3d336106fe8d72d6",html)
+        self.assertIn("독립 QA: 미확인",html)
+        self.assertEqual(html.count('class="review-card"'),2)
+
+    def test_three_other_cases_keep_synthetic_truth(self):
+        for case in ("python-env","powershell-command","git-repository"):
+            with self.subTest(case=case):
+                html=subject.render_evidence_details(case)
+                self.assertIn('data-proof-kind="synthetic-only"',html)
+                self.assertIn("정상 통제 예제",html)
+                self.assertNotIn("과거 첫-party CI",html)
+
+    def test_all_cli_outputs_full_page_without_new_user_input(self):
+        out=StringIO()
+        with redirect_stdout(out):
+            result=subject.main(["--case","all"])
+        self.assertEqual(result,0)
+        self.assertEqual(out.getvalue().count('class="case-panel"'),4)
+        self.assertNotIn("<form",out.getvalue())
+        self.assertNotIn("<script",out.getvalue())
+
+    def test_evidence_panel_forged_rights_rejected(self):
+        original=subject.build_fixed_demo
+        def fake(case):
+            item=original(case)
+            if case=="mcp-prompts":
+                item["linked_review_rows"][0]["rights_approved"]=True
+            return item
+        with patch.object(subject,"build_fixed_demo",side_effect=fake):
+            with self.assertRaises(subject.PreviewError):
+                subject.render_evidence_details("mcp-prompts")
+
+    def test_evidence_panel_wrong_case_rejected(self):
+        with self.assertRaises(subject.PreviewError):
+            subject.render_evidence_details("unapproved-source")
+
+    def test_offline_html_no_external_active_resources(self):
+        html=subject.render_all_cases_page()
+        self.assertNotIn("<script",html)
+        self.assertNotIn("<iframe",html)
+        self.assertNotIn("<form",html)
+        self.assertNotIn('src="http',html)
+        self.assertIn('rel="noopener noreferrer"',html)
+
+    def test_deterministic_whole_page(self):
+        self.assertEqual(subject.render_all_cases_page(),
+                         subject.render_all_cases_page())
