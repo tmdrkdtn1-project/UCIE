@@ -43,6 +43,10 @@ def _valid_book(book: dict, source_id: str, digest: str,
             or book.get("export_allowed") is not False
             or book.get("model_training_performed") is not False
             or book.get("auto_promoted") is not False
+            or book.get("network_requests") != 0
+            or book.get("operating_database_writes") != 0
+            or book.get("other_project_access") is not False
+            or book.get("upstream_source_executed") is not False
             or entry.get("source_id") != source_id
             or entry.get("evidence_sha256") != digest
             or source.get("source_document_sha256") != digest
