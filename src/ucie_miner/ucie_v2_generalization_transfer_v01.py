@@ -72,11 +72,51 @@ def _valid_book(book: dict, source_id: str, digest: str,
             or machine.get("runtime_execution_by_catalog") is not False
             or machine.get("external_code_execution") is not False):
         raise B4HypothesisError("missing structural transfer precondition")
+    # Extract transfer facts from the actual pinned machine-contract fields;
+    # do not assign universal facets to every book without checking its input,
+    # budget, error and disclosure semantics.
+    contracts = {
+        "doc:python/cpython": (
+            "approved_directory", "EXPLICIT_OWNER_AUTHORIZED_ABSOLUTE_LOCAL_DIRECTORY",
+            "INTEGER_1_TO_128_INCLUSIVE", "SORTED_TUPLE_OF_REGULAR_FILENAMES_ONLY",
+            "FILE_NAMES_DISCLOSED_TO_AUTHORIZED_CALLER",
+        ),
+        "doc:git/git": (
+            "payload", "CALLER_SUPPLIED_GIT_PORCELAIN_V1_Z_BYTES_ONLY",
+            "INTEGER_1_TO_64_INCLUSIVE", "BOUNDED_INTEGER_COUNTS_WITH_NO_PATH_BYTES",
+            "COUNTS_ONLY_NO_PATH_NAMES",
+        ),
+    }
+    if source_id not in contracts:
+        raise B4HypothesisError("unreviewed principle transfer source")
+    input_key, input_contract, limit, output_contract, privacy = contracts[source_id]
+    if (inputs.get(input_key) != input_contract
+            or inputs.get("max_entries") != limit
+            or outputs.get("on_success") != output_contract):
+        raise B4HypothesisError("source-specific input/output contract drift")
+    extracted = []
+    if inputs.get(input_key) == input_contract:
+        extracted.append("EXPLICIT_CALLER_INPUT")
+    if inputs.get("max_entries") == limit:
+        extracted.append("BOUNDED_MAX_ENTRIES")
+    if (outputs["on_failure"].endswith("_FAIL_CLOSED")
+            and len(negative) >= 3):
+        extracted.append("FAIL_CLOSED_NEGATIVE_CONTROLS")
+    if (machine.get("runtime_execution_by_catalog") is False
+            and machine.get("external_code_execution") is False):
+        extracted.append("NO_IMPLICIT_CATALOG_EXECUTION")
+    if "NOT_A_SECURITY_SANDBOX" in pres:
+        extracted.append("NOT_A_SECURITY_SANDBOX")
+    if set(extracted) != set(FACETS):
+        raise B4HypothesisError("cannot derive shared bounded mechanism")
     return {
         "source_id": source_id, "document_sha256": digest,
         "skillbook_id": skillbook_id,
         "original_machine_callable": expected_callable,
-        "facets": FACETS,
+        "facets": tuple(sorted(extracted)),
+        "input_budget_contract": limit,
+        "observed_output_contract": output_contract,
+        "data_disclosure_boundary": privacy,
         "first_party_structured_annotation_only": True,
         "independent_qa": False,
         "rights_approved": False,
@@ -152,6 +192,14 @@ def build_hypothesis() -> dict:
             "모든 언어·버전·보안 환경으로의 무조건적 일반화",
         ],
         "rejected_overgeneralization": REJECTED_SCOPE,
+        "nontransferable_privacy_claim": {
+            "claim": "ALL_BOUNDED_METADATA_PROCESSES_HIDE_SOURCE_NAMES",
+            "status": "REJECTED_BY_EXPLICIT_DIFFERING_OUTPUT_CONTRACTS",
+            "counterexample_skillbook_id": PY_BOOK,
+            "counterexample_output_contract": "SORTED_TUPLE_OF_REGULAR_FILENAMES_ONLY",
+            "contrasting_skillbook_id": GIT_BOOK,
+            "contrasting_output_contract": "BOUNDED_INTEGER_COUNTS_WITH_NO_PATH_BYTES",
+        },
     }
     fingerprint = sha256(json.dumps(
         base, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -216,6 +264,9 @@ def run_bounded_transfer(hypothesis: dict) -> dict:
         "parent_skillbooks": [x["skillbook_id"] for x in hypothesis["parents"]],
         "target_capsule_id": hypothesis["target_capsule_id"],
         "positive_negative_control": list(statuses),
+        "overbroad_output_privacy_claim_rejected": True,
+        "nontransferable_privacy_status":
+            hypothesis["nontransferable_privacy_claim"]["status"],
         "synthetic_cases_executed": 3,
         "real_upstream_sdk_rerun": False,
         "independent_qa_verified": False,
