@@ -24,6 +24,8 @@ class UCIEB3RevisionImpactTests(TestCase):
         self.assertEqual(len(g["assets"]), 5)
         self.assertFalse(g["autonomous_generalization_verified"])
         self.assertEqual(g["operating_database_writes"], 0)
+        self.assertEqual(g["graph_scope"], "FIRST_FIVE_PINNED_ASSETS_ONLY")
+        self.assertFalse(g["global_asset_coverage_verified"])
 
     def test_mcp_changed_only_mcp_assets(self):
         x = b3.assess_revision_impacts((
@@ -73,7 +75,7 @@ class UCIEB3RevisionImpactTests(TestCase):
         x = b3.assess_revision_impacts((
             signal("doc:git/git", candidate=b3.PINS["doc:git/git"]),))
         self.assertEqual(x["proposed_test_files"], [])
-        self.assertEqual(x["status"], "NO_RETEST_FOR_UNCHANGED_OR_UNLINKED_SOURCE")
+        self.assertEqual(x["status"], "NO_LINKED_RETEST_IN_BOUNDED_GRAPH")
 
     def test_empty_batch_is_no_action(self):
         x = b3.assess_revision_impacts(())
@@ -98,6 +100,7 @@ class UCIEB3RevisionImpactTests(TestCase):
             self.assertIs(x[field], False)
         self.assertEqual(x["network_requests"], 0)
         self.assertEqual(x["operating_database_writes"], 0)
+        self.assertFalse(x["global_asset_coverage_verified"])
 
     def test_invalid_unapproved_source_rejected(self):
         with self.assertRaises(b3.RevisionImpactError):
