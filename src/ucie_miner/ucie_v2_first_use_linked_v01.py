@@ -226,14 +226,16 @@ def render_existing_action_sections(proof: dict) -> str:
         _link(model["flows"][key]["href"], model["flows"][key]["label"])
         for key in ("solve", "try", "learn")
     )
-    parts = [
+    native_panel = (
         '<details id="direct-start-actions" class="technical-details" '
         'aria-label="기존 UCIE 기능 바로가기">'
         '<summary>다른 UCIE 기능 바로가기</summary>'
         '<p>선택 화면이 동작하지 않을 때 기존 기능으로 이동할 수 있습니다. '
         'UCIE 소유자 로컬 서버가 필요합니다.</p>'
         '<nav aria-label="기존 UCIE 기능 목록">'
-        + native_links + '</nav></details>',
+        + native_links + '</nav></details>'
+    )
+    parts = [
         '<div id="existing-actions" hidden aria-live="polite" '
         'data-ucie-join="review-only">',
         '<p id="route-scope" class="subtle">기존 UCIE 로컬 서버가 같은 주소에서'
@@ -310,4 +312,5 @@ def render_existing_action_sections(proof: dict) -> str:
         _link("/local/solve", "지원하는 네 가지 상황 보기") + '</div>'
         "</div>"
     )
+    parts.append(native_panel)  # Secondary fallback AFTER the case's safe action.
     return "".join(parts)
