@@ -18,6 +18,7 @@ import tempfile
 from .ucie_v2_original_library_assets_v01 import (
     SCHEMA as ASSET_SCHEMA, BUNDLE_ID, _digest as asset_digest,
 )
+from .ucie_v2_revision_impact_v01 import PINS, PY_BOOK, GIT_BOOK, MCP_ASSET
 
 SCHEMA = "UCIE_V2_REVIEW_HISTORY_LEDGER_V01"
 ENTRY_SCHEMA = "UCIE_V2_REVIEW_HISTORY_EVENT_V01"
@@ -115,7 +116,26 @@ def _validate_bundle(bundle: object) -> None:
                    type(p.get("document_sha256")) is not str or
                    HEX64.fullmatch(p["document_sha256"]) is None for p in sources)
             or counterexample.get("result") !=
-                "REJECTED_BY_EXPLICIT_DIFFERING_OUTPUT_CONTRACTS"):
+                "REJECTED_BY_EXPLICIT_DIFFERING_OUTPUT_CONTRACTS"
+            or counterexample.get("claim") !=
+                "ALL_BOUNDED_METADATA_PROCESSES_HIDE_SOURCE_NAMES"
+            or set(counterexample.get("different_output_contracts", ())) != {
+                "SORTED_TUPLE_OF_REGULAR_FILENAMES_ONLY",
+                "BOUNDED_INTEGER_COUNTS_WITH_NO_PATH_BYTES",
+            }
+            or machine.get("target_upstream_commit") !=
+                PINS["repo:modelcontextprotocol/python-sdk"]
+            or machine.get("transfer_target_capsule_id") != MCP_ASSET
+            or machine.get("expected_fixtures") != [
+                {"fixture": "missing_required_argument", "expected": "CONTRACT_MATCH"},
+                {"fixture": "OLD_NONCOMPLIANT_ERROR_CODE", "expected": "CONTRACT_VIOLATION"},
+                {"fixture": "prompt_execution_error", "expected": "CONTROL_ONLY"},
+            ]
+            or {p["source_id"]: (p.get("document_sha256"), p.get("skillbook_id"))
+                for p in sources} != {
+                "doc:python/cpython": (PINS["doc:python/cpython"], PY_BOOK),
+                "doc:git/git": (PINS["doc:git/git"], GIT_BOOK),
+            }):
         raise ReviewHistoryError("source lineage or negative lesson missing")
 
 

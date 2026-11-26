@@ -117,6 +117,33 @@ class ReviewHistoryTests(TestCase):
         with self.assertRaises(ledger.ReviewHistoryError):
             ledger.append_review_bundle(ledger.new_review_history(), b)
 
+    def test_forged_approved_source_pin_denied_even_after_rehash(self):
+        forged = deepcopy(self.clean)
+        forged["chapter"]["source_lineage"][0]["document_sha256"] = "f"*64
+        forged["content_sha256"] = asset._digest({
+            k:v for k,v in forged.items() if k != "content_sha256"
+        })
+        with self.assertRaises(ledger.ReviewHistoryError):
+            ledger.append_review_bundle(ledger.new_review_history(), forged)
+
+    def test_forged_mcp_target_denied_even_after_rehash(self):
+        forged = deepcopy(self.clean)
+        forged["machine"]["target_upstream_commit"] = "f"*40
+        forged["content_sha256"] = asset._digest({
+            k:v for k,v in forged.items() if k != "content_sha256"
+        })
+        with self.assertRaises(ledger.ReviewHistoryError):
+            ledger.append_review_bundle(ledger.new_review_history(), forged)
+
+    def test_counterexample_removed_denied_even_after_rehash(self):
+        forged = deepcopy(self.clean)
+        forged["machine"]["counterexample"]["different_output_contracts"] = []
+        forged["content_sha256"] = asset._digest({
+            k:v for k,v in forged.items() if k != "content_sha256"
+        })
+        with self.assertRaises(ledger.ReviewHistoryError):
+            ledger.append_review_bundle(ledger.new_review_history(), forged)
+
     def test_no_unmarked_directory_writes(self):
         with tempfile.TemporaryDirectory() as t:
             root = Path(t) / "ucie_v2_review_store"
