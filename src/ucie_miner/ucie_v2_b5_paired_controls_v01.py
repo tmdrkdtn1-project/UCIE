@@ -29,6 +29,21 @@ def assess_synthetic_pairs(records: tuple[dict, ...]) -> dict:
             raise B5StudyContractError("paired cohort mismatch")
         cohort_by_subject[token] = cohort
         by_subject[token][row["method"]] = row
+    if not by_subject:
+        return {
+            "schema": SCHEMA,
+            "status": "SYNTHETIC_COMPARISON_EMPTY_HOLD",
+            "paired_synthetic_subjects": 0,
+            "missing_method_subjects": {},
+            "unpaired_observation_count": 0,
+            "comparison": None,
+            "synthetic_summary": summary,
+            "real_human_observations": 0,
+            "human_evidence_valid": False,
+            "competitor_advantage_verified": False,
+            "automatic_rule_adoption": False,
+            "customer_release_authorized": False,
+        }
     missing = {
         token: sorted(set(METHODS) - set(variants))
         for token, variants in sorted(by_subject.items())
