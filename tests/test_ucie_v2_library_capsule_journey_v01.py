@@ -131,3 +131,80 @@ class LibraryCapsuleJourneyTests(TestCase):
             k:v for k,v in r.items() if k!="content_sha256"})
         with self.assertRaises(subject.LibraryJourneyError):
             subject.render_isolated_journey(r)
+
+
+class ExistingQuestionToEvidenceTests(LibraryCapsuleJourneyTests):
+    """Actual existing /local/ask result feeds the isolated B1/B2/B4 flow."""
+
+    @staticmethod
+    def body(s):
+        from urllib.parse import urlencode
+        return urlencode({"question": s}).encode("ascii")
+
+    def build_flow(self, text):
+        return subject.build_isolated_question_flow(
+            self.body(text), self.h,self.f,self.r,self.before,self.after,
+            fixture_sha256=SHA,
+            expected_revision_head_sha256=self.r["content_sha256"])
+
+    def test_existing_mcp_question_joins_same_capsule_and_reviewed_assets(self):
+        result=self.build_flow("MCP prompts/get 호출에서 인수 오류 -32602가 발생합니다.")
+        self.assertEqual(result["case_id"],"mcp-prompts")
+        self.assertEqual(result["linked_capsule_id"],subject.CAPSULE_ID)
+        html=subject.render_isolated_question_flow(result)
+        self.assertIn("왜 이렇게 안내하나요?",html)
+        self.assertIn("고객 환경에서 수정 효과",html)
+        self.assertNotIn("MCP prompts/get 호출에서 인수 오류",html)
+
+    def test_other_three_supported_cases_do_not_invent_mcp_proof(self):
+        samples=(
+            ("Python에서 패키지를 설치했는데 ModuleNotFoundError가 발생합니다.","python-env"),
+            ("PowerShell에서 명령을 입력했는데 명령을 찾을 수 없습니다.","powershell-command"),
+            ("Git 명령을 실행했는데 not a git repository 오류가 납니다.","git-repository"),
+        )
+        for text,case in samples:
+            with self.subTest(case=case):
+                result=self.build_flow(text)
+                self.assertEqual(result["case_id"],case)
+                self.assertIsNone(result["linked_capsule_id"])
+                self.assertIsNone(result["mcp_evidence_journey"])
+                self.assertIn("UCIE가 만든 예제",
+                    subject.render_isolated_question_flow(result))
+
+    def test_unsupported_question_fails_closed_without_fake_source(self):
+        result=self.build_flow("프로그램 화면이 너무 느려서 확인 방법을 알고 싶습니다.")
+        self.assertIsNone(result["case_id"])
+        self.assertIsNone(result["linked_skillbook_id"])
+        self.assertIn("아직 이 문제에 맞는 안내가 없어요",
+            subject.render_isolated_question_flow(result))
+
+    def test_sensitive_text_rejected_and_not_echoed(self):
+        from ucie_miner.local_question_intake_v01 import QuestionInputError
+        secret="MCP prompts/get 오류인데 token=MY_PRIVATE_VALUE 이 보입니다."
+        with self.assertRaises(QuestionInputError) as caught:
+            self.build_flow(secret)
+        self.assertNotIn("MY_PRIVATE_VALUE",str(caught.exception))
+
+    def test_false_release_after_rehash_denied(self):
+        flow=self.build_flow("MCP prompts/get 호출에서 인수 오류 -32602가 발생합니다.")
+        flow["customer_export_authorized"]=True
+        flow["content_sha256"]=subject._sha({
+            k:v for k,v in flow.items() if k != "content_sha256"})
+        with self.assertRaises(subject.LibraryJourneyError):
+            subject.render_isolated_question_flow(flow)
+
+    def test_wrong_mcp_capsule_after_rehash_denied(self):
+        flow=self.build_flow("MCP prompts/get 호출에서 인수 오류 -32602가 발생합니다.")
+        flow["linked_capsule_id"]="forged"
+        flow["content_sha256"]=subject._sha({
+            k:v for k,v in flow.items() if k != "content_sha256"})
+        with self.assertRaises(subject.LibraryJourneyError):
+            subject.render_isolated_question_flow(flow)
+
+    def test_no_new_route_or_background_effect(self):
+        result=self.build_flow("MCP prompts/get 호출에서 인수 오류 -32602가 발생합니다.")
+        self.assertFalse(result["new_http_endpoint_created"])
+        self.assertFalse(result["question_retained"])
+        self.assertFalse(result["automatic_ai_called"])
+        self.assertEqual(result["network_requests"],0)
+        self.assertEqual(result["operating_database_writes"],0)
