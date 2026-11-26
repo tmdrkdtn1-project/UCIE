@@ -368,6 +368,14 @@ def _render_integrated_revision_lifecycle() -> str:
             render_owner_acceptance_checklist())
 
 
+def _render_b5_integrated_first_use() -> str:
+    """Actual existing B5 comparator appended to original B1-B4 Local view."""
+    from .ucie_v2_b5_first_use_local_evaluation_v01 import (
+        build_b5_readonly_evaluation, render_b5_evaluation_panel,
+    )
+    return render_b5_evaluation_panel(build_b5_readonly_evaluation())
+
+
 def render_all_cases_page() -> str:
     """One offline accessible page that compares all four fixed cases.
 
@@ -414,7 +422,8 @@ def render_all_cases_page() -> str:
         '<nav aria-label="대표 문제 선택"><ul>' + navigation +
         '</ul></nav></header><main>' + ''.join(panels) +
         render_fixed_revision_impact_panel() +
-        _render_integrated_revision_lifecycle() + '</main>'
+        _render_integrated_revision_lifecycle() +
+        _render_b5_integrated_first_use() + '</main>'
         '<footer>검토용 실행 화면 · 독립 검증과 권리 검토 전 배포 금지 ·'
         ' 기존 V04 서비스 미변경</footer></body></html>'
     )

@@ -233,3 +233,40 @@ class IntegratedLifecycleInExistingLocalPageTests(TestCase):
         with patch.dict(b3.PINS, {"doc:git/git":"b"*64}):
             with self.assertRaises(b3.RevisionImpactError):
                 subject.render_all_cases_page()
+
+
+class IntegratedB5InOriginalLocalPageTests(TestCase):
+    def test_one_page_has_b1_b4_and_b5_same_mcp_case(self):
+        html=subject.render_all_cases_page()
+        self.assertEqual(html.count('class="case-panel"'),4)
+        self.assertIn('id="revision-lifecycle"',html)
+        self.assertIn('id="b5-first-use-evaluation"',html)
+        self.assertIn("mcp-prompts",html)
+        self.assertIn("검토용 인공 데이터",html)
+
+    def test_all_cli_renders_b5_without_external_input(self):
+        result=StringIO()
+        with redirect_stdout(result):
+            rc=subject.main(["--case","all"])
+        self.assertEqual(rc,0)
+        self.assertIn("실제 비교시험은 아직 수행하지 않았습니다",
+                      result.getvalue())
+        self.assertNotIn("<form",result.getvalue())
+        self.assertNotIn("<script",result.getvalue())
+
+    def test_forged_b5_release_cannot_render_local_page(self):
+        from ucie_miner import ucie_v2_b5_first_use_local_evaluation_v01 as b5
+        real=b5.build_b5_readonly_evaluation()
+        real["customer_distribution_authorized"]=True
+        real["content_sha256"]=b5._sha({k:v for k,v in real.items()
+                                        if k!="content_sha256"})
+        with patch.object(b5,"build_b5_readonly_evaluation",return_value=real):
+            with self.assertRaises(b5.B5WalkthroughError):
+                subject.render_all_cases_page()
+
+    def test_original_single_case_cli_still_works(self):
+        result=StringIO()
+        with redirect_stdout(result):
+            code=subject.main(["--case","mcp-prompts"])
+        self.assertEqual(code,0)
+        self.assertIn("UCIE V2 첫 사용자 미리보기",result.getvalue())
