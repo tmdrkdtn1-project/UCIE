@@ -1,0 +1,13 @@
+# UCIE V2 Review-only feedback persistence and improvement measurement — 2026-11-26
+
+PROJECT=UCIE; source-only on stacked Draft after PR #370 exact head b4582c58acc81cf589c053a804fdf51d9f91876f.
+
+This batch introduces a conservative, **measured observation delta** and separate, optional **immutable create-only review receipt storage**. A first-party synthetic feedback event is evidence that a bounded UCIE-authored in-memory control was observed. It is NOT evidence that a customer problem was fixed, a human improved, an upstream SDK passed, or a new original principle became production-ready.
+
+`compare_review_observations(history,before,after)`: exact same pinned, hash-checked original library history required. The later registry must be append-only with exact old prefix; deleted, reordered, cross-history, duplicated or forged chains fail. Counts distinct review observations and returns current candidate decisions and proposed next tests; explicitly no measured customer benefit, no new approved external evidence, and no adoption.
+
+`save_feedback_receipt` / `read_feedback_receipt`: requires caller-created exact folder name `ucie_v2_feedback_review_store` and a marker named `.ucie_v2_feedback_review_store` containing the exact text `UCIE_V2_FIRST_PARTY_FEEDBACK_REVIEW_ONLY_V01\n`. Default preview never writes. With `approve_write=True`, one canonical hash-named JSON receipt is created once with exclusive O_EXCL create and fsync, capped at 512KB/file and 32 files. No automatic directory creation, no existing file overwrite, no unsafe deletion, no service/db writes. All loads validate the caller-supplied exact library history and embedded registry chain. Disk hash is integrity consistency, **not** an externally signed attestation or independently authenticated test-execution receipt. On platforms without O_NOFOLLOW, directory race/multiwriter operational isolation requires external host acceptance; do not misrepresent as secure production storage.
+
+13 first-party isolated tests cover before/after, identical result, non-append, denied paths, privacy injection, preview, exclusive create, read roundtrip, tamper and wrong history. Scratch temporary directories in tests only.
+
+PR #370 previous CI had one Ubuntu Python3.15 **failure** in a legacy public miner subprocess shutdown timing test (`test_ucie_public_miner_shutdown_phase_w11`); this is NOT a PASS and has not been silently fixed or skipped. The test is not in this new module but must be separately addressed/independently confirmed before any source merge. Do not modify existing production miner to make PR green. Owner Windows dirty tree, active 05:00 ACG, V04, SQLite, signed rules, model training, customer release untouched.
