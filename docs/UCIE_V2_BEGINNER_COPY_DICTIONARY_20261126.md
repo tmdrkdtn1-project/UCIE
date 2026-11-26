@@ -1,5 +1,5 @@
 # UCIE 고객용 쉬운 말 사전 V1 — 코딩 처음인 사람을 위한 화면 문구 계약
-2026-11-26 KST | STATUS=DESIGN_APPROVAL_PENDING_NOT_APPLIED | UCIE ONLY
+2026-11-26 KST | STATUS=OWNER_DESIGN_COPY_BASELINE_LOCKED__NOT_APPLIED | UCIE ONLY
 적용 대상: 향후 분리형 초보자 UX 시안. 기존 승인된 Premium Dark V04, 실제 문구와 운영 코드에는 미적용.
 권위: docs/UCIE_V2_EVIDENCE_FIRST_UX_SCREEN_CONTRACT_20261126.md
 현실 근거: src/ucie_miner/local_first_use_plain_v01.py 및 local_question_intake_v01.py의 실제 기존 기능. 현재 /local/ask는 네 가지 대표 증상만 12~360자 POST로 1차 분류; 자유로운 AI 상담이나 코드 자동 수정 아님.
@@ -160,4 +160,4 @@
 - 현행 owner-frozen V04 NAV/PAGE_NAMES나 /local/ask POST/security/운영 DB를 이번 문서 변경만으로 수정하지 않음.
 
 NEXT_OWNER=UCIE통합개발방 (분리형 UX 시안), UCIE사업방 (고객용 문구·제품 약속 검토)
-GATE=DESIGN_ONLY__USER_TEST_REQUIRED__OWNER_APPROVAL_REQUIRED
+GATE=DESIGN_ONLY_APPROVED__USER_TEST_REQUIRED__LIVE_UI_OWNER_APPROVAL_REQUIRED
