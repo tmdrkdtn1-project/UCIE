@@ -1,0 +1,76 @@
+name: UCIE B4 held-out PowerShell native and owner preflight independent smoke
+
+on:
+  pull_request:
+    branches:
+      - feature/ucie-v2-g4-isolated-windows-edge-20261126
+    paths:
+      - src/ucie_miner/ucie_v2_b4_powershell_heldout_v01.py
+      - src/ucie_miner/ucie_v2_g42_owner_edge_preflight_v01.py
+      - tests/test_ucie_v2_b4_powershell_heldout_v01.py
+      - tests/test_ucie_v2_g42_owner_edge_preflight_v01.py
+      - scripts/ucie_v2_b4_powershell_native_heldout.ps1
+      - .github/workflows/ucie-v2-b4-heldout-windows-native.yml
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-native-powershell-and-contract:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: src
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact PR HEAD, no source or owner mutation
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Python 3.15 for first-party bounded inference
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.15"
+
+      - name: Execute inherited B4, held-out transfer and owner NO-GO negatives
+        shell: pwsh
+        run: |
+          python -B -m unittest discover -s tests -p 'test_ucie_v2_generalization_transfer_v01.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Inherited B4 regression failure' }
+          python -B -m unittest discover -s tests -p 'test_ucie_v2_b4_powershell_heldout_v01.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'B4 held-out synthetic inference regression failure' }
+          python -B -m unittest discover -s tests -p 'test_ucie_v2_g42_owner_edge_preflight_v01.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'G4.2 owner no-go negative regression failure' }
+
+      - name: Observe native Get-Command in fresh disposable PowerShell process
+        shell: pwsh
+        run: |
+          $receiptText = pwsh -NoProfile -NonInteractive -File scripts/ucie_v2_b4_powershell_native_heldout.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'UCIE native PowerShell held-out control failed' }
+          $record = $receiptText | ConvertFrom-Json -ErrorAction Stop
+          if ($record.schema -ne 'UCIE_B4_HELDOUT_POWERSHELL_NATIVE_DISPOSABLE_V01' -or
+              $record.implicit_resolution -ne 'Alias' -or
+              $record.explicit_cmdlet_resolution -ne 'Cmdlet' -or
+              $record.hidden_alias_visible_with_all -ne $true -or
+              $record.hidden_cmdlet_visible_with_all -ne $true -or
+              $record.actual_owner_host_tested -ne $false -or
+              $record.independent_upstream_qa_verified -ne $false -or
+              $record.auto_promoted -ne $false) {
+            throw 'UCIE native observation or security provenance drift'
+          }
+          New-Item -ItemType Directory -Path './_ucie_b4_disposable' | Out-Null
+          $receiptText | Out-File -LiteralPath './_ucie_b4_disposable/native-powershell-receipt.json' -Encoding utf8
+          Write-Output ('Actual isolated PowerShell runtime: ' + $record.observed_pwsh_version)
+          Write-Output ('Exact v7.5.4 runtime matched pinned source: ' + $record.source_version_equals_runtime)
+          Write-Output 'Native positive/negative Get-Command controls PASS (not owner QA)'
+
+      - name: Upload first-party no-private synthetic receipt only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ucie-b4-heldout-powershell-native-${{ github.run_id }}
+          path: ./_ucie_b4_disposable/native-powershell-receipt.json
+          retention-days: 7
+          if-no-files-found: warn
