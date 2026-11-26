@@ -29,7 +29,7 @@ def classify(paths, mode):
                     if any(any(s in p for s in patterns) for p in names))
     approved = ("docs/", "tests/", "scripts/", "src/ucie_miner/", ".github/workflows/")
     unknown = any(not p.startswith(approved) and p not in ("AGENTS.md", "requirements.txt", "pyproject.toml") for p in names)
-    high = unknown or bool(native) or any(p.startswith(("src/", ".github/")) or
+    high = unknown or bool(native) or any(p.startswith(("src/", "scripts/", ".github/")) or
         p in ("AGENTS.md", "requirements.txt", "pyproject.toml") or
         any(s in p for s in ("core.py", "worker.py", "source_registry", "runtime_", "public_miner_cycle", "customer_")) for p in names)
     full = mode == "MERGE_CANDIDATE" or high
