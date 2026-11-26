@@ -1,0 +1,123 @@
+name: UCIE cost-gated manual validation - review candidate
+
+# Isolated shadow design. NEVER automatically runs on PR or main push.
+# workflow_dispatch registration on GitHub requires this workflow on default
+# branch; this review branch is intentionally not activated/deployed.
+on:
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: Immutable UCIE baseline commit (40 lowercase hex)
+        required: true
+        type: string
+      expected_head_sha:
+        description: Exact UCIE source commit to validate (40 lowercase hex)
+        required: true
+        type: string
+      mode:
+        description: Review iteration is not final merge acceptance
+        required: true
+        default: PR_ITERATION
+        type: choice
+        options:
+          - PR_ITERATION
+          - MERGE_CANDIDATE
+  workflow_call:
+    inputs:
+      base_sha:
+        required: true
+        type: string
+      expected_head_sha:
+        required: true
+        type: string
+      mode:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ucie-cost-gated-${{ github.workflow }}-${{ github.ref }}-${{ inputs.expected_head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  classify:
+    name: Exact-HEAD fail-closed change classification
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.gate.outputs.matrix }}
+      native_required: ${{ steps.gate.outputs.native_required }}
+      tier: ${{ steps.gate.outputs.tier }}
+    steps:
+      - name: Read only exact pinned UCIE commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.expected_head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.15"
+      - name: Guard pinned main ancestry and emit bounded matrix
+        id: gate
+        env:
+          UCIE_BASE_SHA: ${{ inputs.base_sha }}
+          UCIE_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          UCIE_MODE: ${{ inputs.mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B scripts/ucie_actions_exact_head_gate_v01.py \
+            --base "$UCIE_BASE_SHA" --head "$UCIE_HEAD_SHA" --mode "$UCIE_MODE"
+      - name: Contract-only no-cloud-runner workaround is not a merge PASS
+        env:
+          REQUIRED_NATIVE: ${{ steps.gate.outputs.native_required }}
+        shell: bash
+        run: |
+          if [ "$REQUIRED_NATIVE" = 'true' ]; then
+            echo 'HOLD: relevant native browser, PowerShell or MCP acceptance must be independently dispatched on this exact SHA.'
+            exit 1
+          fi
+
+  bounded-tests:
+    name: UCIE gated tests / ${{ matrix.os }} / Py${{ matrix.py }}
+    needs: classify
+    if: ${{ needs.classify.result == 'success' }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.expected_head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.py }}
+          cache: pip
+      - name: Set up same declared first-party test dependencies
+        run: python -m pip install -r requirements.txt "setuptools>=68"
+      - name: Recheck exact source commit inside every runner
+        env:
+          UCIE_EXPECTED: ${{ inputs.expected_head_sha }}
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$UCIE_EXPECTED"
+      - name: Run full existing contract suite for final-risk changes
+        if: ${{ needs.classify.outputs.tier == 'FOUR_PLATFORM' }}
+        env:
+          PYTHONPATH: src
+        run: python -B -m unittest discover -s tests -v
+      - name: Run bounded classifier regression for low-risk review
+        if: ${{ needs.classify.outputs.tier == 'FAST_NOT_MERGE' }}
+        env:
+          PYTHONPATH: src
+        run: python -B -m unittest discover -s tests -p test_ucie_actions_exact_head_gate_v01.py -v
+
+# Never sign, publish, upload customer inputs, write owner V04/SQLite,
+# change Windows tasks, or assert release from this workflow.
