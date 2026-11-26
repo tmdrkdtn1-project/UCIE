@@ -54,7 +54,7 @@ def _hash(value: object) -> str:
 def _first_party_study_record(method: str) -> dict:
     return {
         "study_id": STUDY_ID, "case_id": CASE_ID,
-        "anonymous_trial_token": "UCIE_FIXED_LOCAL_WALKTHROUGH",
+        "anonymous_trial_token": "F01",
         "method": method, "cohort": "FIRST_TIME_CODER",
         "first_safe_action_time_ms": 900, "correct_safe_action": True,
         "false_version_or_rights_claim": False, "evidence_detail_found": False,
