@@ -84,6 +84,18 @@ class KnowledgeEvolutionTests(TestCase):
                 reason_code="FIRST_PARTY_COUNTEREXAMPLE",
                 observed_pin=state["concepts"][0]["source_pins"]["doc:git/git"])
 
+    def test_unhashable_claim_is_controlled_rejection(self):
+        bad = deepcopy(e.build_fixed_evolution_demo())
+        bad["events"][0]["claim_code"] = ["ALL_OUTPUTS_ANONYMIZED"]
+        with self.assertRaises(e.EvolutionError):
+            e.validate_knowledge_index(bad)
+
+    def test_non_boolean_retest_flag_is_controlled_rejection(self):
+        bad = deepcopy(e.build_fixed_evolution_demo())
+        bad["events"][0]["retest_proposed"] = 0
+        with self.assertRaises(e.EvolutionError):
+            e.validate_knowledge_index(bad)
+
     def test_tampered_event_detected(self):
         state = e.build_fixed_evolution_demo()
         bad = deepcopy(state)

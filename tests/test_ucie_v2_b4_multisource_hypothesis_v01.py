@@ -29,6 +29,18 @@ class MultiSourceHypothesisTests(TestCase):
         with self.assertRaises(s.MultiSourceError):
             s.compose_hypotheses([records[0], deepcopy(records[0])])
 
+    def test_unhashable_source_id_is_controlled_rejection(self):
+        records = s.pinned_records()
+        records[0]["source_id"] = ["doc:python/cpython"]
+        with self.assertRaises(s.MultiSourceError):
+            s.compose_hypotheses(records)
+
+    def test_non_string_technology_is_controlled_rejection(self):
+        records = s.pinned_records()
+        records[0]["technology"] = {"language": "Python"}
+        with self.assertRaises(s.MultiSourceError):
+            s.compose_hypotheses(records)
+
     def test_source_sha_forgery_fails_closed(self):
         records = s.pinned_records()
         records[0]["source_pin"] = "f" * 64

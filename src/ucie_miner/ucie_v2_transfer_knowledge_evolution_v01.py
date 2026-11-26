@@ -137,6 +137,14 @@ def validate_knowledge_index(index: dict) -> dict:
         claim = event["claim_code"]
         source = event["source_id"]
         reason = event["reason_code"]
+        if (type(claim) is not str or type(source) is not str
+                or type(reason) is not str
+                or type(event["observed_pin"]) is not str
+                or type(event["decision"]) is not str
+                or type(event["affected_concepts"]) is not list
+                or any(type(x) is not str for x in event["affected_concepts"])
+                or type(event["retest_proposed"]) is not bool):
+            raise EvolutionError("malformed event field type")
         if (type(event["sequence"]) is not int or event["sequence"] != number
                 or event["previous_event_hash"] != previous
                 or claim not in ALLOWED_CLAIMS or source not in SOURCE_IDS
