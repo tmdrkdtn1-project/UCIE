@@ -245,6 +245,33 @@ class IsolatedBrowserG3Tests(unittest.TestCase):
             self.assertIn("Noto Sans CJK KR", css_family)
         self.assertIn("도움", page.locator("#stage1 h1").inner_text())
 
+    def test_19_safe_next_action_visible_within_first_mobile_viewport(self):
+        page = self.select_case()
+        action = page.locator(
+            '[data-route-case="mcp-prompts"] a[href="/local/solve?case=mcp-prompts"]')
+        self.assertTrue(action.is_visible())
+        rect = action.bounding_box()
+        self.assertIsNotNone(rect)
+        height = page.evaluate("window.innerHeight")
+        self.assertLess(rect["y"] + rect["height"], height,
+                        ("safe action below first 390px mobile viewport", rect, height))
+        self.assertTrue(page.evaluate("""() => {
+            const safe = document.querySelector(
+              '[data-route-case="mcp-prompts"] a[href="/local/solve?case=mcp-prompts"]');
+            const note = document.querySelector('#stage3 .note');
+            return (safe.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+        }"""))
+        self.screenshot("g3-mcp-first-action-390.png")
+
+    def test_20_programmatic_heading_focus_has_high_contrast_outline(self):
+        page = self.open_preview()
+        focus = page.locator("#stage1 h1")
+        self.assertTrue(focus.evaluate("(e) => document.activeElement === e"))
+        self.assertEqual(focus.evaluate(
+            "(e) => getComputedStyle(e).outlineStyle"), "solid")
+        self.assertEqual(focus.evaluate(
+            "(e) => getComputedStyle(e).outlineWidth"), "2px")
+
     def test_18_browser_is_real_selected_edge_not_g3_chromium(self):
         ua = self.page.evaluate("navigator.userAgent")
         self.assertEqual(self.receipt["browser_channel"], BROWSER_CHANNEL)
