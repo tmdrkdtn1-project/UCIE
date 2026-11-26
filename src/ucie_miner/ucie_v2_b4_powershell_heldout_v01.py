@@ -121,6 +121,7 @@ def _parent_checks() -> dict:
         SCHEMA as B2_SCHEMA, STATUS as B2_STATUS, evaluate_case,
     )
     from .local_error_actionable_workflow_v01 import get_case
+    from .ucie_v2_revision_impact_v01 import PINS, PY_BOOK, GIT_BOOK
 
     try:
         parent = build_hypothesis()
@@ -132,6 +133,24 @@ def _parent_checks() -> dict:
         raise HeldoutPowerShellError(
             "inherited B4 or first-party case already rejected evidence"
         ) from exc
+    # The parent hypothesis itself is draft data: the lower-level transfer
+    # fixture compares to build_hypothesis(), so a swapped builder could
+    # otherwise smuggle in a third, unapproved SkillBook or a forged digest.
+    # Lock ALL three identity fields for each of the TWO approved parents.
+    parents = parent.get("parents")
+    allowed_parents = {
+        ("doc:python/cpython", PY_BOOK, PINS["doc:python/cpython"]),
+        ("doc:git/git", GIT_BOOK, PINS["doc:git/git"]),
+    }
+    if (type(parents) is not list or len(parents) != 2
+            or any(type(row) is not dict for row in parents)
+            or {(row.get("source_id"), row.get("skillbook_id"),
+                 row.get("document_sha256")) for row in parents} != allowed_parents
+            or trial.get("parent_skillbooks") !=
+                [row["skillbook_id"] for row in parents]
+            or trial.get("hypothesis_id") != parent.get("hypothesis_id")
+            or trial.get("content_sha256") != parent.get("content_sha256")):
+        raise HeldoutPowerShellError("unreviewed B4 parent identity or source pin")
     if (parent.get("schema") != B4_SCHEMA
             or parent.get("method") != PARENT_METHOD
             or parent.get("target_case") != TARGET
