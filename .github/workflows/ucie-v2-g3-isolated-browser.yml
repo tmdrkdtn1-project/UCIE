@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 25
     env:
       UCIE_G3_BROWSER_QA: "1"
-      UCIE_G3_OUTPUT_DIR: ${{ runner.temp }}/ucie_g3_browser
+      UCIE_G3_OUTPUT_DIR: ./_ucie_g3_browser
       PYTHONPATH: src
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -51,6 +51,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ucie-g3-first-party-isolated-chromium-${{ github.run_id }}
-          path: ${{ runner.temp }}/ucie_g3_browser/
+          path: ./_ucie_g3_browser/
           retention-days: 7
           if-no-files-found: warn
