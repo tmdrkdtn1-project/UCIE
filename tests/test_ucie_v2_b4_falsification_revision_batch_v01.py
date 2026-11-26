@@ -55,6 +55,32 @@ class FalsificationBatchTests(TestCase):
         with self.assertRaises(b.FalsificationError):
             b.evaluate_first_party_trials(cases)
 
+    def test_boolean_truth_int_spoof_rejected(self):
+        cases = b._trial_specs()
+        cases[0]["expected"] = 1
+        with self.assertRaises(b.FalsificationError):
+            b.evaluate_first_party_trials(cases)
+
+    def test_affected_only_retests_and_unchanged_controls(self):
+        revision = b.build_falsification_revision_batch()["revision"]
+        self.assertEqual(revision["affected_only_retest_case_ids"],
+                         ["ps-prefix-spoof", "py-prefix-spoof"])
+        self.assertEqual(revision["unaffected_controls_preserved"],
+                         ["ps-other", "py-other"])
+
+    def test_bad_version_fields_rejected(self):
+        cases = b._trial_specs()
+        cases[0]["observed_version"] = ["7.6.6"]
+        with self.assertRaises(b.FalsificationError):
+            b.evaluate_first_party_trials(cases)
+
+    def test_synthetic_draft_not_customer_proof(self):
+        result = b.build_falsification_revision_batch()
+        self.assertTrue(result["first_party_synthetic_trials_executed"])
+        self.assertFalse(result["actual_upstream_python_or_powershell_tested"])
+        self.assertFalse(result["revision"]["engine_activated"])
+        self.assertFalse(result["revision"]["original_skillbook_replaced"])
+
     def test_unreviewed_fixture_id_rejected(self):
         cases = b._trial_specs()
         cases[0]["case_id"] = "outside"
