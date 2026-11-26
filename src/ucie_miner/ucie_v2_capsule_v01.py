@@ -65,6 +65,11 @@ def build_capsule(guide: dict, issue: dict, control: dict) -> Capsule:
         raise CapsuleContractError("missing source, rights or recipe")
     expected = (
         (guide.get("schema"), GUIDE_SCHEMA),
+        (guide.get("status"), "SOURCE_PINNED_FIRST_PARTY_DRAFT_NOT_APPROVED"),
+        (guide.get("auto_promoted"), False),
+        (guide.get("network_requests"), 0),
+        (guide.get("operating_database_writes"), 0),
+        (guide.get("other_project_access"), False),
         (guide.get("skillbook_id"), SKILLBOOK_ID),
         (guide.get("export_allowed"), False),
         (src.get("official_repository"), "modelcontextprotocol/python-sdk"),
@@ -74,6 +79,7 @@ def build_capsule(guide: dict, issue: dict, control: dict) -> Capsule:
         (src.get("patch_merge_commit"), FIX_COMMIT),
         (src.get("isolated_real_sdk_in_memory_ci"), REAL_SDK_CI),
         (src.get("observed_cases"), 16),
+        (src.get("source_code_redistributed"), False),
         (src.get("first_published_fixed_version"), "NOT_VERIFIED"),
         (recipe.get("callable"), RECIPE),
         (recipe.get("browser_execution_allowed"), False),
@@ -94,7 +100,9 @@ def build_capsule(guide: dict, issue: dict, control: dict) -> Capsule:
     for record, scenario, code in ((issue, "issue", "CONTRACT_VIOLATION"),
                                    (control, "control", "CONTRACT_MATCH")):
         checked = (
-            ("schema", B2_SCHEMA), ("case_id", CASE_ID),
+            ("schema", B2_SCHEMA),
+            ("status", "UCIE_FIRST_PARTY_SYNTHETIC_OBSERVATION_REVIEW_ONLY"),
+            ("case_id", CASE_ID),
             ("scenario", scenario), ("result_code", code),
             ("fixture_origin", "UCIE_AUTHORED_FIXED_SYNTHETIC"),
             ("fixture_evaluated", True),
