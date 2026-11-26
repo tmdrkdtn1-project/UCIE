@@ -1,0 +1,9 @@
+# UCIE V2 user-runnable local-first B1+B2+B4 walkthrough
+
+UCIE-only isolated source, stacked after Draft #379 exact parent d7c317c0c2e8446b0d1082edd44037691bca8429. Owner-frozen V04 and approved existing /local/ask routes are NOT altered.
+
+This milestone is a **runnable** UCIE-only local preview, not a disconnected concept picture. `python -m ucie_miner.ucie_v2_local_readonly_preview_v01 --case mcp-prompts` prints a full HTML document on stdout. The caller may inspect it via their own browser; no file or browser opens itself. Four exact case IDs are allowed: `mcp-prompts`, `python-env`, `powershell-command`, `git-repository`. It accepts NO arbitrary customer question or code, paths, token, file or URL. Failure prints generic HOLD/usage text without echoing untrusted arguments.
+
+The MCP case constructs the real UCIE-authored fixed B5 synthetic study + original Virtual Library source bundle + bounded 3-control feedback, reuses preexisting B1 pinned SDK Capsule, invokes the same existing bounded question classifier from /local/ask, produces B4 human+machine review packages and displays the three-step isolated journey, along with a clear historic in-memory first-party-vs-new synthetic caveat. The three other cases reuse the existing fixed workbench synthetic evaluator. Source, version, rights and independent QA remain separate; this is not real user-browser QA, not actual SDK regression replay, and not a production release.
+
+The module is standalone pure stdout HTML, with no new router, long-running process, scheduler, operating SQLite write, V04 alteration, signed rulepack, third-party source fetch, or automatic model training. Tests (9) exercise four-case actual code invocation, MCP capsule link, no network/subprocess, CLI fail-closed, deterministic reports, no writes, no false release claims. Exact-head 4-lane CI is necessary; real Edge acceptance is separate.
