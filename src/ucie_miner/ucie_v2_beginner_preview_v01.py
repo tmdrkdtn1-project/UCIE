@@ -27,7 +27,7 @@ button:hover,.start-choice:hover{background:#2b4771}button:focus-visible,a:focus
 a.review-action{display:block;background:#203450;border:1px solid #6481a5;border-radius:12px;padding:12px 14px;margin:10px 0}a.review-action[aria-disabled]{opacity:.6;pointer-events:none}.note{padding:14px;border:1px solid #647c9b;background:#1b2f4b;border-radius:12px}
 .stage[hidden],[hidden]{display:none!important}a{color:#b4d7ff;overflow-wrap:anywhere}
 details{border:1px solid #506481;border-radius:12px;padding:14px;margin-top:20px}
-summary{cursor:pointer;font-weight:700}.stepper{border-bottom:1px solid #3a4e66;padding-bottom:12px}
+summary{cursor:pointer;font-weight:700}code,p,h1,h2,h3,h4,dd,li{overflow-wrap:anywhere}dl,dd{min-width:0}.stepper{border-bottom:1px solid #3a4e66;padding-bottom:12px}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
 <script type="application/json" id="ucie-b1-evidence">__UCIE_PINNED_B1__</script>
