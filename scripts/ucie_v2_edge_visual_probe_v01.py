@@ -37,10 +37,14 @@ class EdgePreviewError(ValueError):
 def validate_url(url: str) -> str:
     if type(url) is not str or len(url) > 200 or any(ord(c) < 32 for c in url):
         raise EdgePreviewError("INVALID_URL")
-    p = urlsplit(url)
+    try:
+        p = urlsplit(url)
+        port = p.port
+    except ValueError as exc:
+        raise EdgePreviewError("INVALID_PORT_OR_URL") from exc
     if (p.scheme != "http" or p.hostname != "127.0.0.1"
             or p.username is not None or p.password is not None
-            or p.port is None or not 1024 <= p.port <= 65535
+            or port is None or not 1024 <= port <= 65535
             or p.path != URL_PATH or p.fragment):
         raise EdgePreviewError("ONLY_EXACT_LOOPBACK_PREVIEW_ALLOWED")
     if p.query:
