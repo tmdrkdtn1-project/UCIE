@@ -27,6 +27,12 @@ background:#73d6d0;color:#10212b;z-index:20}
 summary:focus-visible,.back:focus-visible{outline:3px solid #d5ff62;outline-offset:4px}
 main{max-width:760px}main p,main li,main dd{overflow-wrap:anywhere}
 main a{display:inline-block;max-width:100%;overflow-wrap:anywhere}
+main ol{padding-inline-start:1.75rem;margin:1rem 0}
+main ol li{padding:.25rem 0;line-height:1.55}
+main ol li>a{display:block;width:100%;max-width:100%;
+min-width:0;overflow-wrap:break-word;word-break:keep-all;
+padding:.5rem 0;min-height:44px}
+main ol li::marker{color:#dbe9f6;font-variant-numeric:tabular-nums}
 main section{min-width:0}main details{max-width:100%}
 @media(max-width:390px){main{margin:18px auto 36px;padding:0 12px}
 .panel{padding:16px}header{padding:16px 12px}}
