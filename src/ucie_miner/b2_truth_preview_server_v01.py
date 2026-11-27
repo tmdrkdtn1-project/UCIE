@@ -19,6 +19,20 @@ SCHEMA = "UCIE_V2_ISOLATED_B2_RECEIPT_PREVIEW_V01"
 ROUTE = "/v2/truth"
 HOST = "127.0.0.1"
 
+# Scoped preview-only accessibility adjustments; no frozen V04 CSS changes.
+PREVIEW_STYLES = """
+.skip-link{position:absolute;left:12px;top:-100px;padding:12px;
+background:#73d6d0;color:#10212b;z-index:20}
+.skip-link:focus{top:12px}
+summary:focus-visible,.back:focus-visible{outline:3px solid #d5ff62;outline-offset:4px}
+main{max-width:760px}main p,main li,main dd{overflow-wrap:anywhere}
+main a{display:inline-block;max-width:100%;overflow-wrap:anywhere}
+main section{min-width:0}main details{max-width:100%}
+@media(max-width:390px){main{margin:18px auto 36px;padding:0 12px}
+.panel{padding:16px}header{padding:16px 12px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important}}
+"""
+
 
 def _shell(content: str) -> str:
     return (
@@ -28,8 +42,9 @@ def _shell(content: str) -> str:
         '<meta http-equiv="Content-Security-Policy" '
         'content="default-src \'none\'; style-src \'unsafe-inline\'; '
         'base-uri \'none\'; form-action \'none\'">'
-        '<title>기술 확인 안내 · UCIE</title><style>' + STYLES + '</style>'
-        '</head><body><header><strong>UCIE · 기술 확인 안내</strong></header>'
+        '<title>기술 확인 안내 · UCIE</title><style>' + STYLES + PREVIEW_STYLES + '</style>'
+        '</head><body><a class="skip-link" href="#main">본문으로 건너뛰기</a>'
+        '<header><strong>UCIE · 기술 확인 안내</strong></header>'
         '<main id="main">' + content + '</main>'
         '<footer>실제 사용 환경의 호환성·권리·독립 QA 미확인 · 독립 미리보기</footer>'
         '</body></html>'
@@ -75,6 +90,7 @@ def route_truth_request(method: str, target: str) -> tuple[int, str]:
         chosen, source_tag=known[chosen]["source_tag"], receipt=None)
     return 200, _shell(
         '<a class="back" href="' + ROUTE + '">다른 사례 보기</a>'
+        '<h1>기술 안내와 확인된 범위</h1>'
         '<section class="panel">' + html + '</section>')
 
 
