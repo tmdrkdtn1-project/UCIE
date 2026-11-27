@@ -30,7 +30,8 @@ def build_python315_revision_addendum() -> dict:
         PYTHON_CASE, proposed_runtime="3.15", uses_negative_one=None)
     audit = audit_trusted_scandir_recipe()
     if (
-        joined["case_id"] != delta["case_id"] != audit["case_id"]
+        joined["case_id"] != delta["case_id"]
+        or joined["case_id"] != audit["case_id"]
         or joined["capsule_id"] != delta["capsule_id"]
         or joined["capsule_id"] != audit["capsule_id"]
         or joined["capsule_sha256"] != delta["capsule_sha256"]
