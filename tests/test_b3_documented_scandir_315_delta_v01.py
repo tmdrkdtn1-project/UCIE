@@ -1,4 +1,7 @@
 """UCIE B3 documented upstream delta: actual docs != customer-runtime proof."""
+import errno
+import os
+import sys
 import unittest
 
 from ucie_miner.b3_documented_scandir_315_delta_v01 import (
@@ -64,6 +67,16 @@ class DocumentedScandirDeltaTests(unittest.TestCase):
             with self.subTest(kwargs=kwargs), self.assertRaises(
                 DocumentedDeltaError):
                 evaluate_documented_scandir_delta(**kwargs)
+
+    @unittest.skipUnless(sys.version_info >= (3, 15),
+                         "Runtime reproduction only for Python 3.15+ CI")
+    def test_native_python315_negative_fd_raises_ebadf(self):
+        # Read no directories: invalid sentinel is the entire test input.
+        # This is direct interpreter behavior only, not owner runtime proof.
+        with self.assertRaises(OSError) as caught:
+            with os.scandir(-1) as entries:
+                tuple(entries)
+        self.assertEqual(caught.exception.errno, errno.EBADF)
 
     def test_exact_receipt_deterministic_and_separate_rights(self):
         a = evaluate_documented_scandir_delta(
