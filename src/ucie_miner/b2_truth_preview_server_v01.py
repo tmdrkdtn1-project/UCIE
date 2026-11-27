@@ -34,6 +34,20 @@ min-width:0;overflow-wrap:break-word;word-break:keep-all;
 padding:.5rem 0;min-height:44px}
 main ol li::marker{color:#dbe9f6;font-variant-numeric:tabular-nums}
 main section{min-width:0}main details{max-width:100%}
+.preview-steps{color:#c6d5e5;padding:0 0 0 1.5rem;margin:16px 0 20px}
+.preview-steps li{padding:5px 0}
+.case-choices{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;
+margin:18px 0 0;padding:0;list-style:none;counter-reset:ucie-case}
+.case-choices li{counter-increment:ucie-case;padding:0;min-width:0;position:relative}
+.case-choices li>a{position:relative;box-sizing:border-box;display:block;
+min-height:60px;padding:16px 15px 16px 48px;border:1px solid #53687e;
+border-radius:12px;text-decoration:none;color:#b1e5ff;
+font-weight:650;line-height:1.55;word-break:keep-all;overflow-wrap:anywhere}
+.case-choices li>a::before{content:counter(ucie-case);
+position:absolute;top:15px;left:15px;color:#dbe9f6;font-weight:750}
+.case-choices li>a:hover{background:#23384b;border-color:#73d6d0}
+.case-choices li>a:focus-visible{outline:3px solid #d5ff62;outline-offset:3px}
+.preview-boundary{font-size:13px;margin:22px 0 0}
 @media(max-width:390px){main{margin:18px auto 36px;padding:0 12px}
 .panel{padding:16px}header{padding:16px 12px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important}}
@@ -79,9 +93,18 @@ def route_truth_request(method: str, target: str, *,
             for c in caps
         )
         return 200, _shell(
-            '<section class="panel"><h1>어떤 기술 설명을 살펴볼까요?</h1>'
+            '<section class="panel" aria-labelledby="preview-title">'
+            '<h1 id="preview-title">어떤 기술 설명을 살펴볼까요?</h1>'
             '<p>준비된 두 사례만 살펴봅니다. 이 화면은 고객 코드를 받지 않습니다.</p>'
-            '<ol>' + links + '</ol></section>')
+            '<h2>이 화면에서 할 수 있는 일</h2>'
+            '<ol class="preview-steps"><li>아래 기술 사례를 하나 고릅니다.</li>'
+            '<li>근거와 UCIE 자체 예제의 확인 범위를 읽습니다.</li>'
+            '<li>지금 확인할 일과 아직 모르는 내용을 구분합니다.</li></ol>'
+            '<h2>살펴볼 수 있는 기술</h2>'
+            '<ol class="case-choices" aria-label="기술 사례 선택">' + links + '</ol>'
+            '<p class="preview-boundary">고객 환경을 자동으로 점검하거나 '
+            '코드를 수정하지 않습니다. 사용권·독립 품질 검증은 미확인입니다.</p>'
+            '</section>')
     try:
         parsed = parse_qs(url.query, strict_parsing=True,
                           keep_blank_values=True, max_num_fields=1)
