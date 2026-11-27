@@ -55,6 +55,21 @@ class B2TruthPreviewTests(unittest.TestCase):
             html.index("Python · 공식 문서 범위 살펴보기"))
         # A CSS contract test is not real Edge responsive visual QA.
 
+    def test_first_use_steps_are_explicit_and_only_real_cases_clickable(self):
+        code, html = route_truth_request("GET", ROUTE)
+        self.assertEqual(code, 200)
+        self.assertIn('class="preview-steps"', html)
+        self.assertIn('class="case-choices"', html)
+        self.assertIn("아직 모르는 내용을 구분", html)
+        self.assertIn("고객 환경을 자동으로 점검하거나", html)
+        self.assertIn("사용권·독립 품질 검증은 미확인", html)
+        self.assertEqual(html.count('href="/v2/truth?case='), 2)
+        self.assertEqual(html.count("<h1"), 1)
+        self.assertIn(".case-choices li>a:focus-visible", html)
+        self.assertIn("counter-reset:ucie-case", html)
+        self.assertNotIn("<form", html)
+        self.assertNotIn("코드를 고쳐", html)
+
     def test_source_bound_case_view_for_two_cases(self):
         for cap in build_pinned_b1_capsules():
             with self.subTest(source=cap["source_id"]):
