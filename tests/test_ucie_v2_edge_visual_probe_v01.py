@@ -54,6 +54,30 @@ class UCIEEdgeCaptureGateTests(unittest.TestCase):
                 probe.capture_edge("http://127.0.0.1:53431/v2/truth",
                                    Path("unused"), Path("unused"))
 
+    def test_edge_failure_diagnostics_distinguish_process_and_file(self):
+        from subprocess import CompletedProcess
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory(prefix="UCIE_EDGE_DIAG_TEST_") as folder:
+            missing = Path(folder) / "missing.png"
+            error = CompletedProcess(
+                args=["msedge.exe"], returncode=23,
+                stdout=b"", stderr=b"headless browser failed")
+            report = probe.screenshot_failure_details(error, missing, 320)
+            self.assertEqual(report["edge_exit_code"], 23)
+            self.assertFalse(report["png_created"])
+            self.assertEqual(report["width_css_px"], 320)
+            self.assertIn("headless browser failed", report["edge_stderr_tail"])
+            self.assertEqual(report["visual_qa"], "NOT_RUN")
+            png = Path(folder) / "screen.png"
+            png.write_bytes(probe.PNG_MAGIC + b"synthetic_only")
+            zero_exit = CompletedProcess(
+                args=["msedge.exe"], returncode=0,
+                stdout=b"test", stderr=b"")
+            valid_process = probe.screenshot_failure_details(
+                zero_exit, png, 390)
+            self.assertTrue(valid_process["png_created"])
+            self.assertEqual(valid_process["edge_exit_code"], 0)
+
     def test_capture_receipt_never_labels_visual_qa_pass(self):
         # The output contract is deliberately manual-review-only.
         source = SCRIPT.read_text(encoding="utf-8")
