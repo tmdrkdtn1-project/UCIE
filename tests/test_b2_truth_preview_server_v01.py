@@ -186,10 +186,13 @@ class B2TruthPreviewTests(unittest.TestCase):
                         "https://docs.python.org/3.15/library/os.html", html)
                     self.assertIn("확인하지 않았습니다", html)
                     self.assertIn("다른 호출부와 사용자 코드는 검사하지 않았습니다", html)
+                    self.assertIn("UCIE가 정리한 재사용 안내 보기", html)
+                    self.assertIn("정적 코드 확인만 수행했으며", html)
                     self.assertIn("그런 호출에 대해서만 점검과 재시험을", html)
                 else:
                     self.assertNotIn("Python 3.15에서 달라진 점", html)
                     self.assertNotIn("os.scandir(-1)", html)
+                    self.assertNotIn("UCIE가 정리한 재사용 안내 보기", html)
                 self.assertNotIn("현재 사용자 PC의 동작이 검증됐습니다", html)
                 self.assertNotIn("배포 승인 완료", html)
 
