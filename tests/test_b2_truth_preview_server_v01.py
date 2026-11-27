@@ -115,6 +115,59 @@ class B2TruthPreviewTests(unittest.TestCase):
         ), self.assertRaisesRegex(ValueError, "B1_B2_B3_PINNED_IDENTITY_DRIFT"):
             route_truth_request("GET", ROUTE + "?case=" + cap["case_id"])
 
+    def test_declared_mismatch_proposes_one_affected_case_only(self):
+        from urllib.parse import urlencode
+        from ucie_miner.b1_b2_b3_truth_journey_v01 import build_truth_journey
+        caps = build_pinned_b1_capsules()
+        for cap in caps:
+            with self.subTest(case=cap["case_id"]):
+                target = ROUTE + "?" + urlencode({
+                    "case": cap["case_id"], "review": "declared-mismatch"})
+                code, page = route_truth_request("GET", target)
+                self.assertEqual(code, 200)
+                self.assertIn("가상 버전 차이 시험", page)
+                self.assertIn("이 사례 1건, 실행 보류", page)
+                self.assertIn("실제 공식 업데이트가 아닙니다", page)
+                self.assertIn("관련 예제 재시험:", page)
+                self.assertIn("실행하지 않았습니다", page)
+                self.assertNotIn("UCIE가 만든 예제에서는 확인했습니다", page)
+                changed = build_truth_journey(
+                    cap["case_id"], "UCIE_DEMO_NOT_OBSERVED")
+                self.assertEqual(changed["b3_retest_proposal_count"], 1)
+                self.assertEqual(
+                    changed["source_revision_decision"], "SOURCE_REVISION_MISMATCH_HOLD")
+                self.assertFalse(changed["b3_revision_authenticated"])
+                self.assertFalse(changed["b3_retest_executed"])
+                unaffected = next(x for x in caps if x["case_id"] != cap["case_id"])
+                self.assertEqual(
+                    build_truth_journey(
+                        unaffected["case_id"], unaffected["source_tag"]
+                    )["b3_retest_proposal_count"], 0)
+
+    def test_declared_mismatch_rejects_arbitrary_tags_and_duplicates(self):
+        from urllib.parse import urlencode
+        cap = build_pinned_b1_capsules()[0]
+        normal = ROUTE + "?" + urlencode({"case": cap["case_id"]})
+        for url in (normal + "&review=other",
+                    normal + "&review=declared-mismatch&review=declared-mismatch",
+                    normal + "&review=declared-mismatch&junk=1",
+                    normal + "&tag=arbitrary",
+                    normal + "&review="):
+            with self.subTest(url=url):
+                self.assertEqual(route_truth_request("GET", url)[0], 400)
+
+    def test_declared_mismatch_never_reuses_pinned_synthetic_receipt(self):
+        from urllib.parse import urlencode
+        cap = build_pinned_b1_capsules()[0]
+        receipt = run_scoped_receipt(cap["case_id"], cap["source_tag"])
+        target = ROUTE + "?" + urlencode({
+            "case": cap["case_id"], "review": "declared-mismatch"})
+        code, page = route_truth_request(
+            "GET", target, receipts={cap["case_id"]: receipt})
+        self.assertEqual(code, 200)
+        self.assertNotIn(receipt["receipt_sha256"], page)
+        self.assertIn("아직 자체 시험 기록이 연결되지 않았", page)
+
     def test_reject_untrusted_query_and_post(self):
         for path in (ROUTE + "?case=unknown", ROUTE + "?case=x&case=y",
                      ROUTE + "?case=x&other=y", ROUTE + "?other=1",
