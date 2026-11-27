@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from .b1_b4_skillbook_capsule_link_v01 import build_pinned_b1_capsules
 from .b2_receipt_truth_view_v01 import render_b2_receipt_truth_view
 from .b1_b2_b3_truth_journey_v01 import build_truth_journey
+from .b3_documented_scandir_315_delta_v01 import evaluate_documented_scandir_delta
 from .v2_b1_b4_explorer_v01 import STYLES
 from .local_v1_priority_v01 import require_local_work
 
@@ -172,12 +173,43 @@ def route_truth_request(method: str, target: str, *,
         '</p>'
         '</details></section>'
     )
+    official_delta = ""
+    if capsule["source_id"] == "doc:python/cpython":
+        delta = evaluate_documented_scandir_delta(
+            chosen, proposed_runtime="3.15", uses_negative_one=None)
+        if (delta["capsule_id"] != capsule["capsule_id"]
+                or delta["capsule_sha256"] != capsule["content_sha256"]
+                or delta["recommendation"] != "CHECK_CALLSITE_FIRST_NO_EXECUTION"
+                or delta["retest_candidate"] is not False
+                or delta["customer_runtime_version_verified"] is not False):
+            raise ValueError("B3_REAL_DOC_CAPSULE_DRIFT")
+        official_delta = (
+            '<section class="panel" aria-labelledby="documented-python-change">'
+            '<h2 id="documented-python-change">Python 3.15에서 달라진 점</h2>'
+            '<p>공식 Python 문서에 따르면 3.15부터 '
+            '<code>os.scandir(-1)</code>은 <code>OSError(errno.EBADF)</code>로 '
+            '실패합니다. 이는 문서에서 확인한 변경 사항입니다.</p>'
+            '<p>이 사례가 실제로 <code>-1</code>을 전달하는지는 아직 '
+            '확인하지 않았습니다. 해당 호출을 사용하는지 확인한 다음에만 '
+            '그 부분의 재시험을 제안할 수 있습니다.</p>'
+            '<p>Git 사례는 이 Python 변경의 재시험 대상이 아닙니다. '
+            '현재 사용자 PC의 실행 버전도 조사하지 않았습니다.</p>'
+            '<details><summary>공식 문서 비교 보기</summary>'
+            '<p>Python 3.14: <a href="' + escape(
+                delta["older_official_document"], quote=True) +
+            '">공식 API 참고</a></p>'
+            '<p>Python 3.15: <a href="' + escape(
+                delta["newer_official_document"], quote=True) +
+            '">공식 API 참고</a></p>'
+            '<p>문서 SHA·실행 환경 호환성·독립 품질 검증·배포 권한: '
+            '검증 또는 승인되지 않았습니다.</p></details></section>'
+        )
     return 200, _shell(
         '<a class="back" href="' + ROUTE + '">다른 사례 보기</a>'
         '<h1>' + escape(title, quote=True) + '</h1>'
         '<p>준비된 사례의 근거와 시험 범위를 읽는 미리보기입니다. '
         '현재 사용 중인 PC를 진단한 결과가 아닙니다.</p>'
-        '<section class="panel">' + html + '</section>' + b3)
+        '<section class="panel">' + html + '</section>' + b3 + official_delta)
 
 
 class TruthPreviewHandler(BaseHTTPRequestHandler):
