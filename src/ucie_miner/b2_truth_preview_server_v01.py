@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 from .b1_b4_skillbook_capsule_link_v01 import build_pinned_b1_capsules
 from .b2_receipt_truth_view_v01 import render_b2_receipt_truth_view
+from .b1_b2_b3_truth_journey_v01 import build_truth_journey
 from .v2_b1_b4_explorer_v01 import STYLES
 from .local_v1_priority_v01 import require_local_work
 
@@ -119,10 +120,41 @@ def route_truth_request(method: str, target: str, *,
     receipt = None if receipts is None else receipts.get(chosen)
     html = render_b2_receipt_truth_view(
         chosen, source_tag=known[chosen]["source_tag"], receipt=receipt)
+    journey = build_truth_journey(chosen, known[chosen]["source_tag"])
+    capsule = known[chosen]
+    if (journey["capsule_id"] != capsule["capsule_id"]
+            or journey["source_document_sha256"] != capsule["source_document_sha256"]
+            or journey["source_tag"] != capsule["source_tag"]
+            or journey["source_revision_decision"] != "SOURCE_REVISION_MATCHED"
+            or journey["b3_retest_proposal_count"] != 0
+            or journey["b3_retest_executed"] is not False
+            or journey["b3_revision_authenticated"] is not False):
+        raise ValueError("B1_B2_B3_PINNED_IDENTITY_DRIFT")
+    title = ("Python · 제한된 폴더 탐색"
+             if capsule["source_id"] == "doc:python/cpython"
+             else "Git · 상태 정보 최소 공개")
+    b3 = (
+        '<section class="panel" aria-labelledby="revision-status">'
+        '<h2 id="revision-status">이 설명은 업데이트 후에도 맞을까요?</h2>'
+        '<p>지금은 저장된 공식 문서 버전과 같은지 내부 기록만 확인했습니다. '
+        '공식 사이트에서 최신 변경이 있는지 다시 조사한 결과는 아닙니다.</p>'
+        '<p>공식 자료의 변경 확인: <strong>아직 확인하지 않았습니다.</strong></p>'
+        '<p>관련 예제 재시험: <strong>실행하지 않았습니다.</strong></p>'
+        '<p>근거가 바뀌었다면 출처와 버전을 확인한 뒤 '
+        '영향을 받은 예제만 다시 점검할 것을 제안합니다.</p>'
+        '<details><summary>근거 및 개정 연결 보기</summary>'
+        '<p>고정된 출처 버전: ' + escape(journey["source_tag"], quote=True) + '</p>'
+        '<p>출처 SHA-256: ' + escape(journey["source_document_sha256"], quote=True) + '</p>'
+        '<p>변경 재확인 제안 SHA-256: ' + escape(journey["b3_proposal_sha256"], quote=True) + '</p>'
+        '<p>출처 갱신 인증: 미확인 · 재검토 제안 건수: 0건 (기준 버전 대조)</p>'
+        '</details></section>'
+    )
     return 200, _shell(
         '<a class="back" href="' + ROUTE + '">다른 사례 보기</a>'
-        '<h1>기술 안내와 확인된 범위</h1>'
-        '<section class="panel">' + html + '</section>')
+        '<h1>' + escape(title, quote=True) + '</h1>'
+        '<p>준비된 사례의 근거와 시험 범위를 읽는 미리보기입니다. '
+        '현재 사용 중인 PC를 진단한 결과가 아닙니다.</p>'
+        '<section class="panel">' + html + '</section>' + b3)
 
 
 class TruthPreviewHandler(BaseHTTPRequestHandler):
