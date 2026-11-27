@@ -31,7 +31,7 @@ class FirstPartyReceiptTests(unittest.TestCase):
                 self.assertEqual(receipt["network_requests"], 0)
                 self.assertEqual(receipt["customer_project_reads"], 0)
                 self.assertEqual(receipt["operating_database_writes"], 0)
-                self.assertIn("자체 예제에서는 확인", render_receipt_guidance(receipt))
+                self.assertIn("UCIE가 만든 예제에서는 확인했습니다", render_receipt_guidance(receipt))
 
     def test_mismatch_stays_hold_without_claiming_runtime_support(self):
         cap = self.caps[0]
