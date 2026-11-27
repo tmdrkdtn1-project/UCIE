@@ -73,6 +73,21 @@ def find_edge() -> Path:
     raise EdgePreviewError("EDGE_EXECUTABLE_NOT_FOUND")
 
 
+def screenshot_failure_details(run, dest: Path, width: int) -> dict:
+    """Bounded subprocess diagnostic; never mark a missing PNG as a QA pass."""
+    return {
+        "status": "EDGE_SCREENSHOT_FAILED",
+        "width_css_px": width,
+        "edge_exit_code": run.returncode,
+        "png_created": dest.is_file(),
+        "edge_stderr_tail": run.stderr.decode(
+            "utf-8", errors="replace")[-1200:],
+        "edge_stdout_tail": run.stdout.decode(
+            "utf-8", errors="replace")[-400:],
+        "visual_qa": "NOT_RUN",
+    }
+
+
 def capture_edge(url: str, output: Path, edge: Path, *,
                  timeout_seconds: int = 35) -> dict:
     """Capture 5 real Edge screenshots; record hashes, not visual acceptance.
@@ -121,17 +136,7 @@ def capture_edge(url: str, output: Path, edge: Path, *,
                 raise EdgePreviewError(
                     "EDGE_SCREENSHOT_TIMEOUT_" + str(width)) from exc
             if run.returncode != 0 or not dest.is_file():
-                diagnostic = {
-                    "status": "EDGE_SCREENSHOT_FAILED",
-                    "width_css_px": width,
-                    "edge_exit_code": run.returncode,
-                    "png_created": dest.is_file(),
-                    "edge_stderr_tail": run.stderr.decode(
-                        "utf-8", errors="replace")[-1200:],
-                    "edge_stdout_tail": run.stdout.decode(
-                        "utf-8", errors="replace")[-400:],
-                    "visual_qa": "NOT_RUN",
-                }
+                diagnostic = screenshot_failure_details(run, dest, width)
                 raise EdgePreviewError(json.dumps(
                     diagnostic, ensure_ascii=False, sort_keys=True))
             payload = dest.read_bytes()
