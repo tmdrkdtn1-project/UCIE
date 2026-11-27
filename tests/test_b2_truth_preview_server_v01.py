@@ -81,6 +81,40 @@ class B2TruthPreviewTests(unittest.TestCase):
                 self.assertIn("현재 사용 중인 프로그램 버전에서 작동하는지는 미확인", page)
                 self.assertIn("사용권 승인은 완료되지 않았", page)
 
+    def test_b1_b2_b3_case_identity_and_unverified_revision_status(self):
+        from ucie_miner.b1_b2_b3_truth_journey_v01 import build_truth_journey
+        for cap in build_pinned_b1_capsules():
+            with self.subTest(source=cap["source_id"]):
+                code, page = route_truth_request(
+                    "GET", ROUTE + "?case=" + cap["case_id"])
+                self.assertEqual(code, 200)
+                journey = build_truth_journey(cap["case_id"], cap["source_tag"])
+                self.assertEqual(journey["capsule_id"], cap["capsule_id"])
+                self.assertIn(cap["source_document_sha256"], page)
+                self.assertIn(cap["source_tag"], page)
+                self.assertIn(journey["b3_proposal_sha256"], page)
+                self.assertIn("공식 사이트에서 최신 변경이 있는지 다시 조사한 결과는 아닙니다", page)
+                self.assertIn("관련 예제 재시험:", page)
+                self.assertIn("실행하지 않았습니다", page)
+                self.assertIn("출처 갱신 인증: 미확인", page)
+                self.assertEqual(journey["b3_retest_proposal_count"], 0)
+                self.assertFalse(journey["b3_revision_authenticated"])
+                self.assertFalse(journey["b3_retest_executed"])
+                self.assertNotIn("업데이트 검증 완료", page)
+                self.assertNotIn("고객 환경에 적용 승인", page)
+
+    def test_b1_b2_b3_source_identity_drift_fails_closed(self):
+        from unittest.mock import patch
+        from ucie_miner.b1_b2_b3_truth_journey_v01 import build_truth_journey
+        cap = build_pinned_b1_capsules()[0]
+        journey = build_truth_journey(cap["case_id"], cap["source_tag"])
+        forged = {**journey, "source_document_sha256": "0" * 64}
+        with patch(
+            "ucie_miner.b2_truth_preview_server_v01.build_truth_journey",
+            return_value=forged,
+        ), self.assertRaisesRegex(ValueError, "B1_B2_B3_PINNED_IDENTITY_DRIFT"):
+            route_truth_request("GET", ROUTE + "?case=" + cap["case_id"])
+
     def test_reject_untrusted_query_and_post(self):
         for path in (ROUTE + "?case=unknown", ROUTE + "?case=x&case=y",
                      ROUTE + "?case=x&other=y", ROUTE + "?other=1",
