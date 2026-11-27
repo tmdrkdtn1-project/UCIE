@@ -40,6 +40,35 @@ class B2TruthPreviewTests(unittest.TestCase):
         self.assertEqual(route_truth_request("POST", ROUTE), (405, ""))
         self.assertEqual(route_truth_request("GET", "/local/ask"), (404, ""))
 
+    def test_loopback_rejects_wrong_and_duplicate_host_headers(self):
+        server = ThreadingHTTPServer((HOST, 0), TruthPreviewHandler)
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            for wrong in ("evil.example", "localhost", "127.0.0.1:9999"):
+                with self.subTest(host=wrong):
+                    conn = HTTPConnection(HOST, server.server_port, timeout=5)
+                    conn.putrequest("GET", ROUTE, skip_host=True)
+                    conn.putheader("Host", wrong)
+                    conn.endheaders()
+                    response = conn.getresponse()
+                    self.assertEqual(response.status, 403)
+                    self.assertEqual(response.read(), b"")
+                    conn.close()
+            conn = HTTPConnection(HOST, server.server_port, timeout=5)
+            conn.putrequest("GET", ROUTE, skip_host=True)
+            conn.putheader("Host", HOST + ":" + str(server.server_port))
+            conn.putheader("Host", "evil.example")
+            conn.endheaders()
+            response = conn.getresponse()
+            self.assertEqual(response.status, 403)
+            self.assertEqual(response.read(), b"")
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
     def test_loopback_real_http_get_and_post(self):
         server = ThreadingHTTPServer((HOST, 0), TruthPreviewHandler)
         thread = Thread(target=server.serve_forever, daemon=True)
