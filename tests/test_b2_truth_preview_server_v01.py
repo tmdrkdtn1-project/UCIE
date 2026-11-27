@@ -2,9 +2,11 @@
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from threading import Thread
+from unittest.mock import patch
 import unittest
 
 from ucie_miner.b1_b4_skillbook_capsule_link_v01 import build_pinned_b1_capsules
+from ucie_miner.b1_first_party_receipt_link_v01 import run_scoped_receipt
 from ucie_miner.b2_truth_preview_server_v01 import (
     HOST, ROUTE, TruthPreviewHandler, route_truth_request,
 )
@@ -59,6 +61,64 @@ class B2TruthPreviewTests(unittest.TestCase):
                 self.assertNotEqual(route_truth_request("GET", path)[0], 200)
         self.assertEqual(route_truth_request("POST", ROUTE), (405, ""))
         self.assertEqual(route_truth_request("GET", "/local/ask"), (404, ""))
+
+    def test_explicit_receipt_is_shown_without_get_triggered_trial(self):
+        caps = build_pinned_b1_capsules()
+        receipts = {cap["case_id"]: run_scoped_receipt(
+            cap["case_id"], cap["source_tag"]) for cap in caps}
+        for cap in caps:
+            with self.subTest(source=cap["source_id"]), patch(
+                "ucie_miner.b1_first_party_receipt_link_v01.run_first_party_synthetic_comparison",
+                side_effect=AssertionError("GET must not start a trial"),
+            ):
+                code, page = route_truth_request(
+                    "GET", ROUTE + "?case=" + cap["case_id"],
+                    receipts=receipts)
+                self.assertEqual(code, 200)
+                self.assertIn(receipts[cap["case_id"]]["receipt_sha256"], page)
+                self.assertIn("UCIE가 만든 예제에서는 확인했습니다", page)
+                self.assertIn("독립적인 품질 검증은 미완료", page)
+                self.assertIn("고객용 배포와 사용권 승인은 완료되지 않았", page)
+
+    def test_absent_optional_receipt_stays_unverified(self):
+        cap = build_pinned_b1_capsules()[0]
+        code, html = route_truth_request(
+            "GET", ROUTE + "?case=" + cap["case_id"], receipts={})
+        self.assertEqual(code, 200)
+        self.assertIn("아직 자체 시험 기록이 연결되지 않았", html)
+        self.assertNotIn("UCIE가 만든 예제에서는 확인했습니다", html)
+
+    def test_precomputed_receipt_mismatched_case_fails_closed(self):
+        left, right = build_pinned_b1_capsules()
+        fake = run_scoped_receipt(left["case_id"], left["source_tag"])
+        with self.assertRaises(ValueError):
+            route_truth_request(
+                "GET", ROUTE + "?case=" + right["case_id"],
+                receipts={right["case_id"]: fake})
+
+    def test_http_precomputed_receipt_does_not_execute(self):
+        cap = build_pinned_b1_capsules()[0]
+        receipt = run_scoped_receipt(cap["case_id"], cap["source_tag"])
+        server = ThreadingHTTPServer((HOST, 0), TruthPreviewHandler)
+        server.ucie_receipts = {cap["case_id"]: receipt}
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with patch(
+                "ucie_miner.b1_first_party_receipt_link_v01.run_first_party_synthetic_comparison",
+                side_effect=AssertionError("HTTP must not run a trial"),
+            ):
+                conn = HTTPConnection(HOST, server.server_port, timeout=5)
+                conn.request("GET", ROUTE + "?case=" + cap["case_id"])
+                response = conn.getresponse()
+                self.assertEqual(response.status, 200)
+                body = response.read().decode("utf-8")
+                self.assertIn(receipt["receipt_sha256"], body)
+                conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
 
     def test_loopback_rejects_wrong_and_duplicate_host_headers(self):
         server = ThreadingHTTPServer((HOST, 0), TruthPreviewHandler)
