@@ -118,9 +118,22 @@ def capture_edge(url: str, output: Path, edge: Path, *,
                 run = subprocess.run(argv, timeout=timeout_seconds,
                                      capture_output=True, check=False)
             except subprocess.TimeoutExpired as exc:
-                raise EdgePreviewError("EDGE_SCREENSHOT_TIMEOUT") from exc
+                raise EdgePreviewError(
+                    "EDGE_SCREENSHOT_TIMEOUT_" + str(width)) from exc
             if run.returncode != 0 or not dest.is_file():
-                raise EdgePreviewError("EDGE_SCREENSHOT_FAILED_" + str(width))
+                diagnostic = {
+                    "status": "EDGE_SCREENSHOT_FAILED",
+                    "width_css_px": width,
+                    "edge_exit_code": run.returncode,
+                    "png_created": dest.is_file(),
+                    "edge_stderr_tail": run.stderr.decode(
+                        "utf-8", errors="replace")[-1200:],
+                    "edge_stdout_tail": run.stdout.decode(
+                        "utf-8", errors="replace")[-400:],
+                    "visual_qa": "NOT_RUN",
+                }
+                raise EdgePreviewError(json.dumps(
+                    diagnostic, ensure_ascii=False, sort_keys=True))
             payload = dest.read_bytes()
             if (not payload.startswith(PNG_MAGIC) or
                     not 64 <= len(payload) <= MAX_SCREENSHOT_BYTES):
