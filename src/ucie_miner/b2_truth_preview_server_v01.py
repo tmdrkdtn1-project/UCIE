@@ -86,10 +86,17 @@ class TruthPreviewHandler(BaseHTTPRequestHandler):
         self._respond("POST")
 
     def _respond(self, method: str):
-        try:
-            status, page = route_truth_request(method, self.path)
-        except (ValueError, KeyError, TypeError):
-            status, page = 500, ""
+        # Refuse DNS-rebinding / proxy Host aliases and duplicate Host fields.
+        # A valid loopback socket address alone is not a trustworthy Host claim.
+        hosts = self.headers.get_all("Host", [])
+        expected_host = HOST + ":" + str(self.server.server_port)
+        if hosts != [expected_host]:
+            status, page = 403, ""
+        else:
+            try:
+                status, page = route_truth_request(method, self.path)
+            except (ValueError, KeyError, TypeError):
+                status, page = 500, ""
         data = page.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
