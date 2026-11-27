@@ -47,3 +47,20 @@
 - Record exact branch HEAD, Windows version, Edge version, capture SHA receipt, actual observations, defects and reviewer identity/date
 
 **No automatic PASS**. Capture script has no CSS overflow detector, contrast engine, keyboard bot or actual 200% page-zoom verification. A `SCREENSHOTS_CAPTURED_VISUAL_QA_PENDING` receipt is purely evidence inventory.
+
+
+## Manual screenshot fallback (owner-host evidence 2026-11-27)
+
+Owner observed the V2 page at `http://127.0.0.1:51044/v2/truth` returned HTTP 200. However Microsoft Edge headless returned exit code 0 without creating a PNG on both the UCIE page **and** `about:blank`. This separates page/CSP behavior from the screenshot generation failure; root cause of headless output is unverified. Keep the original CSP `default-src 'none'` intact; do not enable DevTools workspace connections just to suppress its incidental warning.
+
+**Instead of rerunning failing headless capture, use the existing interactive Edge window.** Open DevTools responsive mode (F12, Ctrl+Shift+M), set viewport widths 320/390/768/1024/1440, save screenshots using DevTools capture or Windows screen capture as `ucie_320.png` and so forth. Store screenshots in a new UCIE-only review folder outside `D:\\UCIE`. A capture file without exact viewport evidence is still unverified for CSS viewport correctness.
+
+From the exact isolated checkout containing the manual evidence script:
+
+```powershell
+python scripts/ucie_v2_manual_edge_evidence_v01.py --screenshots-dir "D:\\UCIE_V2_EDGE_MANUAL" --receipt-dir "D:\\UCIE_V2_QA_RECEIPT_001"
+```
+
+The script **reads only explicitly named PNGs**, verifies PNG signature + IHDR checksum, records dimensions and SHA-256, creates one JSON in a new/empty receipt folder, and never sends data or labels browser accessibility/visual quality PASS. It works with one screenshot first, and can later be re-run into a *different new empty receipt directory* after additional screenshots are added. It does not change screenshot files or your existing Edge/profile settings.
+
+The output status `EVIDENCE_REGISTERED_VISUAL_QA_PENDING` means inventory only. Actual quality needs manual review of the image, real 200% zoom and keyboard focus, plus independent release gates. Avoid public commits of screenshots, user data or the receipt.
