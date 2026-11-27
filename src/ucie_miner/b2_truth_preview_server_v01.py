@@ -159,7 +159,7 @@ def route_truth_request(method: str, target: str, *,
         '<p>공식 자료의 변경 확인: <strong>아직 확인하지 않았습니다.</strong></p>'
         '<p>재검토 제안: <strong>' +
         ("이 사례 1건, 실행 보류" if hypothetical else "0건, 변경 관측 없음") +
-        '</strong></p>' + demonstration
+        '</strong></p>' + demonstration +
         '<p>관련 예제 재시험: <strong>실행하지 않았습니다.</strong></p>'
         '<p>근거가 바뀌었다면 출처와 버전을 확인한 뒤 '
         '영향을 받은 예제만 다시 점검할 것을 제안합니다.</p>'
