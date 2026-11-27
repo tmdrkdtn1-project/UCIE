@@ -108,37 +108,58 @@ def route_truth_request(method: str, target: str, *,
             '</section>')
     try:
         parsed = parse_qs(url.query, strict_parsing=True,
-                          keep_blank_values=True, max_num_fields=1)
+                          keep_blank_values=True, max_num_fields=2)
     except (UnicodeError, ValueError):
         return 400, ""
-    if set(parsed) != {"case"} or len(parsed["case"]) != 1:
+    if set(parsed) not in ({"case"}, {"case", "review"}):
+        return 400, ""
+    if len(parsed["case"]) != 1:
         return 400, ""
     chosen = parsed["case"][0]
     if chosen not in known:
         return 400, ""
-    # No implicit trial here: screen explicitly states absence of receipt.
-    receipt = None if receipts is None else receipts.get(chosen)
-    html = render_b2_receipt_truth_view(
-        chosen, source_tag=known[chosen]["source_tag"], receipt=receipt)
-    journey = build_truth_journey(chosen, known[chosen]["source_tag"])
+    hypothetical = "review" in parsed
+    if hypothetical and parsed["review"] != ["declared-mismatch"]:
+        return 400, ""
     capsule = known[chosen]
+    # The review-only revision is a fixed UCIE fictional declaration, NOT
+    # an external fetch, customer environment observation or upstream update.
+    source_tag = "UCIE_DEMO_NOT_OBSERVED" if hypothetical else capsule["source_tag"]
+    # A receipt made for the pinned source MUST NOT certify a hypothetical tag.
+    receipt = None if hypothetical or receipts is None else receipts.get(chosen)
+    html = render_b2_receipt_truth_view(
+        chosen, source_tag=source_tag, receipt=receipt)
+    journey = build_truth_journey(chosen, source_tag)
     if (journey["capsule_id"] != capsule["capsule_id"]
             or journey["source_document_sha256"] != capsule["source_document_sha256"]
             or journey["source_tag"] != capsule["source_tag"]
-            or journey["source_revision_decision"] != "UNKNOWN_NO_PROOF"
-            or journey["b3_retest_proposal_count"] != 0
+            or journey["source_revision_decision"] != (
+                "SOURCE_REVISION_MISMATCH_HOLD" if hypothetical else "UNKNOWN_NO_PROOF")
+            or journey["b3_retest_proposal_count"] != (1 if hypothetical else 0)
             or journey["b3_retest_executed"] is not False
             or journey["b3_revision_authenticated"] is not False):
         raise ValueError("B1_B2_B3_PINNED_IDENTITY_DRIFT")
     title = ("Python · 제한된 폴더 탐색"
              if capsule["source_id"] == "doc:python/cpython"
              else "Git · 상태 정보 최소 공개")
+    demonstration = (
+        '<p class="preview-boundary"><strong>가상 버전 차이 시험:</strong> '
+        'UCIE가 만들어 넣은 버전 이름이며 실제 공식 업데이트가 아닙니다. '
+        '이 사례 하나만 재검토 제안으로 표시합니다.</p>'
+        if hypothetical else
+        '<p><a href="' + ROUTE + '?' + escape(urlencode({
+            "case": chosen, "review": "declared-mismatch"}), quote=True) +
+        '">버전이 달라졌다고 가정한 재확인 사례 보기</a></p>'
+    )
     b3 = (
         '<section class="panel" aria-labelledby="revision-status">'
         '<h2 id="revision-status">이 설명은 업데이트 후에도 맞을까요?</h2>'
         '<p>지금은 저장된 공식 문서 버전과 같은지 내부 기록만 확인했습니다. '
         '공식 사이트에서 최신 변경이 있는지 다시 조사한 결과는 아닙니다.</p>'
         '<p>공식 자료의 변경 확인: <strong>아직 확인하지 않았습니다.</strong></p>'
+        '<p>재검토 제안: <strong>' +
+        ("이 사례 1건, 실행 보류" if hypothetical else "0건, 변경 관측 없음") +
+        '</strong></p>' + demonstration
         '<p>관련 예제 재시험: <strong>실행하지 않았습니다.</strong></p>'
         '<p>근거가 바뀌었다면 출처와 버전을 확인한 뒤 '
         '영향을 받은 예제만 다시 점검할 것을 제안합니다.</p>'
@@ -146,7 +167,9 @@ def route_truth_request(method: str, target: str, *,
         '<p>고정된 출처 버전: ' + escape(journey["source_tag"], quote=True) + '</p>'
         '<p>출처 SHA-256: ' + escape(journey["source_document_sha256"], quote=True) + '</p>'
         '<p>변경 재확인 제안 SHA-256: ' + escape(journey["b3_proposal_sha256"], quote=True) + '</p>'
-        '<p>출처 갱신 인증: 미확인 · 재검토 제안 건수: 0건 (기준 버전 대조)</p>'
+        '<p>출처 갱신 인증: 미확인 · 재검토 제안 건수: ' +
+        ("1건 (가상 버전 차이)" if hypothetical else "0건 (기준 버전 대조)") +
+        '</p>'
         '</details></section>'
     )
     return 200, _shell(
