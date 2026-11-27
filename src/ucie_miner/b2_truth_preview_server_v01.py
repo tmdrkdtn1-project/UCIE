@@ -51,8 +51,9 @@ def _shell(content: str) -> str:
     )
 
 
-def route_truth_request(method: str, target: str) -> tuple[int, str]:
-    """Exact GET route and exact two first-party case selectors only."""
+def route_truth_request(method: str, target: str, *,
+                        receipts: dict | None = None) -> tuple[int, str]:
+    """Exact GET selectors; show only already precomputed opt-in receipts."""
     if method != "GET":
         return 405, ""
     if type(target) is not str or len(target) > 220:
@@ -86,8 +87,9 @@ def route_truth_request(method: str, target: str) -> tuple[int, str]:
     if chosen not in known:
         return 400, ""
     # No implicit trial here: screen explicitly states absence of receipt.
+    receipt = None if receipts is None else receipts.get(chosen)
     html = render_b2_receipt_truth_view(
-        chosen, source_tag=known[chosen]["source_tag"], receipt=None)
+        chosen, source_tag=known[chosen]["source_tag"], receipt=receipt)
     return 200, _shell(
         '<a class="back" href="' + ROUTE + '">다른 사례 보기</a>'
         '<h1>기술 안내와 확인된 범위</h1>'
@@ -110,7 +112,9 @@ class TruthPreviewHandler(BaseHTTPRequestHandler):
             status, page = 403, ""
         else:
             try:
-                status, page = route_truth_request(method, self.path)
+                status, page = route_truth_request(
+                    method, self.path,
+                    receipts=getattr(self.server, "ucie_receipts", None))
             except (ValueError, KeyError, TypeError):
                 status, page = 500, ""
         data = page.encode("utf-8")
@@ -131,11 +135,26 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="UCIE isolated B2 truth preview")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--open-browser", action="store_true")
+    parser.add_argument("--run-synthetic-demo", action="store_true",
+                        help="Explicitly run two UCIE-authored synthetic fixtures before starting; no customer code")
     args = parser.parse_args(argv)
     if args.port and not 1024 <= args.port <= 65535:
         raise ValueError("PORT_OUT_OF_RANGE")
     require_local_work("VIRTUAL_LIBRARY")
+    receipts = None
+    if args.run_synthetic_demo:
+        # Execute only at explicit startup, once per approved fixed case.
+        # Never run a trial from HTTP GET, POST or a preview render.
+        from .b1_first_party_receipt_link_v01 import run_scoped_receipt
+        caps = build_pinned_b1_capsules()
+        if len(caps) != 2 or len({c["case_id"] for c in caps}) != 2:
+            raise ValueError("UNEXPECTED_FIXED_CASES")
+        receipts = {
+            c["case_id"]: run_scoped_receipt(c["case_id"], c["source_tag"])
+            for c in caps
+        }
     with ThreadingHTTPServer((HOST, args.port), TruthPreviewHandler) as server:
+        server.ucie_receipts = receipts
         url = "http://" + HOST + ":" + str(server.server_port) + ROUTE
         print("UCIE_V2_B2_TRUTH_PREVIEW_READY " + url, flush=True)
         if args.open_browser:
