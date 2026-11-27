@@ -169,6 +169,44 @@ class B2TruthPreviewTests(unittest.TestCase):
         self.assertNotIn(receipt["receipt_sha256"], page)
         self.assertIn("아직 자체 시험 기록이 연결되지 않았", page)
 
+    def test_actual_official_python315_delta_only_on_python_detail(self):
+        caps = build_pinned_b1_capsules()
+        for cap in caps:
+            with self.subTest(source=cap["source_id"]):
+                code, html = route_truth_request(
+                    "GET", ROUTE + "?case=" + cap["case_id"])
+                self.assertEqual(code, 200)
+                if cap["source_id"] == "doc:python/cpython":
+                    self.assertIn("Python 3.15에서 달라진 점", html)
+                    self.assertIn("os.scandir(-1)", html)
+                    self.assertIn("OSError(errno.EBADF)", html)
+                    self.assertIn(
+                        "https://docs.python.org/3.14/library/os.html", html)
+                    self.assertIn(
+                        "https://docs.python.org/3.15/library/os.html", html)
+                    self.assertIn("확인하지 않았습니다", html)
+                    self.assertIn("재시험을 제안할 수 있습니다", html)
+                else:
+                    self.assertNotIn("Python 3.15에서 달라진 점", html)
+                    self.assertNotIn("os.scandir(-1)", html)
+                self.assertNotIn("현재 사용자 PC의 동작이 검증됐습니다", html)
+                self.assertNotIn("배포 승인 완료", html)
+
+    def test_official_delta_foreign_capsule_fails_closed(self):
+        from unittest.mock import patch
+        from ucie_miner.b3_documented_scandir_315_delta_v01 import (
+            evaluate_documented_scandir_delta,
+        )
+        cap = next(c for c in build_pinned_b1_capsules()
+                   if c["source_id"] == "doc:python/cpython")
+        delta = evaluate_documented_scandir_delta(
+            cap["case_id"], proposed_runtime="3.15")
+        with patch(
+            "ucie_miner.b2_truth_preview_server_v01.evaluate_documented_scandir_delta",
+            return_value={**delta, "capsule_sha256": "0" * 64},
+        ), self.assertRaisesRegex(ValueError, "B3_REAL_DOC_CAPSULE_DRIFT"):
+            route_truth_request("GET", ROUTE + "?case=" + cap["case_id"])
+
     def test_reject_untrusted_query_and_post(self):
         for path in (ROUTE + "?case=unknown", ROUTE + "?case=x&case=y",
                      ROUTE + "?case=x&other=y", ROUTE + "?other=1",
