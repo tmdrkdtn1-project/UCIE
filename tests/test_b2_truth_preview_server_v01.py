@@ -42,6 +42,19 @@ class B2TruthPreviewTests(unittest.TestCase):
                 self.assertNotIn('<input', detail)
                 self.assertNotIn('tabindex="-1"', detail)
 
+    def test_mobile_numbered_links_keep_marker_at_first_line(self):
+        code, html = route_truth_request("GET", ROUTE)
+        self.assertEqual(code, 200)
+        self.assertIn("main ol li>a{display:block", html)
+        self.assertIn("word-break:keep-all", html)
+        self.assertIn("min-height:44px", html)
+        self.assertIn("main ol li::marker", html)
+        self.assertEqual(html.count("<li><a href="), 2)
+        self.assertLess(
+            html.index("Git · 공식 문서 범위 살펴보기"),
+            html.index("Python · 공식 문서 범위 살펴보기"))
+        # A CSS contract test is not real Edge responsive visual QA.
+
     def test_source_bound_case_view_for_two_cases(self):
         for cap in build_pinned_b1_capsules():
             with self.subTest(source=cap["source_id"]):
