@@ -15,6 +15,7 @@ from .b2_receipt_truth_view_v01 import render_b2_receipt_truth_view
 from .b1_b2_b3_truth_journey_v01 import build_truth_journey
 from .b3_documented_scandir_315_delta_v01 import evaluate_documented_scandir_delta
 from .b3_first_party_callsite_audit_v01 import audit_trusted_scandir_recipe
+from .b4_python315_revision_addendum_v01 import build_python315_revision_addendum
 from .v2_b1_b4_explorer_v01 import STYLES
 from .local_v1_priority_v01 import require_local_work
 
@@ -189,6 +190,12 @@ def route_truth_request(method: str, target: str, *,
                 or audit["actual_runtime_compatibility"] != "NOT_VERIFIED"
                 or audit["other_callers_and_customer_code"] != "NOT_INSPECTED"):
             raise ValueError("B3_FIRST_PARTY_CALLSITE_AUDIT_DRIFT")
+        addendum = build_python315_revision_addendum()
+        if (addendum["capsule_id"] != capsule["capsule_id"]
+                or addendum["static_audit_receipt_sha256"] != audit["receipt_sha256"]
+                or addendum["owner_approved"] is not False
+                or addendum["export_allowed"] is not False):
+            raise ValueError("B4_REVISION_ADDENDUM_PROOF_DRIFT")
         local_code_note = (
             'UCIE 자체 예제의 <code>os.scandir(directory)</code> 호출은 '
             '지정된 디렉터리 변수를 사용하는 것으로 정적 코드 검토에서 확인했습니다. '
@@ -217,7 +224,14 @@ def route_truth_request(method: str, target: str, *,
                 delta["newer_official_document"], quote=True) +
             '">공식 API 참고</a></p>'
             '<p>문서 SHA·실행 환경 호환성·독립 품질 검증·배포 권한: '
-            '검증 또는 승인되지 않았습니다.</p></details></section>'
+            '검증 또는 승인되지 않았습니다.</p></details>'
+            '<details><summary>UCIE가 정리한 재사용 안내 보기</summary>'
+            '<p>' + escape(addendum["human_explanation"], quote=True) + '</p>'
+            '<p>연결 SkillBook: ' + escape(addendum["skillbook_id"], quote=True) + '</p>'
+            '<p>검사 기록 SHA-256: ' + escape(
+                addendum["static_audit_receipt_sha256"], quote=True) + '</p>'
+            '<p>정적 코드 확인만 수행했으며 고객 코드 자동 수정, 독립 검증, '
+            '사용권 승인은 완료되지 않았습니다.</p></details></section>'
         )
     return 200, _shell(
         '<a class="back" href="' + ROUTE + '">다른 사례 보기</a>'
