@@ -14,6 +14,7 @@ from .b1_b4_skillbook_capsule_link_v01 import build_pinned_b1_capsules
 from .b2_receipt_truth_view_v01 import render_b2_receipt_truth_view
 from .b1_b2_b3_truth_journey_v01 import build_truth_journey
 from .b3_documented_scandir_315_delta_v01 import evaluate_documented_scandir_delta
+from .b3_first_party_callsite_audit_v01 import audit_trusted_scandir_recipe
 from .v2_b1_b4_explorer_v01 import STYLES
 from .local_v1_priority_v01 import require_local_work
 
@@ -183,15 +184,29 @@ def route_truth_request(method: str, target: str, *,
                 or delta["retest_candidate"] is not False
                 or delta["customer_runtime_version_verified"] is not False):
             raise ValueError("B3_REAL_DOC_CAPSULE_DRIFT")
+        audit = audit_trusted_scandir_recipe()
+        if (audit["capsule_id"] != capsule["capsule_id"]
+                or audit["actual_runtime_compatibility"] != "NOT_VERIFIED"
+                or audit["other_callers_and_customer_code"] != "NOT_INSPECTED"):
+            raise ValueError("B3_FIRST_PARTY_CALLSITE_AUDIT_DRIFT")
+        local_code_note = (
+            'UCIE 자체 예제의 <code>os.scandir(directory)</code> 호출은 '
+            '지정된 디렉터리 변수를 사용하는 것으로 정적 코드 검토에서 확인했습니다. '
+            '따라서 이 코드의 직접 호출 지점에서는 <code>-1</code> 문제 징후를 '
+            '발견하지 않았습니다. 다른 호출부와 사용자 코드는 검사하지 않았습니다.'
+            if audit["explicit_directory_argument"] else
+            'UCIE 자체 예제의 호출 형태를 확정하지 못해 적용 여부를 보류합니다.'
+        )
         official_delta = (
             '<section class="panel" aria-labelledby="documented-python-change">'
             '<h2 id="documented-python-change">Python 3.15에서 달라진 점</h2>'
             '<p>공식 Python 문서에 따르면 3.15부터 '
             '<code>os.scandir(-1)</code>은 <code>OSError(errno.EBADF)</code>로 '
             '실패합니다. 이는 문서에서 확인한 변경 사항입니다.</p>'
-            '<p>이 사례가 실제로 <code>-1</code>을 전달하는지는 아직 '
-            '확인하지 않았습니다. 해당 호출을 사용하는지 확인한 다음에만 '
-            '그 부분의 재시험을 제안할 수 있습니다.</p>'
+            '<p>' + local_code_note + '</p>'
+            '<p>실제 사용자 프로그램에 <code>os.scandir(-1)</code> 호출이 '
+            '있는지는 확인하지 않았으며, 그런 호출에 대해서만 점검과 재시험을 '
+            '제안합니다.</p>'
             '<p>Git 사례는 이 Python 변경의 재시험 대상이 아닙니다. '
             '현재 사용자 PC의 실행 버전도 조사하지 않았습니다.</p>'
             '<details><summary>공식 문서 비교 보기</summary>'
