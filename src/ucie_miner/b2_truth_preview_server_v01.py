@@ -125,7 +125,7 @@ def route_truth_request(method: str, target: str, *,
     if (journey["capsule_id"] != capsule["capsule_id"]
             or journey["source_document_sha256"] != capsule["source_document_sha256"]
             or journey["source_tag"] != capsule["source_tag"]
-            or journey["source_revision_decision"] != "SOURCE_REVISION_MATCHED"
+            or journey["source_revision_decision"] != "UNKNOWN_NO_PROOF"
             or journey["b3_retest_proposal_count"] != 0
             or journey["b3_retest_executed"] is not False
             or journey["b3_revision_authenticated"] is not False):
