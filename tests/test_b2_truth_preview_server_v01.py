@@ -20,6 +20,26 @@ class B2TruthPreviewTests(unittest.TestCase):
         self.assertNotIn("<form", page)
         self.assertNotIn("onclick=", page)
 
+    def test_accessible_preview_landmarks_and_mobile_contract(self):
+        landing_code, landing = route_truth_request("GET", ROUTE)
+        self.assertEqual(landing_code, 200)
+        self.assertIn('href="#main"', landing)
+        self.assertEqual(landing.count('<main id="main">'), 1)
+        self.assertEqual(landing.count("<h1>"), 1)
+        self.assertIn("summary:focus-visible", landing)
+        self.assertIn("max-width:390px", landing)
+        self.assertIn("overflow-wrap:anywhere", landing)
+        for cap in build_pinned_b1_capsules():
+            with self.subTest(source=cap["source_id"]):
+                code, detail = route_truth_request(
+                    "GET", ROUTE + "?case=" + cap["case_id"])
+                self.assertEqual(code, 200)
+                self.assertEqual(detail.count("<h1>"), 1)
+                self.assertIn("본문으로 건너뛰기", detail)
+                self.assertIn("왜 이렇게 안내하나요?", detail)
+                self.assertNotIn('<input', detail)
+                self.assertNotIn('tabindex="-1"', detail)
+
     def test_source_bound_case_view_for_two_cases(self):
         for cap in build_pinned_b1_capsules():
             with self.subTest(source=cap["source_id"]):
