@@ -2,9 +2,11 @@
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from threading import Thread
+from unittest.mock import patch
 import unittest
 
 from ucie_miner.b1_b4_skillbook_capsule_link_v01 import build_pinned_b1_capsules
+from ucie_miner.b1_first_party_receipt_link_v01 import run_scoped_receipt
 from ucie_miner.b2_truth_preview_server_v01 import (
     HOST, ROUTE, TruthPreviewHandler, route_truth_request,
 )
@@ -25,7 +27,8 @@ class B2TruthPreviewTests(unittest.TestCase):
         self.assertEqual(landing_code, 200)
         self.assertIn('href="#main"', landing)
         self.assertEqual(landing.count('<main id="main">'), 1)
-        self.assertEqual(landing.count("<h1>"), 1)
+        self.assertEqual(landing.count("<h1 "), 1)
+        self.assertIn('<h1 id="preview-title">', landing)
         self.assertIn("summary:focus-visible", landing)
         self.assertIn("max-width:390px", landing)
         self.assertIn("overflow-wrap:anywhere", landing)
@@ -40,6 +43,34 @@ class B2TruthPreviewTests(unittest.TestCase):
                 self.assertNotIn('<input', detail)
                 self.assertNotIn('tabindex="-1"', detail)
 
+    def test_mobile_numbered_links_keep_marker_at_first_line(self):
+        code, html = route_truth_request("GET", ROUTE)
+        self.assertEqual(code, 200)
+        self.assertIn("main ol li>a{display:block", html)
+        self.assertIn("word-break:keep-all", html)
+        self.assertIn("min-height:44px", html)
+        self.assertIn("main ol li::marker", html)
+        self.assertEqual(html.count("<li><a href="), 2)
+        self.assertLess(
+            html.index("Git · 공식 문서 범위 살펴보기"),
+            html.index("Python · 공식 문서 범위 살펴보기"))
+        # A CSS contract test is not real Edge responsive visual QA.
+
+    def test_first_use_steps_are_explicit_and_only_real_cases_clickable(self):
+        code, html = route_truth_request("GET", ROUTE)
+        self.assertEqual(code, 200)
+        self.assertIn('class="preview-steps"', html)
+        self.assertIn('class="case-choices"', html)
+        self.assertIn("아직 모르는 내용을 구분", html)
+        self.assertIn("고객 환경을 자동으로 점검하거나", html)
+        self.assertIn("사용권·독립 품질 검증은 미확인", html)
+        self.assertEqual(html.count('href="/v2/truth?case='), 2)
+        self.assertEqual(html.count("<h1"), 1)
+        self.assertIn(".case-choices li>a:focus-visible", html)
+        self.assertIn("counter-reset:ucie-case", html)
+        self.assertNotIn("<form", html)
+        self.assertNotIn("코드를 고쳐", html)
+
     def test_source_bound_case_view_for_two_cases(self):
         for cap in build_pinned_b1_capsules():
             with self.subTest(source=cap["source_id"]):
@@ -51,6 +82,135 @@ class B2TruthPreviewTests(unittest.TestCase):
                 self.assertIn("현재 사용 중인 프로그램 버전에서 작동하는지는 미확인", page)
                 self.assertIn("사용권 승인은 완료되지 않았", page)
 
+    def test_b1_b2_b3_case_identity_and_unverified_revision_status(self):
+        from ucie_miner.b1_b2_b3_truth_journey_v01 import build_truth_journey
+        for cap in build_pinned_b1_capsules():
+            with self.subTest(source=cap["source_id"]):
+                code, page = route_truth_request(
+                    "GET", ROUTE + "?case=" + cap["case_id"])
+                self.assertEqual(code, 200)
+                journey = build_truth_journey(cap["case_id"], cap["source_tag"])
+                self.assertEqual(journey["capsule_id"], cap["capsule_id"])
+                self.assertIn(cap["source_document_sha256"], page)
+                self.assertIn(cap["source_tag"], page)
+                self.assertIn(journey["b3_proposal_sha256"], page)
+                self.assertIn("공식 사이트에서 최신 변경이 있는지 다시 조사한 결과는 아닙니다", page)
+                self.assertIn("관련 예제 재시험:", page)
+                self.assertIn("실행하지 않았습니다", page)
+                self.assertIn("출처 갱신 인증: 미확인", page)
+                self.assertEqual(journey["b3_retest_proposal_count"], 0)
+                self.assertFalse(journey["b3_revision_authenticated"])
+                self.assertFalse(journey["b3_retest_executed"])
+                self.assertNotIn("업데이트 검증 완료", page)
+                self.assertNotIn("고객 환경에 적용 승인", page)
+
+    def test_b1_b2_b3_source_identity_drift_fails_closed(self):
+        from unittest.mock import patch
+        from ucie_miner.b1_b2_b3_truth_journey_v01 import build_truth_journey
+        cap = build_pinned_b1_capsules()[0]
+        journey = build_truth_journey(cap["case_id"], cap["source_tag"])
+        forged = {**journey, "source_document_sha256": "0" * 64}
+        with patch(
+            "ucie_miner.b2_truth_preview_server_v01.build_truth_journey",
+            return_value=forged,
+        ), self.assertRaisesRegex(ValueError, "B1_B2_B3_PINNED_IDENTITY_DRIFT"):
+            route_truth_request("GET", ROUTE + "?case=" + cap["case_id"])
+
+    def test_declared_mismatch_proposes_one_affected_case_only(self):
+        from urllib.parse import urlencode
+        from ucie_miner.b1_b2_b3_truth_journey_v01 import build_truth_journey
+        caps = build_pinned_b1_capsules()
+        for cap in caps:
+            with self.subTest(case=cap["case_id"]):
+                target = ROUTE + "?" + urlencode({
+                    "case": cap["case_id"], "review": "declared-mismatch"})
+                code, page = route_truth_request("GET", target)
+                self.assertEqual(code, 200)
+                self.assertIn("가상 버전 차이 시험", page)
+                self.assertIn("이 사례 1건, 실행 보류", page)
+                self.assertIn("실제 공식 업데이트가 아닙니다", page)
+                self.assertIn("관련 예제 재시험:", page)
+                self.assertIn("실행하지 않았습니다", page)
+                self.assertNotIn("UCIE가 만든 예제에서는 확인했습니다", page)
+                changed = build_truth_journey(
+                    cap["case_id"], "UCIE_DEMO_NOT_OBSERVED")
+                self.assertEqual(changed["b3_retest_proposal_count"], 1)
+                self.assertEqual(
+                    changed["source_revision_decision"], "SOURCE_REVISION_MISMATCH_HOLD")
+                self.assertFalse(changed["b3_revision_authenticated"])
+                self.assertFalse(changed["b3_retest_executed"])
+                unaffected = next(x for x in caps if x["case_id"] != cap["case_id"])
+                self.assertEqual(
+                    build_truth_journey(
+                        unaffected["case_id"], unaffected["source_tag"]
+                    )["b3_retest_proposal_count"], 0)
+
+    def test_declared_mismatch_rejects_arbitrary_tags_and_duplicates(self):
+        from urllib.parse import urlencode
+        cap = build_pinned_b1_capsules()[0]
+        normal = ROUTE + "?" + urlencode({"case": cap["case_id"]})
+        for url in (normal + "&review=other",
+                    normal + "&review=declared-mismatch&review=declared-mismatch",
+                    normal + "&review=declared-mismatch&junk=1",
+                    normal + "&tag=arbitrary",
+                    normal + "&review="):
+            with self.subTest(url=url):
+                self.assertEqual(route_truth_request("GET", url)[0], 400)
+
+    def test_declared_mismatch_never_reuses_pinned_synthetic_receipt(self):
+        from urllib.parse import urlencode
+        cap = build_pinned_b1_capsules()[0]
+        receipt = run_scoped_receipt(cap["case_id"], cap["source_tag"])
+        target = ROUTE + "?" + urlencode({
+            "case": cap["case_id"], "review": "declared-mismatch"})
+        code, page = route_truth_request(
+            "GET", target, receipts={cap["case_id"]: receipt})
+        self.assertEqual(code, 200)
+        self.assertNotIn(receipt["receipt_sha256"], page)
+        self.assertIn("아직 자체 시험 기록이 연결되지 않았", page)
+
+    def test_actual_official_python315_delta_only_on_python_detail(self):
+        caps = build_pinned_b1_capsules()
+        for cap in caps:
+            with self.subTest(source=cap["source_id"]):
+                code, html = route_truth_request(
+                    "GET", ROUTE + "?case=" + cap["case_id"])
+                self.assertEqual(code, 200)
+                if cap["source_id"] == "doc:python/cpython":
+                    self.assertIn("Python 3.15에서 달라진 점", html)
+                    self.assertIn("os.scandir(-1)", html)
+                    self.assertIn("OSError(errno.EBADF)", html)
+                    self.assertIn(
+                        "https://docs.python.org/3.14/library/os.html", html)
+                    self.assertIn(
+                        "https://docs.python.org/3.15/library/os.html", html)
+                    self.assertIn("확인하지 않았습니다", html)
+                    self.assertIn("다른 호출부와 사용자 코드는 검사하지 않았습니다", html)
+                    self.assertIn("UCIE가 정리한 재사용 안내 보기", html)
+                    self.assertIn("정적 코드 확인만 수행했으며", html)
+                    self.assertIn("그런 호출에 대해서만 점검과 재시험을", html)
+                else:
+                    self.assertNotIn("Python 3.15에서 달라진 점", html)
+                    self.assertNotIn("os.scandir(-1)", html)
+                    self.assertNotIn("UCIE가 정리한 재사용 안내 보기", html)
+                self.assertNotIn("현재 사용자 PC의 동작이 검증됐습니다", html)
+                self.assertNotIn("배포 승인 완료", html)
+
+    def test_official_delta_foreign_capsule_fails_closed(self):
+        from unittest.mock import patch
+        from ucie_miner.b3_documented_scandir_315_delta_v01 import (
+            evaluate_documented_scandir_delta,
+        )
+        cap = next(c for c in build_pinned_b1_capsules()
+                   if c["source_id"] == "doc:python/cpython")
+        delta = evaluate_documented_scandir_delta(
+            cap["case_id"], proposed_runtime="3.15")
+        with patch(
+            "ucie_miner.b2_truth_preview_server_v01.evaluate_documented_scandir_delta",
+            return_value={**delta, "capsule_sha256": "0" * 64},
+        ), self.assertRaisesRegex(ValueError, "B3_REAL_DOC_CAPSULE_DRIFT"):
+            route_truth_request("GET", ROUTE + "?case=" + cap["case_id"])
+
     def test_reject_untrusted_query_and_post(self):
         for path in (ROUTE + "?case=unknown", ROUTE + "?case=x&case=y",
                      ROUTE + "?case=x&other=y", ROUTE + "?other=1",
@@ -59,6 +219,64 @@ class B2TruthPreviewTests(unittest.TestCase):
                 self.assertNotEqual(route_truth_request("GET", path)[0], 200)
         self.assertEqual(route_truth_request("POST", ROUTE), (405, ""))
         self.assertEqual(route_truth_request("GET", "/local/ask"), (404, ""))
+
+    def test_explicit_receipt_is_shown_without_get_triggered_trial(self):
+        caps = build_pinned_b1_capsules()
+        receipts = {cap["case_id"]: run_scoped_receipt(
+            cap["case_id"], cap["source_tag"]) for cap in caps}
+        for cap in caps:
+            with self.subTest(source=cap["source_id"]), patch(
+                "ucie_miner.b1_first_party_receipt_link_v01.run_first_party_synthetic_comparison",
+                side_effect=AssertionError("GET must not start a trial"),
+            ):
+                code, page = route_truth_request(
+                    "GET", ROUTE + "?case=" + cap["case_id"],
+                    receipts=receipts)
+                self.assertEqual(code, 200)
+                self.assertIn(receipts[cap["case_id"]]["receipt_sha256"], page)
+                self.assertIn("UCIE가 만든 예제에서는 확인했습니다", page)
+                self.assertIn("독립적인 품질 검증은 미완료", page)
+                self.assertIn("고객용 배포와 사용권 승인은 완료되지 않았", page)
+
+    def test_absent_optional_receipt_stays_unverified(self):
+        cap = build_pinned_b1_capsules()[0]
+        code, html = route_truth_request(
+            "GET", ROUTE + "?case=" + cap["case_id"], receipts={})
+        self.assertEqual(code, 200)
+        self.assertIn("아직 자체 시험 기록이 연결되지 않았", html)
+        self.assertNotIn("UCIE가 만든 예제에서는 확인했습니다", html)
+
+    def test_precomputed_receipt_mismatched_case_fails_closed(self):
+        left, right = build_pinned_b1_capsules()
+        fake = run_scoped_receipt(left["case_id"], left["source_tag"])
+        with self.assertRaises(ValueError):
+            route_truth_request(
+                "GET", ROUTE + "?case=" + right["case_id"],
+                receipts={right["case_id"]: fake})
+
+    def test_http_precomputed_receipt_does_not_execute(self):
+        cap = build_pinned_b1_capsules()[0]
+        receipt = run_scoped_receipt(cap["case_id"], cap["source_tag"])
+        server = ThreadingHTTPServer((HOST, 0), TruthPreviewHandler)
+        server.ucie_receipts = {cap["case_id"]: receipt}
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with patch(
+                "ucie_miner.b1_first_party_receipt_link_v01.run_first_party_synthetic_comparison",
+                side_effect=AssertionError("HTTP must not run a trial"),
+            ):
+                conn = HTTPConnection(HOST, server.server_port, timeout=5)
+                conn.request("GET", ROUTE + "?case=" + cap["case_id"])
+                response = conn.getresponse()
+                self.assertEqual(response.status, 200)
+                body = response.read().decode("utf-8")
+                self.assertIn(receipt["receipt_sha256"], body)
+                conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
 
     def test_loopback_rejects_wrong_and_duplicate_host_headers(self):
         server = ThreadingHTTPServer((HOST, 0), TruthPreviewHandler)
